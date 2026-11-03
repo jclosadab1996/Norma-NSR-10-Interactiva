@@ -1,0 +1,325 @@
+---
+codigo: 'A.8'
+tipo: capitulo
+titulo: 'Efectos sísmicos sobre elementos estructurales que no forman parte del sistema de resistencia sísmica'
+resumen: 'Cómo se calculan las fuerzas y deformaciones sísmicas de escaleras, tanques, cerchas, viguetas y columnas secundarias que aparecen en los planos estructurales pero no resisten el sismo: aceleración según la altura, fuerza Fp = ax·g·Mp/R0 y deformaciones impuestas por la deriva.'
+objetivos:
+  - 'Distinguir un elemento estructural que no hace parte del sistema de resistencia sísmica de uno no estructural (A.9)'
+  - 'Calcular la aceleración ai a la altura del elemento con la ecuación A.8.2-1'
+  - 'Obtener la fuerza horizontal Fp y diseñar sus uniones al sistema sísmico'
+  - 'Verificar que el elemento resiste, sin deterioro, las deformaciones de la deriva de diseño (A.8.3)'
+paginasNorma: 'A-83 a A-86'
+paginaPdf: 126
+orden: 8
+calculadoras: ['espectro-diseno', 'deriva']
+nivel: 'intermedio'
+---
+
+import { coeficienteFa, coeficienteFv, coeficienteImportancia, periodosEspectro, sa, mesetaSa, verificarDeriva, limiteDeriva } from '../../lib/nsr10';
+import { alturaEquivalente, aceleracionSuperficie, aceleracionNivel, fuerzaElementoNoSismico, deformacionImpuesta } from '../../lib/nsr10/elementosNoSismicos';
+
+export const ej = (() => {
+  const aa = 0.15, av = 0.2;
+  const fa = coeficienteFa('D', aa);
+  const fv = coeficienteFv('D', av);
+  const i = coeficienteImportancia('III');
+  const p = { aa, av, fa, fv, i };
+  const hn = 18, hpi = 3, T = 0.6, r0 = 2.5;
+  const saT = sa(T, p);
+  const as = aceleracionSuperficie(aa, fa, i);
+  const heq = alturaEquivalente(hn);
+  const par = { as, sa: saT, hn };
+  const nivel = (n) => ({ n, h: n * hpi, a: aceleracionNivel(n * hpi, par) });
+  const niveles = [1, 2, 3, 4, 5, 6].map(nivel);
+
+  // Ejemplo 1: machones que soportan una cubierta liviana sobre la terraza (hx = hn)
+  const mp1 = 2500;
+  const a1 = aceleracionNivel(hn, par);
+  const fp1 = fuerzaElementoNoSismico(a1, mp1, r0);
+  const alturaCol = 2.4;
+  const m1 = fp1 * alturaCol;
+
+  // Ejemplo 2: tramo de escalera entre los niveles 6 m y 9 m
+  const mp2 = 3000;
+  const a2 = aceleracionNivel(9, par);
+  const fp2 = fuerzaElementoNoSismico(a2, mp2, r0);
+  const a2inf = aceleracionNivel(6, par);
+  const derivaCalc = 0.008;
+  const dLimite = limiteDeriva('general');
+  const delta = deformacionImpuesta(derivaCalc, hpi);
+  const deltaLim = deformacionImpuesta(dLimite, hpi);
+  const ver = verificarDeriva(delta, 0, hpi, dLimite);
+  // Orden de magnitud: tramo conectado rígidamente en ambos extremos, trabajando como puntal
+  const run = 4.5, rise = 3.0, long = Math.hypot(run, rise), cos = run / long;
+  const E = 4700 * Math.sqrt(21) * 1e6; // Pa, f'c = 21 MPa (C.8.5.1)
+  const area = 1.2 * 0.15;
+  const kAxial = (E * area) / long;
+  const kH = kAxial * cos * cos;
+  const fRigida = kH * delta;
+  return { aa, av, fa, fv, i, p, hn, hpi, T, r0, saT, as, heq, per: periodosEspectro(p), niveles, mp1, a1, fp1, alturaCol, m1, mp2, a2, a2inf, fp2, derivaCalc, dLimite, delta, deltaLim, ver, long, kH, fRigida };
+})();
+
+## Idea central del capítulo
+
+En los planos estructurales de un edificio aparecen muchos elementos que **no hacen parte del sistema que resiste el sismo**: escaleras, tanques, cerchas de cubierta, viguetas, columnas y machones que solo sostienen cubiertas. Nadie los diseñó para resistir el sismo del edificio, pero **el sismo los sacude igual**, y si fallan pueden herir personas o dañar el sistema principal.
+
+**Analogía del bus.** El sistema de resistencia sísmica es el chasis y la carrocería del bus. Los pasajeros no sostienen el bus, pero cuando frena en seco cada uno recibe una fuerza proporcional a su masa. En un edificio la "frenada" es la aceleración del piso donde se apoya el elemento, y **cuanto más alto el piso, más fuerte el latigazo**.
+
+El capítulo es corto y tiene tres ideas:
+
+1. **Fuerza**: el elemento sufre la aceleración del piso donde está apoyado, reducida por el coeficiente $R_0$ (A.8.2).
+2. **Deformación**: debe acompañar sin romperse los desplazamientos relativos que impone la estructura (A.8.3).
+3. **Requisitos de material**: se diseña con los títulos de cada material, con el menor nivel de disipación (A.8.4).
+
+<Callout tipo="importante" titulo="Elemento estructural pero no sísmico">
+Este capítulo **no** trata los elementos **no estructurales** (muros divisorios, fachadas, cielos rasos, equipos): esos son del Capítulo A.9. Aquí se tratan los elementos que **sí son estructurales y figuran en los planos estructurales** pero que, según el Capítulo A.3, no hacen parte del sistema de resistencia sísmica (<NormaRef s="A.8.1.1" pag="A-83" />).
+</Callout>
+
+## A.8.0 — Nomenclatura
+
+| Símbolo | Significado |
+|---|---|
+| $A_s$ | Aceleración máxima en la superficie del suelo, estimada como la aceleración espectral para un período igual a cero |
+| $a_i$, $a_x$ | Aceleración horizontal en el nivel $i$ (o $x$) donde se apoya el elemento, como fracción de $g$ |
+| $F_p$ | Fuerza horizontal sobre el elemento, aplicada en su centro de masa |
+| $g$ | Aceleración de la gravedad, 9.8 m/s² |
+| $h_i$ | Altura del nivel $i$ medida desde la base (m) |
+| $h_n$ | Altura del piso más alto, desde la base (m) |
+| $h_{eq}$ | Altura equivalente del sistema de un grado de libertad que simula la edificación (m) |
+| $M_p$ | Masa del elemento |
+| $R_0$ | Coeficiente de capacidad de disipación de energía básico (Capítulo A.3) |
+| $S_a$ | Aceleración espectral de diseño para el período $T$ (A.2.6), fracción de $g$ |
+
+## A.8.1 — General
+
+### A.8.1.1 — Alcance
+
+El capítulo cubre las previsiones sísmicas de los elementos estructurales que no hacen parte del sistema de resistencia sísmica **y de sus anclajes a él**. Entre ellos, sin limitarse a ellos (<NormaRef s="A.8.1.1" pag="A-83" />):
+
+| | Elemento |
+|---|---|
+| (a) | Escaleras, rampas, etc. |
+| (b) | Tanques, piscinas, etc. |
+| (c) | Elementos de cubiertas: cerchas, correas, etc. |
+| (d) | Elementos secundarios de los entrepisos, como viguetas |
+| (e) | Columnas, columnetas, machones y otros que soportan cubiertas y partes menores de la edificación |
+| (f) | Apoyos de equipos como ascensores y escaleras mecánicas |
+| (g) | En general, todo elemento estructural de los planos estructurales que no haga parte del sistema de resistencia sísmica |
+
+### A.8.1.2 — Responsabilidad del diseño
+
+El diseño ante las solicitaciones del Título A o del Título B de **todo elemento estructural que figure en los planos estructurales** es responsabilidad del **diseñador estructural**, incluidos los de A.8.1.1 (<NormaRef s="A.8.1.2" pag="A-83" />). Aunque el elemento "no resista el sismo", **no queda sin diseñar**: su firma está en el plano estructural.
+
+### A.8.1.3 — Criterio de diseño
+
+El elemento, y **sus anclajes, uniones o amarres** al sistema de resistencia sísmica, se diseñan para la situación que controle entre dos revisiones (<NormaRef s="A.8.1.3" pag="A-83" />):
+
+| Revisión | Pregunta | Sección |
+|---|---|---|
+| (a) **Fuerzas** | ¿Resiste las fuerzas inerciales que le impone su propia masa? | A.8.2 |
+| (b) **Deformaciones** | ¿Resiste las deformaciones que le impone el sistema sísmico al responder, y cómo influye él en la respuesta de la estructura? | A.8.3 |
+
+El literal (b) menciona un caso importante: las **escaleras y rampas pueden actuar como arriostramientos (diagonales)** de un piso al otro. Si se conectan rígidamente en ambos extremos, atraen fuerza al "puntal" que forman y cambian la respuesta del edificio (se verá en el Ejemplo 2).
+
+## A.8.2 — Fuerzas horizontales de diseño
+
+### A.8.2.1 — Aceleración horizontal sobre el elemento
+
+El elemento sufre **las mismas aceleraciones horizontales** que el sistema de resistencia sísmica a su misma altura sobre la base. Las fuerzas inerciales son la masa del elemento multiplicada por esa aceleración, que se determina con uno de dos procedimientos (<NormaRef s="A.8.2.1" pag="A-84" />).
+
+#### A.8.2.1.1 — Método de la fuerza horizontal equivalente
+
+Cuando se usa el método del Capítulo A.4, la aceleración $a_i$ (fracción de $g$) en el piso $i$ es una recta que crece desde $A_s$ en la base hasta $S_a$ a la altura equivalente, y sigue creciendo proporcionalmente más arriba (<NormaRef s="A.8.2-1" pag="A-84" />):
+
+<Ecuacion num="A.8.2-1" titulo="Aceleración horizontal sobre el elemento en el nivel i">
+
+$$
+a_i=\begin{cases}
+A_s+\dfrac{(S_a-A_s)\,h_i}{h_{eq}} & h_i\le h_{eq}\\[10pt]
+S_a\,\dfrac{h_i}{h_{eq}} & h_i\ge h_{eq}
+\end{cases}
+\qquad h_{eq}\approx 0.75\,h_n
+$$
+
+- $A_s$: aceleración en la superficie del suelo ($T=0$). La norma no da una fórmula explícita; evaluando la rama ascendente del espectro (<NormaRef s="A.2.6.1.3" pag="A-27" />) en $T=0$ resulta $A_s=A_aF_aI$.
+- $S_a$: aceleración espectral de diseño para el período fundamental (A.2.6), fracción de $g$.
+- $h_{eq}$ puede estimarse simplificadamente como $0.75h_n$.
+- Ambas ramas coinciden en $h_i = h_{eq}$ (ahí $a_i=S_a$). **Por encima de $h_{eq}$ la aceleración sigue creciendo**: en la cubierta ($h_n=h_{eq}/0.75$) vale $1.33\,S_a$.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Diafragmas de piso o de cubierta">
+Para las fuerzas que deben resistir **los diafragmas** de piso o de cubierta se pueden usar, en lugar de A.8.2-1, estimaciones más precisas de las aceleraciones absolutas máximas, por ejemplo de análisis dinámicos (<NormaRef s="A.8.2.1.1" pag="A-84" />).
+</Callout>
+
+Con los datos del Ejemplo 1 (colegio de 6 pisos, grupo III, perfil D, $S_a$ = {ej.saT.toFixed(3)} g, $A_s$ = {ej.as.toFixed(3)} g, $h_{eq}$ = {ej.heq.toFixed(1)} m) la aceleración en cada nivel es:
+
+| Nivel | $h_i$ (m) | $a_i$ (fracción de $g$) | $a_i / S_a$ |
+|:---:|---:|---:|---:|
+| 1 | {ej.niveles[0].h} | {ej.niveles[0].a.toFixed(4)} | {(ej.niveles[0].a / ej.saT).toFixed(2)} |
+| 2 | {ej.niveles[1].h} | {ej.niveles[1].a.toFixed(4)} | {(ej.niveles[1].a / ej.saT).toFixed(2)} |
+| 3 | {ej.niveles[2].h} | {ej.niveles[2].a.toFixed(4)} | {(ej.niveles[2].a / ej.saT).toFixed(2)} |
+| 4 | {ej.niveles[3].h} | {ej.niveles[3].a.toFixed(4)} | {(ej.niveles[3].a / ej.saT).toFixed(2)} |
+| 5 (= $h_{eq}$) | {ej.niveles[4].h} | {ej.niveles[4].a.toFixed(4)} | {(ej.niveles[4].a / ej.saT).toFixed(2)} |
+| 6 (cubierta) | {ej.niveles[5].h} | {ej.niveles[5].a.toFixed(4)} | {(ej.niveles[5].a / ej.saT).toFixed(2)} |
+
+El nivel 5 queda en 15 m, por encima de $h_{eq}$ = 13.5 m, así que ya usa la segunda rama. La cubierta recibe **{(ej.niveles[5].a / ej.niveles[0].a).toFixed(1)} veces** la aceleración del primer piso.
+
+#### A.8.2.1.2 — Método del análisis dinámico
+
+Cuando se usa el análisis dinámico, la aceleración $a_x$ en el piso $x$ es la del piso **después del ajuste de resultados** de <NormaRef s="A.5.4.5" pag="A-70" />. Ese valor **no puede ser menor** que el de la ecuación A.8.2-1 (<NormaRef s="A.8.2.1.2" pag="A-84" />).
+
+### A.8.2.2 — Fuerzas horizontales sobre el elemento
+
+La fuerza sísmica horizontal **reducida** de diseño, que puede actuar en **cualquier dirección** sobre el centro de masa del elemento, es:
+
+<Ecuacion num="A.8.2-2" titulo="Fuerza sísmica horizontal reducida sobre el elemento">
+
+$$
+F_p=\frac{a_x\,g}{R_0}\,M_p
+$$
+
+- $a_x$: aceleración del nivel de apoyo (fracción de $g$), de A.8.2-1 o del análisis dinámico.
+- $R_0$: coeficiente de capacidad de disipación de energía correspondiente a los requisitos de diseño del elemento (ver A.8.4).
+- $M_p$: masa del elemento (kg); con $g$ = 9.8 m/s² el resultado queda en N.
+
+</Ecuacion>
+
+La ecuación se aplica a elementos con **un solo apoyo**, o cuando **no hay desplazamientos relativos entre sus apoyos** (<NormaRef s="A.8.2.2" pag="A-84" />). Dos casos adicionales:
+
+- **Elementos que amplifican la aceleración** (<NormaRef s="A.8.2.2.1" pag="A-84" />): si sus características dinámicas amplifican su respuesta (típicamente apéndices de la edificación, como antenas, mástiles o parapetos esbeltos), esa amplificación debe incluirse al evaluar $F_p$. A.8.2-2 no trae un coeficiente $a_p$; esa herramienta es del Capítulo A.9.
+- **Elementos con apoyos que se desplazan entre sí** (<NormaRef s="A.8.2.2.2" pag="A-85" />): los conectados a **dos pisos distintos** (escaleras, rampas, tuberías estructurales) deben diseñarse, además de $F_p$, para las **fuerzas inducidas por los desplazamientos relativos** entre apoyos.
+
+<Callout tipo="atencion" titulo="Diferencias con el Capítulo A.9">
+En A.8 la fuerza es $F_p=(a_x g/R_0)M_p$: **no hay** coeficiente de amplificación $a_p$ ni cota mínima $A_aI\,g\,M_p/2$ como en A.9.4-1, y se divide por $R_0$ (el del material) y no por $R_p$ (el del anclaje). Si dudas de qué capítulo aplica, mira si el elemento figura en el plano estructural (A.8) o en los planos arquitectónicos, hidráulicos o mecánicos (A.9).
+</Callout>
+
+### A.8.2.3 — Fuerzas sobre las uniones al sistema de resistencia sísmica
+
+Además de <NormaRef s="A.3.6.4" />, las **uniones, empalmes y amarres** deben resistir **la totalidad de las fuerzas sísmicas reducidas de diseño** del elemento tal como las define A.8.2.2 (<NormaRef s="A.8.2.3" pag="A-85" />). No hay reducción adicional por "ductilidad" de la conexión: el amarre transmite $F_p$ completo.
+
+## A.8.3 — Deformaciones de diseño
+
+Los elementos deben ser capaces de resistir, **sin deterioro**, las deformaciones que les impone la respuesta sísmica. Como mínimo, las que resultan de las **derivas máximas de diseño** del Capítulo A.6 (<NormaRef s="A.8.3.1" pag="A-85" />). En la práctica:
+
+$$
+\delta_{imp} \;=\; \frac{\Delta_{max}}{h_{pi}}\;\times\;h_{\text{entre apoyos}}
+$$
+
+es decir, la deriva (como fracción de la altura de piso, con límite de 1.0 % en concreto y acero, <NormaRef s="Tabla A.6.4-1" pag="A-76" />) multiplicada por la altura entre los dos puntos de apoyo del elemento. Si el elemento no puede acomodar ese desplazamiento, hay que **dejar holgura** (juntas, apoyos deslizantes, agujeros alargados) o **dimensionarlo para la fuerza** que el desplazamiento impuesto genera.
+
+## A.8.4 — Requisitos de diseño
+
+Los requisitos para cada material son los **del Título correspondiente** (C concreto, D mampostería, E casas de uno y dos pisos, F acero, G madera) y, **en su defecto, los del nivel de capacidad de disipación de energía menor** de los previstos para ese material (<NormaRef s="A.8.4.1" pag="A-85" />). Como $R_0$ de A.8.2-2 es el de esos requisitos, en la práctica se toma el $R_0$ del nivel mínimo (DMI) de la Tabla A.3-3 cuando el elemento no se detalla para ductilidad:
+
+| Material del elemento | Nivel mínimo | $R_0$ (Tabla A.3-3) |
+|---|:---:|---:|
+| Concreto reforzado | DMI | 2.5 |
+| Acero estructural | DMI | 3.0 |
+
+<Callout tipo="nota" titulo="Interpretación del R0 aplicable">
+La norma no tabula un $R_0$ propio para estos elementos: remite a "los requisitos de cada Título". Tomar el $R_0$ del nivel DMI de los sistemas de pórtico (2.5 para concreto, 3.0 para acero, verificados en la Tabla A.3-3) es la lectura habitual y conservadora; si el elemento se detalla para DMO o DES, puede justificarse un $R_0$ mayor, pero el diseñador debe cumplir entonces todos los requisitos de detallado correspondientes del Título del material.
+</Callout>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Machones que soportan una cubierta liviana sobre la terraza">
+Un colegio de 6 pisos ($h_n$ = {ej.hn} m, piso a piso {ej.hpi} m, grupo de uso III con $I$ = {ej.i.toFixed(2)}) está en Bogotá ($A_a$ = 0.15, $A_v$ = 0.20) sobre perfil de suelo D. Su período fundamental es $T$ = {ej.T.toFixed(2)} s. Sobre la terraza se apoya una cubierta liviana en machones de concreto de 0.30 × 0.30 m y 2.4 m de altura, que **no hacen parte del sistema sísmico**. La masa tributaria de un machón con su cubierta es $M_p$ = {ej.mp1} kg. Hallar la fuerza sísmica de diseño y los efectos en el machón.
+
+<Paso titulo="Parámetros del espectro" ref="A.2.4, A.2.6">
+$F_a$ = {ej.fa.toFixed(2)}, $F_v$ = {ej.fv.toFixed(2)}; $T_C$ = {ej.per.tc.toFixed(3)} s. Como $T$ = {ej.T.toFixed(2)} s $≤ T_C$, $S_a = 2.5A_aF_aI$ = **{ej.saT.toFixed(4)} g**.
+</Paso>
+<Paso titulo="Aceleración en la superficie, As" ref="A.2.6.1.3">
+$A_s = A_aF_aI = 0.15\times 1.5\times 1.25$ = **{ej.as.toFixed(5)} g**. Además $h_{eq} = 0.75\times 18$ = **{ej.heq.toFixed(1)} m**.
+</Paso>
+<Paso titulo="Aceleración en la cubierta" ref="A.8.2-1">
+El apoyo está en $h_i$ = 18 m, mayor que $h_{eq}$, así que se usa la segunda rama:
+
+$$
+a_x = S_a\,\frac{h_i}{h_{eq}} = 0.703125\times\frac{18}{13.5}
+$$
+
+Resultado: $a_x$ = **{ej.a1.toFixed(4)} g**.
+</Paso>
+<Paso titulo="Coeficiente R0" ref="A.8.4.1">
+Los machones de concreto se detallan con los requisitos mínimos (DMI): $R_0$ = **{ej.r0}** (Tabla A.3-3, fila 3a).
+</Paso>
+<Paso titulo="Fuerza horizontal" ref="A.8.2-2">
+
+$$
+F_p=\frac{a_x\,g}{R_0}M_p=\frac{0.9375\times 9.8}{2.5}\times 2500
+$$
+
+Resultado: $F_p$ = **{(ej.fp1 / 1000).toFixed(2)} kN**, en cualquier dirección horizontal, aplicada en el centro de masa.
+</Paso>
+<Paso titulo="Efectos en el machón" ref="A.8.1.3(a)">
+Si la fuerza actúa a la altura de la cubierta ({ej.alturaCol} m sobre la base del machón), el machón en voladizo debe resistir en su base un cortante $V = F_p$ = {(ej.fp1 / 1000).toFixed(2)} kN y un momento $M = F_p\,h$, con $h$ = {ej.alturaCol} m, de **{(ej.m1 / 1000).toFixed(1)} kN·m**, combinados con las cargas verticales. La **unión** con la losa o viga de apoyo debe resistir el mismo $F_p$ completo (<NormaRef s="A.8.2.3" pag="A-85" />).
+</Paso>
+<Resultado>
+$F_p$ = {(ej.fp1 / 1000).toFixed(2)} kN ({(ej.fp1 / (ej.mp1 * 9.8) * 100).toFixed(1)} % del peso del conjunto). En la cubierta la aceleración ({ej.a1.toFixed(3)} g) es {(ej.a1 / ej.niveles[0].a).toFixed(1)} veces la del primer piso: el mismo machón apoyado en el nivel 1 solo recibiría {(ej.niveles[0].a / ej.a1 * 100).toFixed(0)} % de esta fuerza.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Escalera entre dos pisos: fuerza y deformación impuesta">
+En el mismo colegio, un tramo de escalera en concreto de $M_p$ = {ej.mp2} kg une los niveles a 6 m y 9 m (altura de piso {ej.hpi} m, contrahuella total 3.0 m, huella total 4.5 m, sección 1.20 m × 0.15 m). El análisis del Capítulo A.6 dio una deriva máxima de {(ej.derivaCalc * 100).toFixed(1)} % de la altura de piso. Hallar $F_p$ y la holgura que debe prever el apoyo.
+
+<Paso titulo="Aceleración en el apoyo" ref="A.8.2-1">
+Como el tramo está conectado a dos niveles, se toma, del lado de la seguridad, la aceleración del **apoyo superior** (9 m): $a_x$ = 0.28125 + (0.703125 − 0.28125)×9/13.5 = **{ej.a2.toFixed(4)} g**. (En el apoyo inferior, 6 m, sería {ej.a2inf.toFixed(4)} g.) La norma no precisa a qué nivel evaluar un elemento que une dos pisos: es criterio del diseñador, y tomar el nivel superior es conservador.
+</Paso>
+<Paso titulo="Fuerza horizontal" ref="A.8.2-2">
+
+$$
+F_p=\frac{a_x\,g}{R_0}M_p=\frac{0.5625\times 9.8}{2.5}\times 3000
+$$
+
+Resultado: $F_p$ = **{(ej.fp2 / 1000).toFixed(2)} kN**. Las uniones a los dos niveles deben ser capaces de resistir esta fuerza completa (<NormaRef s="A.8.2.3" pag="A-85" />).
+</Paso>
+<Paso titulo="Deformación impuesta" ref="A.8.3.1, A.6.4">
+Con la deriva calculada de {(ej.derivaCalc * 100).toFixed(1)} %: $\delta$ = {ej.derivaCalc} × {ej.hpi} m = **{(ej.delta * 1000).toFixed(0)} mm**. La deriva cumple el límite de la Tabla A.6.4-1 ({(ej.dLimite * 100).toFixed(1)} %: {ej.ver.cumple ? 'cumple' : 'no cumple'}, usa {(ej.ver.uso * 100).toFixed(0)} % del límite). El apoyo debe poder acomodar **al menos {(ej.delta * 1000).toFixed(0)} mm** entre un extremo y el otro, que es la deriva máxima de diseño que exige A.8.3.1 como mínimo. Si el diseño del edificio aún puede cambiar (por ejemplo, rigidizar o flexibilizar la estructura), es prudente dimensionar la holgura para la deriva límite: {(ej.deltaLim * 1000).toFixed(0)} mm. La holgura constructiva adicional (tolerancias) es criterio del diseñador.
+</Paso>
+<Paso titulo="¿Y si se conecta rígidamente en los dos extremos?" ref="A.8.1.3(b)">
+El tramo se comporta como un puntal inclinado de longitud {ej.long.toFixed(2)} m. Su rigidez horizontal es $k_h = (EA/L)\cos^2\theta$ = {(ej.kH / 1e6).toFixed(0)} MN/m (con $E=4700\sqrt{f'_c}$ en MPa y $f'_c$ = 21 MPa). Impuesto el desplazamiento de {(ej.delta * 1000).toFixed(0)} mm, la fuerza sería del orden de **{(ej.fRigida / 1e6).toFixed(1)} MN**, es decir {(ej.fRigida / ej.fp2).toFixed(0)} veces $F_p$. Es un orden de magnitud (desprecia flexión y fisuración), pero muestra por qué **la escalera se desliga de la estructura** (apoyo deslizante) o se incluye en el modelo como parte del sistema que resiste el sismo.
+</Paso>
+<Resultado>
+$F_p$ = {(ej.fp2 / 1000).toFixed(2)} kN para las uniones, y holgura o deslizamiento de al menos {(ej.delta * 1000).toFixed(0)} mm en uno de los dos extremos. Si se conectara rígido en ambos, la fuerza impuesta superaría con creces cualquier conexión razonable.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="espectro-diseno" />
+
+## Qué documento firma quién
+
+| Tarea | Responsable | Documento |
+|---|---|---|
+| Definir qué elementos hacen parte del sistema sísmico y cuáles no | Diseñador estructural (A.3) | Memoria de cálculo estructural |
+| Calcular $F_p$, $a_x$ y deformaciones de los elementos de A.8.1.1 | Diseñador estructural (A.8.1.2) | Memorias y planos estructurales |
+| Anclajes y uniones al sistema sísmico | Diseñador estructural | Detalles de conexión en planos |
+| Elementos arquitectónicos, hidráulicos, mecánicos y eléctricos | Diseñadores de cada especialidad (Capítulo A.9) | Memorias de cada sistema |
+
+## Anomalías y puntos a vigilar en el texto de la norma
+
+<Detalle titulo="Notas sobre el PDF (erratas e imprecisiones)">
+
+- **$A_s$ sin fórmula**: la nomenclatura lo define como la aceleración espectral para $T=0$ y remite a A.8.2.1.1, pero allí no hay ecuación. La lectura usada aquí ($A_s=A_aF_aI$, rama ascendente de A.2.6-7 en $T=0$) es consistente con A.9.4.8, donde un elemento en la base usa $a_x=A_aI$ (en suelo de roca, $F_a$ = 1).
+- **"Porcentaje" vs fracción**: la nomenclatura dice que $a_x$ se expresa "como un porcentaje de la aceleración de la gravedad", pero en A.8.2-2 se multiplica por $g$ y $S_a$ está en fracción de $g$. Se usa fracción de $g$.
+- **Símbolos**: A.8.2-1 usa $a_i$ y A.8.2-2 usa $a_x$ para la misma aceleración.
+- **Rama $h_i \ge h_{eq}$**: la imagen confirma $a_i=S_a\,h_i/h_{eq}$ (no $S_a$ constante); la extracción de texto del PDF la rompe.
+- **Página A-86** del PDF solo trae el encabezado "Notas:" sin contenido.
+- **A.8.2.2.1** habla de amplificación dinámica sin dar coeficientes; remite implícitamente a criterio del diseñador.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Dejar **sin diseñar** una escalera, tanque o machón "porque no es del sistema sísmico": A.8.1.2 los pone a cargo del diseñador estructural.
+- Usar $S_a$ constante para todos los pisos: la aceleración **crece con la altura** y en la cubierta supera a $S_a$.
+- Olvidar **dividir por $R_0$** o, al contrario, usar $R_0$ de un sistema de resistencia sísmica detallado para DES cuando el elemento solo cumple DMI.
+- Conectar una escalera **rígidamente en ambos extremos** sin contar con la fuerza que le impone la deriva (A.8.2.2.2, A.8.3.1).
+- Diseñar solo el elemento y no su **unión**: las uniones deben resistir el $F_p$ completo (A.8.2.3).
+- Confundir con el Capítulo A.9: aquí no hay $a_p$ ni cota mínima, y $R_0$ viene del material, no del tipo de anclaje.
+</Callout>
+
+## Resumen en una línea
+
+**Todo elemento estructural que no resiste el sismo igual se diseña para $F_p=a_xgM_p/R_0$ con la aceleración de su piso (crece con la altura), con uniones para el $F_p$ completo y capacidad para acomodar la deriva de diseño.**

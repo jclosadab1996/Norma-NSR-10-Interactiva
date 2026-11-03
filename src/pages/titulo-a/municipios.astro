@@ -1,0 +1,21 @@
+---
+import TituloALayout from '../../layouts/TituloALayout.astro';
+import CalculadoraEmbed from '../../components/content/CalculadoraEmbed.astro';
+---
+
+<TituloALayout title="Buscador de municipios — Aa, Av, Ae y Ad" description="Consulta Aa, Av, Ae, Ad y la zona de amenaza sísmica de los municipios de Colombia según el Apéndice A-4 de la NSR-10." ancho="amplio">
+  <header class="mb-6">
+    <p class="text-sm font-semibold uppercase tracking-wider text-primary">Título A · Apéndice A-4</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Buscador de municipios</h1>
+    <p class="mt-3 max-w-3xl text-muted-foreground">
+      Busca tu municipio para conocer sus coeficientes sísmicos: <strong>Aa</strong> y <strong>Av</strong> (diseño, A.2),
+      <strong>Ae</strong> (seguridad limitada en edificaciones existentes, A.10) y <strong>Ad</strong> (umbral de daño, A.12).
+    </p>
+  </header>
+  <CalculadoraEmbed id="municipios" sinMarco />
+  <p class="mt-6 rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+    Los valores son los impresos en el Apéndice A-4 del PDF. Algunas capitales difieren levemente de las tablas de los
+    capítulos A.2, A.10 y A.12 (por ejemplo Montería, Villavicencio, Cúcuta, Armenia e Ibagué): en caso de duda consulta el
+    texto oficial y la reglamentación municipal.
+  </p>
+</TituloALayout>

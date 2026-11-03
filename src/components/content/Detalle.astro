@@ -1,0 +1,18 @@
+---
+/** Bloque desplegable para profundizar (comentarios, demostraciones, casos límite). */
+interface Props {
+  titulo: string;
+  abierto?: boolean;
+}
+const { titulo, abierto = false } = Astro.props;
+---
+
+<details class="group not-prose my-5 rounded-xl border bg-card open:shadow-sm" open={abierto}>
+  <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-semibold marker:hidden hover:bg-accent/50 [&::-webkit-details-marker]:hidden">
+    <svg viewBox="0 0 24 24" class="size-4 shrink-0 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+    {titulo}
+  </summary>
+  <div class="overflow-x-auto border-t px-4 py-3 text-sm leading-relaxed [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1">
+    <slot />
+  </div>
+</details>

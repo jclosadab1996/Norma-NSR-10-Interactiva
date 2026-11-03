@@ -1,0 +1,632 @@
+---
+codigo: 'A.9'
+tipo: capitulo
+titulo: 'Elementos no estructurales'
+resumen: 'Cómo se diseñan sísmicamente fachadas, muros divisorios, cielos rasos, tanques, equipos y tuberías: grado de desempeño según el grupo de uso, fuerza Fp = (ax·ap/Rp)·g·Mp, tipos de anclaje, deformaciones y tablas A.9.5-1 y A.9.6-1.'
+objetivos:
+  - 'Determinar el grado de desempeño mínimo (Superior, Bueno o Bajo) según el grupo de uso y saber cuándo A.9 no se aplica'
+  - 'Calcular la fuerza sísmica de diseño Fp de un elemento no estructural con ax, ap y Rp'
+  - 'Leer las Tablas A.9.5-1 y A.9.6-1 para obtener ap y el tipo de anclaje exigido'
+  - 'Diseñar conexiones, holguras y anclajes de fachadas, cielos rasos, tanques y equipos'
+paginasNorma: 'A-87 a A-96'
+paginaPdf: 130
+orden: 9
+calculadoras: ['espectro-diseno', 'deriva']
+nivel: 'intermedio'
+---
+
+import { coeficienteFa, coeficienteFv, coeficienteImportancia, periodosEspectro, sa, G } from '../../lib/nsr10';
+import { aceleracionSuperficie, aceleracionNivel, alturaEquivalente, deformacionImpuesta } from '../../lib/nsr10/elementosNoSismicos';
+import { elementoNoEstructural, exigenciaAnclaje, rpRequerido, gradoMinimo, exentoPorA913, fuerzaNoEstructural, fuerzaNoEstructuralConAx, axEnBase, fuerzasConexionFachada, gobiernaVientoFachada, RP_ANCLAJE } from '../../lib/nsr10/noEstructurales';
+
+export const nombreAnclaje = { especiales: 'Especiales', ductiles: 'Dúctiles', 'no-ductiles': 'No dúctiles', humedos: 'Húmedos' };
+
+export const celda = (id, grado) => {
+  const x = exigenciaAnclaje(elementoNoEstructural(id), grado);
+  if (x === 'no-requerido') return 'No requerido';
+  if (x === 'no-permitido') return 'No se permite';
+  return `${nombreAnclaje[x]} (${RP_ANCLAJE[x]})`;
+};
+
+export const ex = (() => {
+  const aa = 0.15, av = 0.2;
+  const fa = coeficienteFa('D', aa);
+  const fv = coeficienteFv('D', av);
+  const i = coeficienteImportancia('III');
+  const p = { aa, av, fa, fv, i };
+  const hn = 18, hpi = 3, T = 0.6;
+  const saT = sa(T, p);
+  const as = aceleracionSuperficie(aa, fa, i);
+  const heq = alturaEquivalente(hn);
+  const base = { aa, i, as, sa: saT, hn };
+  const grado = gradoMinimo('III');
+
+  // Ejemplo 1: tanque de agua en la cubierta
+  const tanque = elementoNoEstructural('equipo-general');
+  const rpT = rpRequerido(tanque, grado);
+  const mpT = 5250;
+  const pesoT = G * mpT;
+  const bT = 1.2, hcg = 1.0;
+  const t6 = fuerzaNoEstructural({ ...base, hx: hn, ap: tanque.ap, rp: rpT, mp: mpT });
+  const t15 = fuerzaNoEstructural({ ...base, hx: hn, ap: tanque.ap, rp: RP_ANCLAJE['no-ductiles'], mp: mpT });
+  const t05 = fuerzaNoEstructural({ ...base, hx: hn, ap: tanque.ap, rp: RP_ANCLAJE['humedos'], mp: mpT });
+  const volcamiento = (fp) => {
+    const pesoEf = pesoT * (1 - 1 / 3); // la fuerza vertical A.9.4.4 hacia arriba reduce el peso resistente
+    const mRest = (pesoEf * bT) / 2;
+    const mVolc = fp * hcg;
+    const tTot = Math.max(0, (mVolc - mRest) / bT);
+    return { pesoEf, mRest, mVolc, tTot };
+  };
+  const v6 = volcamiento(t6.fp);
+  const v15 = volcamiento(t15.fp);
+
+  // Ejemplo 2: cielo raso en el nivel 4 (hx = 12 m)
+  const cielo = elementoNoEstructural('cielos-rasos');
+  const rpC = rpRequerido(cielo, grado);
+  const mpC = 15;
+  const c = fuerzaNoEstructural({ ...base, hx: 12, ap: cielo.ap, rp: rpC, mp: mpC });
+  const cBajo = rpRequerido(cielo, 'Bajo');
+
+  // Ejemplo 3: panel de fachada en mampostería reforzada apoyada solo abajo, nivel 15 m
+  const fachada = elementoNoEstructural('fachada-mamp-reforzada-solo-abajo');
+  const rpF = rpRequerido(fachada, grado);
+  const mpF = 240; // kg/m²
+  const f = fuerzaNoEstructural({ ...base, hx: 15, ap: fachada.ap, rp: rpF, mp: mpF });
+  const areaPanel = 3 * 6;
+  const nConex = 4;
+  const fpConex = (f.fp * areaPanel) / nConex;
+  const conexF = fuerzasConexionFachada(fpConex);
+  const viento = 600; // N/m², valor supuesto de B.6 para el ejemplo
+  const vientoCheck = gobiernaVientoFachada(viento, f.fp);
+  const gap = deformacionImpuesta(0.01, hpi);
+
+  // Detalle: bomba en el sótano (A.9.4.8)
+  const bombaAx = axEnBase(aa, i);
+  const bomba = fuerzaNoEstructuralConAx(bombaAx, { aa, i, ap: tanque.ap, rp: rpT, mp: 800 });
+
+  const a = (h) => aceleracionNivel(h, base);
+  return { aa, av, fa, fv, i, p, hn, hpi, T, saT, as, heq, per: periodosEspectro(p), grado, a, tanque, rpT, mpT, pesoT, bT, hcg, t6, t15, t05, v6, v15, cielo, rpC, mpC, c, cBajo, fachada, rpF, mpF, f, areaPanel, nConex, fpConex, conexF, viento, vientoCheck, gap, bombaAx, bomba };
+})();
+
+## Idea central del capítulo
+
+Un edificio bien diseñado estructuralmente puede salir de un sismo con la estructura intacta y, aun así, ser una **trampa**: fachadas que caen a la calle, cielos rasos sobre las personas, tanques que se vuelcan, tuberías de gas que se rompen, muros divisorios que aplastan una columna. La mayor parte del daño económico de un sismo moderado está en estos elementos, y muchas muertes por sismos ocurren por su caída.
+
+El Capítulo A.9 cubre los **elementos no estructurales** (los que no hacen parte de la estructura de la construcción) y sus **anclajes**. Resuelve tres preguntas en cadena:
+
+1. **¿Qué tan bien debe comportarse?** → el *grado de desempeño* (Superior, Bueno o Bajo) según el grupo de uso (A.9.2).
+2. **¿Qué fuerza debe resistir?** → $F_p=\dfrac{a_x\,a_p}{R_p}\,g\,M_p$, con la aceleración del piso donde se apoya ($a_x$), la amplificación del propio elemento ($a_p$) y la ductilidad de su anclaje ($R_p$) (A.9.4).
+3. **¿Cómo se ancla y qué deformación acepta?** → tipos de anclaje, conexiones, holguras frente a la deriva y reglas especiales por tipo de elemento (A.9.4 a A.9.6).
+
+**Analogía de la repisa.** Piensa en una repisa con un florero. Si está pegada con cinta (anclaje "húmedo"), una sacudida la bota. Con chazos de expansión resiste pero se rompe de golpe (anclaje "no dúctil"). Con tornillos profundos que se deforman sin soltarse (anclaje "dúctil") aguanta mucho más. El capítulo traduce eso en el coeficiente $R_p$: cuanto mejor el anclaje, menor la fuerza de diseño, pero más exigente el detalle.
+
+<Callout tipo="importante" titulo="Quién se salva de A.9">
+Las edificaciones de los **grupos de uso I y II** ubicadas en zonas de **amenaza sísmica baja** están **exentas** de todo el capítulo (<NormaRef s="A.9.1.3" pag="A-87" />). En cualquier otro caso, el capítulo aplica, aunque el grado de desempeño exigido para el grupo I sea el más bajo.
+</Callout>
+
+## A.9.0 — Nomenclatura
+
+| Símbolo | Significado |
+|---|---|
+| $a_p$ | Coeficiente de amplificación dinámica del elemento no estructural (Tablas A.9.5-1 y A.9.6-1) |
+| $a_x$ | Aceleración horizontal en el piso $x$ donde se soporta el elemento, como fracción de $g$ |
+| $A_a$, $I$ | Aceleración pico efectiva (A.2.2) y coeficiente de importancia (A.2.5) |
+| $A_s$ | Aceleración en la superficie del suelo ($T=0$); ver A.9.4.2.1 |
+| $F_p$ | Fuerza sísmica horizontal sobre el elemento, aplicada en su centro de masa |
+| $h_x$ | Altura del nivel de apoyo del elemento, desde la base (m) |
+| $h_n$, $h_{eq}$ | Altura de la cubierta y altura equivalente $\approx 0.75h_n$ (m) |
+| $M_p$ | Masa del elemento no estructural |
+| $R_p$ | Coeficiente de capacidad de disipación de energía del elemento y su soporte (Tablas y A.9.4.9) |
+| $S_a$ | Aceleración espectral de diseño del período fundamental (A.2.6), fracción de $g$ |
+| $E$ | Fuerzas sísmicas reducidas de diseño (para esfuerzos de trabajo, A.9.4.7) |
+
+<Callout tipo="atencion" titulo="Anomalía en la definición de E">
+La nomenclatura del PDF define $E = F_p/R_p$ (confirmado en la imagen de la página A-87). Pero la ecuación A.9.4-1 ya da una fuerza **reducida** (ya dividida por $R_p$), y A.9.4.7 llama $E$ a "las fuerzas sísmicas reducidas de diseño que se determinan de acuerdo con el presente Capítulo". Dividir otra vez por $R_p$ sería una doble reducción. En este capítulo se entiende $E=F_p$ de A.9.4-1. La definición parece una errata heredada.
+</Callout>
+
+## A.9.1 — General
+
+### A.9.1.1 — Propósito
+
+Establecer los criterios de diseño de elementos que no hacen parte de la estructura, "con el fin de que se cumpla el propósito del Reglamento" (proteger la vida y limitar el daño) (<NormaRef s="A.9.1.1" pag="A-87" />).
+
+### A.9.1.2 — Alcance
+
+Cubre las previsiones sísmicas de los elementos no estructurales y **de sus anclajes a la estructura**. Los que deben diseñarse sísmicamente incluyen (<NormaRef s="A.9.1.2" pag="A-87" />):
+
+| | Elementos | Dónde se detalla |
+|---|---|---|
+| (a) | Acabados y elementos arquitectónicos y decorativos | A.9.5, Tabla A.9.5-1 |
+| (b) | Instalaciones hidráulicas y sanitarias | A.9.6, Tabla A.9.6-1 |
+| (c) | Instalaciones eléctricas | A.9.6 |
+| (d) | Instalaciones de gas | A.9.6 |
+| (e) | Equipos mecánicos | A.9.6 |
+| (f) | Estanterías | A.9.5 (Tabla A.9.5-1) |
+| (g) | Instalaciones especiales | Criterios generales de A.9.4 |
+
+### A.9.1.3 — Exenciones
+
+Están exentas "todas las edificaciones pertenecientes a los grupos de uso I y II localizadas en zonas de amenaza sísmica baja" (<NormaRef s="A.9.1.3" pag="A-87" />):
+
+| Grupo de uso | Amenaza baja | Amenaza intermedia | Amenaza alta |
+|:---:|:---:|:---:|:---:|
+| I | **Exento** | Aplica A.9 (grado Bajo) | Aplica A.9 (grado Bajo) |
+| II | **Exento** | Aplica A.9 (grado Bueno) | Aplica A.9 (grado Bueno) |
+| III | Aplica A.9 (grado Superior) | Aplica A.9 (grado Superior) | Aplica A.9 (grado Superior) |
+| IV | Aplica A.9 (grado Superior) | Aplica A.9 (grado Superior) | Aplica A.9 (grado Superior) |
+
+## A.9.2 — Grado de desempeño de los elementos no estructurales
+
+### A.9.2.1 — Definición del desempeño
+
+Se llama **desempeño** al comportamiento de los elementos no estructurales ante el sismo de diseño. Hay tres grados (<NormaRef s="A.9.2.1" pag="A-88" />):
+
+| Grado | Daño | Operación del edificio | Reparación |
+|---|---|---|---|
+| **Superior** | Mínimo | **No** interfiere con la operación | Mínima |
+| **Bueno** | Totalmente reparable | **Puede haber alguna interferencia** después del sismo | Reparable |
+| **Bajo** | Daños graves, incluso **no reparables**, pero **sin desprendimiento ni colapso** | No se exige | Puede ser irreparable |
+
+Nótese que **incluso el grado Bajo prohíbe el desprendimiento o colapso**: nunca se acepta que el elemento caiga.
+
+### A.9.2.2 — Clasificación
+
+La edificación debe clasificarse en uno de los tres grados, **no inferior** al mínimo de A.9.2.3. El **propietario**, de manera voluntaria, puede exigir un grado mejor, **comunicándolo por escrito a los diseñadores**; sin esa comunicación, los diseñadores solo están obligados al mínimo (<NormaRef s="A.9.2.2" pag="A-88" />).
+
+### A.9.2.3 — Grado de desempeño mínimo
+
+<TablaNorma numero="Tabla A.9.2-1" titulo="Grado de desempeño mínimo requerido" pag="A-88" nota="Verificada contra la imagen de la página A-88. La tabla asocia un grado a cada grupo de uso de A.2.5.1.">
+
+| Grupo de uso | Grado de desempeño |
+|:---:|---|
+| IV | Superior |
+| III | Superior |
+| II | Bueno |
+| I | Bajo |
+
+</TablaNorma>
+
+<Callout tipo="practica" titulo="Mini-tabla de decisión: ¿qué grado debo diseñar?">
+
+| Tipo de edificación (ejemplos) | Grupo | $I$ | Grado mínimo | Qué se protege |
+|---|:---:|:---:|---|---|
+| Hospital con cirugía, aeropuerto, central de telecomunicaciones | IV | 1.50 | **Superior** | Funcionamiento continuo tras el sismo |
+| Colegio, universidad, estación de bomberos, policía | III | 1.25 | **Superior** | Atención a la comunidad; evacuación segura |
+| Centro comercial grande, salón con más de 200 personas, edificio gubernamental | II | 1.10 | **Bueno** | Daño reparable; interferencia temporal tolerable |
+| Vivienda, oficinas y comercio corrientes | I | 1.00 | **Bajo** | Sin caída; daño grave aceptado |
+
+Si el propietario lo pide por escrito, siempre se puede subir un grado (por ejemplo, vivienda con grado Bueno). Bajar, nunca.
+</Callout>
+
+## A.9.3 — Responsabilidades
+
+| Rol | Responsabilidad | Referencia |
+|---|---|---|
+| **Diseñador responsable** (profesional que firma o rotula el plano) | Del diseño sísmico de cada elemento. Se presume que, si el elemento figura en un plano o memoria, se tomaron las medidas para el grado de desempeño apropiado, y quien firma responde por ello | <NormaRef s="A.9.3.1" pag="A-88" /> |
+| **Constructor** que suscribe la licencia | Cumplir A.1.3.6.5 y ser **responsable final** de que los diseños se hayan hecho adecuadamente y la construcción sea apropiada | <NormaRef s="A.9.3.1" pag="A-88" /> |
+| **Diseñador cuando el fabricante suministra e instala** el elemento | Solo especifica en planos, memorias o especificaciones el **grado de desempeño** que deben cumplir; el constructor sigue obligado por A.1.3.6.5 | <NormaRef s="A.9.3.1.1" pag="A-88" /> |
+| **Supervisor técnico** | Verifica que se construya e instale según planos y especificaciones; si solo se indica el grado de desempeño, **verifica que lo instalado esté efectivamente en capacidad de cumplirlo** | <NormaRef s="A.9.3.2" pag="A-88" /> |
+| **Coordinador**: el profesional que figura como **diseñador arquitectónico** en la solicitud de licencia | Coordina los diseños de elementos de distintos sistemas para que el de uno no afecte el desempeño del de otros | <NormaRef s="A.9.3.3" pag="A-89" /> |
+
+## A.9.4 — Criterio de diseño
+
+### A.9.4.1 — Dos estrategias
+
+El diseñador de elementos no estructurales puede adoptar una de dos estrategias (<NormaRef s="A.9.4.1" pag="A-89" />):
+
+| | (a) **Separarlos de la estructura** | (b) **Admitir las deformaciones de la estructura** |
+|---|---|---|
+| Idea | Se aíslan lateralmente dejando una separación suficiente | Se disponen elementos que **tocan** la estructura |
+| Cómo se soporta | Apoyados abajo o colgados de la estructura | Unidos a la estructura |
+| Requisito principal | Resisten por sí mismos las fuerzas inerciales; anclajes que las transfieran; **separación suficiente** para los desplazamientos de diseño y sin rellenos que la rigidicen | Suficientemente **flexibles** para resistir las deformaciones de la estructura sin daño mayor que el del grado de desempeño |
+| Coordinación | — | **Con el ingeniero estructural**, para considerar el efecto de la interacción sobre la estructura |
+
+### A.9.4.2 — Fuerzas sísmicas de diseño
+
+La fuerza sísmica horizontal reducida sobre cualquier elemento no estructural se calcula con (<NormaRef s="A.9.4-1" pag="A-89" />):
+
+<Ecuacion num="A.9.4-1" titulo="Fuerza sísmica horizontal reducida sobre un elemento no estructural">
+
+$$
+F_p=\frac{a_x\,a_p}{R_p}\,g\,M_p\;\ge\;\frac{A_a\,I}{2}\,g\,M_p
+$$
+
+- $a_x$: aceleración en el punto de soporte (fracción de $g$), de A.9.4-2.
+- $a_p$: amplificación dinámica del elemento (1.0 a 2.5), de las Tablas A.9.5-1 o A.9.6-1.
+- $R_p$: capacidad de disipación del elemento y su anclaje (0.5 a 6.0), del tipo de anclaje de A.9.4.9.
+- $M_p$: masa del elemento (kg); con $g$ = 9.8 m/s² la fuerza queda en N.
+- El segundo miembro es una **cota mínima**: $F_p$ nunca puede ser menor que $A_aI/2$ veces el peso del elemento.
+
+</Ecuacion>
+
+#### A.9.4.2.1 — Aceleración en el punto de soporte, $a_x$
+
+Es la aceleración horizontal en el punto donde el elemento está soportado o anclado a la estructura. Depende del sistema sísmico y de la **localización del elemento** en la edificación. Debe evaluarse con un análisis dinámico que considere la disipación inelástica, o con la siguiente ecuación, compatible con las fuerzas del método de fuerza horizontal equivalente del Capítulo A.4 (<NormaRef s="A.9.4-2" pag="A-89" />):
+
+<Ecuacion num="A.9.4-2" titulo="Aceleración en el nivel de apoyo del elemento">
+
+$$
+a_x=\begin{cases}
+A_s+\dfrac{(S_a-A_s)\,h_x}{h_{eq}} & h_x\le h_{eq}\\[10pt]
+S_a\,\dfrac{h_x}{h_{eq}} & h_x\ge h_{eq}
+\end{cases}
+\qquad h_{eq}\approx 0.75\,h_n
+$$
+
+- Es la misma ecuación A.8.2-1 del capítulo anterior, con $h_x$ en lugar de $h_i$ (verificada en la imagen de la página A-89).
+- $A_s=A_aF_aI$ si se evalúa el espectro en $T=0$ con la rama ascendente (A.2.6.1.3). El PDF remite a A.9.4.2.1 para definirlo, pero ahí no hay fórmula; ver anomalías.
+- **$S_a$ se calcula en las dos direcciones de análisis en planta y se usa el mayor.**
+
+</Ecuacion>
+
+La aceleración **crece con la altura**: en la base vale $A_s$, a la altura equivalente vale $S_a$, y en la cubierta $S_a\,h_n/h_{eq}=1.33\,S_a$. Un mismo tanque recibe más fuerza en la cubierta que en el primer piso.
+
+#### A.9.4.2.2 — Amplificación dinámica, $a_p$
+
+Un elemento rígido, con su masa cerca del apoyo y bien anclado, **no amplifica** (su período es del orden de 0.06 s o menos). Uno flexible, con masa distribuida en altura o concentrada lejos del soporte, o con apoyos que permiten desplazamientos, **amplifica** las aceleraciones por resonancia con la estructura. La amplificación debe determinarse con análisis dinámicos detallados o ensayos; **en su ausencia se usan los valores de las Tablas A.9.5-1 y A.9.6-1**, que van de 1.0 a 2.5 (<NormaRef s="A.9.4.2.2" pag="A-90" />).
+
+#### A.9.4.2.3 — Disipación de energía, $R_p$
+
+Representa la capacidad, en conjunto, del elemento y de su anclaje de deformarse en el rango inelástico. Un $R_p$ cercano a 1 indica fragilidad y poca disipación; al atender esas debilidades se puede subir $R_p$. Las tablas dan las condiciones para los valores **mínimos permitidos** para cada grado de desempeño, que varían entre 0.5 y 6.0 según A.9.4.9 (<NormaRef s="A.9.4.2.3" pag="A-90" />).
+
+### A.9.4.3 — Capacidad de deformación
+
+Los desplazamientos del elemento respecto a la estructura **no deben exceder las holguras** de separación ni las deformaciones que pongan en peligro su integridad. Los **desplazamientos de verificación** se fijan en función de las derivas máximas del Capítulo A.6 (<NormaRef s="A.9.4.3" pag="A-90" />). El elemento debe resistir esas deformaciones sin un daño mayor que el admisible para su grado. Como orden de magnitud:
+
+$$
+\delta \;=\; \text{deriva}\;\times\;h_{\text{piso}}
+$$
+
+Con la deriva límite de 1.0 % de la Tabla A.6.4-1 y un piso de {ex.hpi} m, $\delta$ = **{(ex.gap * 1000).toFixed(0)} mm** de movimiento relativo entre el piso y el superior.
+
+### A.9.4.4 — Aplicación de las fuerzas sísmicas
+
+Las fuerzas actúan según la distribución de masa y rigidez del elemento; se permite suponerlas aplicadas en su **centro de gravedad** y pueden obrar en **cualquier dirección horizontal**. Para **elementos mecánicos y eléctricos** debe considerarse además una **fuerza vertical, hacia arriba o hacia abajo, igual a un tercio de su peso**, que **no se amplifica** con $a_x$ ni $a_p$ ni se divide por $R_p$ (<NormaRef s="A.9.4.4" pag="A-90" />).
+
+### A.9.4.5 — Transferencia de las fuerzas sísmicas
+
+Los elementos que deban diseñarse para resistir fuerzas sísmicas se **amarran o anclan** de modo que las fuerzas lleguen a la estructura. El amarre debe resistir **tensiones y compresiones, sin contar con efectos de fricción ni con la resistencia a la tensión de los morteros de pega** (<NormaRef s="A.9.4.5" pag="A-90" />). Un equipo apoyado "por su peso" no está anclado.
+
+### A.9.4.6 — Otras solicitaciones
+
+Además del sismo hay que considerar las demás solicitaciones del Título B (viento, cargas, temperatura, etc.) (<NormaRef s="A.9.4.6" pag="A-90" />).
+
+### A.9.4.7 — Esfuerzos de trabajo
+
+Si el elemento se diseña con el **método de esfuerzos de trabajo** (B.2.3), las fuerzas reducidas $E$ de este capítulo se multiplican por **0.7**, como en las combinaciones de B.2.3 (<NormaRef s="A.9.4.7" pag="A-90" />). Es decir, $E_{trabajo}=0.7\,F_p$.
+
+### A.9.4.8 — Elementos en la base, por debajo o fuera de la estructura
+
+Los elementos a la altura de la base, **por debajo de ella o fuera de la estructura** se diseñan con A.9.4-1 usando $a_x = A_aI$ (<NormaRef s="A.9.4.8" pag="A-91" />). Con ese valor y $a_p=1$, $R_p=6$, el término $a_xa_p/R_p=A_aI/6$ queda por debajo de la cota $A_aI/2$ y **gobierna la cota mínima**.
+
+### A.9.4.9 — Tipos de anclaje y valor de $R_p$ permitido
+
+Los anclajes deben tener la capacidad de disipación y ductilidad compatibles con el $R_p$ requerido (<NormaRef s="A.9.4.9" pag="A-91" />):
+
+| Tipo | $R_p$ | Qué es | Cuándo se usa |
+|---|:---:|---|---|
+| **Especiales** (A.9.4.9.1) | **6** | Anclajes diseñados con los requisitos del Título F para acero con capacidad especial de disipación (DES) | Cuando la tabla pide "Especiales" (estanterías de más de 2.5 m diseñadas según Título F) |
+| **Dúctiles** (A.9.4.9.2) | **6** | Anclajes **profundos** (relación embebido/diámetro **mayor de 8**) con químicos (epóxicos), vaciados en sitio, o vaciados en sitio que cumplen el Capítulo C.21. **No** se permiten pernos de expansión ni anclajes por tiro | Elementos **dúctiles** |
+| **No dúctiles** (A.9.4.9.3) | **1.5** | Pernos de expansión, anclajes **superficiales** (relación **menor de 8**) con químicos o vaciados en sitio, anclajes por tiro, varillas con gancho en el mortero de pega de la mampostería | Elementos no dúctiles. Si se usan en elementos dúctiles, se diseñan con $R_p$ = 1.5 |
+| **Húmedos** (A.9.4.9.4) | **0.5** | Mortero o adhesivos que pegan directamente al mortero o concreto, **sin anclaje mecánico resistente a tracción** | Solo donde la tabla lo admite (grado Bajo en algunos elementos) |
+
+<Callout tipo="nota" titulo="Un anclaje mejor baja la fuerza">
+Como $F_p$ es proporcional a $1/R_p$, pasar de un anclaje húmedo ($R_p$ = 0.5) a uno dúctil ($R_p$ = 6) divide la fuerza de diseño entre **12**. Pero exige anclajes profundos, ductilidad real del elemento y su sistema de soporte.
+</Callout>
+
+### A.9.4.10 — Elementos de conexión
+
+El elemento de conexión es el aditamento que conecta el elemento no estructural con los anclajes (a veces es el mismo anclaje). Las conexiones que **permiten movimiento** (agujeros alargados, agujeros mayores que el espigo, elementos de acero que se flexionan) deben resistir las fuerzas reducidas en las direcciones en que **no** se permite el movimiento. En **fachadas** (<NormaRef s="A.9.4.10" pag="A-91" />):
+
+| Componente | Se diseña para |
+|---|---|
+| **Elemento de conexión** en sí | **1.33** $F_p$ |
+| **Pernos, tornillos, soldaduras y espigos** del sistema de conexión | **3.0** $F_p$ |
+
+## A.9.5 — Acabados y elementos arquitectónicos
+
+### A.9.5.1 — General
+
+Los acabados y elementos arquitectónicos de la Tabla A.9.5-1 y sus anclajes se diseñan y detallan según esta sección, y **sus cálculos se incluyen en las memorias de diseño de acabados** (<NormaRef s="A.9.5.1" pag="A-91" />).
+
+### A.9.5.2 — Elementos que requieren especial cuidado
+
+Algunos elementos representan un peligro especialmente grave para la vida o pueden llevar a la falla de elementos estructurales críticos (<NormaRef s="A.9.5.2" pag="A-92" />):
+
+| | Elemento | Peligro | Qué exige la norma |
+|---|---|---|---|
+| (a) | **Muros de fachada** | Caída sobre transeúntes | Que sus componentes no se disgreguen y que el conjunto esté bien amarrado a la estructura. Vidrios: Capítulo K.4 |
+| (b) | **Muros interiores** y particiones | Vuelco | Precauciones contra el vuelco |
+| (c) | **Cielos rasos** | Desprendimiento y caída sobre las personas | Diseño sísmico del sistema (ver A.9.5.8) |
+| (d) | **Enchapes de fachada** | Desprendimiento sobre transeúntes | Diseñarlos como **sistema** (soporte, mortero, adhesivos y enchape), con atención a temperatura, humedad, meteorización y deformación del soporte |
+| (e) | **Áticos, parapetos y antepechos** | Igual que fachadas; falla hacia adentro sobre cubiertas de tejas o materiales frágiles | Considerar la posibilidad de que el parapeto falle hacia adentro |
+| (f) | **Vidrios** | Rotura por deformación del marco | Holguras en el montaje; películas protectoras, vidrio templado, laminado o de seguridad. Capítulo K.4 |
+| (g) | **Paneles prefabricados de fachada** | Desprendimiento | Holguras que permitan la deformación y adherencia adecuada al sistema sísmico |
+| (h) | **Columnas cortas o cautivas** | Falla frágil de la columna restringida por un muro no estructural que no llega a la losa | **Separar el muro de la columna** o llevarlo hasta la losa superior |
+
+### A.9.5.3 — Fuerzas sísmicas de diseño
+
+Los elementos arquitectónicos y acabados y sus anclajes se diseñan para las fuerzas reducidas de A.9.4-1, **con los coeficientes de la Tabla A.9.5-1** (<NormaRef s="A.9.5.3" pag="A-92" />).
+
+### A.9.5.4 — Fuerzas de viento
+
+Cuando las fuerzas de viento, positivas o negativas, **sobrepasen 0.7 $F_p$** en muros no estructurales de fachada, **se usan las de viento** en el diseño del elemento y **sus anclajes se diseñan para 1.4 veces la fuerza de viento** (<NormaRef s="A.9.5.4" pag="A-92" />).
+
+### A.9.5.5 — Anclaje de las fachadas
+
+Los anclajes y amarres de las fachadas a la estructura y a los muros interiores deben resistir las fuerzas de A.9.4-1 y tener **ductilidad y capacidad de rotación** para aceptar, en cada piso, desplazamientos entre su base y su parte superior **iguales a la deriva de diseño** del Capítulo A.6. El muro debe resistir la **flexión** que le imponen las fuerzas actuando **perpendicularmente a su plano** (<NormaRef s="A.9.5.5" pag="A-92" />).
+
+### A.9.5.6 — Capacidad de deformación
+
+Los acabados deben resistir, con el daño aceptable para su grado, las deformaciones dictadas por la deriva del Capítulo A.6. En elementos sobre **voladizos** hay que considerar la **deflexión vertical** causada por la rotación en el apoyo (<NormaRef s="A.9.5.6" pag="A-93" />).
+
+### A.9.5.7 — Fuerzas perpendiculares al plano del muro no estructural
+
+Se debe verificar que las **deflexiones** del muro causadas por esas fuerzas **no excedan su capacidad de deformación** (<NormaRef s="A.9.5.7" pag="A-93" />).
+
+### A.9.5.8 — Cielos rasos
+
+Se debe considerar la **interacción** de los elementos arquitectónicos, hidráulicos, mecánicos y eléctricos que se incorporen dentro del cielo raso (luminarias, rociadores, rejillas) (<NormaRef s="A.9.5.8" pag="A-93" />).
+
+<TablaNorma numero="Tabla A.9.5-1" titulo="Coeficiente de amplificación dinámica ap y tipo de anclajes para Rp, en elementos arquitectónicos y acabados" pag="A-93" nota="Transcrita y verificada visualmente contra la imagen de la página A-93. En cada celda, el tipo de anclaje es el mínimo requerido en A.9.4.9 para ese grado de desempeño. Los números entre paréntesis remiten a las notas al pie. Rp según A.9.4.9: Dúctiles y Especiales = 6, No dúctiles = 1.5, Húmedos = 0.5.">
+
+| Elemento no estructural | $a_p$ | Superior | Bueno | Bajo |
+|---|:---:|---|---|---|
+| **Fachadas** | | | | |
+| Paneles prefabricados apoyados arriba y abajo | 1.0 | Dúctiles | No dúctiles | No dúctiles |
+| En vidrio apoyadas arriba y abajo | 1.0 | Dúctiles | No dúctiles | No dúctiles |
+| Lámina en yeso, con costillas de acero | 1.0 | No dúctiles | No dúctiles | No dúctiles |
+| Mampostería reforzada, separada lateralmente de la estructura, apoyada arriba y abajo | 1.0 | Dúctiles | No dúctiles | No dúctiles |
+| Mampostería reforzada, separada lateralmente, apoyada solo abajo | 2.5 | Dúctiles | No dúctiles | No dúctiles |
+| Mampostería no reforzada, separada lateralmente, apoyada arriba y abajo | 1.0 | No se permite | No se permite | No dúctiles (1) |
+| Mampostería no reforzada, separada lateralmente, apoyada solo abajo | 2.5 | No se permite | No se permite | No dúctiles (1) |
+| Mampostería no reforzada, confinada por la estructura | 1.0 | No se permite | No se permite | No dúctiles (2) |
+| Muros que encierran puntos fijos y ductos de escaleras, ascensores y otros | 1.0 | Dúctiles | No dúctiles | Húmedos (1) |
+| **Muros divisorios y particiones** | | | | |
+| Corredores en áreas públicas | 1.0 | Dúctiles | No dúctiles | Húmedos (1) |
+| Muros divisorios de altura total | 1.0 | No dúctiles | No dúctiles | Húmedos (1) |
+| Muros divisorios de altura parcial | 2.5 | No dúctiles | No dúctiles | Húmedos (1) |
+| **Elementos en voladizo vertical** | | | | |
+| Áticos, parapetos y chimeneas | 2.5 | Dúctiles | No dúctiles | No dúctiles |
+| Anclaje de enchapes de fachada | 1.0 | Dúctiles | No dúctiles | Húmedos |
+| Altillos | 1.5 | Dúctiles | No dúctiles | No dúctiles |
+| Cielos rasos | 1.0 | No dúctiles | No dúctiles | No requerido (3) |
+| **Anaqueles, estanterías y bibliotecas de más de 2.50 m de altura, incluyendo el contenido** | | | | |
+| Diseñadas de acuerdo con el Título F | 2.5 | Especiales | Dúctiles | No requerido (3) |
+| Otras | 2.5 | Dúctiles | No dúctiles | No requerido (3) |
+| Tejas | 1.0 | No dúctiles | No dúctiles | No requerido (3) |
+
+**Notas.** (1) Debe verificarse que el muro no pierde su integridad al ser sometido a las derivas máximas calculadas para la estructura. (2) Además de (1), debe verificarse que no interactúa adversamente con la estructura. (3) El elemento no estructural no requiere diseño y verificación sísmica. (4) En el diseño, fabricación y supervisión del montaje de estanterías deben seguirse los lineamientos de A.1.3.4 y las demás condiciones del Título F (la nota 4 no tiene llamada en ninguna celda de la tabla).
+
+</TablaNorma>
+
+<Callout tipo="practica" titulo="Mini-tabla de decisión: elementos arquitectónicos según el grupo de uso">
+
+Anclaje mínimo (y $R_p$) que pide la Tabla A.9.5-1 para algunos elementos frecuentes, según el grado que corresponde al grupo de uso (A.9.2-1). Los valores se leen de la transcripción de la tabla (misma base de datos que usan las funciones de cálculo de esta web):
+
+| Elemento ($a_p$) | Grupos III y IV (**Superior**) | Grupo II (**Bueno**) | Grupo I (**Bajo**) |
+|---|---|---|---|
+| Fachada en paneles prefabricados (1.0) | {celda('fachada-paneles-prefabricados', 'Superior')} | {celda('fachada-paneles-prefabricados', 'Bueno')} | {celda('fachada-paneles-prefabricados', 'Bajo')} |
+| Fachada en mampostería reforzada, apoyada solo abajo (2.5) | {celda('fachada-mamp-reforzada-solo-abajo', 'Superior')} | {celda('fachada-mamp-reforzada-solo-abajo', 'Bueno')} | {celda('fachada-mamp-reforzada-solo-abajo', 'Bajo')} |
+| Fachada en mampostería no reforzada, apoyada arriba y abajo (1.0) | {celda('fachada-mamp-no-reforzada-arriba-abajo', 'Superior')} | {celda('fachada-mamp-no-reforzada-arriba-abajo', 'Bueno')} | {celda('fachada-mamp-no-reforzada-arriba-abajo', 'Bajo')} |
+| Muro divisorio de altura total (1.0) | {celda('particion-altura-total', 'Superior')} | {celda('particion-altura-total', 'Bueno')} | {celda('particion-altura-total', 'Bajo')} |
+| Parapeto, ático o chimenea (2.5) | {celda('voladizo-parapetos', 'Superior')} | {celda('voladizo-parapetos', 'Bueno')} | {celda('voladizo-parapetos', 'Bajo')} |
+| Cielo raso (1.0) | {celda('cielos-rasos', 'Superior')} | {celda('cielos-rasos', 'Bueno')} | {celda('cielos-rasos', 'Bajo')} |
+| Estantería de más de 2.5 m, no Título F (2.5) | {celda('estanterias-otras', 'Superior')} | {celda('estanterias-otras', 'Bueno')} | {celda('estanterias-otras', 'Bajo')} |
+| Tejas (1.0) | {celda('tejas', 'Superior')} | {celda('tejas', 'Bueno')} | {celda('tejas', 'Bajo')} |
+
+</Callout>
+
+## A.9.6 — Instalaciones hidráulicas, sanitarias, mecánicas y eléctricas
+
+### A.9.6.1 — General
+
+Los elementos de la Tabla A.9.6-1 y sus anclajes se diseñan y detallan según esta sección; los cálculos van en las **memorias de diseño de cada sistema**. Puede hacerse un **análisis del mecanismo de soporte** de los componentes, con principios de dinámica estructural, para **justificar una reducción** de las fuerzas de A.9.6.2. Deben investigarse los **estados de esfuerzos combinados** (tensión y cortante) en los pernos de anclaje (<NormaRef s="A.9.6.1" pag="A-94" />).
+
+### A.9.6.2 — Fuerzas sísmicas de diseño
+
+Los componentes hidráulicos, mecánicos y eléctricos y sus anclajes se diseñan con la ecuación A.9.4-1 y **los coeficientes de la Tabla A.9.6-1** (<NormaRef s="A.9.6.2" pag="A-94" />).
+
+### A.9.6.3 — Soportes
+
+Los sistemas de soporte se diseñan para las fuerzas de A.9.6.2 y según el Título del material del soporte, y deben **resistir los desplazamientos** de la estructura calculados según el Capítulo A.6 (<NormaRef s="A.9.6.3" pag="A-94" />).
+
+### A.9.6.4 — Empates con las redes de servicios públicos
+
+Deben disponerse **conexiones flexibles** donde el empate esté en un lugar en que la estructura se pueda desplazar respecto al terreno. El empate flexible debe resistir, sin daño, desplazamientos calculados según A.6 (<NormaRef s="A.9.6.4" pag="A-94" />). Es lo que se ve en una acometida de agua, gas o desagüe: un tramo flexible, un codo con holgura o una junta articulada.
+
+### A.9.6.5 — Interruptores automáticos
+
+En los empates de **electricidad y gas** en edificaciones del **grupo de uso IV** en **amenaza sísmica intermedia o alta**, debe colocarse, del lado de la edificación, un **interruptor automático** que se active cuando la aceleración horizontal del terreno sea **mayor que 0.5 $A_a$** (<NormaRef s="A.9.6.5" pag="A-94" />).
+
+### A.9.6.6 — Ascensores en el grupo de uso IV
+
+En edificaciones del grupo IV en **amenaza sísmica alta**, los ascensores deben diseñarse, construirse y montarse cumpliendo **ANSI/ASME A.17.1** ("Safety Code for Elevators and Escalators"), **incluido el Apéndice F** (<NormaRef s="A.9.6.6" pag="A-94" />).
+
+<TablaNorma numero="Tabla A.9.6-1" titulo="Coeficiente de amplificación dinámica ap y tipo de anclajes para Rp, en elementos hidráulicos, mecánicos o eléctricos" pag="A-95" nota="Transcrita y verificada visualmente contra la imagen de la página A-95 (la extracción de texto del PDF desordena las celdas). Los valores de ap son para la componente horizontal; para la componente vertical se incrementan 33 % (nota b).">
+
+| Elemento no estructural | $a_p$ | Superior | Bueno | Bajo |
+|---|:---:|---|---|---|
+| Sistemas de protección contra el fuego | 2.5 | Dúctiles | No dúctiles | No dúctiles |
+| Plantas eléctricas de emergencia | 1.0 | No dúctiles | No dúctiles | No requerido (g) |
+| Maquinaria de ascensores, guías y rieles del ascensor y del contrapeso | 1.0 | Dúctiles | No dúctiles | No requerido (g) |
+| **Equipo en general**: calderas, hornos, incineradores, calentadores de agua y otros equipos que usan combustibles, y sus chimeneas y escapes; sistemas de comunicación; ductos eléctricos, cárcamos y bandejas de cables (c); equipo eléctrico, transformadores, subestaciones, motores; bombas hidráulicas; **tanques**, condensadores, intercambiadores de calor, equipos de presión; empates con las redes de servicios públicos | 1.0 | Dúctiles | No dúctiles | No requerido (g) |
+| Maquinaria de producción industrial | 1.0 | Dúctiles | No dúctiles | Húmedos |
+| **Sistemas de tuberías** | | | | |
+| Tuberías de gases y combustibles | 2.5 | Dúctiles | No dúctiles | No dúctiles |
+| Tuberías del sistema contra incendio | 2.5 | Dúctiles | No dúctiles | No dúctiles |
+| Otros sistemas de tuberías (d) | 2.5 | No dúctiles | No requerido (g) | No requerido (g) |
+| Sistemas de aire acondicionado, calefacción y ventilación, y sus ductos (e) | 1.0 | Dúctiles | No dúctiles | No requerido (g) |
+| Paneles de control y gabinetes eléctricos | (vacío en el PDF) | No dúctiles | No dúctiles | No requerido (g) |
+| Luminarias y sistemas de iluminación (f) | 1.0 | No dúctiles | No dúctiles | No requerido (g) |
+
+**Notas.** (a) Véanse las exenciones en A.9.1.3. (b) Los valores de $a_p$ son para la componente horizontal; para la componente vertical deben incrementarse en 33 %. (c) No hay necesidad de soportes sísmicos para bandejas de cables eléctricos si: (1) están colgadas de soportes individuales de 300 mm o menos de longitud; (2) en espacios para equipos mecánicos y calderas, el ducto tiene menos de 30 mm de diámetro interior; (3) en otros espacios, cualquier ducto eléctrico de menos de 65 mm de diámetro interior. (d) Ídem para tuberías con las mismas tres condiciones (300 mm; 30 mm; 65 mm). (e) No hay necesidad de soportes sísmicos para ductos de calefacción, ventilación y aire acondicionado si: (1) están colgados de soportes individuales de 300 mm o menos; (2) la sección del ducto tiene un área menor de 0.60 m². (f) Las luminarias dispuestas como péndulos se diseñan con $a_p$ = 1.5 y el soporte vertical con un **factor de seguridad de 4.0**. (g) El elemento no estructural no requiere diseño y verificación sísmica.
+
+</TablaNorma>
+
+<Callout tipo="practica" titulo="Mini-tabla de decisión: instalaciones según el grupo de uso">
+
+| Elemento ($a_p$) | Grupos III y IV (**Superior**) | Grupo II (**Bueno**) | Grupo I (**Bajo**) |
+|---|---|---|---|
+| Tanque, bomba, equipo eléctrico, calderas (1.0) | {celda('equipo-general', 'Superior')} | {celda('equipo-general', 'Bueno')} | {celda('equipo-general', 'Bajo')} |
+| Tubería de gas o combustible (2.5) | {celda('tuberias-gases', 'Superior')} | {celda('tuberias-gases', 'Bueno')} | {celda('tuberias-gases', 'Bajo')} |
+| Tubería contra incendio (2.5) | {celda('tuberias-incendio', 'Superior')} | {celda('tuberias-incendio', 'Bueno')} | {celda('tuberias-incendio', 'Bajo')} |
+| Otras tuberías (2.5) | {celda('tuberias-otras', 'Superior')} | {celda('tuberias-otras', 'Bueno')} | {celda('tuberias-otras', 'Bajo')} |
+| Ductos de aire acondicionado (1.0) | {celda('hvac', 'Superior')} | {celda('hvac', 'Bueno')} | {celda('hvac', 'Bajo')} |
+| Planta eléctrica de emergencia (1.0) | {celda('plantas-emergencia', 'Superior')} | {celda('plantas-emergencia', 'Bueno')} | {celda('plantas-emergencia', 'Bajo')} |
+| Luminarias (1.0; pendulares 1.5) | {celda('luminarias', 'Superior')} | {celda('luminarias', 'Bueno')} | {celda('luminarias', 'Bajo')} |
+
+Las notas (c), (d) y (e) de la tabla eximen de soportes sísmicos a tuberías, ductos y bandejas pequeños o con soportes cortos: no hay que arriostrar todo.
+</Callout>
+
+## Ejemplos resueltos
+
+Los tres ejemplos usan el mismo edificio: un **colegio** (grupo de uso III, $I$ = {ex.i.toFixed(2)}) de 6 pisos, $h_n$ = {ex.hn} m (piso a piso {ex.hpi} m), en Bogotá ($A_a$ = 0.15, $A_v$ = 0.20), perfil de suelo D, con período fundamental $T$ = {ex.T.toFixed(2)} s. Para el grupo III, la Tabla A.9.2-1 exige el grado **{ex.grado}**.
+
+Datos comunes: $F_a$ = {ex.fa.toFixed(2)}, $F_v$ = {ex.fv.toFixed(2)}, $T_C$ = {ex.per.tc.toFixed(3)} s; como $T ≤ T_C$, $S_a = 2.5A_aF_aI$ = **{ex.saT.toFixed(4)} g**; $A_s = A_aF_aI$ = **{ex.as.toFixed(5)} g**; $h_{eq}$ = 0.75 × {ex.hn} = **{ex.heq.toFixed(1)} m**. La cota mínima es $A_aI/2$ = **{(ex.aa * ex.i / 2).toFixed(5)}**.
+
+<Ejemplo numero={1} titulo="Tanque de agua en la cubierta">
+Un tanque de agua de 5 m³ (masa del agua más el tanque: $M_p$ = {ex.mpT} kg, peso {(ex.pesoT / 1000).toFixed(2)} kN) se apoya en la cubierta ($h_x$ = {ex.hn} m) sobre una base cuadrada de {ex.bT} m de lado, con su centro de gravedad a {ex.hcg.toFixed(1)} m sobre la base. Hallar la fuerza sísmica de diseño, la sensibilidad al tipo de anclaje y las fuerzas en los anclajes.
+
+<Paso titulo="Clasificar el elemento y leer ap" ref="Tabla A.9.6-1">
+Un tanque cae en "Equipo en general": $a_p$ = **{ex.tanque.ap.toFixed(1)}**. Para el grado {ex.grado}, la tabla pide anclajes **dúctiles**, es decir $R_p$ = **{ex.rpT}** (A.9.4.9.2: anclajes profundos, embebido/diámetro mayor de 8; no pernos de expansión).
+</Paso>
+<Paso titulo="Aceleración en el apoyo" ref="A.9.4-2">
+$h_x$ = {ex.hn} m ≥ $h_{eq}$, segunda rama:
+
+$$
+a_x=S_a\,\frac{h_x}{h_{eq}}=0.703125\times\frac{18}{13.5}
+$$
+
+Resultado: $a_x$ = **{ex.t6.ax.toFixed(4)} g**.
+</Paso>
+<Paso titulo="Fuerza sísmica de diseño" ref="A.9.4-1">
+
+$$
+F_p=\frac{a_x\,a_p}{R_p}\,g\,M_p=\frac{0.9375\times 1.0}{6}\times 9.8\times 5250
+$$
+
+Resultado: $F_p$ = **{(ex.t6.fpCalculada / 1000).toFixed(2)} kN**. La cota mínima $(A_aI/2)\,g\,M_p$ = {(ex.t6.fpMinima / 1000).toFixed(2)} kN es menor, así que **gobierna el cálculo**: $F_p$ de diseño = **{(ex.t6.fp / 1000).toFixed(2)} kN** ({(ex.t6.fp / ex.pesoT * 100).toFixed(1)} % del peso).
+</Paso>
+<Paso titulo="Fuerza vertical adicional" ref="A.9.4.4">
+Por ser equipo mecánico, hay que considerar una fuerza vertical, hacia arriba o abajo, de un tercio del peso: **{(ex.t6.fuerzaVertical / 1000).toFixed(2)} kN**, sin amplificar ni reducir.
+</Paso>
+<Paso titulo="Sensibilidad al anclaje" ref="A.9.4.9">
+La misma tabla con otros anclajes (a modo de comparación; el grado Superior exige los dúctiles):
+
+| Anclaje | $R_p$ | $F_p$ (kN) | $F_p$ / peso | Cortante por perno, 4 pernos (kN) |
+|---|:---:|---:|---:|---:|
+| Dúctiles | 6 | {(ex.t6.fp / 1000).toFixed(2)} | {(ex.t6.fp / ex.pesoT * 100).toFixed(1)} % | {(ex.t6.fp / 4000).toFixed(2)} |
+| No dúctiles (expansión) | 1.5 | {(ex.t15.fp / 1000).toFixed(2)} | {(ex.t15.fp / ex.pesoT * 100).toFixed(1)} % | {(ex.t15.fp / 4000).toFixed(2)} |
+| Húmedos (sin anclaje mecánico) | 0.5 | {(ex.t05.fp / 1000).toFixed(2)} | {(ex.t05.fp / ex.pesoT * 100).toFixed(1)} % | {(ex.t05.fp / 4000).toFixed(2)} |
+</Paso>
+<Paso titulo="Anclajes: cortante y volcamiento" ref="A.9.4.5">
+No se puede contar con la fricción (A.9.4.5), así que los pernos resisten por cortante todo $F_p$: con 4 pernos, {(ex.t6.fp / 4000).toFixed(2)} kN cada uno. Para el volcamiento, el peso resistente se reduce por la fuerza vertical hacia arriba de A.9.4.4: $W_{ef}$ = (1 − 1/3) × {(ex.pesoT / 1000).toFixed(2)} = {(ex.v6.pesoEf / 1000).toFixed(2)} kN.
+
+Con anclajes dúctiles: momento de volcamiento $F_p h_{cg}$ = {(ex.v6.mVolc / 1000).toFixed(2)} kN·m frente a un momento resistente de {(ex.v6.mRest / 1000).toFixed(2)} kN·m: **no hay tracción neta** en los pernos. Con los anclajes no dúctiles el volcamiento sería {(ex.v15.mVolc / 1000).toFixed(2)} kN·m, mayor que el resistente: aparece una **tracción total de {(ex.v15.tTot / 1000).toFixed(2)} kN** repartida entre los pernos del lado en tracción.
+</Paso>
+<Resultado>
+Tanque de {ex.mpT} kg en la cubierta del colegio: $F_p$ = **{(ex.t6.fp / 1000).toFixed(2)} kN** horizontal (más ±{(ex.t6.fuerzaVertical / 1000).toFixed(2)} kN vertical), con anclajes dúctiles de $R_p$ = 6. Si el instalador cambiara a pernos de expansión, la fuerza de diseño se multiplicaría por 4 ({(ex.t15.fp / 1000).toFixed(1)} kN) y los pernos pasarían a trabajar a tracción.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Cielo raso suspendido en el nivel 4">
+En el mismo colegio, un cielo raso de placa de yeso con perfilería suspendida pesa 15 kg/m² (masa $M_p$ = {ex.mpC} kg/m²) y se cuelga de la losa de $h_x$ = 12 m (nivel 4). Hallar $F_p$ por metro cuadrado y comparar con un edificio del grupo I.
+
+<Paso titulo="Coeficientes de la tabla" ref="Tabla A.9.5-1">
+Cielos rasos: $a_p$ = **{ex.cielo.ap.toFixed(1)}**; grado {ex.grado} → anclajes **no dúctiles**, $R_p$ = **{ex.rpC}**.
+</Paso>
+<Paso titulo="Aceleración en el apoyo" ref="A.9.4-2">
+$h_x$ = 12 m ≤ $h_{eq}$ = 13.5 m, primera rama:
+
+$$
+a_x=A_s+\frac{(S_a-A_s)\,h_x}{h_{eq}}=0.28125+\frac{(0.703125-0.28125)\times 12}{13.5}
+$$
+
+Resultado: $a_x$ = **{ex.c.ax.toFixed(5)} g**.
+</Paso>
+<Paso titulo="Fuerza sísmica por metro cuadrado" ref="A.9.4-1">
+
+$$
+F_p=\frac{0.65625\times 1.0}{1.5}\times 9.8\times 15
+$$
+
+Resultado: $F_p$ = **{ex.c.fp.toFixed(1)} N/m²** (cota mínima {ex.c.fpMinima.toFixed(1)} N/m², no gobierna). Es una fuerza horizontal de {(ex.c.fp / (ex.mpC * 9.8) * 100).toFixed(1)} % del peso del cielo raso: debe tomarla el sistema de arriostramiento (péndolas inclinadas o riostras) y no las péndolas verticales.
+</Paso>
+<Paso titulo="Comparación con un edificio del grupo I" ref="A.9.2-1, Tabla A.9.5-1">
+En una vivienda o edificio de oficinas del grupo I (grado **Bajo**, amenaza intermedia o alta) la Tabla A.9.5-1 indica "No requerido" para cielos rasos: **no requiere diseño ni verificación sísmica** (nota 3). Si el edificio está en amenaza baja, ni siquiera aplica A.9 (A.9.1.3).
+</Paso>
+<Resultado>
+Cielo raso del colegio: $F_p$ = **{ex.c.fp.toFixed(1)} N/m²** horizontal, con conexiones no dúctiles ($R_p$ = 1.5). Cuidar la interacción con luminarias y rociadores (A.9.5.8) y su holgura perimetral frente a la deriva.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Panel de fachada en mampostería reforzada">
+En el mismo colegio, un panel de fachada de mampostería reforzada, de 3 m de altura por 6 m de ancho (área {ex.areaPanel} m²), 240 kg/m², **separado lateralmente de la estructura y apoyado solo abajo**, ocupa el nivel entre 15 y 18 m (apoyo en $h_x$ = 15 m). Se sujeta con {ex.nConex} conexiones. Hallar $F_p$, las fuerzas de conexión, el efecto del viento y la holgura requerida.
+
+<Paso titulo="Coeficientes de la tabla" ref="Tabla A.9.5-1">
+Fachada de mampostería reforzada, separada lateralmente y apoyada solo abajo: $a_p$ = **{ex.fachada.ap.toFixed(1)}**; grado {ex.grado} → anclajes dúctiles, $R_p$ = **{ex.rpF}**.
+</Paso>
+<Paso titulo="Aceleración y fuerza sísmica" ref="A.9.4-2, A.9.4-1">
+$h_x$ = 15 m ≥ $h_{eq}$ = 13.5 m: $a_x$ = 0.703125 × 15 / 13.5 = **{ex.f.ax.toFixed(5)} g**.
+
+$$
+F_p=\frac{0.78125\times 2.5}{6}\times 9.8\times 240
+$$
+
+Resultado: $F_p$ = **{ex.f.fp.toFixed(1)} N/m²** (cota mínima {ex.f.fpMinima.toFixed(1)} N/m²). Para el panel completo: {ex.f.fp.toFixed(1)} × {ex.areaPanel} = **{(ex.f.fp * ex.areaPanel / 1000).toFixed(2)} kN**.
+</Paso>
+<Paso titulo="Viento" ref="A.9.5.4">
+Supongamos que de Título B (viento) resulta una presión de succión de {ex.viento} N/m² sobre la fachada. Se compara con 0.7 $F_p$ = {(0.7 * ex.f.fp).toFixed(1)} N/m². Como {ex.viento} N/m² {ex.vientoCheck.gobierna ? 'es mayor' : 'no es mayor'}, **{ex.vientoCheck.gobierna ? 'gobierna el viento' : 'gobierna el sismo'}** en el diseño del muro y los anclajes deben resistir 1.4 × {ex.viento} = **{ex.vientoCheck.gobierna ? (1.4 * ex.viento).toFixed(0) : 'F_p'} N/m²** (el valor del viento es supuesto, para ilustrar la regla).
+</Paso>
+<Paso titulo="Conexiones" ref="A.9.4.10">
+Con {ex.nConex} conexiones, cada una toma {(ex.fpConex / 1000).toFixed(2)} kN de $F_p$ (la fuerza sísmica del panel repartida). El **elemento de conexión** se diseña para 1.33 $F_p$ = **{(ex.conexF.elementoConexion / 1000).toFixed(2)} kN** y los **pernos, soldaduras y espigos** para 3.0 $F_p$ = **{(ex.conexF.sujetadores / 1000).toFixed(2)} kN** por conexión.
+</Paso>
+<Paso titulo="Deformación" ref="A.9.4.3, A.9.5.5">
+La separación lateral entre el panel y la estructura, y los anclajes de rotación, deben acomodar la deriva de diseño: con el límite de 1.0 % y piso de 3 m, **{(ex.gap * 1000).toFixed(0)} mm** de desplazamiento relativo entre la base y la parte superior del panel. Si se dejara una holgura de 10 mm, el panel golpearía la estructura (y podría atrapar una columna: columna cautiva, A.9.5.2(h)).
+</Paso>
+<Resultado>
+Panel de {ex.areaPanel} m²: $F_p$ sísmica = {(ex.f.fp * ex.areaPanel / 1000).toFixed(2)} kN; el viento supuesto gobierna sobre 0.7 $F_p$; conexiones para 1.33 $F_p$ y fijaciones para 3.0 $F_p$; separación de al menos {(ex.gap * 1000).toFixed(0)} mm.
+</Resultado>
+</Ejemplo>
+
+<Detalle titulo="Caso aparte: una bomba de 800 kg en el sótano (A.9.4.8)">
+
+Un elemento a la altura de la base, por debajo de ella o fuera de la estructura usa $a_x = A_aI$ = {ex.bombaAx.toFixed(4)} g. Para una bomba de 800 kg ($a_p$ = 1.0, grado Superior con anclajes dúctiles, $R_p$ = 6): $a_xa_p/R_p$ = {(ex.bombaAx / 6).toFixed(5)} g, menor que la cota $A_aI/2$ = {(ex.aa * ex.i / 2).toFixed(5)} g. **Gobierna la cota mínima**: $F_p$ = {(ex.bomba.fp / 1000).toFixed(3)} kN ({(ex.bomba.fp / (800 * 9.8) * 100).toFixed(2)} % del peso), tres veces el valor "calculado" de {(ex.bomba.fpCalculada / 1000).toFixed(3)} kN. Mensaje: en la base y con $R_p$ alto, la cota mínima manda.
+
+</Detalle>
+
+<CalculadoraEmbed id="espectro-diseno" />
+
+## Anomalías y puntos a vigilar en el texto de la norma
+
+<Detalle titulo="Notas sobre el PDF (erratas e imprecisiones)">
+
+- **$E = F_p/R_p$** en la nomenclatura (A-87): inconsistente con A.9.4-1 y A.9.4.7 (ver recuadro de A.9.0).
+- **$A_s$ sin fórmula**: la nomenclatura remite a A.9.4.2.1 y allí no hay ecuación. Se usa $A_s=A_aF_aI$ (espectro en $T=0$). También remite $h_n$ a A.8.2.1.1 (cruce entre capítulos).
+- **"Porcentaje" vs fracción**: $a_x$ "expresada como un porcentaje de $g$" pero la ecuación A.9.4-1 usa fracción (se multiplica por $g$).
+- **Tabla A.9.6-1**: la celda $a_p$ de "Paneles de control y gabinetes eléctricos" está **vacía**; por analogía con el resto del equipo eléctrico se suele tomar 1.0, pero el texto no lo dice.
+- **Tabla A.9.6-1, plantas de emergencia**: el grado Superior pide anclajes "No dúctiles" ($R_p$ = 1.5), mientras que el equipo en general pide "Dúctiles"; es lo que muestra la imagen y se transcribió así.
+- **Tabla A.9.5-1**: la nota 4 (estanterías) no tiene llamada en ninguna celda. Las notas (1) y (2) aplican solo al grado Bajo.
+- **A.9.6.6**: la norma ANSI/ASME se cita como "A.17.1" (el código es A17.1). Se transcribe como en el PDF.
+- **Página A-96 (PDF 139)** solo trae el encabezado "Notas:" sin contenido.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Suponer que "no estructural" significa "sin diseño": cada elemento debe diseñarse para su grado de desempeño y su ficha firmada (A.9.3.1).
+- Usar $S_a$ en lugar de $a_x$: la aceleración **crece con la altura** (A.9.4-2). Un equipo en la cubierta recibe más fuerza que en el piso 1.
+- Olvidar la **cota mínima** $A_aI/2$ (sobre todo en la base, A.9.4.8) y la **fuerza vertical** de un tercio del peso en equipos mecánicos y eléctricos (A.9.4.4).
+- Anclar con **pernos de expansión** y diseñar con $R_p$ = 6: los pernos de expansión son "no dúctiles" ($R_p$ = 1.5).
+- **Contar con la fricción** o con la tensión del mortero de pega para resistir fuerzas (A.9.4.5).
+- Diseñar solo para sismo y olvidar el **viento** en fachadas (0.7 $F_p$, anclajes a 1.4 veces el viento, A.9.5.4) y las **demás solicitaciones** del Título B.
+- Dejar un muro de mampostería **pegado a una columna sin llegar a la losa**: columna corta o cautiva (A.9.5.2(h)).
+- No coordinar: el arquitecto coordina los diseños de otros especialistas (A.9.3.3), y el supervisor técnico verifica que lo instalado cumpla el grado (A.9.3.2).
+- Dejar al fabricante la decisión sin **especificar el grado de desempeño** en planos o memorias (A.9.3.1.1).
+</Callout>
+
+## Resumen en una línea
+
+**Define el grado de desempeño por el grupo de uso (Superior, Bueno, Bajo), calcula $F_p=\dfrac{a_x a_p}{R_p}gM_p\ge\dfrac{A_aI}{2}gM_p$ con la aceleración de su nivel, usa los $a_p$ y anclajes de las Tablas A.9.5-1 y A.9.6-1, y detalla conexiones (1.33 $F_p$ y 3.0 $F_p$ en fachadas) y holguras para la deriva.**

@@ -1,0 +1,65 @@
+---
+/**
+ * Inserta una calculadora (isla React) dentro de un capítulo MDX o de una página.
+ * Uso en MDX: <CalculadoraEmbed id="espectro-diseno" />
+ * Los componentes se importan de forma estática (Astro necesita la ruta del módulo para hidratar);
+ * solo se envía al navegador el JS de la calculadora que realmente se usa.
+ */
+import { calculadoraPorId } from '../../data/calculadoras';
+import ZonaAmenaza from '../calc/ZonaAmenaza';
+import EfectosLocales from '../calc/EfectosLocales';
+import EspectroDiseno from '../calc/EspectroDiseno';
+import CoeficienteR from '../calc/CoeficienteR';
+import PeriodoFundamental from '../calc/PeriodoFundamental';
+import FuerzaHorizontal from '../calc/FuerzaHorizontal';
+import DerivaCheck from '../calc/DerivaCheck';
+import SeparacionSismica from '../calc/SeparacionSismica';
+import UmbralDano from '../calc/UmbralDano';
+import Municipios from '../calc/Municipios';
+
+interface Props {
+  id: string;
+  /** Oculta el marco y el encabezado (para páginas que ya los muestran). */
+  sinMarco?: boolean;
+}
+const { id, sinMarco = false } = Astro.props;
+const meta = calculadoraPorId(id);
+---
+
+{
+  sinMarco ? (
+    <div class="not-prose">
+      {id === 'zona-amenaza' && <ZonaAmenaza client:visible />}
+      {id === 'efectos-locales' && <EfectosLocales client:visible />}
+      {id === 'espectro-diseno' && <EspectroDiseno client:visible />}
+      {id === 'coeficiente-r' && <CoeficienteR client:visible />}
+      {id === 'periodo-fundamental' && <PeriodoFundamental client:visible />}
+      {id === 'fuerza-horizontal' && <FuerzaHorizontal client:visible />}
+      {id === 'deriva' && <DerivaCheck client:visible />}
+      {id === 'separacion-sismica' && <SeparacionSismica client:visible />}
+      {id === 'umbral-dano' && <UmbralDano client:visible />}
+      {id === 'municipios' && <Municipios client:visible />}
+    </div>
+  ) : (
+    <section id={`calc-${id}`} class="not-prose my-8 scroll-mt-24 rounded-2xl border border-chart-2/40 bg-card shadow-sm" aria-label={`Calculadora: ${meta?.nombre ?? id}`}>
+      <header class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-chart-2/30 bg-chart-2/10 px-5 py-3">
+        <span class="rounded-md bg-chart-2 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-black/80">Calculadora</span>
+        <h3 class="text-base font-semibold">{meta?.nombre ?? id}</h3>
+        {meta && <span class="ml-auto font-mono text-xs text-muted-foreground">§ {meta.secciones}</span>}
+      </header>
+      <div class="p-4 sm:p-5">
+        {id === 'zona-amenaza' && <ZonaAmenaza client:visible />}
+        {id === 'efectos-locales' && <EfectosLocales client:visible />}
+        {id === 'espectro-diseno' && <EspectroDiseno client:visible />}
+        {id === 'coeficiente-r' && <CoeficienteR client:visible />}
+        {id === 'periodo-fundamental' && <PeriodoFundamental client:visible />}
+        {id === 'fuerza-horizontal' && <FuerzaHorizontal client:visible />}
+        {id === 'deriva' && <DerivaCheck client:visible />}
+        {id === 'separacion-sismica' && <SeparacionSismica client:visible />}
+        {id === 'umbral-dano' && <UmbralDano client:visible />}
+        {id === 'municipios' && <Municipios client:visible />}
+      </div>
+      {meta && <p class="border-t px-5 py-2 text-xs text-muted-foreground">{meta.descripcion}</p>}
+    </section>
+  )
+}

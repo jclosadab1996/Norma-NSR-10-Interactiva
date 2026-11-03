@@ -1,0 +1,23 @@
+---
+/**
+ * Ecuación numerada de la norma. El slot debe contener un bloque KaTeX ($$ … $$) y opcionalmente
+ * una lista de variables con <Donde>.
+ */
+interface Props {
+  /** Número tal como aparece en la norma: "A.2.6-1" */
+  num: string;
+  /** Título corto opcional. */
+  titulo?: string;
+}
+const { num, titulo } = Astro.props;
+---
+
+<div class="not-prose my-6 rounded-xl border bg-card">
+  <div class="flex items-center justify-between gap-3 border-b bg-muted/40 px-4 py-1.5 text-xs">
+    <span class="font-medium text-muted-foreground">{titulo ?? 'Ecuación'}</span>
+    <span class="rounded bg-primary/10 px-1.5 py-0.5 font-mono font-semibold text-primary">({num})</span>
+  </div>
+  <div class="px-4 py-3 text-base [&_.katex-display]:my-1 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_p]:my-2 [&_p]:text-sm [&_ul]:my-2 [&_ul]:space-y-1 [&_ul]:pl-0 [&_ul]:text-sm [&_li]:list-none">
+    <slot />
+  </div>
+</div>

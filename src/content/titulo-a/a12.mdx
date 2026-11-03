@@ -1,0 +1,458 @@
+---
+codigo: 'A.12'
+tipo: capitulo
+titulo: 'Requisitos especiales para edificaciones indispensables de los grupos de uso III y IV (umbral de daño)'
+resumen: 'Cómo verificar que hospitales, estaciones de bomberos, colegios y otras edificaciones esenciales sigan operando después de un sismo: el movimiento del umbral de daño (Ad), su espectro con 2 % de amortiguamiento, el análisis y el límite de deriva de 0.4 % (0.2 % en mampostería de cortante).'
+objetivos:
+  - 'Identificar qué edificaciones deben cumplir el Capítulo A.12 y por qué se exige además del diseño sismo resistente normal'
+  - 'Obtener Ad y construir el espectro del umbral de daño Sad (2 % de amortiguamiento)'
+  - 'Calcular el cortante basal del umbral de daño Vsd y verificar las derivas con los límites de la Tabla A.12.5-1'
+  - 'Comparar el umbral de daño con el sismo de diseño y reconocer cuál controla'
+paginasNorma: 'A-117 a A-124'
+paginaPdf: 160
+orden: 12
+calculadoras: ['umbral-dano']
+nivel: 'avanzado'
+---
+
+import { coeficienteFa, coeficienteFv, periodoAproximado, sa, periodosEspectro, sad, periodosUmbral, parametroS, verificarDeriva, limiteDeriva, limiteDerivaUmbralDano, zonaAmenaza } from '../../lib/nsr10';
+import municipios from '../../data/municipios.json';
+
+export const buscar = (nombre, depto) => municipios.find((m) => m.municipio === nombre && (!depto || m.departamento === depto));
+
+export const cali = buscar('Cali', 'Valle del Cauca');
+
+export const hosp = (() => {
+  const perfil = 'D';
+  const fa = coeficienteFa(perfil, cali.aa);
+  const fv = coeficienteFv(perfil, cali.av);
+  const fvd = coeficienteFv(perfil, cali.ad);
+  const i = 1.5;
+  const dis = { aa: cali.aa, av: cali.av, fa, fv, i };
+  const disI1 = { ...dis, i: 1 };
+  const hn = 21.5;
+  const t = periodoAproximado('porticos-concreto', hn);
+  const pu = { ad: cali.ad, fv: fvd };
+  const masaKg = 5.4e6; // 5 400 t
+  const g = 9.8;
+  const vsd = (sad(t, pu) * g * masaKg) / 1000; // kN
+  const vsElastico = (sa(t, dis) * g * masaKg) / 1000;
+  const vsI1 = (sa(t, disI1) * g * masaKg) / 1000;
+  const periodosD = periodosEspectro(dis);
+  const periodosU = periodosUmbral(fvd);
+  const filas = [0.1, 0.25, 0.5, t, 1.0, 1.5, 3.0, 8.0].map((tt) => ({ t: tt, sad: sad(tt, pu), sa: sa(tt, dis), sa1: sa(tt, disI1) }));
+  return { fa, fv, fvd, i, dis, t, pu, vsd, vsElastico, vsI1, g, masaKg, periodosD, periodosU, s: parametroS(fvd), sadT: sad(t, pu), saT: sa(t, dis), sa1T: sa(t, disI1), filas };
+})();
+
+export const pisos = (() => {
+  const h = [4.0, 3.5, 3.5, 3.5, 3.5, 3.5];
+  const delta = [13, 25, 35.5, 44.5, 51.5, 57]; // mm, desplazamientos del centro de masa bajo Vsd
+  const lim = limiteDerivaUmbralDano('general');
+  const limC = limiteDerivaUmbralDano('mamposteriaCortante');
+  const filas = h.map((hp, k) => {
+    const sup = delta[k];
+    const inf = k === 0 ? 0 : delta[k - 1];
+    const v = verificarDeriva(sup, inf, hp * 1000, lim);
+    const vc = verificarDeriva(sup, inf, hp * 1000, limC);
+    return { piso: k + 1, h: hp, delta: sup, v, vc };
+  });
+  return { filas, lim, limC, nFallaCortante: filas.filter((f) => !f.vc.cumple).length, maxUso: Math.max(...filas.map((f) => f.v.uso)) };
+})();
+
+export const comparacion = ['Bogotá D. C.', 'Medellín', 'Cali', 'Bucaramanga', 'Barranquilla', 'Quibdó', 'Cúcuta'].map((n) => {
+  const m = buscar(n);
+  const fa = coeficienteFa('D', m.aa);
+  const fv = coeficienteFv('D', m.av);
+  const fvd = coeficienteFv('D', m.ad);
+  const t = 0.73;
+  const sa1 = sa(t, { aa: m.aa, av: m.av, fa, fv, i: 1 });
+  const sd = sad(t, { ad: m.ad, fv: fvd });
+  return { nombre: m.municipio, aa: m.aa, av: m.av, ad: m.ad, sa1, sd, razon: sd / sa1, indice: (sd / 0.004) / (sa1 / 0.01) };
+});
+
+## Idea central del capítulo
+
+El diseño sismo resistente normal busca que la edificación **no colapse** en un sismo fuerte, aceptando daño. Pero hay edificaciones que **no pueden dejar de funcionar**: el hospital que recibe heridos, la estación de bomberos que sale a atender la emergencia, el colegio que sirve de refugio. Para ellas el Capítulo A.12 añade una exigencia: que **sigan operando durante y después de un temblor**.
+
+La estrategia es elegante y simple: se define un **sismo más pequeño y frecuente que el de diseño** (el **umbral de daño**, con 80 % de probabilidad de ser excedido en 50 años) y se exige que, bajo él, la estructura y los elementos no estructurales **permanezcan en el rango elástico**. Esa condición se comprueba **limitando las derivas** a 0.4 % de la altura de piso (0.2 % para mampostería controlada por cortante), es decir, a un cuarto o un medio de lo permitido bajo el sismo de diseño.
+
+<Callout tipo="importante" titulo="Se suma a todo lo demás">
+El Capítulo A.12 **no reemplaza** los requisitos de A.1 a A.9: contiene requisitos **adicionales** (<NormaRef s="A.12.1.1" pag="A-117" />). La edificación se diseña con $I$ = 1.25 o 1.50 para el sismo de diseño y, además, se verifica en deriva contra el sismo del umbral de daño.
+</Callout>
+
+## A.12.0 — Nomenclatura
+
+<Detalle titulo="Símbolos del Capítulo A.12">
+
+| Símbolo | Significado |
+|---|---|
+| $A_d$ | Aceleración pico efectiva para el umbral de daño (A.12.2) |
+| $E_d$ | Fuerzas internas por el sismo del umbral de daño |
+| $F_v$ | Coeficiente de sitio para períodos intermedios (A.2.4.5), obtenido **con $A_v = A_d$** |
+| $S$ (con barra) | Coeficiente de sitio del espectro del umbral de daño: $\bar S = 1.25\,F_v$ |
+| $S_{ad}$ | Aceleración espectral del umbral de daño (fracción de $g$) |
+| $T_{Cd}$, $T_{Ld}$ | Períodos que limitan la meseta y el inicio de la rama de desplazamiento constante |
+| $V_{sd}$ | Cortante sísmico en la base para el umbral de daño |
+| $M$ | Masa total de la edificación (en kg): estructura, muros divisorios, equipos permanentes, tanques y contenido; en depósitos o bodegas, además 25 % de la masa de la carga viva |
+| $h_{pi}$ | Altura del piso $i$, entre diafragmas consecutivos |
+| $g$ | Aceleración de la gravedad, 9.8 m/s² |
+
+</Detalle>
+
+## A.12.1 — General
+
+### Propósito y alcance
+
+El capítulo aplica a (<NormaRef s="A.12.1.1" pag="A-117" />, <NormaRef s="A.12.1.2" />):
+
+- Todas las edificaciones del **grupo de uso IV** (A.2.5.1.1): hospitales con cirugía, cuidados intensivos o urgencias; aeropuertos, centrales de telecomunicación, refugios de emergencia, centros de control de líneas vitales, edificaciones con explosivos o tóxicos, etc.
+- Las del **grupo III literales (a), (b), (c) y (d)** (A.2.5.1.2): estaciones de bomberos, defensa civil, policía, cuarteles y sedes de atención de desastres; garajes de vehículos de emergencia; centros de atención de emergencias; **guarderías, escuelas, colegios, universidades y otros centros de enseñanza**.
+- Las que la **comunidad designe** como indispensables.
+
+Para los literales (e) (edificaciones del grupo II que el propietario subió al III) y (f) (las que designe una autoridad), **queda a decisión del propietario o de la autoridad competente** si se aplican los requisitos especiales de A.12.
+
+<Callout tipo="practica" titulo="Los colegios también">
+Es común pensar que A.12 es solo para hospitales. Pero como los centros de enseñanza están en el literal (d) del grupo III, **un colegio nuevo debe verificar la deriva del umbral de daño**, además de su diseño con $I$ = 1.25.
+</Callout>
+
+### Metodología
+
+La operatividad después de un sismo se determina verificando que la edificación se **mantiene dentro del rango elástico** bajo las solicitaciones correspondientes al **inicio del daño**, el umbral de daño (<NormaRef s="A.12.1.3" pag="A-118" />).
+
+### Procedimiento de verificación
+
+Además de los pasos de diseño de A.1.3.4 se agregan cuatro (<NormaRef s="A.12.1.4" pag="A-118" />):
+
+| Paso | Qué se hace | Sección |
+|---|---|---|
+| **A** | Determinar los movimientos sísmicos del umbral de daño ($A_d$) para el lugar | A.12.2 |
+| **B** | Obtener las fuerzas sísmicas del umbral de daño (espectro $S_{ad}$ y cortante $V_{sd}$) | A.12.3, A.12.4 |
+| **C** | Analizar la estructura (modelo matemático) con esas fuerzas: desplazamientos máximos y fuerzas internas | A.12.4 |
+| **D** | Verificar que las deflexiones no superen los límites de A.12.5; si los exceden, **la estructura debe rigidizarse** hasta cumplir | A.12.5 |
+
+## A.12.2 — Movimientos sísmicos del umbral de daño
+
+### Qué representan
+
+Los movimientos del umbral de daño se definen para una probabilidad del **80 % de ser excedidos en 50 años** (<NormaRef s="A.12.2.1" pag="A-118" />), lo que corresponde a un período de retorno de apenas unos 30 años: es un sismo **frecuente**, que la edificación debe soportar sin daño. Se representan con la **aceleración pico efectiva $A_d$**.
+
+### Cómo se obtiene Ad
+
+Se ubica la región en el mapa de la Figura A.12.2-1 y se lee $A_d$ en la Tabla A.12.2-1; para **capitales de departamento** se usa la Tabla A.12.2-2, y para **cualquier municipio** el Apéndice A-4 (<NormaRef s="A.12.2.2" />).
+
+<TablaNorma numero="Tabla A.12.2-1" titulo="Valores de Ad según la región del mapa de la Figura A.12.2-1" pag="A-118" nota="Las regiones representan rangos de valores. Debe consultarse el Apéndice A-4 para determinar el valor de Ad en cada municipio.">
+
+| Región Nº | Ad |
+|---:|---|
+| 7 | 0.13 – 0.14 |
+| 6 | 0.11 – 0.12 |
+| 5 | 0.09 – 0.10 |
+| 4 | 0.07 – 0.08 |
+| 3 | 0.05 – 0.06 |
+| 2 | 0.03 – 0.04 |
+| 1 | 0.00 – 0.02 |
+
+</TablaNorma>
+
+<Figura src="/img/titulo-a/figura-a12-2-1-mapa-ad.png" alt="Mapa de Colombia con regiones numeradas del 1 al 7 que indican los valores de Ad." numero="Figura A.12.2-1" pie="Mapa de valores de Ad. Las regiones representan rangos; el valor por municipio está en el Apéndice A-4." pag="A-119" />
+
+<TablaNorma numero="Tabla A.12.2-2" titulo="Valores de Ad para las ciudades capitales de departamento" pag="A-120">
+
+| Ciudad | Ad | Ciudad | Ad |
+|---|---:|---|---:|
+| Arauca | 0.04 | Neiva | 0.08 |
+| Armenia | 0.10 | Pasto | 0.08 |
+| Barranquilla | 0.03 | Pereira | 0.10 |
+| Bogotá | 0.06 | Popayán | 0.08 |
+| Bucaramanga | 0.09 | Puerto Carreño | 0.02 |
+| Cali | 0.09 | Puerto Inírida | 0.02 |
+| Cartagena | 0.03 | Quibdó | 0.13 |
+| Cúcuta | 0.10 | Riohacha | 0.04 |
+| Florencia | 0.05 | San Andrés, Isla | 0.03 |
+| Ibagué | 0.06 | San José del Guaviare | 0.02 |
+| Leticia | 0.02 | Santa Marta | 0.04 |
+| Manizales | 0.10 | Sincelejo | 0.04 |
+| Medellín | 0.07 | Tunja | 0.07 |
+| Mitú | 0.02 | Valledupar | 0.03 |
+| Mocoa | 0.10 | Villavicencio | 0.07 |
+| Montería | 0.04 | Yopal | 0.06 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Una diferencia entre tablas">
+Para **Ibagué** la Tabla A.12.2-2 da $A_d$ = 0.06, pero el Apéndice A-4 (el que rige para cualquier municipio) trae 0.08. Es una de las diferencias conocidas entre las tablas de capitales y el apéndice; consulta siempre el valor oficial vigente en el [buscador de municipios](/titulo-a/municipios).
+</Callout>
+
+### Variación local (A.12.2.3)
+
+Un municipio con **microzonificación sísmica** o **red acelerográfica local** puede variar $A_d$ mediante **ordenanza municipal**, pero **nunca por debajo** del valor del Reglamento (<NormaRef s="A.12.2.3" pag="A-118" />).
+
+## A.12.3 — Espectro sísmico para el umbral de daño
+
+### Parámetros y ecuaciones
+
+El espectro de aceleraciones horizontales para el umbral de daño es **elástico**, con **2 % de amortiguamiento crítico** (el espectro de diseño usa 5 %). El período $T$ es **el mismo** que se utilizó para el espectro de diseño, y el coeficiente de sitio es
+
+$$
+\bar S = 1.25\,F_v
+$$
+
+donde $F_v$ se obtiene de A.2.4 **empleando $A_d$ en lugar de $A_v$** (<NormaRef s="A.12.3.1" pag="A-120" />). La forma completa del espectro (Figura A.12.3-1) se define por cuatro tramos:
+
+<Ecuacion num="A.12.3-1 a A.12.3-6" titulo="Espectro de aceleraciones del umbral de daño Sad (fracción de g)">
+
+$$
+S_{ad}=\begin{cases}
+A_d\,(1.0+8T) & T < 0.25\ \text{s}\quad \text{(A.12.3-2)}\\[4pt]
+3.0\,A_d & 0.25\ \text{s}\le T \le T_{Cd}\quad \text{(A.12.3-4)}\\[6pt]
+\dfrac{1.5\,A_d\,\bar S}{T} & T_{Cd} < T \le T_{Ld}\quad \text{(A.12.3-1)}\\[10pt]
+\dfrac{1.5\,A_d\,\bar S\,T_{Ld}}{T^{2}} & T > T_{Ld}\quad \text{(A.12.3-6)}
+\end{cases}
+$$
+
+$$
+T_{Cd} = 0.5\,\bar S\quad \text{(A.12.3-3)}\qquad\qquad T_{Ld} = 2.4\,\bar S\quad \text{(A.12.3-5)}
+$$
+
+- $A_d$: aceleración pico efectiva del umbral de daño (A.12.2).
+- $\bar S = 1.25\,F_v$, con $F_v$ calculado con $A_v = A_d$.
+- $T$: período de vibración de la edificación (s).
+
+</Ecuacion>
+
+<Figura src="/img/titulo-a/figura-a12-3-1-espectro-umbral.png" alt="Espectro elástico del umbral de daño: rampa Sad = Ad(1+8T) hasta 0.25 s, meseta 3.0 Ad hasta TCd, rama 1.5 Ad S/T y rama 1.5 Ad S TLd/T2 después de TLd." numero="Figura A.12.3-1" pie="Espectro de aceleraciones horizontales elástico del umbral de daño (2 % de amortiguamiento crítico)." pag="A-121" />
+
+<Callout tipo="nota" titulo="Cómo leer el espectro">
+- La **rampa inicial** parte de $A_d$ (el valor de la aceleración del terreno en $T$ = 0) y sube hasta $3.0A_d$ en $T$ = 0.25 s, donde ambas expresiones coinciden ($A_d(1+8\times 0.25) = 3.0A_d$).
+- La **meseta** de $3.0A_d$ llega hasta $T_{Cd}$; como $\bar S\ge 1.0$ (porque $F_v\ge 0.8$), $T_{Cd}$ es siempre igual o mayor que 0.5 s (y, por tanto, mayor que 0.25 s).
+- La **rama $1/T$** empalma continuamente con la meseta en $T_{Cd}$, porque $1.5A_d\bar S/(0.5\bar S) = 3.0A_d$.
+- Después de $T_{Ld}$ la aceleración cae como $1/T^2$.
+</Callout>
+
+### Microzonificación
+
+Si la ciudad cuenta con una reglamentación de **microzonificación sísmica** que defina el espectro del umbral de daño, **debe usarse ese**; en su defecto, aplican las prescripciones de A.12.3 (<NormaRef s="A.12.3.5" pag="A-121" />).
+
+<CalculadoraEmbed id="umbral-dano" />
+
+## A.12.4 — Metodología de análisis
+
+### Método de análisis (A.12.4.1) y rigidez (A.12.4.2)
+
+Como **mínimo** debe emplearse el **método de la fuerza horizontal equivalente** del Capítulo A.4; se permite el análisis dinámico del Capítulo A.5 (<NormaRef s="A.12.4.1" pag="A-121" />).
+
+Las rigideces del análisis deben ser **compatibles con las fuerzas y deformaciones** del umbral de daño. Al nivel de deformación del umbral de daño, la estructura responde en el rango **lineal elástico** y los **elementos no estructurales pueden contribuir a la rigidez** si no están aislados de ella; esa interacción debe considerarse tanto en la estructura como en los elementos no estructurales (<NormaRef s="A.12.4.2" />).
+
+### Fuerza horizontal equivalente (A.12.4.3)
+
+- **Período** (<NormaRef s="A.12.4.3.1" pag="A-122" />): puede usarse el fundamental de A.4.2.
+- **Cortante en la base** (<NormaRef s="A.12.4.3.2" />):
+
+<Ecuacion num="A.12.4-1" titulo="Cortante sísmico en la base para el umbral de daño">
+
+$$
+V_{sd} = S_{ad}\; g\; M
+$$
+
+- $S_{ad}$: aceleración leída en el espectro de A.12.3 para el período $T$ de la edificación.
+- $g$: 9.8 m/s². $M$: masa total en kg (A.12.0), de modo que $V_{sd}$ queda en newtons.
+
+</Ecuacion>
+
+La fuerza horizontal del umbral de daño en cada nivel se obtiene con las ecuaciones **A.4.3-1 y A.4.3-2**, usando $V_{sd}$ en lugar de $V_s$. **No se divide por $R$**: el análisis es elástico.
+
+- **Análisis** (<NormaRef s="A.12.4.3.3" />): se obtienen las fuerzas internas $E_d$ aplicando A.4.4.1 **con excepción del literal (f)**. En concreto reforzado y mampostería estructural, el **grado de fisuración debe ser compatible** con las fuerzas del umbral de daño, considerando que la estructura trabaja en el rango lineal. Se deben obtener los **desplazamientos horizontales incluyendo torsión** (para la deriva) y, si los no estructurales entraron al modelo, sus deformaciones y esfuerzos.
+
+### Análisis dinámico (A.12.4.4)
+
+Se aplican los requisitos de A.5 usando los **movimientos del umbral de daño** en lugar de los de diseño, y el ajuste de resultados de A.5.4.5 se hace con respecto a $V_{sd}$ (A.12.4-1) en vez de $V_s$ (<NormaRef s="A.12.4.4" />).
+
+## A.12.5 — Requisitos de la deriva para el umbral de daño
+
+### Desplazamientos y deriva máxima
+
+Los desplazamientos horizontales de todos los grados de libertad, en las dos direcciones principales, se obtienen del análisis de A.12.4 con las rigideces de A.12.4.2 (<NormaRef s="A.12.5.1" pag="A-122" />). La deriva máxima en cualquier punto del piso se obtiene con la ecuación A.6.3-1 (<NormaRef s="A.12.5.2" />), **sin incluir efectos P-Delta**.
+
+<Callout tipo="nota" titulo="Una referencia cruzada por revisar">
+A.12.5.1 remite a la "ecuación A.6.2-1" para obtener los desplazamientos totales; en el Capítulo A.6 esa ecuación es la de los desplazamientos por torsión ($\delta_t = r\theta$), mientras que los desplazamientos totales están en A.6.2-4 ($\delta_{tot} = \delta_{cm} + \delta_t + \delta_{pd}$). La lectura razonable es usar A.6.2-4 sin el término P-Delta, que es lo que el propio texto aclara.
+</Callout>
+
+### Límites de la deriva
+
+La deriva máxima del umbral de daño, en cualquier punto, **no puede exceder** los límites de la Tabla A.12.5-1 (<NormaRef s="A.12.5.3" pag="A-122" />):
+
+<TablaNorma numero="Tabla A.12.5-1" titulo="Derivas máximas para el umbral de daño como porcentaje de hpi" pag="A-123">
+
+| Estructuras de | Deriva máxima |
+|---|---|
+| Concreto reforzado, metálicas, de madera y de mampostería que cumplen A.12.5.3.1 | **0.40 %** ($\Delta^i_{max} \le 0.0040\,h_{pi}$) |
+| Mampostería que cumple A.12.5.3.2 | **0.20 %** ($\Delta^i_{max} \le 0.0020\,h_{pi}$) |
+
+</TablaNorma>
+
+- **A.12.5.3.1** — Se puede usar **0.0040 $h_{pi}$** en mampostería estructural cuyos muros tengan como modo de falla predominante la **flexión** ante fuerzas en su plano: muros esbeltos que actúan como **voladizos** apoyados en la base, construidos de modo que la transferencia de momento entre muros por los elementos horizontales de acople (losas, vigas de enlace, antepechos, dinteles) sea **despreciable**.
+- **A.12.5.3.2** — Para muros de mampostería **poco esbeltos** o con modo de falla por **cortante**, el límite es **0.0020 $h_{pi}$**.
+
+Para comparar: bajo el sismo de diseño el límite es 1.0 % (0.5 % en mampostería controlada por cortante), según la Tabla A.6.4-1 del Capítulo A.6.
+
+## A.12.6 — Verificación de esfuerzos
+
+Esta sección es breve: **no hay necesidad de verificar los esfuerzos** de los elementos estructurales (<NormaRef s="A.12.6.1" pag="A-123" />) **ni de los no estructurales** (<NormaRef s="A.12.6.2" />, cuyo título dice "muros no estructurales" pero cuyo texto habla de elementos no estructurales) generados por el sismo del umbral de daño. El control se hace **solo por deformación** (la deriva).
+
+<Callout tipo="practica" titulo="¿Y si lo dañable es el elemento no estructural?">
+Aunque no se revisan esfuerzos, el límite de 0.4 % existe justamente para proteger los elementos no estructurales (fachadas, muros divisorios, vidrios, acabados) sin cuya integridad el hospital o el colegio no puede operar. Por eso A.12.4.2 pide considerar su interacción con la estructura cuando no están aislados.
+</Callout>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Espectro del umbral de daño de un hospital en Cali">
+Un hospital con cirugía y urgencias (**grupo IV**, $I$ = {hosp.i.toFixed(2)}) se construirá en **Cali** sobre un perfil de suelo tipo D. Es una edificación de 6 pisos con pórticos de concreto de altura total $h_n$ = 21.5 m y masa total $M$ = 5 400 t. Calcular $S_{ad}$ y $V_{sd}$ y compararlos con el sismo de diseño.
+
+<Paso titulo="Parámetros del municipio" ref="Apéndice A-4">
+Para {cali.municipio}: $A_a$ = {cali.aa.toFixed(2)}, $A_v$ = {cali.av.toFixed(2)} y **$A_d$ = {cali.ad.toFixed(2)}** (coincide con la Tabla A.12.2-2).
+</Paso>
+<Paso titulo="Coeficientes de sitio" ref="A.2.4.5, A.12.3.1">
+- Sismo de diseño: $F_a$ = {hosp.fa.toFixed(2)} (interpolado con $A_a$ = 0.25) y $F_v$ = {hosp.fv.toFixed(2)} (interpolado con $A_v$ = 0.25).
+- Umbral de daño: $F_v$ se obtiene **con $A_v = A_d$** = {cali.ad.toFixed(2)}; como es menor que 0.1, se toma la primera columna: $F_v$ = **{hosp.fvd.toFixed(2)}**.
+</Paso>
+<Paso titulo="Coeficiente S y períodos del espectro" ref="A.12.3-3, A.12.3-5">
+
+$$
+\bar S = 1.25\times 2.4 = 3.0,\qquad T_{Cd} = 0.5\,\bar S,\qquad T_{Ld} = 2.4\,\bar S
+$$
+
+Resultado: $\bar S$ = **{hosp.s.toFixed(2)}**, $T_{Cd}$ = **{hosp.periodosU.tcd.toFixed(2)} s** y $T_{Ld}$ = **{hosp.periodosU.tld.toFixed(2)} s**. (Para el sismo de diseño: $T_C$ = {hosp.periodosD.tc.toFixed(2)} s y $T_L$ = {hosp.periodosD.tl.toFixed(2)} s.)
+</Paso>
+<Paso titulo="Período de la edificación" ref="A.4.2-3, A.12.4.3.1">
+
+$$
+T_a = C_t\,h_n^{\alpha} = 0.047\times 21.5^{0.9}
+$$
+
+Resultado: $T_a$ = **{hosp.t.toFixed(3)} s**. Este mismo período se usa en ambos espectros.
+</Paso>
+<Paso titulo="Aceleración espectral del umbral de daño" ref="A.12.3-4">
+Como 0.25 s ≤ T = {hosp.t.toFixed(2)} s ≤ $T_{Cd}$ = {hosp.periodosU.tcd.toFixed(2)} s, estamos en la meseta:
+
+$$
+S_{ad} = 3.0\,A_d = 3.0\times 0.09
+$$
+
+Resultado: $S_{ad}$ = **{hosp.sadT.toFixed(3)} g**.
+</Paso>
+<Paso titulo="Cortante en la base" ref="A.12.4-1">
+
+$$
+V_{sd} = S_{ad}\,g\,M = 0.27\times 9.8\times 5\,400\,000\ \text{kg}
+$$
+
+Resultado: $V_{sd}$ = **{hosp.vsd.toFixed(0)} kN**, que equivale a {(hosp.sadT * 100).toFixed(0)} % del peso de la edificación.
+</Paso>
+<Paso titulo="Comparación con el sismo de diseño" ref="A.2.6-1, A.4.3-1">
+Con el espectro de diseño ($I$ = 1.5), $S_a$({hosp.t.toFixed(2)} s) = {hosp.saT.toFixed(3)} g, es decir un cortante elástico de {hosp.vsElastico.toFixed(0)} kN; con $I$ = 1.0 (permitido para calcular desplazamientos, A.6.2.1.2) $S_a$ = {hosp.sa1T.toFixed(3)} g y {hosp.vsI1.toFixed(0)} kN. El umbral de daño produce **{(hosp.sadT / hosp.sa1T * 100).toFixed(0)} %** de la aceleración usada para las derivas de diseño, pero su límite de deriva es **40 %** del de diseño (0.4 % frente a 1.0 %).
+</Paso>
+
+<Resultado>
+$S_{ad}$ = {hosp.sadT.toFixed(3)} g y $V_{sd}$ = {hosp.vsd.toFixed(0)} kN. Los valores elásticos del umbral de daño (2 % de amortiguamiento, sin dividir por $R$) pueden superar la fuerza reducida de diseño ($V_s/R$ con $R$ = 7 daría {(hosp.vsElastico / 7).toFixed(0)} kN), pero A.12.6 no pide revisar esfuerzos para ellos: **solo la deriva**.
+
+| T (s) | Sad (g) | Sa de diseño, I = 1.5 (g) |
+|---:|---:|---:|
+| {hosp.filas[0].t.toFixed(2)} | {hosp.filas[0].sad.toFixed(3)} | {hosp.filas[0].sa.toFixed(3)} |
+| {hosp.filas[1].t.toFixed(2)} | {hosp.filas[1].sad.toFixed(3)} | {hosp.filas[1].sa.toFixed(3)} |
+| {hosp.filas[2].t.toFixed(2)} | {hosp.filas[2].sad.toFixed(3)} | {hosp.filas[2].sa.toFixed(3)} |
+| {hosp.filas[3].t.toFixed(2)} (Ta) | {hosp.filas[3].sad.toFixed(3)} | {hosp.filas[3].sa.toFixed(3)} |
+| {hosp.filas[4].t.toFixed(2)} | {hosp.filas[4].sad.toFixed(3)} | {hosp.filas[4].sa.toFixed(3)} |
+| {hosp.filas[5].t.toFixed(2)} | {hosp.filas[5].sad.toFixed(3)} | {hosp.filas[5].sa.toFixed(3)} |
+| {hosp.filas[6].t.toFixed(2)} | {hosp.filas[6].sad.toFixed(3)} | {hosp.filas[6].sa.toFixed(3)} |
+| {hosp.filas[7].t.toFixed(2)} | {hosp.filas[7].sad.toFixed(3)} | {hosp.filas[7].sa.toFixed(3)} |
+
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Verificación de la deriva del umbral de daño">
+El análisis elástico del hospital del Ejemplo 1 con las fuerzas del umbral de daño (fuerza horizontal equivalente con $V_{sd}$, rigideces compatibles según A.12.4.2) entrega estos **desplazamientos del centro de masa** (datos supuestos para el ejemplo). El primer piso mide 4.0 m y los demás 3.5 m. Verificar la deriva con la Tabla A.12.5-1 para una estructura de concreto reforzado.
+
+<Paso titulo="Límite aplicable" ref="Tabla A.12.5-1">
+Pórticos de concreto reforzado: $\Delta_{max} \le 0.0040\,h_{pi}$ = **{(pisos.lim * 100).toFixed(2)} %** de $h_{pi}$.
+</Paso>
+<Paso titulo="Deriva piso por piso" ref="A.12.5.2, A.6.3">
+En cada piso, $\Delta$ = $\delta_i - \delta_{i-1}$, y se compara $\Delta/h_{pi}$ con el límite:
+
+<table>
+  <thead>
+    <tr><th>Piso</th><th>h (m)</th><th>δ (mm)</th><th>Δ (mm)</th><th>Δ / h (%)</th><th>Uso del límite</th><th>Cumple</th></tr>
+  </thead>
+  <tbody>
+    {pisos.filas.map((f) => (
+      <tr>
+        <td>{f.piso}</td>
+        <td>{f.h.toFixed(1)}</td>
+        <td>{f.delta.toFixed(1)}</td>
+        <td>{f.v.deriva.toFixed(1)}</td>
+        <td>{(f.v.razon * 100).toFixed(3)}</td>
+        <td>{(f.v.uso * 100).toFixed(0)} %</td>
+        <td>{f.v.cumple ? 'Sí' : 'No'}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Paso titulo="Si los muros fueran de mampostería controlada por cortante" ref="A.12.5.3.2">
+Con el límite de {(pisos.limC * 100).toFixed(2)} %, la misma deformada **no cumpliría en {pisos.nFallaCortante} de los 6 pisos**: se requeriría más rigidez (por ejemplo más muros) hasta cumplir, como exige el Paso D de A.12.1.4.
+</Paso>
+<Resultado>
+La estructura de pórticos de concreto **cumple**: la deriva máxima usa el {(pisos.maxUso * 100).toFixed(0)} % del límite de 0.40 %. Los mismos desplazamientos fallarían con el límite de 0.20 % de la mampostería de cortante, lo que muestra cuánto más rígida debe ser una edificación de ese tipo. Comprueba tus propios pisos con la calculadora de deriva (límite del umbral de daño) del Capítulo A.6.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="deriva" />
+
+### ¿Quién controla: el umbral de daño o el sismo de diseño?
+
+Como las derivas son proporcionales a la fuerza aplicada (comportamiento lineal con la misma rigidez), puede compararse qué verificación es más exigente. Con $T$ = 0.73 s, perfil de suelo D, y $S_a$ con $I$ = 1.0 (A.6.2.1.2):
+
+- Deriva de umbral de daño ∝ $S_{ad}/0.004$.
+- Deriva de diseño ∝ $S_a/0.010$.
+- **Índice de gobierno** = $(S_{ad}/0.004)\,/\,(S_a/0.010)$. Si es mayor que 1, el umbral de daño es más exigente que el sismo de diseño.
+
+<table>
+  <thead>
+    <tr><th>Ciudad</th><th>Aa</th><th>Av</th><th>Ad</th><th>Sa (I = 1)</th><th>Sad</th><th>Sad / Sa</th><th>Índice de gobierno</th></tr>
+  </thead>
+  <tbody>
+    {comparacion.map((c) => (
+      <tr>
+        <td>{c.nombre}</td>
+        <td>{c.aa.toFixed(2)}</td>
+        <td>{c.av.toFixed(2)}</td>
+        <td>{c.ad.toFixed(2)}</td>
+        <td>{c.sa1.toFixed(3)}</td>
+        <td>{c.sd.toFixed(3)}</td>
+        <td>{c.razon.toFixed(2)}</td>
+        <td><strong>{c.indice.toFixed(2)}</strong></td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+<Callout tipo="nota" titulo="Lectura de la tabla">
+En la mayoría de las ciudades el índice queda por debajo de 1 (**controla la deriva del sismo de diseño**), pero se acerca a 1 donde la amenaza es alta, y en **Quibdó** ambas verificaciones quedan prácticamente empatadas. Es solo una aproximación: A.12.4.2 permite rigideces distintas en el análisis del umbral de daño (por ejemplo con participación de elementos no estructurales no aislados), de modo que el resultado real puede variar. El Capítulo A.12 debe verificarse siempre de forma explícita.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Pensar que A.12 solo es para hospitales: **colegios, universidades, bomberos, policía** y centros de emergencia (grupo III a–d) también lo cumplen.
+- Calcular $F_v$ con $A_v$ en lugar de $A_d$ al armar el espectro del umbral de daño (A.12.3.1).
+- Usar el espectro de 5 % de amortiguamiento: el del umbral de daño es de **2 %** y tiene una forma distinta (rampa $A_d(1+8T)$ y meseta $3.0A_d$).
+- **Dividir por $R$** las fuerzas del umbral de daño: el análisis es elástico y $V_{sd} = S_{ad}\,g\,M$ sin reducción.
+- Incluir efectos P-Delta en los desplazamientos del umbral de daño (no hay necesidad, A.12.5.1) o aplicar el límite de 1 % de A.6.4 en lugar de 0.4 %.
+- Olvidar que la mampostería con falla por cortante tiene un límite de **0.2 %** (A.12.5.3.2).
+- Ignorar la rigidez de los elementos no estructurales no aislados en el análisis del umbral de daño (A.12.4.2).
+- Tomar el $A_d$ de la Tabla A.12.2-2 sin contrastarlo con el Apéndice A-4 (por ejemplo Ibagué: 0.06 frente a 0.08).
+</Callout>
+
+## Resumen en una línea
+
+**Para hospitales, colegios y demás edificaciones indispensables, además del diseño normal se calcula el espectro del umbral de daño ($S_{ad}$, 2 % de amortiguamiento, con $A_d$ del Apéndice A-4 y $F_v$ obtenido con $A_v = A_d$), se obtiene $V_{sd} = S_{ad}gM$ y se exige que la deriva no pase de 0.4 % de la altura de piso (0.2 % en mampostería de cortante), sin necesidad de revisar esfuerzos.**

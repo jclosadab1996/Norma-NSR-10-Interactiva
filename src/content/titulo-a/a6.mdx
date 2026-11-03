@@ -1,0 +1,551 @@
+---
+codigo: 'A.6'
+tipo: capitulo
+titulo: 'Requisitos de la deriva'
+resumen: 'Cómo calcular los desplazamientos horizontales de la edificación (centro de masa, torsión, P-Delta), obtener la deriva máxima de cada piso, compararla con los límites de la norma y dejar la separación sísmica entre edificaciones vecinas.'
+objetivos:
+  - 'Calcular los desplazamientos totales con δcm, δt y δpd y decidir cuándo hay que considerar los efectos P-Delta (Qi > 0.10)'
+  - 'Obtener la deriva máxima de un piso con A.6.3 (forma general y forma alternativa A.6.3-2 con sus cinco condiciones)'
+  - 'Comparar la deriva con los límites de la Tabla A.6.4-1 (1.0 % o 0.5 % de la altura de piso) y aplicar el factor 0.7 cuando procede'
+  - 'Determinar la separación sísmica con el paramento del lote según la Tabla A.6.5-1 y la Figura A.6.5-1'
+paginasNorma: 'A-73 a A-80'
+paginaPdf: 116
+orden: 6
+calculadoras: ['deriva', 'separacion-sismica']
+nivel: 'intermedio'
+---
+
+import {
+  coeficienteFa, coeficienteFv, periodoAproximado, sa, periodosEspectro, mesetaSa,
+  cortanteBasal, distribuirFuerzas, exponenteK, verificarDeriva, limiteDeriva,
+  coeficienteSeparacion, separacionSismica,
+} from '../../lib/nsr10';
+
+export const f = (x, d = 2) => x.toFixed(d);
+export const miles = (x) => Math.round(x).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+export const e1 = (() => {
+  const aa = 0.15, av = 0.2, i = 1.0;
+  const fa = coeficienteFa('D', aa) ?? NaN;
+  const fv = coeficienteFv('D', av) ?? NaN;
+  const p = { aa, av, fa, fv, i };
+  const n = 5, hp = 3, hn = n * hp;
+  const pesos = [4500, 4500, 4500, 4500, 3600]; // kN por nivel
+  const niveles = pesos.map((w, idx) => ({ h: hp * (idx + 1), m: (w / 9.8) * 1000 }));
+  const masaKg = niveles.reduce((s, x) => s + x.m, 0);
+  const peso = pesos.reduce((a, b) => a + b, 0);
+  const ta = periodoAproximado('porticos-concreto', hn);
+  const per = periodosEspectro(p);
+  const saT = sa(ta, p);
+  const vsN = cortanteBasal(saT, masaKg);
+  const dist = distribuirFuerzas(niveles, vsN, ta);
+  const k = exponenteK(ta);
+  const delta = [0, 15, 38, 70, 95, 112]; // mm, centro de masa, fuerzas sin dividir por R
+  const limite = limiteDeriva('general');
+  const pisos = niveles.map((nv, idx) => {
+    const P = pesos.slice(idx).reduce((a, b) => a + b, 0);
+    const V = dist[idx].cortantePiso / 1000;
+    const dd = delta[idx + 1] - delta[idx];
+    const Q = (P * (dd / 1000)) / (V * hp);
+    const v = verificarDeriva(delta[idx + 1], delta[idx], hp * 1000, limite);
+    const v7 = verificarDeriva(delta[idx + 1], delta[idx], hp * 1000, limite, 0.7);
+    return { piso: idx + 1, di: delta[idx + 1], P, V, dd, Q, v, v7 };
+  });
+  const qMax = Math.max(...pisos.map((x) => x.Q));
+  const critico = pisos.reduce((a, b) => (b.v.razon > a.v.razon ? b : a));
+  return { aa, av, fa, fv, i, n, hp, hn, peso, masaKg, ta, per, saT, vs: vsN / 1000, k, dist, delta, limite, pisos, qMax, critico, limiteMamp: limiteDeriva('mamposteriaCortante') };
+})();
+
+export const pdelta = (() => {
+  const P = 40000, dCm = 0.06, V = 5000, hp = 3.2; // kN, m, kN, m
+  const Q = (P * dCm) / (V * hp);
+  const fac = Q / (1 - Q);
+  return { P, dCm, V, hp, Q, fac, dpd: dCm * 1000 * fac, mult: 1 / (1 - Q), total: dCm * 1000 * (1 + fac) };
+})();
+
+export const torsion = (() => {
+  const r = 12, theta = 0.0004; // m, rad
+  return { r, theta, dt: r * theta * 1000 };
+})();
+
+export const alt = (() => {
+  // A.6.3-2 con hp = 3.0 m en todos los pisos (mm)
+  const d2 = 70, d1 = 80, di = 92, hpi = 3.0, hp1 = 3.0;
+  const extrapol = d2 + ((d1 - d2) * (hpi + hp1)) / hp1;
+  const delta = di - 0.5 * extrapol - 0.5 * d1;
+  const conv = di - d1;
+  // perfil recto: 10, 20, 30
+  const rect = 30 - 0.5 * (10 + ((20 - 10) * (3 + 3)) / 3) - 0.5 * 20;
+  return { d2, d1, di, extrapol, delta, conv, razon: delta / 3000, rect, rectConv: 10 };
+})();
+
+export const e2 = (() => {
+  const pisos = 10, hp = 3, hn = pisos * hp;
+  const colindancias = [
+    { clave: 'coinciden-losas', nombre: 'Vecino existente, losas coinciden', lado: 'Fondo' },
+    { clave: 'no-coinciden-losas', nombre: 'Vecino existente, losas no coinciden', lado: 'Lateral izquierdo' },
+    { clave: 'sin-vecino-o-separado', nombre: 'Sin vecino (solo cerramiento) o vecino que ya se separó', lado: 'Lateral derecho' },
+  ].map((c) => ({ ...c, coef: coeficienteSeparacion(pisos, c.clave), cubierta: separacionSismica(hn, pisos, c.clave) }));
+  const niveles = Array.from({ length: pisos }, (_, idx) => ({ piso: idx + 1, h: hp * (idx + 1) })).map((nv) => ({
+    ...nv,
+    sep: colindancias.map((c) => separacionSismica(nv.h, pisos, c.clave)),
+  }));
+  const tres = [
+    coeficienteSeparacion(3, 'coinciden-losas'),
+    coeficienteSeparacion(3, 'no-coinciden-losas'),
+    coeficienteSeparacion(3, 'sin-vecino-o-separado'),
+  ];
+  return { pisos, hp, hn, colindancias, niveles, tres };
+})();
+
+## Idea central del capítulo
+
+Un edificio puede resistir las fuerzas del sismo y aun así **fallar en servicio**: si un piso se desplaza demasiado respecto al de abajo, se rompen muros, vidrios y acabados, se pierde la estabilidad global y las personas entran en pánico. El Capítulo A.6 controla ese riesgo con tres cosas:
+
+1. **Calcular los desplazamientos** horizontales de cada piso (centro de masa, torsión y efectos de segundo orden P-Delta).
+2. **Obtener la deriva**, es decir, el desplazamiento relativo entre pisos consecutivos, y compararla con un **límite** de la altura de piso (1.0 % o 0.5 %).
+3. **Separar** la edificación de sus vecinas para que no se golpeen durante el sismo.
+
+<Callout tipo="importante" titulo="Las derivas se calculan con fuerzas sin dividir por R">
+La fuerza cortante de piso $V_i$ que se usa en este capítulo es la del Capítulo A.4 **"sin dividir por $R$"** (<NormaRef s="A.6.0" pag="A-73" />). Es decir, los desplazamientos de A.6 provienen de las fuerzas **elásticas**, no de las fuerzas reducidas $E = F_s/R$ con que se diseñan los elementos. Además, para edificaciones de los grupos II, III y IV se permite calcular los desplazamientos con $I = 1.0$ (<NormaRef s="A.6.2.1.2" pag="A-74" />).
+</Callout>
+
+## A.6.0 — Nomenclatura
+
+Variables del capítulo (<NormaRef s="A.6.0" pag="A-73" />):
+
+| Símbolo | Significado |
+|---|---|
+| $h_i$, $h_n$ | Altura del nivel $i$ y del piso más alto, medidas desde la base (m) |
+| $h_{pi}$ | Altura del piso $i$: del diafragma del piso $i$ al del piso inmediatamente inferior $i-1$ (m) |
+| $j$ | Dirección ortogonal principal en planta ($x$ o $y$) |
+| $P_i$ | Suma de la carga vertical total (muerta + viva) en el piso $i$ y en todos los pisos por encima; para P-Delta los coeficientes de carga no tienen que ser mayores que 1 |
+| $Q_i$ | Índice de estabilidad del piso $i$ (A.6.2-2) |
+| $r_j$ | Proyección, perpendicular a la dirección $j$, de la distancia entre el centro de masa y el punto de interés |
+| $T$, $T_a$ | Período fundamental (A.4.2) y período aproximado |
+| $V_i$ | Fuerza cortante del piso $i$ en la dirección estudiada, **sin dividir por $R$**: suma de las fuerzas sísmicas horizontales del nivel $i$ y de los de arriba (A.4.3) |
+| $\Delta^i_{cm,j}$ | Deriva del piso $i$ medida en el centro de masa: desplazamiento del piso $i$ menos el del piso $i-1$ |
+| $\Delta^i_j$ | Deriva del piso $i$ en la dirección principal $j$ |
+| $\Delta^i_{max}$ | Deriva máxima para cualquier punto del piso $i$ |
+| $\delta^i_{cm,j}$ | Desplazamiento horizontal del centro de masa del piso $i$ en la dirección $j$ |
+| $\delta^i_{pd,j}$ | Desplazamiento adicional por efectos P-Delta |
+| $\delta^i_{t,j}$ | Desplazamiento adicional por torsión de cualquier punto del diafragma |
+| $\delta^i_{tot,j}$ | Desplazamiento total de cualquier punto del diafragma del piso $i$ |
+| $\theta_i$ | Rotación (rad) alrededor de un eje vertical por el centro de masa del piso $i$, causada por la torsión |
+
+<Callout tipo="nota" titulo="Anomalía de transcripción en la nomenclatura">
+En el PDF, el texto extraído de la lista de A.6.0 queda con los símbolos y las definiciones desordenados (el símbolo de $Q_i$, por ejemplo, queda separado de su descripción). Aquí se asignó cada definición por su contenido, comprobado contra la imagen de la página A-73.
+</Callout>
+
+## A.6.1 — General
+
+- **Alcance** (<NormaRef s="A.6.1.1" pag="A-73" />): el capítulo da los procedimientos para calcular la deriva y sus límites permisibles.
+- **Definición** (<NormaRef s="A.6.1.2" pag="A-73" />): deriva es el **desplazamiento horizontal relativo entre dos puntos colocados en la misma línea vertical, en dos pisos o niveles consecutivos**.
+- **Por qué controlarla** (<NormaRef s="A.6.1.3" pag="A-73" />): la deriva se asocia con (a) deformación inelástica de elementos estructurales y no estructurales, (b) la estabilidad global de la estructura, (c) daño en elementos estructurales que no son del sistema de resistencia sísmica y en elementos no estructurales (divisiones, enchapes, acabados, instalaciones eléctricas y mecánicas) y (d) alarma y pánico entre los ocupantes.
+
+La norma insiste en que es **fundamental** cumplir estrictamente estos requisitos para lograr el propósito del Reglamento y un buen comportamiento de la estructura y su contenido.
+
+## A.6.2 — Cálculo del desplazamiento horizontal
+
+El desplazamiento total de un punto del piso se arma con tres sumandos: el del **centro de masa**, el **adicional por torsión** y el **adicional por P-Delta**.
+
+### A.6.2.1 — Desplazamientos en el centro de masa, δcm
+
+Son los desplazamientos horizontales del centro de masa en las dos direcciones principales (<NormaRef s="A.6.2.1" pag="A-74" />). Si el análisis es dinámico, se combinan los modos según A.5.4.4 (primero las derivas por modo, nunca las deflexiones ya combinadas).
+
+- **Con el método de la FHE** (<NormaRef s="A.6.2.1.1" pag="A-74" />): las fuerzas para calcular los desplazamientos pueden obtenerse con el período $T$ de la ecuación A.4.2-1 aplicando el tope $C_uT_a$, o alternativamente con el período $T$ de las ecuaciones A.4.2-3 o A.4.2-5.
+- **Grupos de uso II, III y IV** (<NormaRef s="A.6.2.1.2" pag="A-74" />): para calcular los desplazamientos en el centro de masa se permite usar $I = 1.0$; las fuerzas con que se verifica la **resistencia** sí usan el $I$ del grupo de uso.
+
+### A.6.2.2 — Desplazamientos por torsión, δt
+
+Solo se evalúan cuando los **diafragmas son rígidos** (<NormaRef s="A.6.2.2" pag="A-74" />). El incremento de desplazamiento por la rotación del piso, en un punto cualquiera, es:
+
+<Ecuacion num="A.6.2-1" titulo="Desplazamiento adicional por torsión">
+
+$$
+\delta_{t,j}=r_j\,\theta_i
+$$
+
+- $r_j$: proyección, perpendicular a la dirección $j$ en planta, de la distancia entre el centro de masa y el punto de interés.
+- $\theta_i$: rotación (rad) del nivel $i$ alrededor del eje vertical que pasa por el centro de masa, causada por los efectos torsionales de A.3.6.7.
+
+</Ecuacion>
+
+<Detalle titulo="Ejemplo numérico de A.6.2-1">
+
+Un punto de borde está a $r_j$ = {torsion.r} m del centro de masa (medido perpendicular a la dirección estudiada) y el piso rota $\theta_i$ = {torsion.theta} rad. El desplazamiento extra por torsión es $\delta_t = 12\times0.0004$ = **{f(torsion.dt, 1)} mm**, que se suma al $\delta_{cm}$ de ese punto. Por eso los **bordes** de un edificio con torsión se desplazan más que su centro de masa.
+
+</Detalle>
+
+### A.6.2.3 — Efectos P-Delta, δpd
+
+Los efectos de segundo orden (la carga vertical actuando sobre la estructura ya desplazada) **aumentan** las deflexiones y las fuerzas internas. Deben considerarse cuando el **índice de estabilidad $Q_i$** supera 0.10 (<NormaRef s="A.6.2.3" pag="A-74" />):
+
+<Ecuacion num="A.6.2-2" titulo="Índice de estabilidad del piso i">
+
+$$
+Q_i=\frac{P_i\,\Delta_{cm}}{V_i\,h_{pi}}
+$$
+
+- $P_i$: carga vertical total (muerta + viva) en el piso $i$ y todos los superiores.
+- $\Delta_{cm}$: deriva del piso en el centro de masa.
+- $V_i$: cortante del piso $i$ sin dividir por $R$.
+- $h_{pi}$: altura del piso $i$.
+
+</Ecuacion>
+
+<TablaNorma numero="Criterio" titulo="Qué hacer según el valor de Qi" pag="A-74">
+
+| Valor de $Q_i$ | Consecuencia |
+|---|---|
+| $Q_i \le 0.10$ | No hay que considerar efectos P-Delta |
+| $0.10 < Q_i \le 0.30$ | Deben incluirse los efectos P-Delta: $\delta_{pd}$ (A.6.2-3) y fuerzas internas $\times\,1/(1-Q_i)$ (A.6.2.3.2) |
+| $Q_i > 0.30$ | Estructura potencialmente **inestable**: debe rigidizarse, salvo que en estructuras de concreto reforzado se cumplan **todos** los requisitos de C.10.11.6.2(b) |
+
+</TablaNorma>
+
+La deflexión adicional por P-Delta en el piso $i$:
+
+<Ecuacion num="A.6.2-3" titulo="Desplazamiento adicional por P-Delta">
+
+$$
+\delta_{pd}=\delta_{cm}\left(\frac{Q_i}{1-Q_i}\right)
+$$
+
+</Ecuacion>
+
+Dos alternativas o complementos:
+
+- **A.6.2.3.1**: en estructuras de concreto reforzado, los efectos P-Delta pueden evaluarse siguiendo C.10.11 (<NormaRef s="A.6.2.3.1" pag="A-75" />).
+- **A.6.2.3.2**: si $Q_i > 0.10$, los efectos P-Delta en las **fuerzas internas** causadas por las cargas laterales se aumentan multiplicándolas, piso por piso, por el factor $1/(1-Q_i)$ (<NormaRef s="A.6.2.3.2" pag="A-75" />).
+
+<Detalle titulo="Ejemplo numérico: un piso con Qi > 0.10">
+
+Piso con $P_i$ = {miles(pdelta.P)} kN, deriva en el centro de masa $\Delta_{cm}$ = {f(pdelta.dCm, 3)} m, $V_i$ = {miles(pdelta.V)} kN y $h_{pi}$ = {f(pdelta.hp, 1)} m:
+
+$$
+Q_i=\frac{40000\times0.060}{5000\times3.2}
+$$
+
+Resulta $Q_i$ = **{f(pdelta.Q, 3)}** (> 0.10: hay que tener en cuenta P-Delta y < 0.30: no hay inestabilidad potencial). Si el desplazamiento del centro de masa es $\delta_{cm}$ = {f(pdelta.dCm * 1000, 0)} mm, el adicional es $\delta_{pd}$ = {f(pdelta.dCm * 1000, 0)} × {f(pdelta.Q, 3)}/(1 − {f(pdelta.Q, 3)}) = **{f(pdelta.dpd, 1)} mm** (el desplazamiento total pasa a {f(pdelta.total, 1)} mm) y las fuerzas internas por cargas laterales se multiplican por 1/(1 − Q) = **{f(pdelta.mult, 3)}**. La ecuación, tal como está escrita, se aplica nivel por nivel y la deriva se calcula luego con los desplazamientos totales (A.6.3.1.1).
+
+</Detalle>
+
+### A.6.2.4 — Desplazamientos horizontales totales
+
+Se obtienen del análisis estructural con el método definido en A.3.4 y las rigideces de A.3.4.3, para cualquier grado de libertad, como **suma de valores absolutos** (<NormaRef s="A.6.2.4" pag="A-75" />):
+
+<Ecuacion num="A.6.2-4" titulo="Desplazamiento horizontal total">
+
+$$
+\delta_{tot,j}=\left|\delta_{cm,j}\right|+\left|\delta_{t,j}\right|+\left|\delta_{pd,j}\right|
+$$
+
+- $\delta_{cm,j}$: desplazamiento del centro de masa en la dirección $j$.
+- $\delta_{t,j}$: adicional por torsión (solo con diafragma rígido).
+- $\delta_{pd,j}$: adicional por P-Delta.
+
+</Ecuacion>
+
+Cuando se usan procedimientos de **interacción suelo-estructura**, o cuando A.3.4.2 lo exige porque la estructura se analizó **empotrada en la base**, deben sumarse a los desplazamientos totales los adicionales obtenidos con el Capítulo A.7.
+
+<Callout tipo="nota" titulo="Errata menor en la ecuación">
+En el texto del PDF la ecuación A.6.2-4 y la frase que la acompaña escriben "$\delta_{t0t,j}$" (con un cero) donde debería decir $\delta_{tot,j}$. Es un error tipográfico evidente; la nomenclatura de A.6.0 usa $\delta_{tot,j}$.
+</Callout>
+
+## A.6.3 — Evaluación de la deriva máxima
+
+### A.6.3.1.1 — Edificaciones sin irregularidad 1aP/1bP, o con diafragma flexible
+
+Para edificaciones regulares o irregulares **sin irregularidad en planta tipo 1aP o 1bP** (Tabla A.3-6), o con **diafragma flexible**, la deriva máxima del piso $i$ es la mayor de las dos direcciones principales, calculada como el **valor absoluto de la diferencia** entre el desplazamiento del centro de masa del piso $i$ y el del piso inferior $(i-1)$ **incluyendo los efectos P-Delta** (<NormaRef s="A.6.3.1.1" pag="A-75" />):
+
+$$
+\Delta^i_{max}=\max_{j}\ \left|\delta^i_{cm,j}-\delta^{i-1}_{cm,j}\right|
+$$
+
+(Con $\delta_{cm}$ ya con $\delta_{pd}$ si $Q_i>0.10$. Es la expresión que la calculadora y los ejemplos usan.)
+
+### A.6.3.1.2 — Con irregularidad torsional 1aP o 1bP
+
+En estas edificaciones se mide la deriva en **cualquier punto** del piso, restando los desplazamientos **totales máximos** (A.6.2.4) del punto en el piso $i$ y de un punto en el mismo eje vertical del piso $i-1$ (<NormaRef s="A.6.3.1.2" pag="A-75" />), y combinando las dos direcciones:
+
+<Ecuacion num="A.6.3-1" titulo="Deriva máxima con irregularidad torsional">
+
+$$
+\Delta^i_{max}=\sqrt{\sum_{j=1}^{2}\left(\delta^i_{tot,j}-\delta^{i-1}_{tot,j}\right)^{2}}
+$$
+
+</Ecuacion>
+
+Alternativamente pueden usarse procedimientos para estimar máximos de cantidades vectoriales. Basta verificarla en **todos los ejes verticales de columna** y en los **bordes de los muros estructurales**; la deriva máxima del piso es la mayor de todos esos puntos (<NormaRef s="A.6.3.1.2" pag="A-76" />).
+
+### A.6.3.1.3 — Forma alternativa en pisos superiores (A.6.3-2)
+
+En los **pisos superiores** de ciertas edificaciones se permite calcular la deriva con una forma alternativa, siempre que se cumplan **las cinco** condiciones (<NormaRef s="A.6.3.1.3" pag="A-76" />):
+
+| | Condición |
+|---|---|
+| (a) | La edificación tiene **diez o más pisos** sobre su base |
+| (b) | Solo aplica en los pisos **por encima de dos tercios** de la altura de la edificación (medida desde la base) |
+| (c) | El sistema de resistencia sísmica es **diferente a pórtico resistente a momentos** (p. ej. muros o dual) |
+| (d) | La edificación es **regular** tanto en planta como en altura (Capítulo A.3) |
+| (e) | El índice de estabilidad $Q_i$ es **menor de 0.10** en todos los pisos donde se aplicaría |
+
+La deriva máxima del piso es la mayor de las dos direcciones principales, con:
+
+<Ecuacion num="A.6.3-2" titulo="Deriva alternativa en pisos superiores">
+
+$$
+\Delta^{i}_{j}=\delta^{i}_{cm,j}-0.5\left[\frac{\left(\delta^{i-1}_{cm,j}-\delta^{i-2}_{cm,j}\right)\left(h_p^{i}+h_p^{i-1}\right)}{h_p^{i-1}}+\delta^{i-2}_{cm,j}\right]-0.5\,\delta^{i-1}_{cm,j}
+$$
+
+- $\delta^{i}_{cm,j}$, $\delta^{i-1}_{cm,j}$, $\delta^{i-2}_{cm,j}$: desplazamientos del centro de masa de los pisos $i$, $i-1$ e $i-2$.
+- $h_p^{i}$, $h_p^{i-1}$: alturas de los pisos $i$ e $i-1$.
+
+</Ecuacion>
+
+**Cómo leerla (interpretación, no está explicada en el PDF).** El término entre corchetes es el desplazamiento que tendría el nivel $i$ si el perfil de desplazamientos de los dos pisos inferiores se **prolongara en línea recta** hasta ese nivel. La ecuación resta de $\delta^i$ el **promedio** entre esa extrapolación y el desplazamiento del piso $i-1$: en lugar de medir el "salto" completo entre pisos, mide cuánto se aparta el piso $i$ de la tendencia de los de abajo. Si el perfil fuera una **recta**, la fórmula da exactamente la **mitad** de la deriva convencional. Es la forma de no penalizar la rotación de conjunto (como la flexión de un muro en voladizo) en los pisos altos.
+
+<Detalle titulo="Ejemplo numérico de A.6.3-2">
+
+Edificio de muros de 10 pisos con $h_p$ = 3.0 m en todos los pisos, regular y con $Q_i$ < 0.10. En el piso 9 (por encima de 2/3 de la altura): $\delta^{7}$ = {alt.d2} mm, $\delta^{8}$ = {alt.d1} mm y $\delta^{9}$ = {alt.di} mm.
+
+- Deriva convencional (A.6.3.1.1): {alt.di} − {alt.d1} = **{alt.conv} mm** (= {f(alt.conv / 3000 * 100, 2)} % de $h_p$).
+- Extrapolación a $i$: {alt.d2} + ({alt.d1} − {alt.d2})(3 + 3)/3 = {f(alt.extrapol, 0)} mm.
+- Deriva alternativa: {alt.di} − 0.5 × {f(alt.extrapol, 0)} − 0.5 × {alt.d1} = **{f(alt.delta, 1)} mm** (= {f(alt.razon * 100, 2)} % de $h_p$).
+
+Control de coherencia: con un perfil recto 10–20–30 mm, la deriva convencional es {alt.rectConv} mm y la alternativa {f(alt.rect, 1)} mm (la mitad).
+
+</Detalle>
+
+## A.6.4 — Límites de la deriva
+
+La deriva máxima de **cualquier piso**, obtenida según A.6.3.1, no puede exceder los límites de la Tabla A.6.4-1, expresados como porcentaje de la altura de piso $h_{pi}$ (<NormaRef s="A.6.4.1" pag="A-76" />):
+
+<TablaNorma numero="Tabla A.6.4-1" titulo="Derivas máximas como porcentaje de hpi" pag="A-76" nota="Errata de referencias cruzadas: la tabla impresa remite a A.6.4.2.2 y A.6.4.2.3, que no existen en el capítulo; los requisitos correspondientes están en A.6.4.1.3 y A.6.4.1.4 (ver la nota siguiente).">
+
+| Estructuras de | Deriva máxima | En el texto |
+|---|---|---|
+| Concreto reforzado, metálicas, de madera, y de mampostería que cumplen los requisitos de «A.6.4.2.2» | **1.0 %** ($\Delta^i_{max} \le 0.010\,h_{pi}$) | A.6.4.1.3 |
+| De mampostería que cumplen los requisitos de «A.6.4.2.3» | **0.5 %** ($\Delta^i_{max} \le 0.005\,h_{pi}$) | A.6.4.1.4 |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Referencia cruzada rara en la Tabla A.6.4-1">
+La tabla del PDF cita **A.6.4.2.2** y **A.6.4.2.3**, pero el capítulo no tiene numerales A.6.4.2: sus requisitos se desarrollan en **A.6.4.1.3** (mampostería con falla por flexión, límite 1.0 %) y **A.6.4.1.4** (mampostería poco esbelta o con falla por cortante, límite 0.5 %). La lectura coherente es esa; probablemente son restos de una numeración anterior del borrador. Úsese el texto de A.6.4.1.3 y A.6.4.1.4.
+</Callout>
+
+Los numerales que completan los límites (<NormaRef s="A.6.4.1.1" pag="A-76" /> a <NormaRef s="A.6.4.1.5" pag="A-77" />):
+
+- **A.6.4.1.1 — Secciones fisuradas**: cuando se usan secciones fisuradas, en concreto reforzado, mampostería y estructuras mixtas con acero, las derivas **pueden multiplicarse por 0.7** antes de compararlas con la tabla.
+- **A.6.4.1.2 — Análisis inelástico**: si se verificó con análisis inelástico que **todos** los elementos están en un rango de desempeño no mayor a "Protección de la Vida" (LS, según ASCE 31 y ASCE 41), las derivas también pueden multiplicarse por 0.7.
+- **A.6.4.1.3 — Mampostería con falla por flexión**: se permite el límite de **0.010 $h_{pi}$** si la edificación es de mampostería estructural con muros cuyo modo de falla prevaleciente es la **flexión** ante fuerzas en su plano, diseñados como elementos verticales esbeltos en voladizo apoyados en la base, y construidos de modo que la transferencia de momento entre muros por elementos de acople (losas, vigas de enlace, antepechos, dinteles) sea **despreciable**.
+- **A.6.4.1.4 — Mampostería poco esbelta o con falla por cortante**: debe usarse el límite de **0.005 $h_{pi}$**.
+- **A.6.4.1.5 — Edificaciones de un piso**: **no hay límite de deriva**, siempre que muros, particiones interiores y exteriores y cielorrasos se diseñen para **acomodar** las derivas del piso.
+
+<Callout tipo="atencion" titulo="Sobre el factor 0.7 (A.6.4.1.1)">
+El texto literal dice que cuando se usan secciones fisuradas las derivas "pueden multiplicarse por 0.7". Úsalo solo si el modelo realmente empleó rigideces fisuradas coherentes con A.3.4.3 y con el título del material; si el modelo usó secciones brutas, no hay justificación para la reducción. Es un criterio de la norma, no una corrección que se deduzca de la física, así que documenta la hipótesis en la memoria de cálculo.
+</Callout>
+
+<Callout tipo="nota" titulo="Otros límites en la norma">
+Para el **umbral de daño** de edificaciones de los grupos III y IV, el Capítulo A.12 establece límites aún menores (0.4 % general y 0.2 % en mampostería con falla por cortante; Tabla A.12.5-1). La calculadora de deriva permite compararlos.
+</Callout>
+
+<CalculadoraEmbed id="deriva" />
+
+## A.6.5 — Separación entre estructuras adyacentes
+
+### A.6.5.1 — Dentro de la misma construcción
+
+Todas las partes de la estructura deben actuar como **una unidad integral**, a menos que se separen una distancia suficiente para evitar el choque dañino entre partes. La distancia mínima de separación se obtiene **sumando el valor absoluto de los desplazamientos totales** de A.6.2.1 de cada una de las porciones, en la dirección perpendicular a la junta, salvo que se tomen medidas para que no haya daño con una distancia menor (<NormaRef s="A.6.5.1" pag="A-77" />).
+
+### A.6.5.2 — Entre edificaciones vecinas
+
+#### Alcance (A.6.5.2.1)
+
+- **(a)** En municipios en **zona de amenaza sísmica baja** no se requiere separación sísmica entre vecinas.
+- **(b)** Solo aplica a licencias de **edificaciones nuevas** solicitadas por primera vez después de adoptar el Reglamento.
+- **(c)** **No** aplica a edificaciones en trámite de **reconocimiento**.
+- **(d)** Para **rehabilitación sísmica** de edificaciones existentes aplican los requisitos de A.10.7.
+- **(e)** El municipio o distrito puede **modificar** estos requisitos siempre que los resultantes **no sean menores** que los dados aquí.
+
+#### Definiciones (A.6.5.2.2)
+
+Las definiciones de altura del piso, altura de la edificación en la colindancia, cerramiento, coincidencia de las losas en la colindancia, nivel de un piso, número de pisos aéreos y separación sísmica en la colindancia están en el Capítulo A.13. Si el terreno es **inclinado** en la colindancia, hay **diferentes alturas de piso** o **diferente número de pisos aéreos**, se usa la altura de piso o el número de pisos que conduzca a la **mayor** separación sísmica.
+
+#### Separación con el paramento del lote (A.6.5.2.3)
+
+- **(a) Vía pública o zona verde pública**: no se requiere separación sísmica en ese costado (no exime de los retrocesos urbanísticos).
+- **(b) Cerramiento**: si hay un cerramiento y la edificación nueva está separada de él más que lo señalado para el **piso crítico** en la Tabla A.6.5-1, no se requiere separación sísmica con el paramento.
+- **(c)** Edificaciones con **uno o dos pisos aéreos** en la colindancia no requieren separación.
+- **(d)** Con **más de dos pisos** aéreos: hasta tres pisos, ninguna separación si no hay vecino existente o si las losas coinciden; **1 %** de la altura de la edificación nueva si las losas no coinciden. Con más de tres pisos, **2 %** si las losas coinciden, **3 %** si no coinciden y **1 %** si no hay vecino (o es solo un cerramiento).
+- **(e)** En cada piso, la separación es la distancia horizontal, perpendicular al plano vertical del lindero, medida desde la losa hasta ese plano, igual al **coeficiente de la tabla × la altura del piso sobre el terreno**.
+- **(f)** Evitar que se depositen **materiales extraños** en la separación y colocar protección contra el **agua lluvia**.
+- **(g)** En **reforzamiento y rehabilitación** el diseñador debe dejar constancia de que estudió el efecto de la interacción con las vecinas y tomó medidas (A.10.1.7).
+- **(h)** El **paramento** y la separación requerida deben quedar **claramente indicados en los planos arquitectónicos** presentados a la curaduría o autoridad para la licencia.
+
+<TablaNorma numero="Tabla A.6.5-1" titulo="Separación sísmica mínima en la cubierta entre edificaciones colindantes que no hagan parte de la misma construcción" pag="A-79" nota="Los coeficientes se aplican a la altura hn de la edificación nueva en la cubierta (1 %, 2 % o 3 % de hn).">
+
+| Altura de la edificación nueva | Vecino existente, **coinciden** las losas | Vecino existente, **no coinciden** las losas | No existe vecino, o el existente ya dejó su separación |
+|---|---|---|---|
+| 1 y 2 pisos | No requiere separación | No requiere separación | No requiere separación |
+| 3 pisos | No requiere separación | 0.01 $h_n$ (1 %) | No requiere separación |
+| Más de 3 pisos | 0.02 $h_n$ (2 %) | 0.03 $h_n$ (3 %) | 0.01 $h_n$ (1 %) |
+
+</TablaNorma>
+
+**Nota 1 de la tabla**: para obtener la separación en pisos diferentes a la cubierta se aplica el coeficiente de la tabla multiplicado por la **altura sobre el terreno del piso** en particular. **Nota 2**: si el terreno es inclinado, o hay diferentes alturas o números de pisos en la colindancia, se toma en la edificación nueva la altura de piso o el número de pisos que dé la **mayor** separación.
+
+<Figura src="/img/titulo-a/figura-a6-5-1-separacion-sismica.png" alt="Elevación de una edificación nueva junto al paramento del lote con una edificación existente; en cada piso aéreo se indica la separación sísmica como distancia horizontal al paramento, proporcional a la altura hi del piso" numero="Figura A.6.5-1" pie="Medición de la separación sísmica (vista en elevación): en cualquier piso es como mínimo el coeficiente de la Tabla A.6.5-1 por la altura hi de ese piso sobre el terreno; la mayor separación se da en la cubierta (hn)." pag="A-79" />
+
+<Callout tipo="practica" titulo="Qué significa en la práctica">
+La separación **crece con la altura**: el primer piso casi puede estar sobre el lindero y la cubierta debe retirarse el 1 %, 2 % o 3 % de $h_n$. Como se mide **piso por piso**, la edificación nueva puede "escalonar" su fachada hacia la colindancia (retrocediendo en los pisos altos) en lugar de retirarse toda al máximo. Y en un lote con vecino existente que **no dejó** separación, el vecino manda: de si las losas coinciden o no depende que se pida el 2 % o el 3 %.
+</Callout>
+
+<CalculadoraEmbed id="separacion-sismica" />
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Verificación de la deriva de un edificio de 5 pisos">
+Edificio de oficinas (grupo I, $I$ = 1.0) de **5 pisos** con pórticos de concreto reforzado en **Medellín** ($A_a$ = {f(e1.aa)}, $A_v$ = {f(e1.av)}), perfil de suelo **D** ($F_a$ = {f(e1.fa)}, $F_v$ = {f(e1.fv)}), regular en planta y altura, con diafragmas rígidos y sin irregularidad torsional. $h_p$ = {e1.hp} m en todos los pisos ($h_n$ = {e1.hn} m). Pesos por nivel: 4500 kN en los pisos 1 a 4 y 3600 kN en la cubierta ({miles(e1.peso)} kN en total). Del modelo con las fuerzas **sin dividir por $R$** se obtuvieron los desplazamientos del centro de masa $\delta_{cm}$ (mm): 15, 38, 70, 95 y 112 de los pisos 1 a 5. Verificar la deriva y el índice de estabilidad.
+
+<Paso titulo="Fuerzas sísmicas y cortantes de piso" ref="A.4.2-3, A.4.3-1, A.4.3-2">
+$T_a = 0.047\times15^{0.9}$ = {f(e1.ta, 3)} s, que está en la meseta ($T_C$ = {f(e1.per.tc, 3)} s), así que $S_a$ = {f(e1.saT, 4)} g y $V_s$ = **{miles(e1.vs)} kN**. Con $k$ = {f(e1.k, 3)} se obtienen los cortantes de piso $V_i$ de la tabla siguiente (calculados con `distribuirFuerzas`).
+</Paso>
+<Paso titulo="Deriva de cada piso y límite" ref="A.6.3.1.1, Tabla A.6.4-1">
+
+Por ser regular y sin 1aP/1bP, se usa la diferencia de desplazamientos del centro de masa (A.6.3.1.1). El límite es 1.0 % de $h_{pi}$ = {f(e1.limite * e1.hp * 1000, 0)} mm. Cada fila se calcula con `verificarDeriva(δi, δi−1, hp, 0.010)`:
+
+<table>
+  <thead>
+    <tr><th>Piso</th><th>δcm (mm)</th><th>Deriva Δ (mm)</th><th>Δ/hp (%)</th><th>% del límite</th><th>¿Cumple 1.0 %?</th></tr>
+  </thead>
+  <tbody>
+    {e1.pisos.map((x) => (
+      <tr key={x.piso}>
+        <td>{x.piso}</td><td>{x.di}</td><td>{f(x.v.deriva, 0)}</td><td>{f(x.v.razon * 100, 3)}</td><td>{f(x.v.uso * 100, 0)}</td><td>{x.v.cumple ? 'Sí' : 'No'}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Paso titulo="Índice de estabilidad y P-Delta" ref="A.6.2-2">
+
+$Q_i = P_i\,\Delta_{cm}/(V_i\,h_{pi})$ con $P_i$ acumulado desde la cubierta, $V_i$ en kN y $\Delta_{cm}$ en m:
+
+<table>
+  <thead>
+    <tr><th>Piso</th><th>Pi (kN)</th><th>Vi (kN)</th><th>Δcm (mm)</th><th>Qi</th></tr>
+  </thead>
+  <tbody>
+    {e1.pisos.map((x) => (
+      <tr key={x.piso}>
+        <td>{x.piso}</td><td>{miles(x.P)}</td><td>{miles(x.V)}</td><td>{f(x.dd, 0)}</td><td>{f(x.Q, 4)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+El máximo es $Q_i$ = {f(e1.qMax, 4)} < 0.10: **no se requieren efectos P-Delta** y la deriva de la tabla anterior no cambia.
+
+</Paso>
+<Paso titulo="Piso crítico" ref="A.6.4.1">
+El piso {e1.critico.piso} tiene la mayor deriva: Δ = {f(e1.critico.v.deriva, 0)} mm = {f(e1.critico.v.razon * 100, 2)} % de $h_p$, es decir {f(e1.critico.v.uso * 100, 0)} % del límite. Como supera el 1.0 %, **el edificio no cumple** tal como está modelado.
+</Paso>
+<Paso titulo="¿Qué se puede hacer?" ref="A.6.4.1.1">
+- **Rigidizar** (más sección en columnas y vigas, o muros) y repetir el análisis, que es lo más robusto. Recuerda que cambiar la rigidez cambia también el período y las fuerzas (iterar según A.4.2.3).
+- Si el modelo **ya empleó secciones fisuradas** coherentes con A.3.4.3, A.6.4.1.1 permite multiplicar las derivas por 0.7 antes de comparar: la deriva del piso {e1.critico.piso} pasa a {f(e1.critico.v7.deriva, 1)} mm = {f(e1.critico.v7.razon * 100, 3)} % de $h_p$ ({f(e1.critico.v7.uso * 100, 0)} % del límite) y cumple. Si el modelo usó secciones brutas, esa reducción **no** se justifica.
+- Si fuera de mampostería con falla por cortante (límite 0.5 % = {f(e1.limiteMamp * e1.hp * 1000, 0)} mm), varios pisos incumplirían incluso con el factor 0.7.
+
+<table>
+  <thead>
+    <tr><th>Piso</th><th>Deriva ×0.7 (mm)</th><th>Δ/hp ×0.7 (%)</th><th>¿Cumple 1.0 %?</th></tr>
+  </thead>
+  <tbody>
+    {e1.pisos.map((x) => (
+      <tr key={x.piso}>
+        <td>{x.piso}</td><td>{f(x.v7.deriva, 1)}</td><td>{f(x.v7.razon * 100, 3)}</td><td>{x.v7.cumple ? 'Sí' : 'No'}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Resultado>
+Deriva máxima en el piso {e1.critico.piso}: {f(e1.critico.v.razon * 100, 2)} % de $h_p$ frente al límite de 1.0 %; $Q_{i,max}$ = {f(e1.qMax, 3)} (sin P-Delta). **No cumple con secciones sin reducir**; cumpliría con el factor 0.7 solo si el modelo usó secciones fisuradas. Compruébalo en la calculadora:
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Separación sísmica de un edificio nuevo de 10 pisos con vecino existente">
+Edificio nuevo de **{e2.pisos} pisos** ($h_p$ = {e2.hp} m; $h_n$ = {e2.hn} m) en un lote en **Cali** (amenaza alta, la separación sí aplica). El lote limita por el frente con una **vía pública**, por el fondo con un edificio existente cuyas **losas coinciden** con las del nuevo, por un lado lateral con otro edificio existente cuyas **losas no coinciden**, y por el otro lado con un lote vacío con solo un cerramiento. Ningún vecino dejó separación sísmica. Determinar la separación en cada colindancia y piso.
+
+<Paso titulo="Aplicabilidad" ref="A.6.5.2.1">
+Zona de amenaza alta, edificación **nueva** con licencia solicitada por primera vez: aplica A.6.5.2 (no sería exigible en zona baja ni en un trámite de reconocimiento).
+</Paso>
+<Paso titulo="Frente: vía pública" ref="A.6.5.2.3 (a)">
+Sin separación sísmica con el paramento en ese costado (sin perjuicio de los retrocesos urbanísticos).
+</Paso>
+<Paso titulo="Coeficiente por colindancia" ref="Tabla A.6.5-1">
+Con más de 3 pisos:
+
+<table>
+  <thead>
+    <tr><th>Colindancia</th><th>Caso de la tabla</th><th>Coeficiente</th><th>Separación en la cubierta (hn = {e2.hn} m)</th></tr>
+  </thead>
+  <tbody>
+    {e2.colindancias.map((c) => (
+      <tr key={c.clave}>
+        <td>{c.lado}</td><td>{c.nombre}</td><td>{f(c.coef, 2)}</td><td>{f(c.cubierta, 2)} m</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Paso titulo="Separación piso por piso" ref="A.6.5.2.3 (e), nota 1 de la Tabla A.6.5-1">
+
+La separación mínima en el piso $i$ es $c\times h_i$ (altura sobre el terreno de la losa del piso):
+
+<table>
+  <thead>
+    <tr><th>Piso</th><th>hi (m)</th><th>Fondo (2 %) (m)</th><th>Lateral izq. (3 %) (m)</th><th>Lateral der. (1 %) (m)</th></tr>
+  </thead>
+  <tbody>
+    {e2.niveles.map((n) => (
+      <tr key={n.piso}>
+        <td>{n.piso}</td><td>{n.h}</td><td>{f(n.sep[0], 2)}</td><td>{f(n.sep[1], 2)}</td><td>{f(n.sep[2], 2)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Paso titulo="Detalles de la colindancia con cerramiento" ref="A.6.5.2.3 (b)">
+En el lateral derecho, si la edificación nueva se retira del cerramiento una distancia **mayor** que la del piso crítico (en este caso {f(e2.colindancias[2].cubierta, 2)} m en la cubierta), no se exige separación sísmica con el paramento. Si el lote vecino se construye después, ese vecino tendrá que dejar su propia separación.
+</Paso>
+<Paso titulo="Documentación y mantenimiento" ref="A.6.5.2.3 (f), (h)">
+El **paramento** y la separación requerida deben aparecer en los **planos arquitectónicos** de la licencia. Debe protegerse la junta contra el ingreso de agua lluvia y materiales extraños.
+</Paso>
+<Resultado>
+La cubierta debe quedar a **{f(e2.colindancias[0].cubierta, 2)} m** del fondo, **{f(e2.colindancias[1].cubierta, 2)} m** del lateral con losas no coincidentes y **{f(e2.colindancias[2].cubierta, 2)} m** del lateral con cerramiento; los pisos intermedios, proporcionalmente a su altura. Si el edificio tuviera solo 3 pisos, los coeficientes serían {f(e2.tres[0], 2)}, {f(e2.tres[1], 2)} y {f(e2.tres[2], 2)} respectivamente.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Calcular desplazamientos con fuerzas ya divididas por $R$**: las derivas se obtienen con $V_i$ sin dividir por $R$.
+- **Olvidar P-Delta** cuando $Q_i > 0.10$, o ignorar que $Q_i > 0.30$ obliga a rigidizar.
+- **Combinar primero las deflexiones modales** y restar después: se subestima la deriva (A.5.4.4).
+- **Medir la deriva solo en el centro de masa** cuando hay irregularidad torsional 1aP/1bP: hay que revisar los puntos del piso (A.6.3-1).
+- **Usar la forma alternativa A.6.3-2** sin cumplir las **cinco** condiciones (≥ 10 pisos, solo sobre 2/3 de la altura, no pórtico, regular y $Q_i$ < 0.10).
+- **Aplicar el factor 0.7** con un modelo de secciones brutas.
+- **Usar el límite de 1.0 % en mampostería poco esbelta** (el límite es 0.5 %).
+- **Aplicar la separación sísmica con el $h_n$ de la cubierta en todos los pisos**: la separación depende de la altura de cada piso.
+- **Olvidar indicar el paramento y la separación** en los planos arquitectónicos de la licencia.
+</Callout>
+
+## Resumen en una línea
+
+**Calcula $\delta_{cm}$ (con fuerzas sin dividir por $R$) + torsión + P-Delta ($Q_i$ > 0.10) → deriva = diferencia entre pisos consecutivos → compárala con 1.0 % de $h_{pi}$ (0.5 % en mampostería poco esbelta; ×0.7 si hay secciones fisuradas) → y retira la edificación del lindero 1 %, 2 % o 3 % de la altura en cada piso según la Tabla A.6.5-1.**

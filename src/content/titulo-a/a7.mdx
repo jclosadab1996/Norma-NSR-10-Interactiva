@@ -1,0 +1,368 @@
+---
+codigo: 'A.7'
+tipo: capitulo
+titulo: 'Interacción suelo-estructura'
+resumen: 'Cuándo y cómo se tiene en cuenta que el suelo no es un apoyo infinitamente rígido: qué cambia en el período, el amortiguamiento, las derivas y el cortante basal, y cómo se reparten las tareas entre el geotecnista y el ingeniero estructural.'
+objetivos:
+  - 'Explicar qué es la interacción suelo-estructura (ISE) y en qué se diferencia de los efectos de sitio del Capítulo A.2'
+  - 'Saber cuándo la norma exige o permite considerar la ISE (A.3.4.2) y qué datos geotécnicos hacen falta'
+  - 'Describir qué cambia con la ISE en período, cortante basal, derivas y distribución de fuerzas'
+  - 'Aplicar el piso del cortante de A.7.3.4 y el criterio de valores máximos y mínimos de A.7.3.5'
+paginasNorma: 'A-81 a A-82'
+paginaPdf: 124
+orden: 7
+calculadoras: ['espectro-diseno', 'periodo-fundamental', 'deriva']
+nivel: 'avanzado'
+---
+
+import { coeficienteFa, coeficienteFv, periodosEspectro, sa, periodoAproximado, coeficienteCu, distribuirFuerzas, cortanteBasal, limiteDeriva } from '../../lib/nsr10';
+import { masaParticipante, alturaEfectiva, rigidezEmpotrada, periodoEfectivoISE, amortiguamientoEfectivo, reduccionCortanteISE, cortanteConISE, derivaConISE } from '../../lib/nsr10/interaccionSueloEstructura';
+
+export const ise = (() => {
+  const aa = 0.15, av = 0.2;
+  const fa = coeficienteFa('E', aa);
+  const fv = coeficienteFv('E', av);
+  const p = { aa, av, fa, fv, i: 1.0 };
+  const { tc, tl } = periodosEspectro(p);
+  const M = 1.0e7; // kg (10 000 t)
+  const hn = 30, hpi = 3, T = 1.0;
+  const derivaEmpotrada = 0.021; // m, supuesta del análisis de base empotrada (0.70 % de hpi)
+  const ta = periodoAproximado('porticos-concreto', hn);
+  const cu = coeficienteCu(av, fv);
+  const cuTa = cu * ta;
+  const mBarra = masaParticipante(M);
+  const hBarra = alturaEfectiva(hn);
+  const k = rigidezEmpotrada(mBarra, T);
+  const vs = cortanteBasal(sa(T, p), M);
+  const vsPrima = cortanteBasal(sa(cuTa, p), M);
+  // Momento de vuelco Mo = Σ Fx·hx con la distribución de A.4.3 (sin reducción por ISE)
+  const niveles = Array.from({ length: 10 }, (_, j) => ({ h: hpi * (j + 1), m: M / 10 }));
+  const mo = distribuirFuerzas(niveles, vs, T).reduce((s, n) => s + n.fx * n.h, 0);
+  const A0 = 900, nu = 0.4, beta0 = 0.03;
+  const R = Math.sqrt(A0 / Math.PI);
+  const caso = (factorG) => {
+    const Gs = 26e6 * factorG;
+    const ky = (8 * Gs * R) / (2 - nu);
+    const kth = (8 * Gs * R ** 3) / (3 * (1 - nu));
+    const tEf = periodoEfectivoISE(T, k, ky, kth, hBarra);
+    const beta = amortiguamientoEfectivo(beta0, tEf, T);
+    const saEmp = sa(T, p);
+    const saEf = sa(tEf, p);
+    const dVs = reduccionCortanteISE(saEmp, saEf, beta, mBarra);
+    const res = cortanteConISE(vs, dVs, vsPrima);
+    const der = derivaConISE(derivaEmpotrada, hpi, mo, kth, res.vsDiseno, vs);
+    return { factorG, Gs, ky, kth, tEf, beta, saEmp, saEf, dVs, ...res, ...der, razonDeriva: der.derivaModificada / hpi };
+  };
+  const c = caso(1);
+  return { aa, av, fa, fv, p, tc, tl, dosTc: 2 * tc, M, hn, hpi, T, derivaEmpotrada, ta, cu, cuTa, mBarra, hBarra, k, vs, vsPrima, mo, R, A0, c, casos: [caso(0.5), caso(1), caso(2)], limite: limiteDeriva('general') };
+})();
+
+export const decision = (() => {
+  const evalua = (nombre, perfil, t, pisos) => {
+    const aa = 0.15, av = 0.2;
+    const fa = coeficienteFa(perfil, aa), fv = coeficienteFv(perfil, av);
+    const { tc } = periodosEspectro({ aa, av, fa, fv });
+    return { nombre, perfil, t, pisos, tc, dosTc: 2 * tc, obligatoria: ['D', 'E'].includes(perfil) && t > 2 * tc };
+  };
+  return [
+    evalua('A', 'C', 0.45, 4),
+    evalua('B', 'D', 2.0, 18),
+    evalua('C', 'E', 1.0, 10),
+    evalua('D', 'E', 2.4, 16),
+  ];
+})();
+
+## Idea central del capítulo
+
+Casi todos los modelos de análisis estructural suponen que la edificación está **empotrada en su base**: el suelo sería un apoyo infinitamente rígido que solo "mueve" el edificio. En la realidad el suelo es deformable, y esa deformabilidad cambia la forma en que el edificio vibra.
+
+**Analogía del colchón.** Párate sobre el piso de concreto y empuja una pared: casi no te mueves. Ahora párate sobre un colchón blando y haz lo mismo: te balanceas más lento (período más largo), te inclinas desde los pies (cabeceo o *rocking*), y el colchón absorbe parte de la energía (más amortiguamiento). Así se comporta un edificio pesado y rígido sobre un suelo blando.
+
+El Capítulo A.7 es **corto y de principios**: no trae ecuaciones propias. Define *qué efectos* produce la ISE, *quién aporta qué* (geotecnista y estructural) y *qué límites* se imponen a los resultados. Las ecuaciones prácticas viven en el **Apéndice A-2**, que el capítulo remite como procedimiento recomendado (<NormaRef s="A.7.1.3" pag="A-81" />).
+
+<Callout tipo="importante" titulo="La ISE no es un descuento automático">
+La interacción suelo-estructura **alarga el período y suele reducir el cortante basal**, pero también **aumenta los desplazamientos y las derivas**. La norma pone un piso al cortante reducido (<NormaRef s="A.7.3.4" pag="A-82" />) y obliga a usar los valores del suelo más desfavorables para cada efecto (<NormaRef s="A.7.3.5" pag="A-82" />). Ignorar la ISE puede ser tanto conservador (cortante) como inseguro (derivas).
+</Callout>
+
+## A.7.1 — General
+
+### A.7.1.1 — Definición
+
+La respuesta sísmica de una estructura depende de cómo el movimiento del terreno le llega **a través de su cimentación**. Tres cosas interactúan entre sí (<NormaRef s="A.7.1.1" pag="A-81" />):
+
+- las **características dinámicas del suelo** subyacente,
+- la **rigidez y la disposición de la cimentación**, y
+- el **tipo de sistema estructural** de la edificación.
+
+Si el análisis ignora la rigidez de la cimentación y la dinámica del suelo, la respuesta estimada puede diferir apreciablemente de la real. Por eso la norma considera "conveniente" incluir la ISE en el análisis sísmico.
+
+### A.7.1.2 — Efectos asociados con la interacción suelo-estructura
+
+Según las características de la estructura, la cimentación y el suelo, la respuesta frente a cargas verticales estáticas y a sismo puede variar, comparada con la estimada sin ISE, en los siguientes aspectos (<NormaRef s="A.7.1.2" pag="A-81" />):
+
+| Literal | Efecto | Traducción práctica |
+|---|---|---|
+| (a) | Suelos blandos y compresibles modifican la **distribución de esfuerzos y deformaciones bajo losas de fundación**, tanto ante cargas verticales como horizontales | La presión de contacto deja de ser uniforme; los asentamientos diferenciales cambian los esfuerzos en la estructura |
+| (b) | **Aumento del período** del sistema suelo-estructura respecto al modelo de base empotrada | El edificio vibra más lento porque el suelo "ablanda" el apoyo |
+| (c) | Generalmente **aumento del amortiguamiento** viscoso equivalente (disipación adicional por amortiguamiento material y geométrico del suelo) | Parte de la energía se "fuga" hacia el suelo (radiación de ondas) |
+| (d) | **Aumento de los desplazamientos laterales**, en parte significativa por la **rotación de la base** (cabeceo), con cambios en las derivas según el nivel | El edificio se inclina como cuerpo rígido; las derivas por piso cambian con la altura |
+| (e) | **Variación en la distribución de cortantes** entre los elementos del sistema de resistencia sísmica, sobre todo si se combinan elementos con rigideces y apoyos distintos (pórticos con muros) | Un muro apoyado sobre suelo blando "se descarga" y el pórtico recibe más fuerza |
+| (f) | Otros | — |
+
+<Callout tipo="nota" titulo="Anomalía menor del PDF">
+El literal (a) dice "en las distribución de esfuerzos"; es una errata de redacción (debería ser "en la distribución"). El sentido es claro y no afecta la aplicación.
+</Callout>
+
+### A.7.1.2.1 — ISE no es lo mismo que efectos de sitio
+
+Esta aclaración evita una confusión frecuente (<NormaRef s="A.7.1.2.1" pag="A-81" />):
+
+| | **Efectos de sitio** (Cap. A.2) | **Interacción suelo-estructura** (Cap. A.7) |
+|---|---|---|
+| Qué cambia | El **movimiento de entrada**: la onda se amplifica o atenúa al viajar de la roca a la superficie | La **respuesta de la estructura**: la edificación y su cimentación alteran el movimiento del suelo que las rodea |
+| Se cuantifica con | $F_a$, $F_v$, perfil de suelo A–F | Rigideces $K_y$ y $K_\theta$ de la cimentación, amortiguamiento del sistema |
+| Siempre se aplica | Sí, en todo diseño | No: es opcional salvo los casos de A.3.4.2 |
+| Quién lo define | Geotecnista (perfil de suelo) | Geotecnista y estructural, en conjunto |
+
+Los dos efectos **se acumulan**: primero se define el espectro en la superficie con $F_a$ y $F_v$ (A.2), y luego, si corresponde, se modifica la respuesta de la estructura por ISE.
+
+### A.7.1.3 — Procedimiento recomendado y cuándo se considera
+
+El capítulo "define los criterios generales" que deben tener en cuenta **tanto el ingeniero estructural como el geotecnista** cuando se deba usar la ISE, "de acuerdo con los requisitos de A.3.4.2". Si ambos disponen de la información necesaria, obtenida "con el mayor rigor posible", se pueden usar los requisitos del **Apéndice A-2** (<NormaRef s="A.7.1.3" pag="A-81" />).
+
+¿Cuándo se **debe** considerar la ISE? La norma lo dice en otros capítulos:
+
+| Situación | Efecto sobre la ISE | Referencia |
+|---|---|---|
+| Edificación en perfil de suelo **D, E o F** con período **mayor de $2T_C$** (regular o irregular) | Obliga al análisis dinámico elástico, y este "debe incluir los efectos de interacción suelo-estructura" si se analizó con base empotrada | <NormaRef s="A.3.4.2.2(e)" pag="A-45" /> |
+| Misma condición (D, E o F, $T > 2T_C$) en edificaciones regulares de 20 pisos o menos | **No** se permite el método de la fuerza horizontal equivalente | <NormaRef s="A.3.4.2.1(c)" pag="A-45" /> |
+| Se usan procedimientos de ISE, o A.3.4.2 lo requiere porque se analizó empotrada | Los desplazamientos adicionales por ISE deben sumarse a los totales para la deriva | <NormaRef s="A.6.2.4" pag="A-75" /> |
+| Se usan procedimientos de ISE en el análisis dinámico | Se permite usar el $V_s$ reducido al aplicar el ajuste del 80 % / 90 % | <NormaRef s="A.5.4.5" pag="A-70" /> |
+
+En los demás casos la ISE es **voluntaria**: el diseñador puede ignorarla (modelo empotrado) o incluirla para obtener una estimación más realista.
+
+<Callout tipo="practica" titulo="Regla de oro para decidir">
+La ISE importa más cuando la estructura es **pesada y rígida** y el suelo es **blando**: relación grande entre la rigidez de la estructura ($\bar k$) y la del suelo ($K_y$, $K_\theta$). Un edificio flexible sobre roca o suelo duro prácticamente no cambia. Esto explica por qué la norma pone el umbral en perfiles D, E, F y períodos largos.
+</Callout>
+
+## A.7.2 — Información geotécnica
+
+El estudio geotécnico debe incluir el alcance mínimo de exploración, interpretación y recomendaciones, "en un todo de acuerdo con lo señalado en el Título H" (<NormaRef s="A.7.2" pag="A-81" />). Cuatro tareas:
+
+### A.7.2.1 — Exploración
+
+Los procedimientos (de campo o de laboratorio) deben ser **consistentes con el tipo de propiedades** que se estudian. Hay que cuidar especialmente el **nivel de deformación** al que se expresan las propiedades del suelo: debe ser **compatible con el que imponen los movimientos sísmicos** (<NormaRef s="A.7.2.1" pag="A-82" />).
+
+> Por qué importa: la rigidez del suelo cae al crecer la deformación. Un módulo de cortante medido a deformaciones minúsculas (como en un ensayo sísmico de campo) sobrestima la rigidez que tendrá el suelo durante un sismo fuerte. Por eso el Apéndice A-2 reduce $G_0$ con la relación $G/G_0$ de la Tabla A-2.1-1 (0.81 para $A_a ≤ 0.10$, hasta 0.42 para $A_a ≥ 0.30$).
+
+### A.7.2.2 — Laboratorio
+
+Los ensayos deben **cuantificar, directa o indirectamente, el comportamiento del material en condiciones dinámicas** y a los niveles de deformación esperados durante el sismo (<NormaRef s="A.7.2.2" pag="A-82" />): por ejemplo, columna resonante, triaxial cíclico o correlaciones calibradas.
+
+### A.7.2.3 — Interpretación
+
+Los datos de campo y laboratorio se combinan en **recomendaciones** que describen y sustentan las características que debe usar el ingeniero estructural en sus modelos. Esas recomendaciones deben fijar **limitaciones y rangos de aplicabilidad "fáciles de identificar"**, para evitar el peligro de usar los parámetros fuera del contexto en que se expresaron (<NormaRef s="A.7.2.3" pag="A-82" />).
+
+### A.7.2.4 — Revisión y evaluación de los resultados
+
+El geotecnista debe **revisar y avalar** los resultados del ingeniero estructural en lo que toca a las recomendaciones de ISE y a la validez de los resultados obtenidos con ellas (<NormaRef s="A.7.2.4" pag="A-82" />). Es decir, el flujo es de **ida y vuelta**:
+
+| Paso | Quién | Qué entrega |
+|---|---|---|
+| 1 | Geotecnista | Exploración y ensayos a deformaciones sísmicas; perfil de $v_s$, $G$, amortiguamiento; **rangos** (mínimo y máximo) de los parámetros |
+| 2 | Estructural | Modelo con apoyos elásticos (resortes) y análisis con ISE |
+| 3 | Geotecnista | Revisa y **avala** que los resultados respetan los rangos y límites de aplicabilidad |
+| 4 | Estructural | Diseña con la envolvente más desfavorable (A.7.3.5) |
+
+## A.7.3 — Análisis y diseño estructural
+
+Alcance mínimo de lo que el ingeniero estructural debe considerar para describir la ISE (<NormaRef s="A.7.3" pag="A-82" />).
+
+### A.7.3.1 — Tipo de modelo
+
+Los modelos pueden ser **estáticos o dinámicos** y deben describir la rigidez de **estructura, cimentación y suelo** a niveles compatibles con las deformaciones esperadas. En el modelo estructural se introducen **condiciones de apoyo elástico** de los muros, columnas y demás elementos del sistema de resistencia sísmica al nivel de la cimentación, consistentes con las rigideces supuestas (<NormaRef s="A.7.3.1" pag="A-82" />).
+
+En términos prácticos: en lugar de apoyos fijos, se colocan **resortes** (traslacionales y rotacionales) bajo cada elemento, con las rigideces que entrega el estudio geotécnico.
+
+### A.7.3.2 — Fuerzas de diseño de los elementos estructurales
+
+Las fuerzas internas que se usan en el diseño de cada elemento son **las que resultan del análisis con ISE**, no las del modelo empotrado (<NormaRef s="A.7.3.2" pag="A-82" />). Esto incluye la redistribución entre pórticos y muros (efecto (e) de A.7.1.2).
+
+### A.7.3.3 — Derivas
+
+Las derivas obtenidas con ISE deben **cumplir los límites del Capítulo A.6** (<NormaRef s="A.7.3.3" pag="A-82" />). La norma advierte que hay casos en que deben esperarse derivas **mayores** que las del modelo empotrado (A.7.1.2(d)). Una estructura que cumplía con base empotrada puede dejar de cumplir al incluir la ISE.
+
+### A.7.3.4 — Cortante sísmico en la base
+
+Es la regla más importante del capítulo (<NormaRef s="A.7.3.4" pag="A-82" />):
+
+- Si la ISE **aumenta** el cortante basal, se **diseña para ese cortante mayor**.
+- Si la ISE lo **disminuye** (por un período equivalente mayor y/o más amortiguamiento), el cortante de diseño **no puede ser menor** que el del método de la fuerza horizontal equivalente del Capítulo A.4 con un período $T = C_u T_a$ (según <NormaRef s="A.4.2.1" />) y los espectros del Capítulo A.2.
+
+Escrito como desigualdad, llamando $V_s'$ al cortante calculado con $T = C_uT_a$:
+
+$$
+\bar V_s \;\ge\; V_s'
+$$
+
+<Callout tipo="atencion" titulo="Anomalía: dos pisos distintos en el mismo reglamento">
+El Apéndice A-2 (<NormaRef s="A-2.2.1" pag="A-143" />) dice que el cortante reducido $\bar V_s$ "no puede ser menor que **0.7**$V_s'$", mientras que A.7.3.4 exige que no sea menor que **$V_s'$ completo**. Como el Capítulo A.7 es el que fija las "limitaciones" del Apéndice (A-2.1.1: "su uso se permite dentro de las limitaciones que da el Capítulo A.7"), en este sitio se aplica el criterio **más exigente** ($V_s'$ completo). Conviene confirmar la interpretación con la Comisión Asesora o con el revisor del proyecto.
+</Callout>
+
+### A.7.3.5 — Valores máximos y mínimos de los efectos de ISE
+
+Los parámetros del suelo tienen incertidumbre. Por eso deben considerarse los **valores máximos y mínimos esperados** y **usar los que produzcan los efectos más desfavorables** (<NormaRef s="A.7.3.5" pag="A-82" />), "tanto en la determinación de los cortantes sísmicos, como para el cálculo de las derivas de piso y las fuerzas de diseño de los elementos de la estructura y la cimentación".
+
+Atención: **el caso desfavorable no es el mismo para todo**. En general:
+
+| Efecto que se verifica | Suelo más desfavorable | Por qué |
+|---|---|---|
+| Cortante basal y fuerzas | **Más rígido** (G alto) | Período más corto, menos reducción de $S_a$ |
+| Derivas y desplazamientos | **Más blando** (G bajo) | Más cabeceo y más flexibilidad |
+| Fuerzas en la cimentación | Se evalúan ambos extremos | Cambia la distribución de reacciones |
+
+Se verá con números en el Ejemplo 1.
+
+## Puente con el Apéndice A-2
+
+El Apéndice A-2 desarrolla el método para base empotrada analizada por fuerza horizontal equivalente (<NormaRef s="A-2.2" pag="A-143" />) y por análisis modal (A-2.3). Estas son las dos ecuaciones que se necesitan para entender el ejemplo (verificadas contra la imagen de la página; su desarrollo completo corresponde al Apéndice A-2):
+
+<Ecuacion num="A-2-3 y A-2-4" titulo="Período efectivo con interacción suelo-estructura">
+
+$$
+\bar T = T\sqrt{1+\frac{\bar k}{K_y}\left(1+\frac{K_y\,\bar h^{2}}{K_\theta}\right)}
+\qquad
+\bar k = 4\pi^{2}\,\frac{\bar M}{T^{2}}
+$$
+
+- $T$: período fundamental con base empotrada (A.4.2); $\bar T$: período efectivo con ISE.
+- $\bar k$: rigidez lateral de la estructura empotrada; $\bar M = 0.7M$: masa participante; $\bar h = 0.7h_n$: altura efectiva.
+- $K_y$: rigidez lateral de la cimentación (fuerza horizontal por unidad de desplazamiento).
+- $K_\theta$: rigidez rotacional o de balanceo (momento por unidad de rotación).
+
+</Ecuacion>
+
+<Ecuacion num="A-2-1, A-2-2 y A-2-9" titulo="Cortante reducido y amortiguamiento efectivo">
+
+$$
+\bar V_s = V_s-\Delta V_s,\qquad
+\Delta V_s=\left[S_a-\bar S_a\left(\frac{0.05}{\bar\beta}\right)^{0.4}\right] g\,\bar M,\qquad
+\bar\beta=\beta_o+\frac{0.05}{(\bar T/T)^{3}}
+$$
+
+- $\bar S_a$: valor de $S_a$ para el período efectivo $\bar T$; $S_a$ el del período $T$.
+- $\beta_o$: amortiguamiento de la cimentación (Figura A-2.2-1); $0.05 ≤ \bar\beta ≤ 0.20$.
+
+</Ecuacion>
+
+Lee las ecuaciones así: **cuanto más blando el suelo ($K_y$ y $K_\theta$ pequeños), mayor $\bar T$**; **cuanto más rígida la estructura (mayor $\bar k$), más se nota**. El factor $(0.05/\bar\beta)^{0.4}$ corrige $S_a$ por el amortiguamiento adicional respecto al 5 % del espectro.
+
+## Caso práctico
+
+<Ejemplo numero={1} titulo="Edificio de 10 pisos sobre suelo blando: qué cambia con la ISE">
+Edificio de pórticos de concreto de 10 pisos ($h_n$ = {ise.hn} m, piso a piso {ise.hpi} m), grupo de uso I ($I$ = 1.00), masa total $M$ = {(ise.M / 1000).toFixed(0)} t, con $A_a$ = {ise.aa} y $A_v$ = {ise.av}, sobre un perfil de suelo **E**. Cimentación: losa de 30 × 30 m. El geotecnista entrega, para el nivel de deformación sísmica, $G$ = 26 MPa y $\nu$ = 0.4, y $\beta_o$ = 0.03 (valores **ilustrativos** de este ejemplo). El modelo de base empotrada dio $T$ = {ise.T.toFixed(2)} s y una deriva máxima de {(ise.derivaEmpotrada * 1000).toFixed(0)} mm por piso (0.70 % de $h_{pi}$). Evaluar el efecto de la ISE y los valores máximos y mínimos de $G$.
+
+<Paso titulo="Espectro de diseño" ref="A.2.4, A.2.6">
+Perfil E: $F_a$ = {ise.fa.toFixed(2)} (interpolado entre 2.5 y 1.7) y $F_v$ = {ise.fv.toFixed(2)}. Los períodos característicos son $T_C$ = {ise.tc.toFixed(3)} s y $T_L$ = {ise.tl.toFixed(2)} s. Con $T$ = 1.0 s (mayor que $T_C$): $S_a$ = 1.2 × 0.20 × 3.2 / 1.0 = **{ise.c.saEmp.toFixed(3)} g**.
+</Paso>
+<Paso titulo="¿Es obligatoria la ISE?" ref="A.3.4.2.2(e)">
+$2T_C$ = {ise.dosTc.toFixed(2)} s. Como $T$ = {ise.T.toFixed(2)} s es menor que $2T_C$, **no es obligatoria**; se hace de forma voluntaria porque el suelo es blando y la losa es grande, y se quiere conocer el efecto en derivas y fuerzas. Además $T_a$ = 0.047·30^0.9 = {ise.ta.toFixed(3)} s, $C_u$ = {ise.cu.toFixed(2)} y **$C_uT_a$ = {ise.cuTa.toFixed(3)} s**, que cumple $T ≤ C_uT_a$.
+</Paso>
+<Paso titulo="Rigideces de la cimentación y de la estructura" ref="A-2-4">
+Para una losa de área 900 m² se toma el radio equivalente $R = \sqrt{900/\pi}$ = {ise.R.toFixed(2)} m y las expresiones usuales de la dinámica de suelos para un disco rígido (suministradas por el geotecnista, no por la norma): $K_y = 8GR/(2-\nu)$ y $K_\theta = 8GR^3/[3(1-\nu)]$.
+
+Resultado: $K_y$ = **{(ise.c.ky / 1e9).toFixed(2)}·10⁹ N/m** y $K_\theta$ = **{(ise.c.kth / 1e11).toFixed(2)}·10¹¹ N·m/rad**.
+
+La estructura empotrada: $\bar M = 0.7M$ = {(ise.mBarra / 1000).toFixed(0)} t, $\bar h = 0.7h_n$ = {ise.hBarra.toFixed(1)} m y $\bar k = 4\pi^2\bar M/T^2$ = **{(ise.k / 1e8).toFixed(3)}·10⁸ N/m**.
+</Paso>
+<Paso titulo="Período efectivo" ref="A-2-3">
+
+$$
+\bar T = 1.0\sqrt{1+\frac{2.76\times 10^{8}}{2.20\times 10^{9}}\left(1+\frac{2.20\times 10^{9}\times 21^2}{5.60\times 10^{11}}\right)}
+= 1.0\sqrt{1+0.1256\times 2.732}
+$$
+
+Resultado: $\bar T$ = **{ise.c.tEf.toFixed(3)} s** (+{((ise.c.tEf / ise.T - 1) * 100).toFixed(1)} % respecto a la base empotrada).
+</Paso>
+<Paso titulo="Amortiguamiento y cortante reducido" ref="A-2-9, A-2-2">
+
+$$
+\bar\beta=\beta_o+\frac{0.05}{(\bar T/T)^{3}},\qquad
+\Delta V_s=\left[S_a-\bar S_a\left(\frac{0.05}{\bar\beta}\right)^{0.4}\right]g\,\bar M
+$$
+
+Con $\beta_o$ = 0.03 y $\bar T/T$ = {ise.c.tEf.toFixed(3)}: $\bar\beta$ = **{ise.c.beta.toFixed(4)}**. Como $\bar T$ > $T_C$, ambos $S_a$ están en la rama $1/T$: $S_a$ = {ise.c.saEmp.toFixed(3)} g y $\bar S_a$ = {ise.c.saEf.toFixed(3)} g.
+
+Resultado: $\Delta V_s$ = **{(ise.c.dVs / 1e6).toFixed(2)} MN**.
+
+El cortante sin ISE es $V_s = S_a\,g\,M$ = **{(ise.vs / 1e6).toFixed(2)} MN**, así que $\bar V_s = V_s - \Delta V_s$ = **{(ise.c.vsReducido / 1e6).toFixed(2)} MN** (−{((1 - ise.c.vsReducido / ise.vs) * 100).toFixed(1)} %).
+</Paso>
+<Paso titulo="Piso de A.7.3.4" ref="A.7.3.4">
+Con $T = C_uT_a$ = {ise.cuTa.toFixed(3)} s: $S_a$ = {sa(ise.cuTa, ise.p).toFixed(3)} g y $V_s'$ = **{(ise.vsPrima / 1e6).toFixed(2)} MN**. Como {(ise.c.vsReducido / 1e6).toFixed(2)} MN > {(ise.vsPrima / 1e6).toFixed(2)} MN, el piso **no gobierna** en este caso y se diseña para {(ise.c.vsDiseno / 1e6).toFixed(2)} MN. (El piso del Apéndice A-2, 0.7$V_s'$ = {(ise.c.pisoApendice / 1e6).toFixed(2)} MN, ni siquiera se acerca.)
+</Paso>
+<Paso titulo="Deriva con cabeceo" ref="A-2-11, A.7.3.3">
+El momento de vuelco de la distribución de A.4.3 (sin reducción por ISE, exponente $k$ = 1.25) es $M_o$ = **{(ise.mo / 1e6).toFixed(0)} MN·m**. La rotación de la base aporta por piso un desplazamiento adicional $M_o h_{pi}/K_\theta$ = **{(ise.c.incrementoPorCabeceo * 1000).toFixed(1)} mm**. La deriva modificada es
+
+$$
+\bar\Delta=\frac{\bar V_s}{V_s}\left(\Delta+\frac{M_o\,h_{pi}}{K_\theta}\right)
+$$
+
+Resultado: {(ise.c.vsDiseno / ise.vs).toFixed(3)} × ({(ise.derivaEmpotrada * 1000).toFixed(1)} + {(ise.c.incrementoPorCabeceo * 1000).toFixed(1)}) = **{(ise.c.derivaModificada * 1000).toFixed(1)} mm**, es decir **{(ise.c.razonDeriva * 100).toFixed(2)} % de $h_{pi}$** (límite 1.0 %, <NormaRef s="Tabla A.6.4-1" pag="A-76" />).
+</Paso>
+<Paso titulo="Valores máximos y mínimos del suelo" ref="A.7.3.5">
+El geotecnista indica que $G$ puede variar entre la mitad y el doble del valor central. Se repite el cálculo (con $K_y$ y $K_\theta$ proporcionales a $G$, $\beta_o$ constante por simplicidad):
+
+| $G$ | $\bar T$ (s) | $\bar\beta$ | $\bar V_s$ (MN) | $V_s$ de diseño (MN) | Reducción | Deriva (% $h_{pi}$) | ¿Cumple 1.0 %? |
+|---|---:|---:|---:|---:|---:|---:|:---:|
+| {(ise.casos[0].Gs / 1e6).toFixed(0)} MPa (×0.5) | {ise.casos[0].tEf.toFixed(3)} | {ise.casos[0].beta.toFixed(4)} | {(ise.casos[0].vsReducido / 1e6).toFixed(2)} | {(ise.casos[0].vsDiseno / 1e6).toFixed(2)} | {((1 - ise.casos[0].vsDiseno / ise.vs) * 100).toFixed(1)} % | {(ise.casos[0].razonDeriva * 100).toFixed(2)} | {ise.casos[0].razonDeriva <= ise.limite ? 'sí' : 'NO'} |
+| {(ise.casos[1].Gs / 1e6).toFixed(0)} MPa (central) | {ise.casos[1].tEf.toFixed(3)} | {ise.casos[1].beta.toFixed(4)} | {(ise.casos[1].vsReducido / 1e6).toFixed(2)} | {(ise.casos[1].vsDiseno / 1e6).toFixed(2)} | {((1 - ise.casos[1].vsDiseno / ise.vs) * 100).toFixed(1)} % | {(ise.casos[1].razonDeriva * 100).toFixed(2)} | {ise.casos[1].razonDeriva <= ise.limite ? 'sí' : 'NO'} |
+| {(ise.casos[2].Gs / 1e6).toFixed(0)} MPa (×2) | {ise.casos[2].tEf.toFixed(3)} | {ise.casos[2].beta.toFixed(4)} | {(ise.casos[2].vsReducido / 1e6).toFixed(2)} | {(ise.casos[2].vsDiseno / 1e6).toFixed(2)} | {((1 - ise.casos[2].vsDiseno / ise.vs) * 100).toFixed(1)} % | {(ise.casos[2].razonDeriva * 100).toFixed(2)} | {ise.casos[2].razonDeriva <= ise.limite ? 'sí' : 'NO'} |
+
+Observa dos cosas. Con $G$ a la mitad, $\bar V_s$ baja a {(ise.casos[0].vsReducido / 1e6).toFixed(2)} MN, **por debajo del piso** $V_s'$ = {(ise.vsPrima / 1e6).toFixed(2)} MN: A.7.3.4 lo sube a {(ise.casos[0].vsDiseno / 1e6).toFixed(2)} MN. Y la deriva del suelo blando ({(ise.casos[0].razonDeriva * 100).toFixed(2)} %) **excede el 1.0 %** aunque el modelo empotrado cumplía con 0.70 %.
+</Paso>
+<Resultado>
+La ISE alarga el período de {ise.T.toFixed(2)} s a {ise.c.tEf.toFixed(2)} s y reduce el cortante de diseño en {((1 - ise.c.vsDiseno / ise.vs) * 100).toFixed(1)} % (entre 13 % y 17 % según $G$), pero **la deriva sube de 0.70 % a {(ise.c.razonDeriva * 100).toFixed(2)} % (central) y {(ise.casos[0].razonDeriva * 100).toFixed(2)} % (suelo blando)**. Por A.7.3.5 se diseñan las fuerzas con el suelo **rígido** (cortante {(ise.casos[2].vsDiseno / 1e6).toFixed(2)} MN) y se revisan las derivas con el suelo **blando**, donde el edificio no cumple y habría que rigidizar la estructura o mejorar la cimentación. El ahorro de cortante no compensa el problema de derivas.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="deriva" />
+
+<Ejemplo numero={2} titulo="¿Hay que considerar la ISE? Cuatro edificios, cuatro decisiones">
+Para un sitio con $A_a$ = 0.15 y $A_v$ = 0.20, se tienen cuatro edificaciones ya analizadas con base empotrada. Decidir en cuáles la norma exige ISE (<NormaRef s="A.3.4.2.2(e)" pag="A-45" />) y en cuáles es una decisión de buena práctica.
+
+<Paso titulo="Calcular 2TC con el perfil de cada caso" ref="A.2.6-2">
+
+| Edificio | Pisos | Perfil | $T$ analizado (s) | $2T_C$ (s) | ¿$T > 2T_C$ y perfil D/E/F? |
+|---|---:|:---:|---:|---:|:---:|
+| {decision[0].nombre} | {decision[0].pisos} | {decision[0].perfil} | {decision[0].t.toFixed(2)} | {decision[0].dosTc.toFixed(2)} | {decision[0].obligatoria ? 'sí' : 'no'} |
+| {decision[1].nombre} | {decision[1].pisos} | {decision[1].perfil} | {decision[1].t.toFixed(2)} | {decision[1].dosTc.toFixed(2)} | {decision[1].obligatoria ? 'sí' : 'no'} |
+| {decision[2].nombre} | {decision[2].pisos} | {decision[2].perfil} | {decision[2].t.toFixed(2)} | {decision[2].dosTc.toFixed(2)} | {decision[2].obligatoria ? 'sí' : 'no'} |
+| {decision[3].nombre} | {decision[3].pisos} | {decision[3].perfil} | {decision[3].t.toFixed(2)} | {decision[3].dosTc.toFixed(2)} | {decision[3].obligatoria ? 'sí' : 'no'} |
+
+</Paso>
+<Paso titulo="Decisión">
+- **A** (4 pisos, perfil C): no aplica la condición de A.3.4.2.2(e) (el perfil no es D, E ni F) y el período es corto. Base empotrada es suficiente.
+- **B** (18 pisos, perfil D, $T$ = 2.0 s): $T > 2T_C$, **obligatorio**. No puede usarse FHE; se hace análisis dinámico elástico que incluya la ISE.
+- **C** (10 pisos, perfil E, $T$ = 1.0 s): $T$ está por debajo de $2T_C$ = {decision[2].dosTc.toFixed(2)} s, así que **no es obligatorio**. Es el edificio del Ejemplo 1: conviene evaluarlo igual porque es pesado y el suelo es blando; sirve para saber si las derivas cumplen.
+- **D** (16 pisos, perfil E, $T$ = 2.4 s): $T > 2T_C$ = {decision[3].dosTc.toFixed(2)} s, **obligatorio**.
+</Paso>
+<Resultado>
+Obligatoria en **B** y **D** (perfil D o E con $T > 2T_C$); recomendable en **C**; innecesaria en **A**. Toda ISE se hace con datos y revisión del geotecnista (A.7.2) y respetando A.7.3.4 y A.7.3.5.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Confundir **ISE con efectos de sitio**: $F_a$ y $F_v$ (A.2) ya cubren la amplificación de la onda; la ISE es otro efecto, que modifica la respuesta de la estructura (<NormaRef s="A.7.1.2.1" pag="A-81" />).
+- Usar la ISE solo para **bajar el cortante** y olvidar que sube las **derivas** (que deben cumplir A.6, <NormaRef s="A.7.3.3" pag="A-82" />).
+- Reducir el cortante por debajo de $V_s'$ (el que resulta de $T = C_uT_a$), contra A.7.3.4.
+- Usar un **único valor de $G$**: A.7.3.5 exige máximos y mínimos y el más desfavorable en cada verificación.
+- Tomar módulos de cortante a **deformaciones pequeñas** (sin reducir por nivel de deformación sísmica): sobrestima la rigidez del suelo (A.7.2.1).
+- Aplicar las ecuaciones del Apéndice A-2 cuando el modelo **ya incorpora directamente la flexibilidad** de la cimentación (resortes o suelo en el modelo): no deben usarse en ese caso (<NormaRef s="A-2.1.1" pag="A-142" />).
+- Que el estructural use los parámetros **sin el aval** del geotecnista (A.7.2.4).
+</Callout>
+
+## Resumen en una línea
+
+**La ISE reconoce que el suelo es un apoyo deformable: alarga el período y puede aliviar el cortante (nunca por debajo de $V_s'$ con $T = C_uT_a$), pero aumenta derivas y cambia la distribución de fuerzas, por lo que se diseña con el suelo más desfavorable para cada efecto y con el aval del geotecnista.**

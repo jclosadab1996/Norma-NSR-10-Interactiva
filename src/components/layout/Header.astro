@@ -1,0 +1,68 @@
+---
+import { TITULOS } from '../../data/titulos';
+import ThemeToggle from './ThemeToggle.astro';
+
+const path = Astro.url.pathname.replace(/\/+$/, '') || '/';
+const activo = TITULOS.find((t) => path === `/${t.slug}` || path.startsWith(`/${t.slug}/`));
+---
+
+<header class="sticky top-0 z-40 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+  <div class="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6">
+    <a href="/" class="flex items-center gap-2 font-semibold tracking-tight" aria-label="NSR-10 Interactiva — inicio">
+      <span class="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground" aria-hidden="true">
+        <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12h3l2-6 4 12 3-9 2 3h4" />
+        </svg>
+      </span>
+      <span class="text-base sm:text-lg">NSR-10 <span class="text-primary">Interactiva</span></span>
+    </a>
+
+    <nav aria-label="Principal" class="ml-auto hidden items-center gap-1 text-sm md:flex">
+      <a href="/" class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path === '/' && 'bg-accent font-medium']}>Inicio</a>
+      <a href="/titulos" class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path === '/titulos' && 'bg-accent font-medium']}>Títulos</a>
+      <a href="/titulo-a/calculadoras" class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path.startsWith('/titulo-a/calculadoras') && 'bg-accent font-medium']}>Calculadoras</a>
+      <a href="/titulo-a/glosario" class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path.startsWith('/titulo-a/glosario') && 'bg-accent font-medium']}>Glosario</a>
+    </nav>
+    <div class="ml-auto flex items-center gap-1 md:ml-2">
+      <a
+        href="/buscar"
+        class="inline-flex size-9 items-center justify-center rounded-md hover:bg-accent"
+        aria-label="Buscar en el sitio"
+        title="Buscar"
+      >
+        <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+        </svg>
+      </a>
+      <ThemeToggle />
+    </div>
+  </div>
+
+  <!-- Pestañas por Título de la norma -->
+  <div class="border-t bg-muted/30">
+    <nav aria-label="Títulos de la NSR-10" class="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 py-1.5 sm:px-6 [scrollbar-width:thin]">
+      {
+        TITULOS.map((t) => {
+          const esActivo = activo?.slug === t.slug;
+          return (
+            <a
+              href={`/${t.slug}`}
+              aria-current={esActivo ? 'page' : undefined}
+              title={`Título ${t.letra} — ${t.nombre}`}
+              class:list={[
+                'group flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors',
+                esActivo ? 'bg-primary text-primary-foreground shadow-sm' : 'hover:bg-accent',
+                t.estado === 'proximamente' && !esActivo && 'text-muted-foreground',
+              ]}
+            >
+              <span class="font-semibold">Título {t.letra}</span>
+              {t.estado === 'proximamente' && (
+                <span class:list={['hidden text-[10px] uppercase tracking-wide opacity-70 lg:inline', esActivo && 'opacity-90']}>pronto</span>
+              )}
+            </a>
+          );
+        })
+      }
+    </nav>
+  </div>
+</header>

@@ -1,0 +1,62 @@
+---
+interface Item {
+  id: string;
+  codigo: string;
+  titulo: string;
+  tipo: 'capitulo' | 'apendice';
+}
+interface Props {
+  items: Item[];
+  actual?: string;
+}
+const { items, actual } = Astro.props;
+const capitulos = items.filter((i) => i.tipo === 'capitulo');
+const apendices = items.filter((i) => i.tipo === 'apendice');
+---
+
+<nav aria-label="Capítulos del Título A" class="text-sm">
+  <a href="/titulo-a" class:list={['mb-2 flex items-center gap-2 rounded-md px-2 py-1.5 font-semibold hover:bg-accent', actual === undefined && 'bg-accent']}>
+    <span class="grid size-6 place-items-center rounded bg-primary text-xs font-bold text-primary-foreground">A</span>
+    Título A
+  </a>
+  <p class="mt-3 mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Capítulos</p>
+  <ul class="space-y-0.5">
+    {
+      capitulos.map((c) => (
+        <li>
+          <a
+            href={`/titulo-a/${c.id}`}
+            aria-current={actual === c.id ? 'page' : undefined}
+            class:list={['flex gap-2 rounded-md px-2 py-1.5 leading-snug hover:bg-accent', actual === c.id && 'bg-primary/10 font-medium text-primary']}
+          >
+            <span class="w-10 shrink-0 font-mono text-xs text-muted-foreground pt-0.5">{c.codigo}</span>
+            <span>{c.titulo}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+  <p class="mt-4 mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Apéndices</p>
+  <ul class="space-y-0.5">
+    {
+      apendices.map((c) => (
+        <li>
+          <a
+            href={`/titulo-a/${c.id}`}
+            aria-current={actual === c.id ? 'page' : undefined}
+            class:list={['flex gap-2 rounded-md px-2 py-1.5 leading-snug hover:bg-accent', actual === c.id && 'bg-primary/10 font-medium text-primary']}
+          >
+            <span class="w-10 shrink-0 font-mono text-xs text-muted-foreground pt-0.5">{c.codigo}</span>
+            <span>{c.titulo}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+  <p class="mt-4 mb-1 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Herramientas</p>
+  <ul class="space-y-0.5">
+    <li><a href="/titulo-a/calculadoras" class="block rounded-md px-2 py-1.5 hover:bg-accent">Calculadoras</a></li>
+    <li><a href="/titulo-a/municipios" class="block rounded-md px-2 py-1.5 hover:bg-accent">Buscador de municipios</a></li>
+    <li><a href="/titulo-a/glosario" class="block rounded-md px-2 py-1.5 hover:bg-accent">Glosario (A.13)</a></li>
+  </ul>
+</nav>

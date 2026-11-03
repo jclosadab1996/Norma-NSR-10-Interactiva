@@ -1,0 +1,23 @@
+---
+/**
+ * Ejemplo resuelto. El enunciado va en el slot por defecto; los pasos con <Paso>; el cierre con <Resultado>.
+ */
+interface Props {
+  titulo: string;
+  /** Nº de ejemplo dentro del capítulo (opcional). */
+  numero?: number | string;
+}
+const { titulo, numero } = Astro.props;
+---
+
+<section class="not-prose my-8 overflow-hidden rounded-2xl border border-primary/30 bg-card shadow-sm" aria-label={`Ejemplo resuelto: ${titulo}`}>
+  <header class="flex items-center gap-3 border-b border-primary/20 bg-primary/10 px-5 py-3">
+    <span class="rounded-md bg-primary px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-primary-foreground">
+      Ejemplo{numero !== undefined ? ` ${numero}` : ''}
+    </span>
+    <h3 class="text-base font-semibold leading-snug">{titulo}</h3>
+  </header>
+  <div class="ejemplo-body overflow-x-auto space-y-3 px-5 py-4 text-sm leading-relaxed [counter-reset:paso] [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_.katex-display]:overflow-x-auto [&_.katex-display]:py-1 [&_table]:my-3 [&_table]:w-full [&_table]:text-sm [&_th]:border-b [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border-b [&_td]:px-2 [&_td]:py-1 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1">
+    <slot />
+  </div>
+</section>

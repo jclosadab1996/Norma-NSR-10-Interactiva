@@ -1,0 +1,29 @@
+---
+/**
+ * Contenedor para una tabla transcrita de la norma (tabla Markdown en el slot).
+ * Muestra el número de tabla, título, fuente y permite desplazamiento horizontal en móvil.
+ */
+interface Props {
+  /** "Tabla A.2.4-3" */
+  numero: string;
+  titulo: string;
+  /** Página impresa de la norma. */
+  pag?: string;
+  nota?: string;
+}
+const { numero, titulo, pag, nota } = Astro.props;
+---
+
+<figure class="not-prose my-6 overflow-hidden rounded-xl border bg-card">
+  <figcaption class="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b bg-muted/50 px-4 py-2.5">
+    <span class="rounded bg-primary px-1.5 py-0.5 text-xs font-bold text-primary-foreground">{numero}</span>
+    <span class="text-sm font-semibold">{titulo}</span>
+    {pag && <span class="ml-auto font-mono text-xs text-muted-foreground">Norma p. {pag}</span>}
+  </figcaption>
+  <div
+    class="tabla-norma overflow-x-auto p-2 text-sm [&_table]:w-full [&_table]:min-w-max [&_table]:border-collapse [&_th]:border-b [&_th]:bg-muted/40 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border-b [&_td]:px-3 [&_td]:py-1.5 [&_tr:last-child_td]:border-b-0 [&_tbody_tr:hover]:bg-accent/40"
+  >
+    <slot />
+  </div>
+  {nota && <p class="border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">{nota}</p>}
+</figure>

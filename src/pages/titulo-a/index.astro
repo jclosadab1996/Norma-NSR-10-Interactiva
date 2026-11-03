@@ -1,0 +1,125 @@
+---
+import { getCollection } from 'astro:content';
+import TituloALayout from '../../layouts/TituloALayout.astro';
+import { buttonVariants } from '../../components/ui/button';
+import { cn } from '../../lib/utils';
+import { CALCULADORAS } from '../../data/calculadoras';
+
+const todos = (await getCollection('titulo-a')).sort((a, b) => a.data.orden - b.data.orden);
+const capitulos = todos.filter((e) => e.data.tipo === 'capitulo');
+const apendices = todos.filter((e) => e.data.tipo === 'apendice');
+
+const NIVEL = { basico: 'Básico', intermedio: 'Intermedio', avanzado: 'Avanzado' } as const;
+const NIVEL_CLASE = {
+  basico: 'bg-ok/15 text-ok',
+  intermedio: 'bg-warn/15 text-warn',
+  avanzado: 'bg-danger/15 text-danger',
+} as const;
+
+const flujo = [
+  ['1', 'Estudios geotécnicos', 'A.1.3.2', 'Exploración del subsuelo y perfil de suelo.'],
+  ['2', 'Diseño arquitectónico', 'A.1.3.3', 'Usos, grupo de uso y no estructurales.'],
+  ['3', 'Diseño estructural', 'A.1.3.4', 'Predimensionamiento, movimientos sísmicos, sistema, análisis y verificaciones.'],
+  ['4', 'Planos, memorias y estudios', 'A.1.5', 'Documentación que respalda el diseño.'],
+  ['5', 'Construcción y supervisión', 'A.1.3.5–6', 'Calidad de materiales y supervisión técnica.'],
+] as const;
+---
+
+<TituloALayout
+  title="Título A — Requisitos generales de diseño y construcción sismo resistente"
+  description="Guía interactiva del Título A de la NSR-10: amenaza sísmica, espectro de diseño, sistemas estructurales, fuerzas sísmicas, deriva, elementos no estructurales y más."
+>
+  <header class="rounded-2xl border bg-gradient-to-br from-primary/10 via-background to-chart-2/10 p-6 sm:p-8">
+    <p class="text-sm font-semibold uppercase tracking-wider text-primary">Título A</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Requisitos generales de diseño y construcción sismo resistente</h1>
+    <p class="mt-4 max-w-3xl text-muted-foreground">
+      Es el corazón sismo resistente de la NSR-10. Establece cómo se define el movimiento del terreno en cada lugar, cómo se
+      convierte en fuerzas sobre la edificación, qué sistemas estructurales se permiten, qué deriva se tolera y cómo tratar
+      los elementos no estructurales y las edificaciones existentes.
+    </p>
+    <div class="mt-6 flex flex-wrap gap-3">
+      <a href={`/titulo-a/${capitulos[0]?.id ?? 'a1'}`} class={cn(buttonVariants())}>Empezar por A.1</a>
+      <a href="/titulo-a/calculadoras" class={cn(buttonVariants({ variant: 'outline' }))}>Calculadoras</a>
+      <a href="/titulo-a/municipios" class={cn(buttonVariants({ variant: 'outline' }))}>Buscar municipio</a>
+    </div>
+  </header>
+
+  <section class="mt-10" aria-labelledby="h-flujo">
+    <h2 id="h-flujo" class="text-2xl font-bold tracking-tight">El proceso de diseño de un vistazo</h2>
+    <p class="mt-1 text-sm text-muted-foreground">Resumen del procedimiento de A.1.3 (con la Tabla A.1.3-1 como guía del diseño estructural).</p>
+    <ol class="mt-5 grid gap-3 md:grid-cols-5">
+      {
+        flujo.map(([n, t, ref, d]) => (
+          <li class="relative rounded-xl border bg-card p-4">
+            <span class="absolute -top-3 left-4 grid size-6 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">{n}</span>
+            <p class="mt-1 font-semibold leading-snug">{t}</p>
+            <p class="mt-1 font-mono text-xs text-muted-foreground">§ {ref}</p>
+            <p class="mt-2 text-sm text-muted-foreground">{d}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </section>
+
+  <section class="mt-12" aria-labelledby="h-caps">
+    <h2 id="h-caps" class="text-2xl font-bold tracking-tight">Capítulos</h2>
+    <ul class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {
+        capitulos.map((c) => (
+          <li>
+            <a href={`/titulo-a/${c.id}`} class="group flex h-full flex-col rounded-xl border bg-card p-5 transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-mono text-lg font-bold text-primary">{c.data.codigo}</span>
+                <span class={`rounded-full px-2 py-0.5 text-xs ${NIVEL_CLASE[c.data.nivel]}`}>{NIVEL[c.data.nivel]}</span>
+              </div>
+              <h3 class="mt-2 font-semibold leading-snug group-hover:text-primary">{c.data.titulo}</h3>
+              <p class="mt-2 flex-1 text-sm text-muted-foreground">{c.data.resumen}</p>
+              <p class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span class="font-mono">{c.data.paginasNorma}</span>
+                {c.data.calculadoras.length > 0 && <span class="rounded bg-chart-2/20 px-1.5 py-0.5 font-medium text-foreground">{c.data.calculadoras.length} calculadora{c.data.calculadoras.length > 1 ? 's' : ''}</span>}
+              </p>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  {
+    apendices.length > 0 && (
+      <section class="mt-12" aria-labelledby="h-apend">
+        <h2 id="h-apend" class="text-2xl font-bold tracking-tight">Apéndices</h2>
+        <p class="mt-1 text-sm text-muted-foreground">Material complementario del Título A (no todos son de carácter obligatorio).</p>
+        <ul class="mt-5 grid gap-4 sm:grid-cols-2">
+          {apendices.map((c) => (
+            <li>
+              <a href={`/titulo-a/${c.id}`} class="group block h-full rounded-xl border bg-card p-5 transition hover:border-primary/50 hover:shadow-md">
+                <span class="font-mono text-lg font-bold text-primary">{c.data.codigo}</span>
+                <h3 class="mt-1 font-semibold leading-snug group-hover:text-primary">{c.data.titulo}</h3>
+                <p class="mt-2 text-sm text-muted-foreground">{c.data.resumen}</p>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  <section class="mt-12 rounded-2xl border bg-muted/30 p-6" aria-labelledby="h-calc">
+    <h2 id="h-calc" class="text-xl font-bold tracking-tight">Herramientas interactivas</h2>
+    <ul class="mt-4 grid gap-2 sm:grid-cols-2">
+      {
+        CALCULADORAS.map((c) => (
+          <li class="flex items-start gap-3 rounded-lg border bg-card p-3 text-sm">
+            <span class="mt-0.5 rounded bg-chart-2/25 px-1.5 py-0.5 font-mono text-xs">{c.secciones.split(' ')[0]}</span>
+            <div>
+              <p class="font-medium">{c.nombre}</p>
+              <p class="text-xs text-muted-foreground">{c.descripcion}</p>
+            </div>
+          </li>
+        ))
+      }
+    </ul>
+    <a href="/titulo-a/calculadoras" class="mt-4 inline-block text-sm font-medium text-primary hover:underline">Abrir todas las calculadoras →</a>
+  </section>
+</TituloALayout>

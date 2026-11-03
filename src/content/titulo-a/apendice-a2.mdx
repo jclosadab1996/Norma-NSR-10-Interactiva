@@ -1,0 +1,380 @@
+---
+codigo: 'A-2'
+tipo: apendice
+titulo: 'Interacción dinámica suelo-estructura'
+resumen: 'Cómo reducir el cortante sísmico de diseño cuando el suelo no es infinitamente rígido: período efectivo, amortiguamiento efectivo y ecuaciones A-2-1 a A-2-15, con un ejemplo numérico completo.'
+objetivos:
+  - 'Explicar por qué la flexibilidad del suelo alarga el período y aumenta el amortiguamiento de una edificación'
+  - 'Aplicar las ecuaciones A-2-1 a A-2-4 y A-2-9 para obtener el cortante en la base reducido'
+  - 'Usar la Tabla A-2.1-1 y la Figura A-2.2-1 para leer G/Go, vs/vso y el amortiguamiento de la cimentación βo'
+  - 'Conocer los límites y condiciones: piso de 0.7 Vs′, β entre 0.05 y 0.20 y la advertencia sobre las derivas'
+paginasNorma: 'A-141 a A-146'
+paginaPdf: 185
+orden: 15
+calculadoras: []
+nivel: 'avanzado'
+---
+
+import { coeficienteFa, coeficienteFv, periodoAproximado, coeficienteCu } from '../../lib/nsr10';
+import {
+  interaccionFHE,
+  relacionesDeformacionApreciable,
+  moduloCortantePequenasDeformaciones,
+  radioPorArea,
+  radioPorInercia,
+  longitudCaracteristica,
+  rigidecesCimentacionCircular,
+  parametroAlfa,
+  periodoEfectivoLosaSuperficial,
+  deflexionModificada,
+} from '../../lib/nsr10/apendiceA2';
+
+export const ej = (() => {
+  const aa = 0.15, av = 0.2;
+  const espectro = { aa, av, fa: coeficienteFa('D', aa), fv: coeficienteFv('D', av), i: 1.0 };
+  const t = 1.1, masa = 3.0e6, hn = 30;
+  const ta = periodoAproximado('porticos-concreto', hn);
+  const cu = coeficienteCu(av, espectro.fv);
+  // Cimentación: losa de 30 × 30 m
+  const ao = 900, lo = 30, io = (lo * 30 ** 3) / 12;
+  const ra = radioPorArea(ao), rm = radioPorInercia(io);
+  const rel = relacionesDeformacionApreciable(aa);
+  const gamma = 1800, vso = 200, nu = 0.35;
+  const go = moduloCortantePequenasDeformaciones(gamma, vso);
+  const g = rel.gGo * go, vs = rel.vsVso * vso;
+  const { ky, ktheta } = rigidecesCimentacionCircular(g, nu, ra, rm);
+  const beta0 = 0.01;
+  const r = interaccionFHE({ espectro, t, ta, masaTotal: masa, hn, ky, ktheta, beta0 });
+  const rLong = longitudCaracteristica(r.hBarra, lo, ra, rm);
+  const alpha = parametroAlfa(r.mBarra, gamma, ao, r.hBarra);
+  const tLosa = periodoEfectivoLosaSuperficial({ t, alpha, ra, rm, hBarra: r.hBarra, vs, alphaTheta: 1.0 });
+  const mo = r.vs * r.hBarra;
+  const delta = 0.15;
+  const deltaMod = deflexionModificada(r.vsBarra, r.vs, delta, mo, hn, ktheta);
+  return { espectro, t, masa, hn, ta, cu, ao, lo, io, ra, rm, rel, gamma, vso, nu, go, g, vs, ky, ktheta, beta0, r, rLong, alpha, tLosa, mo, delta, deltaMod };
+})();
+
+## Idea central del apéndice
+
+Casi todo el Título A supone que la edificación está **empotrada en la base**: el suelo es infinitamente rígido y el movimiento del terreno entra sin cambios en la estructura. En la realidad el suelo se deforma. Eso tiene dos efectos conocidos en dinámica estructural:
+
+1. **El período de vibración se alarga** (la estructura apoyada en suelo flexible es menos rígida en conjunto).
+2. **El amortiguamiento aumenta** (parte de la energía se disipa en el suelo y se irradia como ondas).
+
+Como el espectro de diseño de A.2.6 decrece con el período y la mayor parte de las edificaciones está en la rama descendente, ambos efectos **reducen el cortante sísmico** que llega a la estructura. El Apéndice A-2 da las ecuaciones para cuantificar esa reducción cuando se usan modelos de base empotrada.
+
+<Callout tipo="importante" titulo="Un apéndice «recomendado»">
+El título completo es «Recomendaciones para el cálculo de los efectos de interacción dinámica suelo-estructura»: sus requisitos «pueden utilizarse» dentro de las limitaciones del Capítulo [A.7](/titulo-a/a7) (<NormaRef s="A-2.1.1" pag="A-142" />). **No deben usarse si el modelo ya incluye la cimentación flexible** (modelo de base flexible), porque se contaría el efecto dos veces.
+</Callout>
+
+<Callout tipo="atencion" titulo="No todo mejora">
+La interacción **disminuye** el cortante basal, las fuerzas horizontales y los momentos de vuelco, pero **aumenta** las deflexiones horizontales y por tanto las derivas en algunos puntos, además de los desplazamientos y fuerzas secundarias por efectos P-Delta (<NormaRef s="A-2.1.1" pag="A-142" />). Verifica la deriva (Capítulo A.6) con los valores modificados.
+</Callout>
+
+## A-2.0 — Nomenclatura
+
+El apéndice añade variables propias a las del Título A. Las barras superiores (por ejemplo $\bar T$, $\bar V_s$, $\bar\beta$) indican el valor **modificado por la interacción**; sin barra es el valor de base empotrada.
+
+| Símbolo | Significado | Unidades típicas |
+|---|---|---|
+| $\bar T$ | Período fundamental tomando en cuenta la interacción (A-2.2.1.1) | s |
+| $\bar M$ | Masa participante: $0.7M$ (o $M$ si toda la masa está en un solo piso) | kg |
+| $\bar h$ | Altura efectiva: $0.7\,h_n$ (o la altura del piso si toda la masa está en uno solo) | m |
+| $\bar k$ | Rigidez de la estructura empotrada, ec. A-2-4 | N/m |
+| $K_y$ | Rigidez lateral de la cimentación (fuerza horizontal para una deflexión unitaria) | N/m |
+| $K_\theta$ | Rigidez rotacional o de balanceo de la cimentación (momento para una rotación unitaria) | N·m/rad |
+| $A_o$, $I_o$, $L_o$ | Área, momento de inercia (respecto a un eje horizontal perpendicular a la dirección en estudio) y longitud de la cimentación en la dirección en estudio | m², m⁴, m |
+| $r_a$, $r_m$, $r$ | Longitudes características de la cimentación (A-2-7, A-2-8) | m |
+| $\gamma$ | Masa unitaria promedio del suelo | kg/m³ |
+| $v_{so}$, $G_o=\gamma v_{so}^2$ | Velocidad de onda de cortante y módulo de cortante para **deformaciones pequeñas** (menores de 0.001 %) | m/s, Pa |
+| $v_s$, $G$ | Los mismos para las **deformaciones apreciables** del sismo (Tabla A-2.1-1) | m/s, Pa |
+| $\alpha$, $\alpha_\theta$ | Densidad relativa estructura-suelo (A-2-6) y modificador de rigidez dinámica por balanceo | adim. |
+| $\beta_o$, $\bar\beta$ | Amortiguamiento crítico de la cimentación (Figura A-2.2-1) y del sistema estructura-cimentación (A-2-9) | adim. |
+| $D_s$ | Profundidad del estrato blando (A-2-10) | m |
+| $V_s'$ | Cortante basal del Capítulo A.4 calculado con un período igual a $C_uT_a$ | N |
+| $\Delta V_s$ | Reducción del cortante basal por interacción, ec. A-2-2 | N |
+| $M_o$, $M_{1o}$ | Momento de vuelco en la base sin reducir por interacción (total y del primer modo) | N·m |
+
+## A-2.1 — General
+
+Un vistazo a las condiciones de uso (<NormaRef s="A-2.1.1" pag="A-142" />):
+
+- Se aplica cuando el modelo matemático **no** incorpora la flexibilidad de la cimentación (modelos empotrados).
+- Hay procedimientos para el **método de la fuerza horizontal equivalente** (A-2.2) y para el **análisis dinámico modal elástico** (A-2.3).
+- No se usa con un modelo de base flexible donde la cimentación se modela directamente.
+
+## A-2.2 — Método de la fuerza horizontal equivalente
+
+### A-2.2.1 — Cortante en la base
+
+El cortante de diseño $V_s$ del Capítulo A.4 puede reducirse a $\bar V_s$ (<NormaRef s="A-2.2.1" pag="A-143" />):
+
+<Ecuacion num="A-2-1" titulo="Cortante basal modificado por interacción">
+
+$$
+\bar V_s = V_s - \Delta V_s
+$$
+
+- $V_s = S_a\,g\,M$ (A.4.3-1), con $S_a$ en el período $T$ de base empotrada.
+- $\Delta V_s$: reducción por interacción, ecuación siguiente.
+
+</Ecuacion>
+
+<Ecuacion num="A-2-2" titulo="Reducción del cortante basal">
+
+$$
+\Delta V_s=\left[S_a-\bar S_a\left(\frac{0.05}{\bar\beta}\right)^{0.4}\right] g\,\bar M
+$$
+
+- $S_a$: espectro en $T$ (base empotrada); $\bar S_a$: espectro en el período efectivo $\bar T$.
+- $\bar\beta$: amortiguamiento efectivo (A-2-9). El factor $(0.05/\bar\beta)^{0.4}$ reduce la ordenada espectral porque el espectro de A.2.6 es para 5 % de amortiguamiento.
+- $\bar M$ = 0.7 $M$: solo la **masa participante** en el modo fundamental.
+
+</Ecuacion>
+
+**Límite inferior:** el cortante modificado $\bar V_s$ **no puede ser menor que $0.7\,V_s'$**, donde $V_s'$ es el cortante del método de la fuerza horizontal equivalente calculado con un período $C_u T_a$ (el período máximo permisible de A.4.2.1).
+
+#### A-2.2.1.1 — Período efectivo de la edificación
+
+<Ecuacion num="A-2-3" titulo="Período efectivo">
+
+$$
+\bar T = T\sqrt{1+\frac{\bar k}{K_y}\left(1+\frac{K_y\,\bar h^{2}}{K_\theta}\right)}
+$$
+
+- El radicando es 1 más la flexibilidad **traslacional** de la cimentación ($\bar k/K_y$) y su flexibilidad por **balanceo** ($\bar k\bar h^2/K_\theta$), ambas relativas a la rigidez de la estructura.
+- Si la cimentación fuera infinitamente rígida ($K_y,K_\theta\to\infty$), $\bar T = T$.
+
+</Ecuacion>
+
+<Ecuacion num="A-2-4" titulo="Rigidez de la estructura empotrada">
+
+$$
+\bar k = 4\pi^2\,\frac{\bar M}{T^{2}}
+$$
+
+Es la rigidez de un oscilador de masa $\bar M$ y período $T$.
+
+</Ecuacion>
+
+Las rigideces $K_y$ y $K_\theta$ «deben determinarse por medio de principios establecidos de mecánica de suelos», con propiedades del suelo representativas de **niveles de deformación comparables a los del sismo de diseño**. Si el estudio geotécnico no las da, el módulo de cortante $G$ y la velocidad $v_s$ para deformaciones apreciables se obtienen reduciendo los de deformaciones pequeñas con la Tabla A-2.1-1:
+
+<TablaNorma numero="Tabla A-2.1-1" titulo="Valores de G/Go y vs/vso" pag="A-143" nota="El PDF solo trae columnas para Aa ≤ 0.10, ≤ 0.15, ≤ 0.20 y ≥ 0.30: no cubre 0.20 < Aa < 0.30 (p. ej. Aa = 0.25). Valores verificados contra la imagen de la página.">
+
+| | Aa ≤ 0.10 | Aa ≤ 0.15 | Aa ≤ 0.20 | Aa ≥ 0.30 |
+|---|---:|---:|---:|---:|
+| Valor de $G/G_o$ | 0.81 | 0.64 | 0.49 | 0.42 |
+| Valor de $v_s/v_{so}$ | 0.90 | 0.80 | 0.70 | 0.65 |
+
+</TablaNorma>
+
+La lógica es física: **cuanto más fuerte el sismo, más se degrada la rigidez del suelo** (el módulo cae a 42 % del inicial para $A_a \ge 0.30$).
+
+**Alternativa para losas superficiales.** Si la cimentación es una losa de fundación superficial o aproximadamente superficial, y el contacto de los muros de contención con el suelo no restringe el libre movimiento de la estructura, el período efectivo puede calcularse con:
+
+<Ecuacion num="A-2-5" titulo="Período efectivo (losa de fundación superficial)">
+
+$$
+\bar T = T\sqrt{1+\frac{25\,\alpha\,r_a\,\bar h}{v_s^{2}\,T^{2}}\left(1+\frac{1.12\,r_a\,\bar h^{2}}{\alpha_\theta\,r_m^{3}}\right)}
+$$
+
+con
+
+$$
+\alpha=\frac{\bar M}{\gamma\,A_o\,\bar h}\quad\text{(A-2-6)}\qquad
+r_a=\sqrt{\frac{A_o}{\pi}}\quad\text{(A-2-7)}\qquad
+r_m=\sqrt[4]{\frac{4\,I_o}{\pi}}\quad\text{(A-2-8)}
+$$
+
+- $r_a$ es el radio de un círculo de **igual área** que la cimentación y $r_m$ el de un círculo de **igual momento de inercia**.
+- $\alpha_\theta$ es el «modificador de la rigidez dinámica de la cimentación para tener en cuenta el balanceo»; **el apéndice no da su valor**, por lo que debe tomarse de la literatura o de un estudio geotécnico.
+
+</Ecuacion>
+
+#### A-2.2.1.2 — Amortiguamiento efectivo
+
+<Ecuacion num="A-2-9" titulo="Amortiguamiento efectivo del sistema estructura-cimentación">
+
+$$
+\bar\beta=\beta_o+\frac{0.05}{\left(\bar T/T\right)^{3}}
+$$
+
+- El segundo término es el 5 % de amortiguamiento de la estructura, que disminuye cuando el período se alarga.
+- $\beta_o$: amortiguamiento de la cimentación, de la Figura A-2.2-1.
+- **Límites:** $\bar\beta$ no puede ser menor de 0.05 ni mayor de 0.20, con o sin el ajuste de A-2-10.
+
+</Ecuacion>
+
+El parámetro $\beta_o$ se lee en la figura siguiente en función de $\bar T/T$, de $A_a$ y de la esbeltez $\bar h/r$. La longitud característica $r$ depende de $\bar h/L_o$: si $\bar h/L_o \le 0.5$, $r = r_a$; si $\bar h/L_o \ge 1.0$, $r = r_m$; entre ambos se **interpola**. $A_o$ e $I_o$ se calculan para el área de cimentación que **efectivamente** transmite el peso al suelo.
+
+<Figura src="/img/titulo-a/figura-a2-2-1-amortiguamiento-beta0.png" alt="Gráfico del coeficiente de amortiguamiento crítico de la cimentación beta o en función de T barra sobre T, con familias de curvas para h barra sobre r menor o igual a 1.0, 1.5, 2.0 y 5.0 y para Aa menor o igual a 0.10, 0.15 y mayor o igual a 0.20" numero="Figura A-2.2-1" pie="Coeficiente de amortiguamiento crítico de la cimentación, βo. Para cada relación h̄/r hay tres curvas, de abajo hacia arriba Aa ≤ 0.10, Aa = 0.15 y Aa ≥ 0.20." pag="A-145" />
+
+Dos tendencias saltan a la vista: **βo crece con el alargamiento del período** ($\bar T/T$) y **decrece con la esbeltez** ($\bar h/r$): un edificio alto y angosto disipa poca energía en el suelo; uno bajo y ancho, mucha.
+
+**Estrato blando sobre un depósito rígido.** Para edificios sobre pilotes de punta, o con un estrato blando uniforme sobre suelos más duros o roca (cambio abrupto de rigidez), $\beta_o$ puede sustituirse por:
+
+<Ecuacion num="A-2-10" titulo="Amortiguamiento ajustado para estrato blando">
+
+$$
+\beta_o' = \beta_o\left(\frac{4\,D_s}{v_s\,\bar T}\right)^{2}
+$$
+
+Solo se aplica cuando la expresión entre paréntesis es **menor que 1**. $D_s$ es la profundidad total del estrato blando. Que el paréntesis sea menor que 1 equivale a $D_s < v_s\bar T/4$: el estrato es menos profundo que un cuarto de la longitud de onda, y entonces la energía que podría irradiarse hacia abajo queda atrapada en él y el amortiguamiento por radiación cae.
+
+</Ecuacion>
+
+### A-2.2.2 — Distribución en la altura de las fuerzas
+
+La distribución en la altura del cortante basal corregido se toma **igual a la de la estructura sin interacción** (<NormaRef s="A-2.2.2" pag="A-145" />): se reescalan las fuerzas $F_x$ de A.4.3 multiplicándolas por $\bar V_s/V_s$.
+
+### A-2.2.3 — Otros efectos
+
+Cortantes de piso, momentos de vuelco y efectos torsionales se calculan como si no hubiera interacción, **pero con las fuerzas horizontales reducidas**. Las deflexiones modificadas se calculan con (<NormaRef s="A-2.2.3" pag="A-145" />):
+
+<Ecuacion num="A-2-11" titulo="Deflexión horizontal modificada en el nivel x">
+
+$$
+\bar\delta_x=\frac{\bar V_s}{V_s}\left(\delta_x+\frac{M_o\,h_x}{K_\theta}\right)
+$$
+
+- $\delta_x$: deflexión de la estructura empotrada con las fuerzas **sin** modificar.
+- $M_o\,h_x/K_\theta$: desplazamiento adicional por la **rotación de la cimentación** ($M_o/K_\theta$ rad) a la altura $h_x$ del nivel.
+
+</Ecuacion>
+
+## A-2.3 — Método del análisis modal
+
+Es el mismo concepto aplicado **solo al modo fundamental** del análisis dinámico elástico del Capítulo A.5 (<NormaRef s="A-2.3.1" pag="A-145" />):
+
+<Ecuacion num="A-2-12 y A-2-13" titulo="Cortante modal del primer modo modificado">
+
+$$
+\bar V_{1j}=V_{1j}-\Delta V_{1j}\qquad
+\Delta V_{1j}=\left[S_{a1}-\bar S_{a1}\left(\frac{0.05}{\bar\beta}\right)^{0.4}\right] g\,\bar M_{1j}
+$$
+
+- $V_{1j}$ (de la ecuación A.5.4-3) y $\bar M_{1j}$ (masa participante del modo fundamental, de A.5.4-2) son los del primer modo en la dirección $j$.
+- $\bar T_1$ se calcula con A-2-3 o A-2-5, usando $T_1$ en vez de $T$, $\bar M_{1j}$ en vez de $\bar M$ y la altura efectiva modal siguiente.
+
+</Ecuacion>
+
+<Ecuacion num="A-2-14" titulo="Altura efectiva del primer modo">
+
+$$
+\bar h=\frac{\sum_{i=1}^{n} m_i\,\phi_{i1}\,h_i}{\sum_{i=1}^{n} m_i\,\phi_{i1}}
+$$
+
+$\phi_{i1}$ es la amplitud de la forma del primer modo en el nivel $i$.
+
+</Ecuacion>
+
+**No se reducen las contribuciones de los demás modos.** El cortante de diseño en la base no puede ser menor que $0.7\,V_s'$. Los cortantes de piso y momentos de vuelco se calculan con el primer modo modificado (A-2.3.2), y las deflexiones del primer modo con:
+
+<Ecuacion num="A-2-15" titulo="Deflexión modificada del primer modo">
+
+$$
+\bar\delta_{1x}=\frac{\bar V_1}{V_1}\left(\delta_{1x}+\frac{M_{1o}\,h_x}{K_\theta}\right)
+$$
+
+</Ecuacion>
+
+Los valores de diseño (A-2.3.3) se obtienen con el procedimiento del Capítulo A.5 pero usando los efectos del primer modo modificados en cada dirección principal.
+
+## Ejemplo numérico: un edificio de 10 pisos sobre losa
+
+<Ejemplo numero={1} titulo="Reducción del cortante basal de un edificio en Bogotá">
+Edificio de pórticos de concreto de 10 pisos ($h_n$ = {ej.hn} m, $M$ = {(ej.masa / 1000).toFixed(0)} t), en Bogotá ($A_a$ = {ej.espectro.aa}, $A_v$ = {ej.espectro.av}), perfil de suelo tipo D (grupo de uso I). El análisis con base empotrada da $T$ = {ej.t} s. Cimentación: losa de 30 × 30 m. Suelo: $\gamma$ = {ej.gamma} kg/m³, $v_{so}$ = {ej.vso} m/s para deformaciones pequeñas, $\nu$ = {ej.nu}. Estimar el cortante basal con interacción suelo-estructura.
+
+<Paso titulo="Cortante con base empotrada" ref="A.2.6, A.4.3-1">
+$F_a$ = {ej.espectro.fa.toFixed(2)}, $F_v$ = {ej.espectro.fv.toFixed(2)}; $T_C$ = 0.853 s, así que $T$ = {ej.t} s está en la rama $1/T$: $S_a$ = 1.2 $A_v F_v / T$ = **{ej.r.sa.toFixed(4)} g**. Entonces $V_s = S_a g M$ = **{(ej.r.vs / 1000).toFixed(0)} kN**.
+</Paso>
+<Paso titulo="Masa participante y altura efectiva" ref="A-2.0">
+$\bar M$ = 0.7 $M$ = **{(ej.r.mBarra / 1000).toFixed(0)} t**; $\bar h$ = 0.7 $h_n$ = **{ej.r.hBarra.toFixed(1)} m**.
+</Paso>
+<Paso titulo="Propiedades del suelo para deformaciones del sismo" ref="Tabla A-2.1-1">
+$G_o = \gamma v_{so}^2$ = {ej.gamma} × {ej.vso}² = {(ej.go / 1e6).toFixed(1)} MPa. Con $A_a$ = 0.15 la tabla da $G/G_o$ = {ej.rel.gGo} y $v_s/v_{so}$ = {ej.rel.vsVso}, de modo que $G$ = **{(ej.g / 1e6).toFixed(2)} MPa** y $v_s$ = **{ej.vs.toFixed(0)} m/s**.
+</Paso>
+<Paso titulo="Longitudes características de la cimentación" ref="A-2-7, A-2-8">
+
+$$
+r_a=\sqrt{\frac{900}{\pi}},\qquad I_o=\frac{30\times 30^{3}}{12},\qquad r_m=\sqrt[4]{\frac{4\,I_o}{\pi}}
+$$
+
+Resultado: $r_a$ = **{ej.ra.toFixed(2)} m**, $I_o$ = {ej.io.toFixed(0)} m⁴, $r_m$ = **{ej.rm.toFixed(2)} m**.
+
+</Paso>
+<Paso titulo="Rigideces de la cimentación" ref="A-2.2.1.1">
+La norma pide usar «principios establecidos de mecánica de suelos». Como aproximación se usan las expresiones usuales para una cimentación circular rígida equivalente (no son ecuaciones de la NSR-10): $K_y = 8Gr_a/(2-\nu)$ y $K_\theta = 8Gr_m^3/[3(1-\nu)]$. Resultado: $K_y$ = **{(ej.ky / 1e9).toFixed(2)} × 10⁹ N/m** y $K_\theta$ = **{(ej.ktheta / 1e12).toFixed(3)} × 10¹² N·m/rad**.
+</Paso>
+<Paso titulo="Período efectivo" ref="A-2-4, A-2-3">
+
+$$
+\bar k=4\pi^2\frac{\bar M}{T^2},\qquad
+\bar T=T\sqrt{1+\frac{\bar k}{K_y}\left(1+\frac{K_y\bar h^2}{K_\theta}\right)}
+$$
+
+Resultado: $\bar k$ = {(ej.r.kBarra / 1e6).toFixed(1)} MN/m, $\bar T$ = **{ej.r.tBarra.toFixed(3)} s** ($\bar T/T$ = {ej.r.razonPeriodos.toFixed(3)}). La interacción alarga el período solo {((ej.r.razonPeriodos - 1) * 100).toFixed(1)} %: el suelo es relativamente firme y la losa grande.
+
+</Paso>
+<Paso titulo="Amortiguamiento efectivo" ref="Figura A-2.2-1, A-2-9">
+$\bar h/L_o$ = {(ej.r.hBarra / ej.lo).toFixed(2)}, entre 0.5 y 1.0, así que se interpola $r$ = {ej.rLong.toFixed(2)} m y $\bar h/r$ = {(ej.r.hBarra / ej.rLong).toFixed(2)} (entre las curvas $\bar h/r \le 1.0$ y 1.5). Con $\bar T/T$ = {ej.r.razonPeriodos.toFixed(3)} y $A_a$ = 0.15, la figura da un valor muy pequeño; se lee aproximadamente $\beta_o$ ≈ {ej.beta0} (lectura aproximada de la gráfica). Entonces
+
+$$
+\bar\beta=\beta_o+\frac{0.05}{(\bar T/T)^3}
+$$
+
+Resultado: $\bar\beta$ = **{ej.r.betaBarra.toFixed(4)}** (dentro de 0.05–0.20).
+</Paso>
+<Paso titulo="Reducción del cortante" ref="A-2-2, A-2-1">
+$\bar S_a$ = $S_a(\bar T)$ = {ej.r.saBarra.toFixed(4)} g y el factor $(0.05/\bar\beta)^{0.4}$ = {Math.pow(0.05 / ej.r.betaBarra, 0.4).toFixed(4)}.
+
+$$
+\Delta V_s=\left[S_a-\bar S_a\left(\frac{0.05}{\bar\beta}\right)^{0.4}\right] g\,\bar M
+$$
+
+Resultado: $\Delta V_s$ = **{(ej.r.deltaVs / 1000).toFixed(0)} kN**, y $\bar V_s = V_s - \Delta V_s$ = {(ej.r.vs / 1000).toFixed(0)} − {(ej.r.deltaVs / 1000).toFixed(0)} = **{(ej.r.vsBarra / 1000).toFixed(0)} kN**: una reducción de {ej.r.reduccionPorcentaje.toFixed(1)} %.
+</Paso>
+<Paso titulo="Verificar el piso de 0.7 Vs′" ref="A-2.2.1">
+$T_a = C_t h_n^{\alpha}$ = {ej.ta.toFixed(3)} s y $C_u$ = {ej.cu.toFixed(2)}, así que $V_s'$ se calcula con $T$ = $C_uT_a$ = {(ej.cu * ej.ta).toFixed(3)} s y vale {(ej.r.vsPrima / 1000).toFixed(0)} kN. El piso es 0.7 $V_s'$ = {(ej.r.piso / 1000).toFixed(0)} kN, menor que {(ej.r.vsBarra / 1000).toFixed(0)} kN: **no gobierna**.
+</Paso>
+<Paso titulo="Efecto sobre las deflexiones (sentido de la corrección)" ref="A-2-11">
+Para ilustrar, supón una deflexión de cubierta con base empotrada $\delta_x$ = {ej.delta} m y estima el momento de vuelco como $M_o \approx V_s\bar h$ = {(ej.mo / 1e6).toFixed(0)} MN·m (aproximación solo para este ejemplo). El giro de la cimentación es $M_o/K_\theta$ = {(ej.mo / ej.ktheta * 1000).toFixed(3)} mrad y, a $h_x$ = {ej.hn} m, añade {((ej.mo * ej.hn) / ej.ktheta * 1000).toFixed(1)} mm. Con A-2-11: $\bar\delta_x$ = ({(ej.r.vsBarra / 1000).toFixed(0)}/{(ej.r.vs / 1000).toFixed(0)}) × ({ej.delta} + {((ej.mo * ej.hn) / ej.ktheta).toFixed(4)}) = **{ej.deltaMod.toFixed(4)} m**. En este caso la reducción de fuerzas compensa casi todo el efecto del giro; con suelo más blando, la corrección por balanceo pesaría más.
+</Paso>
+<Paso titulo="Comparación con la fórmula para losa superficial" ref="A-2-5, A-2-6">
+Con A-2-6, $\alpha$ = $\bar M/(\gamma A_o \bar h)$ = {ej.alpha.toFixed(4)}, y suponiendo $\alpha_\theta$ = 1.0 (hipótesis de este ejemplo: la norma no da su valor), A-2-5 da $\bar T$ = **{ej.tLosa.toFixed(3)} s**, muy cercano al {ej.r.tBarra.toFixed(3)} s de A-2-3 (dentro de {(Math.abs(ej.tLosa - ej.r.tBarra) / ej.r.tBarra * 100).toFixed(2)} %).
+</Paso>
+<Resultado>
+El cortante basal baja de {(ej.r.vs / 1000).toFixed(0)} kN a {(ej.r.vsBarra / 1000).toFixed(0)} kN (−{ej.r.reduccionPorcentaje.toFixed(1)} %): la interacción ayuda, pero poco, en un suelo de rigidez media y con un edificio relativamente flexible. El beneficio crece con suelos más blandos y edificios más rígidos y bajos, que son justo los casos donde el período de base empotrada está en la meseta del espectro.
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="Sobre los números del ejemplo">
+Los valores de $\gamma$, $v_{so}$, $\nu$, la lectura de $\beta_o$, las expresiones de $K_y$ y $K_\theta$ y la deflexión $\delta_x$ son **supuestos didácticos**; en un proyecto real los entrega el estudio geotécnico. Las funciones usadas están en `src/lib/nsr10/apendiceA2.ts` con sus pruebas.
+</Callout>
+
+<Detalle titulo="Erratas y rarezas del PDF en este apéndice">
+
+- **Remisión a «A.4-5»** (A-2.2.1): el cortante basal se determina «por medio de la ecuación A.4-5», pero esa ecuación no existe con ese número; el cortante $V_s = S_a g M$ es la ecuación **A.4.3-1**.
+- **Tabla A-2.1-1** no cubre $0.20 < A_a < 0.30$ (columnas ≤ 0.10, ≤ 0.15, ≤ 0.20 y ≥ 0.30). Para $A_a$ = 0.25 hay que definir el valor con criterio geotécnico (por ejemplo, interpolando entre las columnas vecinas y justificándolo).
+- **Nomenclatura**: el texto extraído pierde las barras y confunde $S_a$ con $\bar S_a$, $T$ con $\bar T$, etc.; las ecuaciones y la imagen de la página aclaran cuál es cuál. El subíndice «1» de los símbolos del primer modo ($T_1$, $S_{a1}$, $V_{1j}$…) aparece como «l» (ele) en el texto. $G_o$ se escribe «γ v²s0» (sic, $v_{so}$).
+- **Remisiones internas inexactas**: $\bar\beta$ se remite a «A-2.2-1» (es A-2.2.1.2); $D_s$ se remite a «A-2.2.1.2» (aparece en A-2-10, dentro de esa sección).
+- **Numeración de páginas**: el PDF imprime A-139 dos veces (la página final de A.13 y la primera de este apéndice), por lo que este apéndice ocupa las páginas impresas A-141 a A-146 (PDF 185 a 190).
+- El Capítulo A.7 (A.7.3.4) fija su propio piso del cortante modificado; el apéndice dice 0.7 $V_s'$. Consulta ambos.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Aplicar el apéndice a un modelo que ya tiene cimentación flexible** (resortes, elementos finitos del suelo): se cuenta dos veces la interacción.
+- **Usar $M$ y $h_n$ completos** en vez de la masa participante ($0.7M$) y la altura efectiva ($0.7h_n$).
+- **Olvidar el piso de $0.7V_s'$** o no limitar $\bar\beta$ entre 0.05 y 0.20.
+- **Usar $G_o$ y $v_{so}$ (deformaciones pequeñas)** para $K_y$ y $K_\theta$: debe usarse $G$ y $v_s$, degradados por la deformación del sismo.
+- **Dar por buenas las derivas sin recalcularlas**: la interacción reduce fuerzas pero aumenta desplazamientos y efectos P-Delta.
+- **Reducir también los modos superiores** en el análisis modal: la norma solo permite modificar el modo fundamental.
+- **Suponer que siempre favorece**: en suelos duros el efecto es pequeño; solo en suelos blandos y estructuras rígidas es apreciable (y entonces los criterios geotécnicos pesan más).
+</Callout>
+
+## Resumen en una línea
+
+**El suelo flexible alarga el período ($\bar T$, A-2-3) y aumenta el amortiguamiento ($\bar\beta$, A-2-9), lo que reduce el cortante basal en $\Delta V_s$ (A-2-2), con piso de 0.7 $V_s'$, pero aumenta deflexiones y derivas (A-2-11).**

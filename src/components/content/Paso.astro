@@ -1,0 +1,19 @@
+---
+/** Paso numerado dentro de un <Ejemplo>. */
+interface Props {
+  titulo: string;
+  /** Sección de la norma que respalda el paso, p. ej. "A.2.4.5.5". */
+  ref?: string;
+}
+const { titulo, ref: referencia } = Astro.props;
+---
+
+<div class="paso relative rounded-lg border bg-background/60 p-3 pl-12 [counter-increment:paso] before:absolute before:left-3 before:top-3 before:grid before:size-6 before:place-items-center before:rounded-full before:bg-primary before:text-xs before:font-bold before:text-primary-foreground before:content-[counter(paso)]">
+  <p class="!my-0 font-semibold">
+    {titulo}
+    {referencia && <span class="ml-2 rounded border bg-muted px-1.5 py-0.5 font-mono text-[11px] font-medium text-muted-foreground">§{referencia}</span>}
+  </p>
+  <div class="mt-1.5 [&>*:last-child]:mb-0">
+    <slot />
+  </div>
+</div>

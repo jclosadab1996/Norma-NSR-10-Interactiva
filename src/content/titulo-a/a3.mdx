@@ -1,0 +1,816 @@
+---
+codigo: 'A.3'
+tipo: capitulo
+titulo: 'Requisitos generales de diseño sismo resistente'
+resumen: 'Cómo se clasifica la estructura en uno de los cuatro sistemas de resistencia sísmica, qué alturas permite cada uno según la zona, cómo las irregularidades y la falta de redundancia reducen el coeficiente R, y qué método de análisis y combinaciones aplicar.'
+objetivos:
+  - 'Clasificar una estructura en muros de carga, combinado, pórtico o dual y leer R0, Ω0 y la altura máxima permitida por zona'
+  - 'Distinguir los grados de capacidad de disipación de energía DES, DMO y DMI'
+  - 'Evaluar irregularidades en planta y altura (φp, φa) y redundancia (φr) para obtener R = φaφpφrR0'
+  - 'Elegir el método de análisis mínimo exigido (fuerza horizontal equivalente o dinámico)'
+  - 'Aplicar las reglas de torsión, diafragmas, efectos ortogonales y fuerzas de diseño de los elementos'
+paginasNorma: 'A-39 a A-62'
+paginaPdf: 82
+orden: 3
+calculadoras: ['coeficiente-r']
+nivel: 'avanzado'
+---
+
+import { SISTEMAS, buscarSistema, limiteEnZona, describirLimite, calcularR, phiPlanta, phiAltura, phiRedundancia, r0Efectivo, omega0Efectivo } from '../../data/sistemasEstructurales';
+import { coeficienteFa, coeficienteFv, coeficienteImportancia, periodosEspectro, sa, periodoAproximado, cortanteBasal, zonaAmenaza } from '../../lib/nsr10';
+
+export const ej1 = (() => {
+  const s = buscarSistema('a3-3-1a');
+  const planta = ['1bP', '3P'];
+  const altura = ['1aA', '2A'];
+  const phiP = phiPlanta(planta);
+  const phiA = phiAltura(altura);
+  const phiR = phiRedundancia(s.capacidadDisipacion, true);
+  const phiRsin = phiRedundancia(s.capacidadDisipacion, false);
+  return {
+    s, phiP, phiA, phiR, phiRsin,
+    R: calcularR(s.r0, phiA, phiP, phiR),
+    RSin: calcularR(s.r0, phiA, phiP, phiRsin),
+    ingenuo: s.r0 * 0.8 * 0.9 * 0.9 * 0.9,
+  };
+})();
+
+export const ej2 = (() => {
+  const h = 45;
+  const permite = (s, zona) => {
+    const l = limiteEnZona(s, zona);
+    if (!l.permitido) return false;
+    if (l.tipoLimite === 'sin-limite') return true;
+    if (l.tipoLimite === 'metros') return h <= l.alturaMaxM;
+    return false;
+  };
+  const concretos = SISTEMAS.filter((s) => s.material === 'concreto' && !s.subsistema.includes('péndulo'));
+  const alta = concretos.filter((s) => permite(s, 'alta')).sort((a, b) => b.r0 - a.r0);
+  const intermedia = concretos.filter((s) => permite(s, 'intermedia')).length;
+  const baja = concretos.filter((s) => permite(s, 'baja')).length;
+  const porticoDMO = buscarSistema('a3-3-2a');
+  const porticoDMI = buscarSistema('a3-3-3a');
+  const conteo = {
+    total: SISTEMAS.length,
+    alta: SISTEMAS.filter((s) => limiteEnZona(s, 'alta').permitido).length,
+    intermedia: SISTEMAS.filter((s) => limiteEnZona(s, 'intermedia').permitido).length,
+    baja: SISTEMAS.filter((s) => limiteEnZona(s, 'baja').permitido).length,
+  };
+  return { h, alta, intermedia, baja, nConcretos: concretos.length, porticoDMO, porticoDMI, conteo, zona: zonaAmenaza(0.25, 0.25) };
+})();
+
+export const ej3 = (() => {
+  const aa = 0.15, av = 0.2;
+  const fa = coeficienteFa('D', aa);
+  const fv = coeficienteFv('D', av);
+  const i = coeficienteImportancia('I');
+  const p = { aa, av, fa, fv, i };
+  const s = buscarSistema('a3-3-2a');
+  const hn = 30;
+  const ta = periodoAproximado('porticos-concreto', hn);
+  const per = periodosEspectro(p);
+  const saT = sa(ta, p);
+  const masaKg = 5.4e6;
+  const vs = cortanteBasal(saT, masaKg) / 1000;
+  const casos = [
+    { nombre: 'Regular y redundante', phiA: 1, phiP: 1, phiR: 1 },
+    { nombre: 'Irregular (φa = 0.9, φp = 0.8)', phiA: 0.9, phiP: 0.8, phiR: 1 },
+    { nombre: 'Irregular y sin redundancia (φr = 0.75)', phiA: 0.9, phiP: 0.8, phiR: 0.75 },
+  ].map((c) => {
+    const R = calcularR(s.r0, c.phiA, c.phiP, c.phiR);
+    return { ...c, R, e: vs / R };
+  });
+  const base = casos[0].e;
+  casos.forEach((c) => { c.aumento = (c.e / base - 1) * 100; });
+  const fsElem = 900, d = 500;
+  const r = casos[0].R;
+  const omega0 = s.omega0;
+  const termino = 0.5 * aa * fa * d;
+  const eMas = (omega0 * fsElem) / r + termino;
+  const eMenos = (omega0 * fsElem) / r - termino;
+  return { aa, av, fa, fv, i, s, hn, ta, per, saT, masaKg, vs, casos, fsElem, d, omega0, termino, eMas, eMenos, zona: zonaAmenaza(aa, av) };
+})();
+
+## Idea central del capítulo
+
+Con los movimientos sísmicos del Capítulo A.2 ya definidos, falta decidir **con qué tipo de estructura se va a resistir** y **cuánta reducción de fuerzas se le permite**. El Capítulo A.3 responde en cinco pasos:
+
+1. **Sistema estructural** (A.3.2): la estructura se clasifica en muros de carga, combinado, pórtico o dual, con material y grado de disipación (DES, DMO o DMI). De ahí salen $R_0$, $\Omega_0$ y la **altura máxima permitida** por zona de amenaza.
+2. **Configuración** (A.3.3): se revisa si la estructura es regular o irregular en planta y altura, y si es redundante. Cada defecto *reduce* $R$: $R = \phi_a\,\phi_p\,\phi_r\,R_0$.
+3. **Método de análisis** (A.3.4): según la zona, la altura y la regularidad se exige fuerza horizontal equivalente o análisis dinámico.
+4. **Efectos sísmicos** (A.3.6): torsión, diafragmas, efectos ortogonales, amarres, discontinuidades, voladizos.
+5. **Fuerzas de diseño** (A.3.7): las fuerzas del análisis $F_s$ se dividen por $R$ y entran a las combinaciones de carga.
+
+<Callout tipo="importante" titulo="La idea que une todo el capítulo">
+Una estructura que disipa energía de manera dúctil puede diseñarse para **una fracción** de las fuerzas elásticas: $E = F_s/R$. Pero esa fracción **solo se permite si la estructura se comporta como el sistema supone**. Por eso la norma castiga las irregularidades y la falta de redundancia reduciendo $R$ y, con ello, **aumentando** la fuerza de diseño.
+</Callout>
+
+## A.3.0 — Nomenclatura
+
+La nomenclatura define los símbolos del capítulo (<NormaRef s="A.3.0" pag="A-39" />). Los más usados:
+
+| Símbolo | Significado |
+|---|---|
+| $A_a$, $A_v$ | Aceleración y velocidad horizontales pico efectivas de diseño (A.2.2) |
+| $A_s$ | Aceleración máxima en la superficie del suelo, estimada como la aceleración espectral para $T = 0$ (ecuación A.3.6-3) |
+| $A_x$ | Coeficiente de amplificación de la torsión accidental en el nivel $x$ (A.3.6.7) |
+| $E$ | Fuerzas sísmicas reducidas de diseño, $E = F_s/R$ |
+| $F_s$ | Fuerzas sísmicas obtenidas del análisis, sin reducir por $R$ |
+| $F_i$, $V_x$ | Parte del cortante basal en el nivel $i$; cortante sísmico en el nivel $x$ (A.3.6.6) |
+| $h_i$, $h_n$, $h_{eq}$ | Altura del nivel $i$; altura del piso más alto; altura equivalente del sistema de un grado de libertad (A.3.6-3) |
+| $M$, $m_i$, $M_p$ | Masa total de la edificación (kg, incluye muros divisorios, equipos, tanques; en depósitos o bodegas suma el 25 % de la masa de la carga viva); masa del nivel $i$; masa de un elemento |
+| $R_0$ | Coeficiente de capacidad de disipación de energía **básico**, por sistema y grado de disipación |
+| $R$ | Coeficiente para el diseño: $R = \phi_a\phi_p\phi_r R_0$ |
+| $\phi_a$, $\phi_p$, $\phi_r$ | Reducción de $R$ por irregularidad en altura, en planta y por ausencia de redundancia |
+| $\Omega_0$ | Coeficiente de sobrerresistencia (A.3.3.9) |
+| $\delta_{max}$, $\delta_{prom}$ | Desplazamiento horizontal máximo y promedio de los extremos en el nivel $x$ (A.3.6-2) |
+| $g$ | Aceleración de la gravedad, 9.8 m/s² |
+
+## A.3.1 — Bases generales de diseño sismo resistente
+
+### A.3.1.1 — Procedimiento de diseño
+
+El Capítulo A.1 (A.1.3) da los pasos y el A.2 los movimientos de diseño; este capítulo establece (<NormaRef s="A.3.1.1" pag="A-39" />):
+
+- Los **sistemas estructurales** y los **métodos de análisis** (que dependen del grado de irregularidad) para hallar el cortante en la base y su distribución en altura.
+- La aplicación de las fuerzas por nivel al sistema estructural y la obtención de deflexiones y fuerzas internas con un **modelo matemático** apropiado.
+- La **verificación de derivas** con las deflexiones del análisis.
+- El diseño de elementos y conexiones con todas las solicitaciones del Título B. Las fuerzas del análisis $F_s$ se dividen por $R$ para obtener $E = F_s/R$.
+- El coeficiente $R = \phi_a\phi_p\phi_r R_0$.
+- Los **elementos frágiles de conexión** y otros que según su material requieran $\Omega_0$ se diseñan con $E$ de la ecuación A.3.3-2.
+- Los elementos se diseñan con el detallado del grado de disipación requerido.
+- Estas fuerzas son **al nivel de resistencia** (ya mayoradas). Para esfuerzos de trabajo, véase A.3.1.8.
+
+### A.3.1.2 a A.3.1.6 — Principios de estructuración
+
+| Sección | Requisito |
+|---|---|
+| **A.3.1.2** Características de la estructuración | El sistema de resistencia sísmica debe ser uno de los de A.3.2 y cumplir el Título A y el del material, con el grado de disipación apropiado. Los elementos estructurales que **no** hacen parte del sistema se evalúan con el Capítulo A.8; los no estructurales, con el A.9. |
+| **A.3.1.3** Capacidad de disipación mínima | Según el material y el sistema, las Tablas A.3-1 a A.3-4 fijan el grado mínimo (DES, DMO o DMI) por zona de amenaza. |
+| **A.3.1.4** Resistencia en todas las direcciones | El sismo puede actuar en cualquier dirección horizontal: el sistema debe existir en **dos direcciones ortogonales o aproximadamente ortogonales**, garantizando la estabilidad global y de cada elemento. |
+| **A.3.1.5** Trayectoria de las fuerzas | Las fuerzas deben transferirse desde su punto de aplicación hasta su punto final de resistencia por trayectorias **continuas**, con resistencia y rigidez suficientes. La cimentación se diseña para las fuerzas y movimientos sísmicos. |
+| **A.3.1.6** Sistemas isostáticos | En lo posible el sistema debe ser **hiperestático**. Si no lo es, se debe considerar el efecto adverso de la falla de un miembro o conexión sobre la estabilidad. |
+
+### A.3.1.7 — Sistemas prefabricados
+
+Se permiten edificaciones cuyo sistema de resistencia sísmica sea de elementos **prefabricados**, diseñados para las fuerzas del Reglamento con $R_0 = 1.5$ (<NormaRef s="A.3.1.7" pag="A-41" />). Si se demuestra con evidencia experimental y analítica que el sistema tiene resistencia, capacidad de disipación y capacidad de trabajo inelástico **iguales o mayores** que las de una estructura monolítica del Reglamento, aplican los artículos 10 y 12 de la Ley 400; pero $R_0$ **nunca** podrá exceder el de un sistema monolítico del mismo material. Véase también A.1.4.2.
+
+### A.3.1.8 — Esfuerzos de trabajo
+
+Si el material se diseña con el **método de esfuerzos de trabajo** (B.2.3), las fuerzas sísmicas reducidas $E$ se llevan a ese nivel con un **coeficiente de carga de 0.7** (<NormaRef s="A.3.1.8" pag="A-41" />).
+
+## A.3.2 — Sistemas estructurales
+
+### A.3.2.1 — Los cuatro tipos de sistema
+
+La norma reconoce cuatro sistemas generales, subdivididos por el tipo de elemento vertical y el grado de disipación del material (<NormaRef s="A.3.2.1" pag="A-41" />):
+
+| Sistema | Cómo resiste cargas verticales | Cómo resiste fuerzas horizontales | Tabla |
+|---|---|---|---|
+| **Muros de carga** (A.3.2.1.1) | Los muros de carga; **no hay pórtico esencialmente completo** | Muros estructurales o pórticos con diagonales | A.3-1 |
+| **Combinado** (A.3.2.1.2) | (a) Pórtico **no** resistente a momentos, esencialmente completo; o (b) pórtico resistente a momentos, esencialmente completo | (a) Muros estructurales o pórticos con diagonales; (b) pórtico más muros o diagonales, **sin cumplir** los requisitos de un dual | A.3-2 |
+| **Pórtico** (A.3.2.1.3) | Pórtico espacial resistente a momentos, esencialmente completo, **sin diagonales** | El mismo pórtico | A.3-3 |
+| **Dual** (A.3.2.1.4) | Pórtico espacial resistente a momentos, sin diagonales, esencialmente completo | Combinación de muros estructurales o pórticos con diagonales **más** el pórtico | A.3-4 |
+
+<Callout tipo="importante" titulo="Requisitos para que un sistema sea dual (A.3.2.1.4)">
+(a) El pórtico espacial resistente a momentos debe poder soportar las cargas verticales. (b) El pórtico, **actuando independientemente**, debe resistir como mínimo el **25 %** del cortante sísmico en la base; su capacidad de disipación debe ser DES (concreto o acero), DMO (concreto) o DMI (acero). (c) Los dos sistemas deben resistir **todo** el cortante en proporción a sus rigideces e interacción en todos los niveles, pero los **muros o pórticos con diagonales nunca asumen menos del 75 %** del cortante basal.
+
+Un sistema que combine pórtico y muros pero **no cumpla** estas condiciones se clasifica como **combinado** (peor $R_0$ y, normalmente, menores alturas).
+</Callout>
+
+### Grados de capacidad de disipación de energía: DES, DMO y DMI
+
+Cada material (concreto, acero, mampostería, madera) puede diseñarse y detallarse en tres grados. Cuanto mayor es la capacidad de disipar energía **dentro del rango inelástico** (deformarse sin colapsar), mayor es el $R_0$ que la norma le reconoce y más exigente el detallado de los Títulos C, D, F y G.
+
+| Grado | Nombre | En palabras sencillas | Dónde se permite (en general) |
+|---|---|---|---|
+| **DES** | Capacidad **especial** de disipación de energía | Detallado más estricto y mayor ductilidad; $R_0$ más alto | Todas las zonas; **la única opción en zona de amenaza alta** para la mayoría de sistemas |
+| **DMO** | Capacidad **moderada** de disipación de energía | Detallado intermedio | Zonas intermedia y baja (en alta solo algunos sistemas de mampostería) |
+| **DMI** | Capacidad **mínima** de disipación de energía | Detallado básico; $R_0$ más bajo | Principalmente zona de amenaza baja |
+
+La edificación **no puede elegir el grado libremente**: las Tablas A.3-1 a A.3-4 fijan, por sistema y zona, qué filas están permitidas (<NormaRef s="A.3.1.3" pag="A-40" /> y <NormaRef s="A.3.5.1" pag="A-46" />). El grado elegido debe quedar anotado en los planos estructurales (A.1.5.2.1).
+
+### A.3.2.2 y A.3.2.3 — Clasificación y límites de altura
+
+Toda edificación, o cualquier parte de ella, debe quedar clasificada en **uno** de los cuatro sistemas (<NormaRef s="A.3.2.2" pag="A-42" />). Las Tablas A.3-1 a A.3-4 dan la **altura máxima** (en metros desde la base, o número de pisos) que puede tener cada sistema en cada zona (<NormaRef s="A.3.2.3" pag="A-42" />).
+
+### Tablas A.3-1 a A.3-4 de forma consultable
+
+Las cuatro tablas siguientes reproducen los valores del PDF (páginas A-52 a A-57), una fila por sistema con su $R_0$, $\Omega_0$ y la restricción por zona. Cómo leerlas:
+
+- **No** = el sistema no se permite en esa zona. **Sin límite** = sin límite de altura. **solo Grupo I** = únicamente edificaciones del grupo de uso I.
+- **N#** = nota de la tabla (ver el desplegable de notas más abajo). Las notas $R_0$ (irregulares, $R = \phi_a\phi_p\phi_r R_0$) y $\Omega_0$ (restar 0.5 con diafragma flexible, nunca menos de 2.0) aplican a **todas** las filas.
+- Las zonas son las del Capítulo A.2 (<NormaRef s="Tabla A.2.3-1" pag="A-15" />): **alta** si $A_a$ o $A_v$ > 0.20; **intermedia** si ≤ 0.20 y alguno > 0.10; **baja** si ambos ≤ 0.10.
+
+<Callout tipo="nota" titulo="Alturas y número de pisos">
+Las alturas se miden **en metros desde la base**. Solo unas pocas filas (mampostería parcialmente reforzada y mampostería no reforzada) limitan por **número de pisos** (por ejemplo "2 pisos"); en ese caso no hay equivalencia en metros.
+</Callout>
+
+#### Tabla A.3-1 — Sistema de muros de carga
+
+<TablaNorma numero="Tabla A.3-1" titulo="Sistema estructural de muros de carga" pag="A-52" nota="N3: mampostería no reforzada solo en zona baja con Aa ≤ 0.05, grupo I, 1 o 2 pisos.">
+
+| Fila | Sistema de resistencia sísmica (fuerzas horizontales) | Sistema para cargas verticales | R₀ | Ω₀ | Alta | Intermedia | Baja |
+|---|---|---|---:|---:|---|---|---|
+| | **1. Paneles de cortante de madera** | | | | | | |
+| 1 | Paneles de cortante de madera | muros ligeros de madera laminada | 3.0 | 2.5 | 6 m | 9 m | 12 m |
+| | **2. Muros estructurales** | | | | | | |
+| 2a | Muros de concreto con capacidad especial de disipación de energía (DES) | el mismo | 5.0 | 2.5 | 50 m | Sin límite | Sin límite |
+| 2b | Muros de concreto con capacidad moderada de disipación de energía (DMO) | el mismo | 4.0 | 2.5 | No | 50 m | Sin límite |
+| 2c | Muros de concreto con capacidad mínima de disipación de energía (DMI) | el mismo | 2.5 | 2.5 | No | No | 50 m |
+| 2d | Muros de mampostería reforzada de bloque de perforación vertical (DES) con todas las celdas rellenas | el mismo | 3.5 | 2.5 | 50 m | Sin límite | Sin límite |
+| 2e | Muros de mampostería reforzada de bloque de perforación vertical (DMO) | el mismo | 2.5 | 2.5 | 30 m | 50 m | Sin límite |
+| 2f | Muros de mampostería parcialmente reforzada de bloque de perforación vertical | el mismo | 2.0 | 2.5 | 2 pisos (solo Grupo I) | 12 m | 18 m |
+| 2g | Muros de mampostería confinada | el mismo | 2.0 | 2.5 | 2 pisos (solo Grupo I) | 12 m (solo Grupo I) | 18 m (solo Grupo I) |
+| 2h | Muros de mampostería de cavidad reforzada | el mismo | 4.0 | 2.5 | 45 m | 60 m | Sin límite |
+| 2i | Muros de mampostería no reforzada (no tiene capacidad de disipación de energía) | el mismo | 1.0 | 2.5 | No | No | 2 pisos (solo Grupo I; N3) |
+| | **3. Pórticos con diagonales (las diagonales llevan fuerza vertical)** | | | | | | |
+| 3a | Pórticos de acero estructural con diagonales concéntricas (DES) | el mismo | 5.0 | 2.5 | 24 m | 30 m | Sin límite |
+| 3b | Pórticos con diagonales de concreto con capacidad moderada de disipación de energía (DMO) | el mismo | 3.5 | 2.5 | No | 30 m | 30 m |
+| 3c | Pórticos de madera con diagonales | el mismo | 2.0 | 2.5 | 12 m | 15 m | 18 m |
+
+</TablaNorma>
+
+#### Tabla A.3-2 — Sistema combinado
+
+<TablaNorma numero="Tabla A.3-2" titulo="Sistema estructural combinado" pag="A-53 y A-54" nota="N3: los pórticos losa-columna incluyen el reticular celulado. N5: se permite 20 m en edificios de un piso (naves industriales o similares) que no sean grupo IV.">
+
+| Fila | Sistema de resistencia sísmica (fuerzas horizontales) | Sistema para cargas verticales | R₀ | Ω₀ | Alta | Intermedia | Baja |
+|---|---|---|---:|---:|---|---|---|
+| | **1. Pórticos de acero con diagonales excéntricas** | | | | | | |
+| 1a | Pórticos de acero con diagonales excéntricas si las conexiones con las columnas por fuera del vínculo son resistentes a momento | pórticos de acero resistentes a momentos con capacidad mínima de disipación de energía (DMI) | 7.0 | 2.0 | 45 m | 60 m | Sin límite |
+| 1b | Pórticos de acero con diagonales excéntricas si las conexiones con las columnas por fuera del vínculo no son resistentes a momento | pórticos de acero resistentes a momentos con capacidad mínima de disipación de energía (DMI) | 6.0 | 2.0 | 45 m | 60 m | Sin límite |
+| 1c | Pórticos de acero con diagonales excéntricas si el vínculo no se conecta a la columna | pórticos de acero no resistentes a momentos | 6.0 | 2.0 | 30 m | 45 m | Sin límite |
+| 1d | Pórticos de acero con diagonales excéntricas si el vínculo tiene conexión resistente a momento con la columna | pórticos de acero resistentes a momentos con capacidad mínima de disipación de energía (DMI) | 5.0 | 2.0 | 30 m | 45 m | Sin límite |
+| | **2. Muros estructurales** | | | | | | |
+| 2a | Muros de concreto con capacidad especial de disipación de energía (DES) | pórticos de concreto con capacidad especial de disipación de energía (DES) | 7.0 | 2.5 | 72 m | Sin límite | Sin límite |
+| 2b | Muros de concreto con capacidad moderada de disipación de energía (DMO) | pórticos de concreto con capacidad moderada de disipación de energía (DMO) | 5.0 | 2.5 | No | 72 m | Sin límite |
+| 2c | Muros de concreto con capacidad moderada de disipación de energía (DMO) | pórticos losa-columna (Nota 3) con capacidad moderada de disipación de energía (DMO) | 3.5 | 2.5 | No | 18 m | 27 m |
+| 2d | Muros de concreto con capacidad mínima de disipación de energía (DMI) | pórticos de concreto con capacidad mínima de disipación de energía (DMI) | 2.5 | 2.5 | No | No | 72 m |
+| 2e | Muros de concreto con capacidad mínima de disipación de energía (DMI) | pórticos losa-columna (Nota 3) con capacidad mínima de disipación de energía (DMI) | 2.0 | 2.5 | No | No | 18 m |
+| 2f | Muros de mampostería reforzada de bloque de perforación vertical (DES) con todas las celdas rellenas | pórticos de concreto con capacidad especial de disipación de energía (DES) | 4.5 | 2.5 | 30 m | 45 m | 45 m |
+| 2g | Muros de mampostería reforzada de bloque de perforación vertical (DMO) | pórticos de concreto con capacidad especial de disipación de energía (DES) | 3.5 | 2.5 | 30 m | 45 m | 45 m |
+| 2h | Muros de mampostería reforzada de bloque de perforación vertical (DMO) | pórticos de concreto con capacidad moderada de disipación de energía (DMO) | 2.5 | 2.5 | No | 30 m | 45 m |
+| 2i | Muros de mampostería confinada (DMO — capacidad moderada de disipación de energía) | pórticos de concreto con capacidad moderada de disipación de energía (DMO) | 2.0 | 2.5 | No | 18 m (solo Grupo I) | 21 m (solo Grupo I) |
+| 2j | Muros de mampostería confinada (DMO — capacidad moderada de disipación de energía) | pórticos de concreto con capacidad mínima de disipación de energía (DMI) | 2.0 | 2.5 | No | No | 18 m (solo Grupo I) |
+| 2k | Muros de mampostería de cavidad reforzada (DES — capacidad especial de disipación de energía) | pórticos de concreto con capacidad moderada de disipación de energía (DMO) | 4.0 | 2.5 | No | 30 m | 45 m |
+| 2l | Muros de mampostería de cavidad reforzada (DES — capacidad especial de disipación de energía) | pórticos de concreto con capacidad mínima de disipación de energía (DMI) | 2.0 | 2.5 | No | No | 45 m |
+| 2m | Muros de cortante con placa de acero (DES) | pórticos de acero resistente o no a momentos | 7.0 | 2.0 | 50 m | Sin límite | Sin límite |
+| 2n | Muros de cortante compuestos con placa de acero y concreto | pórticos de acero resistente o no a momentos | 6.5 | 2.5 | 50 m | Sin límite | Sin límite |
+| 2o | Muros de concreto reforzado (DES) mixtos con elementos de acero | pórticos de acero resistente o no a momentos | 6.0 | 2.5 | 50 m | Sin límite | Sin límite |
+| 2p | Muros de concreto reforzado (DMO) mixtos con elementos de acero | pórticos de acero resistente o no a momentos | 5.5 | 2.5 | No | No | Sin límite |
+| 2q | Muros de concreto reforzado (DMI) mixtos con elementos de acero | pórticos de acero resistentes o no a momentos | 5.0 | 2.5 | No | No | 45 m |
+| | **3. Pórticos con diagonales concéntricas** | | | | | | |
+| 3a | Pórticos de acero con diagonales concéntricas (DES) | pórticos de acero no resistentes a momentos | 5.0 | 2.5 | 30 m | 45 m | 60 m |
+| 3b | Pórticos de acero con diagonales concéntricas (DMI) | pórticos de acero no resistentes a momentos | 4.0 | 2.5 | No | 10 m | 60 m |
+| 3c | Pórticos mixtos con diagonales concéntricas (DES) | pórticos de acero resistentes o no a momentos | 5.0 | 2.0 | 50 m | Sin límite | Sin límite |
+| 3d | Pórticos mixtos con diagonales concéntricas (DMI) | pórticos de acero resistentes o no a momentos | 3.0 | 2.0 | No (excepción: 20 m en 1 piso, N5) | No (excepción: 20 m en 1 piso, N5) | Sin límite |
+| 3e | Pórticos de acero con diagonales concéntricas restringidas a pandeo, con conexiones viga-columna resistentes a momento | pórticos de acero no resistentes a momentos | 7.0 | 2.5 | 30 m | 45 m | Sin límite |
+| 3f | Pórticos de acero con diagonales concéntricas restringidas a pandeo, con conexiones viga-columna no resistentes a momento | pórticos de acero no resistentes a momentos | 6.0 | 2.5 | 30 m | 45 m | Sin límite |
+| 3g | Pórticos de concreto con diagonales concéntricas con capacidad moderada de disipación de energía (DMO) | pórticos de concreto con capacidad moderada de disipación de energía (DMO) | 3.5 | 2.5 | No | 24 m | 30 m |
+
+</TablaNorma>
+
+#### Tabla A.3-3 — Sistema de pórtico resistente a momentos
+
+<TablaNorma numero="Tabla A.3-3" titulo="Sistema estructural de pórtico resistente a momentos" pag="A-55" nota="N3: en acero con uniones soldadas en obra, R0 se multiplica por 0.90. N5: se permite hasta 12 m en edificios de un piso (naves industriales o similares) que no sean grupo IV.">
+
+| Fila | Sistema de resistencia sísmica (fuerzas horizontales) | Sistema para cargas verticales | R₀ | Ω₀ | Alta | Intermedia | Baja |
+|---|---|---|---:|---:|---|---|---|
+| | **1. Pórticos resistentes a momentos con capacidad especial de disipación de energía (DES)** | | | | | | |
+| 1a | De concreto (DES) | el mismo | 7.0 | 3.0 | Sin límite | Sin límite | Sin límite |
+| 1b | De acero (DES) | el mismo | 7.0 (N3) | 3.0 | Sin límite | Sin límite | Sin límite |
+| 1c | Mixtos (DES) | Pórticos de acero o mixtos resistentes o no a momentos | 7.0 | 3.0 | Sin límite | Sin límite | Sin límite |
+| 1d | De acero con cerchas dúctiles (DES) | Pórticos de acero resistentes o no a momentos | 6.0 | 3.0 | 30 m | 45 m | Sin límite |
+| | **2. Pórticos resistentes a momentos con capacidad moderada de disipación de energía (DMO)** | | | | | | |
+| 2a | De concreto (DMO) | el mismo | 5.0 | 3.0 | No | Sin límite | Sin límite |
+| 2b | De acero (DMO) | el mismo | 5.0 (N3) | 3.0 | No | Sin límite | Sin límite |
+| 2c | Mixtos con conexiones rígidas (DMO) | Pórticos de acero o mixtos resistentes o no a momentos | 5.0 | 3.0 | No | Sin límite | Sin límite |
+| | **3. Pórticos resistentes a momentos con capacidad mínima de disipación de energía (DMI)** | | | | | | |
+| 3a | De concreto (DMI) | el mismo | 2.5 | 3.0 | No | No | Sin límite |
+| 3b | De acero (DMI) | el mismo | 3.0 | 2.5 | No | No | Sin límite |
+| 3c | Mixtos con conexiones totalmente restringidas a momento (DMI) | Pórticos de acero o mixtos resistentes o no a momentos | 3.0 | 3.0 | No | No | Sin límite |
+| 3d | Mixtos con conexiones parcialmente restringidas a momento | Pórticos de acero o mixtos resistentes o no a momentos | 6.0 | 3.0 | No | 30 m | 50 m |
+| 3e | De acero con cerchas no dúctiles | el mismo | 1.5 | 1.5 | No (excepción: 12 m en 1 piso, N5) | No (excepción: 12 m en 1 piso, N5) | 12 m |
+| 3f | De acero con perfiles de lámina doblada en frío y perfiles tubulares estructurales PTE que no cumplen los requisitos de F.2.2.4 para perfiles no esbeltos (nota 6) | el mismo | 1.5 | 1.5 | No (excepción: 12 m en 1 piso, N5) | No (excepción: 12 m en 1 piso, N5) | Sin límite |
+| | **4. Pórticos losa-columna (incluye reticular celulado)** | | | | | | |
+| 4a | De concreto con capacidad moderada de disipación de energía (DMO) | el mismo | 2.5 | 3.0 | No | 15 m | 21 m |
+| 4b | De concreto con capacidad mínima de disipación de energía (DMI) | el mismo | 1.5 | 3.0 | No | No | 15 m |
+| | **5. Estructuras de péndulo invertido** | | | | | | |
+| 5a | Pórticos de acero resistentes a momento con capacidad especial de disipación de energía (DES) | el mismo | 2.5 (N3) | 2.0 | Sin límite | Sin límite | Sin límite |
+| 5b | Pórticos de concreto con capacidad especial de disipación de energía (DES) | el mismo | 2.5 | 2.0 | Sin límite | Sin límite | Sin límite |
+| 5c | Pórticos de acero resistentes a momento con capacidad moderada de disipación de energía (DMO) | el mismo | 1.5 (N3) | 2.0 | No | Sin límite | Sin límite |
+
+</TablaNorma>
+
+La fila **3g** de la Tabla A.3-3 no trae valores: las "otras estructuras de celosía tales como vigas y cerchas" **no se pueden usar** como parte del sistema de resistencia sísmica, a menos que tengan conexiones rígidas a columnas, en cuyo caso se tratan como pórticos de celosía.
+
+#### Tabla A.3-4 — Sistema dual
+
+<TablaNorma numero="Tabla A.3-4" titulo="Sistema estructural dual" pag="A-56 y A-57" nota="N4: se permite hasta 12 m en edificios de un piso (naves industriales o similares) que no sean grupo IV.">
+
+| Fila | Sistema de resistencia sísmica (fuerzas horizontales) | Sistema para cargas verticales | R₀ | Ω₀ | Alta | Intermedia | Baja |
+|---|---|---|---:|---:|---|---|---|
+| | **1. Muros estructurales** | | | | | | |
+| 1a | Muros de concreto con capacidad especial de disipación de energía (DES) | pórticos de concreto con capacidad especial de disipación de energía (DES) | 8.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 1b | Muros de concreto con capacidad especial de disipación de energía (DES) | pórticos de acero resistentes a momentos con capacidad especial de disipación de energía (DES) | 8.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 1c | Muros de concreto con capacidad moderada de disipación de energía (DMO) | pórticos de concreto con capacidad moderada de disipación de energía (DMO) | 6.0 | 2.5 | No | Sin límite | Sin límite |
+| 1d | Muros de concreto con capacidad moderada de disipación de energía (DMO) | pórticos de acero resistentes a momentos con capacidad moderada de disipación de energía (DMO) | 6.0 | 2.5 | No | Sin límite | Sin límite |
+| 1e | Muros de mampostería reforzada de bloque de perforación vertical (DES) con todas las celdas rellenas | pórticos de concreto con capacidad especial de disipación de energía (DES) | 5.5 | 3.0 | 45 m | 45 m | 45 m |
+| 1f | Muros de mampostería reforzada de bloque de perforación vertical (DES) con todas las celdas rellenas | pórticos de acero resistentes a momentos con capacidad especial de disipación de energía (DES) | 5.5 | 3.0 | 45 m | 45 m | 45 m |
+| 1g | Muros de mampostería reforzada de bloque de perforación vertical (DMO) | pórticos de concreto con capacidad especial de disipación de energía (DES) | 4.5 | 2.5 | 35 m | 35 m | 35 m |
+| 1h | Muros de mampostería reforzada de bloque de perforación vertical (DMO) | pórticos de acero resistentes a momentos con capacidad especial de disipación de energía (DES) | 4.5 | 2.5 | 35 m | 35 m | 35 m |
+| 1i | Muros de mampostería reforzada de bloque de perforación vertical (DMO) | pórticos de acero resistentes a momentos con capacidad moderada de disipación de energía (DMO) | 3.5 | 2.5 | No | 30 m | 30 m |
+| 1j | Muros de mampostería reforzada de bloque de perforación vertical (DMO) | pórticos de concreto con capacidad moderada de disipación de energía (DMO) | 3.5 | 2.5 | No | 30 m | 30 m |
+| 1k | Muros de cortante con placa de acero (DES) | pórticos de acero con alma llena, con conexiones rígidas (DES) | 7.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 1m | Muros de cortante mixtos con placa de acero | pórticos de acero con alma llena, con conexiones rígidas (DES) | 6.5 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 1n | Muros de concreto reforzado (DES) mixtos con elementos de acero | pórticos de acero con alma llena, con conexiones rígidas (DES) | 6.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 1o | Muros de concreto reforzado (DMI) mixtos con elementos de acero | pórticos de acero con alma llena, con conexiones rígidas (DES) | 5.0 | 2.5 | No | No | Sin límite |
+| 1p | Muros de concreto reforzado (DMI) mixtos con elementos de acero | pórticos de acero con alma llena, con conexiones rígidas (DMO) | 4.0 | 3.0 | No | No | Sin límite |
+| | **2. Pórticos de acero con diagonales excéntricas** | | | | | | |
+| 2a | Pórticos de acero con diagonales excéntricas si las conexiones con las columnas por fuera del vínculo son resistentes a momento | pórticos de acero resistentes a momentos con capacidad especial de disipación de energía (DES) | 8.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 2b | Pórticos de acero con diagonales excéntricas si las conexiones con las columnas por fuera del vínculo no son resistentes a momento | pórticos de acero resistentes a momentos con capacidad especial de disipación de energía (DES) | 7.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 2c | Pórticos de acero con diagonales excéntricas si las conexiones con las columnas por fuera del vínculo son resistentes a momento | pórticos de acero resistentes a momentos con capacidad moderada de disipación de energía (DMO) | 6.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 2d | Pórticos de acero con diagonales excéntricas si las conexiones con las columnas por fuera del vínculo no son resistentes a momento | pórticos de acero resistentes a momentos con capacidad moderada de disipación de energía (DMO) | 5.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| | **3. Pórticos con diagonales concéntricas** | | | | | | |
+| 3a | De acero con capacidad especial de disipación de energía (DES) | pórticos de acero resistentes a momentos con capacidad especial de disipación de energía (DES) | 6.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 3b | De acero con capacidad mínima de disipación de energía (DMI) | pórticos de acero resistentes a momentos con capacidad moderada de disipación de energía (DMO) | 3.0 | 2.5 | No | 60 m | Sin límite |
+| 3c | De concreto con capacidad moderada de disipación de energía (DMO) | pórticos de concreto con capacidad moderada de disipación de energía (DMO) | 4.0 | 2.5 | No | 24 m | 30 m |
+| 3d | Pórticos mixtos con diagonales concéntricas (DES) | pórticos de acero con alma llena, con conexiones rígidas (DES) | 6.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 3e | Pórticos de acero con diagonales concéntricas restringidas al pandeo | pórticos de acero con alma llena, con conexiones rígidas (DES) | 7.0 | 2.5 | Sin límite | Sin límite | Sin límite |
+| 3f | Pórticos de acero con diagonales concéntricas (DES) | pórticos de acero con alma llena, con conexiones rígidas (DMO) | 6.0 | 2.5 | No | 10 m | Sin límite |
+| 3g | Pórticos mixtos con diagonales concéntricas (DES) | pórticos de acero con alma llena, con conexiones rígidas (DMO) | 5.5 | 2.5 | 50 m | 30 m | Sin límite |
+| 3h | Pórticos con diagonales concéntricas que resistan solo a tensión | el mismo | 3.0 | 2.5 | No (excepción: 12 m en 1 piso, N4) | No (excepción: 12 m en 1 piso, N4) | No (excepción: 12 m en 1 piso, N4) |
+
+</TablaNorma>
+
+<Detalle titulo="Notas de las Tablas A.3-1 a A.3-4 (texto de la norma)">
+
+**Notas comunes a todas las tablas**
+
+- **R₀** (A.3-1 nota 2; A.3-2, A.3-3 y A.3-4 nota 2): para edificaciones irregulares, $R_0$ se multiplica por $\phi_a$, $\phi_p$ y $\phi_r$ para obtener $R = \phi_a\phi_p\phi_r R_0$ (A.3.3.3).
+- **Ω₀** (A.3-1, A.3-2 y A.3-3 nota 4; A.3-4 nota 3): $\Omega_0$ puede reducirse restándole 0.5 en estructuras con **diafragma flexible**, pero **no debe ser menos de 2.0** para cualquier estructura.
+
+**Tabla A.3-1:** (3) La mampostería no reforzada solo se permite en las regiones de zona baja donde $A_a$ ≤ 0.05, en edificaciones del grupo I de uno y dos pisos.
+
+**Tabla A.3-2:** (3) Los pórticos losa-columna incluyen el reticular celulado. (5) Se permite una altura de 20 m en edificios de un piso (naves industriales o similares) que no sean grupo IV.
+
+**Tabla A.3-3:** (3) En estructuras de acero con uniones del sistema de resistencia sísmica **soldadas en obra**, $R_0$ se multiplica por 0.90. (5) Se permite hasta 12 m en edificios de un piso (naves industriales o similares) que no sean grupo IV. (6) Los perfiles de lámina doblada y los tubulares estructurales que cumplen F.2.2.4 para miembros no esbeltos, diseñados con conexiones dúctiles calificadas según F.3.1.8, se podrán diseñar como pórticos resistentes a momentos convencionales.
+
+**Tabla A.3-4:** (4) Se permite hasta 12 m en edificios de un piso (naves industriales o similares) que no sean grupo IV.
+
+</Detalle>
+
+<Callout tipo="atencion" titulo="Anomalías de las tablas A.3-1 a A.3-4 en el PDF">
+- **Tabla A.3-3, fila 3d** (mixtos con conexiones parcialmente restringidas, DMI): trae $R_0$ = **6.0**, valor mayor que el de otros sistemas DMI de la misma tabla (1.5 a 3.0) e incluso que el de los pórticos DMO (5.0). Está así en el PDF; verifícalo con la norma vigente antes de usarlo.
+- **Tabla A.3-3, filas 3e y 3f** traen $\Omega_0$ = 1.5, por debajo del 2.0 que menciona la nota 4 (que se refiere al límite tras *reducir* $\Omega_0$ por diafragma flexible, no a los valores base). Para ellas $\Omega_0$ no se reduce.
+- **Tabla A.3-4, fila 3h** (diagonales que resisten solo a tensión): la celda dice "no se permite (nota 4)" en las tres zonas, y la nota 4 permite hasta 12 m en edificios de un piso (naves industriales o similares) que no sean del grupo IV. Se interpreta como "no se permite, salvo esa excepción".
+- **Tabla A.3-4, subgrupo 1:** la numeración salta de la fila **k** a la **m** (no existe la fila "l").
+</Callout>
+
+### A.3.2.4 — Combinación de sistemas estructurales en la altura
+
+Cuando una misma edificación usa **diferentes sistemas en la altura** deben cumplirse estas reglas (<NormaRef s="A.3.2.4" pag="A-42" />):
+
+| Sección | Regla |
+|---|---|
+| **A.3.2.4.1** Máximo valor de $R$ | La estructura se clasifica como **irregular tipo 5aA o 5bA** (Tabla A.3-7) y, en cualquier dirección y nivel, $R$ no puede ser mayor que el **menor $R$ de los sistemas combinados por encima de ese nivel**. Cada sistema y grado de disipación cumple sus propios requisitos. |
+| **A.3.2.4.2** Pisos livianos | No aplica A.3.2.4.1 si la masa de los pisos **por encima** del nivel donde empieza un sistema es **menor del 10 %** de la masa total $M$. |
+| **A.3.2.4.3** Flexible sobre rígida | Si se cumple la Tabla A.3-5 puede usarse el procedimiento allí indicado. |
+| **A.3.2.4.4** Rígida sobre flexible | **No es un sistema aceptable.** |
+
+<TablaNorma numero="Tabla A.3-5" titulo="Mezcla de sistemas estructurales en la altura" pag="A-58">
+
+| Combinación | Condiciones | Requisitos de diseño |
+|---|---|---|
+| **Estructura flexible apoyada sobre una estructura con mayor rigidez** | (a) Ambas partes, consideradas por separado, son **regulares** (A.3.3). (b) El **promedio de rigideces de piso de la parte baja es al menos 10 veces** el de la parte alta. (c) El **período de la estructura completa no excede 1.1 veces** el período de la parte superior considerada independiente y empotrada en la base. Si no se cumplen, la estructura es irregular (A.3.3). | No se considera irregular ($\phi_p = \phi_a = 1.0$) y se diseña con la fuerza horizontal equivalente (Capítulo A.4): (1) la parte **superior** se analiza como estructura separada, apoyada en la parte rígida, con su $R_0$; (2) la parte **inferior** se analiza como estructura separada con su $R_0$, y **las reacciones de la parte superior se amplifican por la relación $R_0$ superior / $R_0$ inferior**. |
+| **Estructura rígida apoyada sobre una estructura con menor rigidez** | Se suspende antes de llegar a la base, parcial o totalmente, un sistema más rígido que el que llega a la base. | **No es aceptable** como solución estructural. |
+
+</TablaNorma>
+
+### A.3.2.5 — Combinación de sistemas en planta
+
+Se pueden combinar sistemas en planta **sin que la estructura se clasifique como irregular** si (<NormaRef s="A.3.2.5" pag="A-42" />):
+
+- **(a)** Los dos sistemas coexisten en **toda la altura**, salvo que se cumpla A.3.2.4.
+- **(b)** Si hay muros de carga **solo en una dirección**, el $R$ de la dirección ortogonal no puede ser mayor que **1.25 veces** el $R$ del sistema de muros de carga.
+- **(c)** Con dos sistemas de muros de carga distintos en la misma dirección, el $R$ del sistema de mayor $R$ no puede exceder **1.25 veces** el $R$ del de menor $R$.
+- **(d)** Con sistemas distintos de muros de carga en ambas direcciones, el sistema de mayor $R$ no puede usar más de **1.25 veces** el menor $R$.
+
+### A.3.2.6 — Elementos comunes a varios sistemas
+
+Los elementos comunes a diferentes sistemas se diseñan y detallan con los requisitos **más restrictivos** de los sistemas a los que pertenecen (<NormaRef s="A.3.2.6" pag="A-42" />).
+
+## A.3.3 — Configuración estructural de la edificación
+
+### A.3.3.1 y A.3.3.2 — General y definición
+
+Para el diseño sísmico la edificación se clasifica como **regular o irregular** en planta y en altura, y como **redundante o con ausencia de redundancia** (<NormaRef s="A.3.3.1" pag="A-42" />). La **configuración** incluye no solo la forma exterior y el tamaño, sino la naturaleza, dimensiones y localización de los elementos estructurales **y no estructurales** que afecten el comportamiento sísmico (<NormaRef s="A.3.3.2" />).
+
+### A.3.3.3 — Reducción de $R$ por irregularidades y falta de redundancia
+
+<Ecuacion num="A.3.3-1" titulo="Coeficiente de capacidad de disipación de energía para diseño">
+
+$$
+R=\phi_a\,\phi_p\,\phi_r\,R_0
+$$
+
+- $R_0$: valor básico de las Tablas A.3-1 a A.3-4.
+- $\phi_a$: reducción por irregularidades en **altura** (Tabla A.3-7).
+- $\phi_p$: reducción por irregularidades en **planta** (Tabla A.3-6).
+- $\phi_r$: reducción por **ausencia de redundancia** (A.3.3.8).
+
+</Ecuacion>
+
+Si hay **varios tipos de irregularidad en planta** a la vez se aplica el **menor** $\phi_p$; análogamente, con varias irregularidades en altura, el **menor** $\phi_a$ (<NormaRef s="A.3.3.3" pag="A-43" />). Los valores **no se multiplican** entre irregularidades del mismo plano (planta o altura): solo se multiplican $\phi_a$, $\phi_p$ y $\phi_r$ entre sí.
+
+### A.3.3.4 — Configuración en planta (Tabla A.3-6)
+
+La edificación es irregular en planta cuando ocurre uno o varios de los casos de la Tabla A.3-6 (<NormaRef s="A.3.3.4" pag="A-43" />). Los valores de $\phi_p$ son:
+
+<TablaNorma numero="Tabla A.3-6" titulo="Irregularidades en planta" pag="A-59" nota="Nota 1: zona intermedia, grupo I: basta evaluar 1aP, 1bP, 3P y 4P. Nota 2: zona baja, grupos I y II: basta evaluar 1aP y 1bP.">
+
+| Tipo | Irregularidad | Se presenta cuando | $\phi_p$ |
+|---|---|---|---:|
+| **1aP** | Torsional | Con diafragma rígido, la máxima deriva de un extremo, incluida la torsión accidental y medida perpendicular al eje, es **más de 1.2 y hasta 1.4 veces** la deriva promedio de los dos extremos | **0.9** |
+| **1bP** | Torsional extrema | Igual, pero **más de 1.4 veces** el promedio | **0.8** |
+| **2P** | Retrocesos excesivos en las esquinas | Las proyecciones a ambos lados del retroceso son **mayores del 15 %** de la dimensión de la planta en esa dirección | **0.9** |
+| **3P** | Discontinuidades en el diafragma | Aberturas, entradas, retrocesos o huecos con **área mayor del 50 %** del área bruta del diafragma, o cambios de rigidez efectiva **mayores del 50 %** entre niveles consecutivos | **0.9** |
+| **4P** | Desplazamientos del plano de acción de elementos verticales | Discontinuidades en la trayectoria de fuerzas: un grupo de elementos verticales se traslada, perpendicular a él, a otro plano. Los altillos o mansardas de un solo piso se eximen | **0.8** |
+| **5P** | Sistemas no paralelos | Las direcciones de acción horizontal de los elementos verticales **no son paralelas o simétricas** respecto a los ejes ortogonales principales | **0.9** |
+
+</TablaNorma>
+
+<Figura src="/img/titulo-a/figura-a3-1-irregularidades-planta.png" alt="Esquemas de las irregularidades en planta tipos 1aP, 1bP, 2P, 3P, 4P y 5P con sus fórmulas y valores de phi p" numero="Figura A.3-1" pie="Irregularidades en planta. Se indican las condiciones geométricas de cada tipo (por ejemplo A > 0.15B y C > 0.15D para el tipo 2P)." pag="A-61" />
+
+### A.3.3.5 — Configuración en la altura (Tabla A.3-7)
+
+Una edificación es irregular en altura cuando ocurre uno o varios de los casos de la Tabla A.3-7 (<NormaRef s="A.3.3.5" pag="A-43" />):
+
+<TablaNorma numero="Tabla A.3-7" titulo="Irregularidades en la altura" pag="A-60" nota="Nota 1: si la deriva de todo piso es menor de 1.3 veces la del piso siguiente hacia arriba, no existen 1aA, 1bA, 2A ni 3A. Nota 2: zona intermedia, grupo I: basta 4A, 5aA y 5bA. Nota 3: zona baja, grupos I y II: basta 5aA y 5bA.">
+
+| Tipo | Irregularidad | Se presenta cuando | $\phi_a$ |
+|---|---|---|---:|
+| **1aA** | Piso flexible (rigidez) | La rigidez del piso es **menor del 70 % pero ≥ 60 %** de la del piso superior, o **menor del 80 % pero ≥ 70 %** del promedio de los tres pisos superiores | **0.9** |
+| **1bA** | Piso flexible extremo | La rigidez es **menor del 60 %** de la del piso superior o **menor del 70 %** del promedio de los tres pisos superiores | **0.8** |
+| **2A** | Distribución de masas | La masa de un piso es **mayor de 1.5 veces** la de uno de los pisos contiguos (se exceptúan las cubiertas más livianas que el piso de abajo) | **0.9** |
+| **3A** | Geométrica | La dimensión horizontal del sistema de resistencia sísmica en un piso es **mayor de 1.3 veces** la de un piso adyacente (se exceptúan los altillos de un solo piso) | **0.9** |
+| **4A** | Desplazamientos dentro del plano de acción | Hay desplazamientos en el alineamiento de elementos verticales, en su mismo plano, **mayores que la dimensión horizontal del elemento**. Se eximen los elementos que solo sostienen la cubierta | **0.8** |
+| **5aA** | Piso débil (resistencia) | La resistencia del piso es **menor del 80 % pero ≥ 65 %** de la del piso superior | **0.9** |
+| **5bA** | Piso débil extremo | La resistencia del piso es **menor del 65 %** de la del piso superior | **0.8** |
+
+</TablaNorma>
+
+En 5aA y 5bA, la **resistencia del piso** es la suma de las resistencias de todos los elementos que comparten el cortante del piso en la dirección considerada.
+
+<Figura src="/img/titulo-a/figura-a3-2-irregularidades-altura.png" alt="Esquemas de las irregularidades en altura tipos 1aA, 1bA, 2A, 3A, 4A, 5aA y 5bA con sus condiciones y valores de phi a" numero="Figura A.3-2" pie="Irregularidades en la altura. Las letras A a F identifican pisos; por ejemplo, el tipo 1aA compara la rigidez del piso C con la del piso D y con el promedio de los pisos D, E y F." pag="A-62" />
+
+<Callout tipo="nota" titulo="Excepción por derivas (A.3.3.5.1)">
+Si, en **todos** los pisos, la deriva de cualquier piso es **menor de 1.3 veces** la deriva del piso siguiente hacia arriba, se puede considerar que no existen irregularidades 1aA, 1bA, 2A ni 3A y se aplica $\phi_a = 1$. No se consideran las derivas de los **dos pisos superiores** ni las de los **sótanos con muros de contención integrados a la estructura en toda su periferia**; las derivas pueden calcularse sin los efectos torsionales. Tampoco se considera irregular la estructura flexible sobre rígida que cumpla A.3.2.4.3 y la Tabla A.3-5 (<NormaRef s="A.3.3.5.1" pag="A-43" />).
+</Callout>
+
+### A.3.3.6 y A.3.3.7 — Qué irregularidades evaluar según zona y grupo de uso
+
+La norma **simplifica** la revisión en zonas de menor amenaza y edificaciones menos importantes:
+
+| Situación | Irregularidades a evaluar | Sección |
+|---|---|---|
+| Zona de amenaza **baja**, grupos de uso **I y II** | Planta: **1aP, 1bP**. Altura: **5aA, 5bA** | A.3.3.6 |
+| Zona de amenaza **intermedia**, grupo de uso **I** | Planta: **1aP, 1bP, 3P, 4P**. Altura: **4A, 5aA, 5bA** | A.3.3.7 |
+| **Cualquier otro caso** (zona alta; intermedia con grupos II, III o IV; baja con grupos III o IV) | **Todas** | — |
+
+### A.3.3.8 — Ausencia de redundancia, $\phi_r$
+
+Se asigna $\phi_r$ en **las dos direcciones principales** en planta (<NormaRef s="A.3.3.8" pag="A-43" />):
+
+| Caso | $\phi_r$ |
+|---|---:|
+| Sistema **DMI** (A.3.3.8.1) | **1.0** |
+| Sistema **DMO o DES** y, en todos los pisos que resisten **más del 35 %** del corte basal en la dirección estudiada, se cumplen las condiciones de redundancia (a) a (e) (A.3.3.8.2) | **1.0** |
+| Sistema DMO o DES que **no** cumple las condiciones (a) a (d) | **0.75** |
+| Aunque no cumpla (a) a (d), todos los pisos que resisten más del 35 % del corte basal son **regulares en planta** y tienen **al menos dos vanos** del sistema de resistencia sísmica en la periferia, a ambos lados de la planta y en las dos direcciones principales | **1.0** |
+
+<Detalle titulo="Condiciones de redundancia (a) a (e) — A.3.3.8.2">
+
+La pérdida de **un componente** del sistema no debe causar una reducción de más del **33 %** de la resistencia horizontal del piso **ni** producir una irregularidad torsional extrema (tipo 1bP):
+
+- **(a) Pórticos con arriostramientos concéntricos:** la falla de cualquier diagonal o de sus conexiones.
+- **(b) Pórticos con arriostramientos excéntricos:** la pérdida de resistencia a momento (vínculos a momento) o a cortante (vínculos a corte) en los **dos extremos** de un vínculo.
+- **(c) Pórticos resistentes a momentos:** la pérdida de resistencia a momento en la conexión viga-columna de los **dos extremos** de una viga.
+- **(d) Muros estructurales de concreto:** la falla de un muro o de una porción de él con relación **altura de piso / longitud horizontal mayor que 1**, o de los elementos colectores que lo conectan al diafragma.
+- **(e) Otros sistemas:** sin requisitos especiales.
+
+Para contar los vanos equivalentes de un **muro estructural** se divide su longitud horizontal entre la altura del piso.
+
+</Detalle>
+
+<Callout tipo="nota" titulo="Por qué el texto habla de (a) a (e) y luego de (a) a (d)">
+La lista de condiciones de redundancia tiene cinco literales, pero los párrafos siguientes (φr = 0.75 y su excepción) se refieren solo a "las condiciones (a) a (d)": el literal (e) ("otros sistemas") no impone requisitos, por lo que no puede incumplirse.
+</Callout>
+
+### A.3.3.9 — Sobrerresistencia $\Omega_0$
+
+Cuando el material y el grado de disipación exigen que los **elementos frágiles** o las **conexiones** se diseñen para fuerzas sísmicas amplificadas por $\Omega_0$, se usa (<NormaRef s="A.3.3.9" pag="A-44" />):
+
+<Ecuacion num="A.3.3-2" titulo="Fuerzas de diseño con sobrerresistencia">
+
+$$
+E=\frac{\Omega_0\,F_s}{R}\pm 0.5\,A_a\,F_a\,D
+$$
+
+- $F_s$: fuerzas sísmicas del análisis.
+- $R = \phi_a\phi_p\phi_r R_0$: coeficiente de disipación del sistema.
+- $D$: carga muerta sobre el elemento (Título B).
+- El signo de $\pm$ es el que conduce al **mayor valor de $E$**, según el signo de $F_s$.
+
+</Ecuacion>
+
+## A.3.4 — Métodos de análisis
+
+### A.3.4.1 — Métodos reconocidos
+
+(<NormaRef s="A.3.4.1" pag="A-44" />) La norma reconoce: (a) **fuerza horizontal equivalente** (Capítulo A.4); (b) **análisis dinámico elástico** (A.5); (c) **análisis dinámico inelástico** (A.5); y (d) **métodos alternos** que consideren las características dinámicas y el comportamiento inelástico y sean de aceptación general; con ellos no se pueden usar períodos fundamentales mayores que los permitidos en A.4 y A.5.
+
+### A.3.4.2 — Método mínimo a utilizar
+
+<TablaNorma numero="A.3.4.2" titulo="¿Qué método de análisis debo usar como mínimo?" pag="A-45">
+
+| Se puede usar la **fuerza horizontal equivalente** (A.3.4.2.1) en… | Se **debe** usar análisis **dinámico elástico** (A.3.4.2.2) en… |
+|---|---|
+| (a) **Todas** las edificaciones (regulares e irregulares) en zona de amenaza **baja** | (a) Edificaciones de **más de 20 niveles o más de 60 m** (salvo las de A.3.4.2.1 a y b) |
+| (b) **Todas** las del **grupo de uso I** en zona **intermedia** | (b) Con irregularidades verticales **1aA, 1bA, 2A y 3A** |
+| (c) **Regulares** de **20 niveles o menos y 60 m o menos** desde la base, en cualquier zona, **excepto** en perfiles de suelo D, E o F con período mayor de **2 $T_C$** | (c) Con irregularidades que **no** estén descritas en A.3.3.4 y A.3.3.5 (salvo A.3.2.4.3) |
+| (d) **Irregulares** de **no más de 6 niveles ni 18 m** desde la base | (d) De **más de 5 niveles o 20 m** en zona **alta** que **no tengan el mismo sistema estructural en toda su altura** (salvo A.3.2.4.3) |
+| (e) Estructuras flexibles sobre estructuras más rígidas que cumplan A.3.2.4.3 | (e) Regulares o irregulares en perfil **D, E o F** con **período mayor de 2 $T_C$**, incluyendo interacción suelo-estructura (Capítulo A.7) |
+
+</TablaNorma>
+
+Los otros dos métodos son de uso **voluntario** a juicio del diseñador:
+
+- **Dinámico inelástico (A.3.4.2.3):** para casos con variaciones de capacidad de disipación inelástica solo identificables con este procedimiento. Los diseños deben ser **revisados por dos profesionales independientes** del diseñador, que firman un memorial en que consta que se usaron las mejores metodologías y que la edificación tiene resistencia y comportamiento similares a los de una diseñada por los otros métodos; el memorial se anexa a la solicitud de licencia.
+- **No lineal estático "push-over" (A.3.4.2.4):** cumple los requisitos del **Apéndice A-3** y se confronta con otro de los métodos permitidos, usando en el diseño lo **más exigente**.
+
+### A.3.4.3 — Rigidez de la estructura y sus elementos
+
+Las rigideces para el análisis sísmico las define el **ingeniero diseñador** según su criterio y los preceptos de cada material en el Título correspondiente (<NormaRef s="A.3.4.3" pag="A-45" />).
+
+## A.3.5 — Requisitos para los materiales estructurales
+
+Los requisitos especiales de diseño y detallado de cada material se dan **por grado de disipación** (DMI, DMO o DES) y por sistema en las Tablas A.3-1 a A.3-4 (<NormaRef s="A.3.5.1" pag="A-46" />). El detalle de cada material está en los Títulos C (concreto), D (mampostería), F (acero) y G (madera y guadúa).
+
+## A.3.6 — Efectos sísmicos en los elementos estructurales
+
+### A.3.6.1 y A.3.6.2 — Generalidades y combinación de cargas
+
+- **A.3.6.1.1:** solo los elementos del **sistema de resistencia sísmica** pueden contribuir a la resistencia sísmica. Se diseñan con los requisitos de su material y el grado requerido.
+- **A.3.6.1.2:** los elementos estructurales que **no** hacen parte del sistema deben conservar su capacidad para cargas verticales ante los **desplazamientos y derivas** del sismo de diseño; basta que cumplan el grado de disipación **mínimo** (DMI) de su material. Sus anclajes y amarres cumplen A.3.6 y A.8.
+- **A.3.6.2:** los coeficientes de carga para combinar gravedad y sismo están en el Título B. Las fuerzas sísmicas del Reglamento ya están **al nivel de resistencia** (mayoradas).
+
+### A.3.6.3 — Dirección de aplicación y efectos ortogonales
+
+En zonas de amenaza **intermedia o alta** deben considerarse los **efectos ortogonales**, salvo que (1) la estructura tenga **diafragmas flexibles** o (2) sea un edificio de **un piso** (nave industrial o similar) **sin** irregularidad en planta 5P (<NormaRef s="A.3.6.3" pag="A-46" />). Se admiten dos formas de combinar:
+
+| Método | Cómo se aplica |
+|---|---|
+| **100 % + 30 %** | El 100 % de las fuerzas en una dirección **y simultáneamente** el 30 % en la dirección perpendicular. Se usa la combinación que requiera **mayor resistencia** del elemento |
+| **Raíz de la suma de cuadrados (SRSS)** | $\sqrt{E_x^2+E_y^2}$ con los efectos del 100 % de las fuerzas actuando por separado en cada dirección, con el signo más conservador |
+
+La fuerza sísmica se combina con las cargas verticales según el Título B.
+
+### A.3.6.4 — Amarres y continuidad
+
+Todos los elementos estructurales deben interconectarse, con conexiones capaces de transmitir las fuerzas sísmicas de las partes que unen (<NormaRef s="A.3.6.4" pag="A-46" />):
+
+- **A.3.6.4.1 Partes de la edificación:** una parte o porción diferenciada pero vinculada debe amarrarse al resto con conectores diseñados para las fuerzas axiales, de corte y flexión de la interacción, y para una fuerza sísmica **mínima de $0.40\,A_a\,g$ veces la masa** de esa parte. En el análisis **no** se usa nudo maestro u otro método de igualación de grados de libertad para cargas laterales.
+- **A.3.6.4.2 Vigas de amarre de la cimentación:** zapatas, dados de pilotes, pilas o caissons se amarran con elementos capaces de resistir en tensión o compresión una fuerza no menor de **$0.25\,A_a$ veces la carga vertical total** del elemento más cargado que interconectan, **además** de las fuerzas de la superestructura.
+
+### A.3.6.5 y A.3.6.6 — Colectores y cortante de piso
+
+- **A.3.6.5:** deben existir **elementos colectores** que lleven las fuerzas desde otras partes de la edificación hasta el elemento vertical que las resiste.
+- **A.3.6.6:** con la fuerza horizontal equivalente, el cortante de piso es la suma de las fuerzas de los niveles superiores (ecuación A.3.6-1). El cortante y las torsiones se reparten entre pórticos y muros según sus rigideces de desplazamiento y la rigidez del diafragma (A.3.6.7.2).
+
+<Ecuacion num="A.3.6-1" titulo="Cortante sísmico en el nivel x">
+
+$$
+V_x=\sum_{i=x}^{n}F_i
+$$
+
+- $F_i$: parte del cortante basal asignada al nivel $i$ (Capítulo A.4).
+
+</Ecuacion>
+
+### A.3.6.7 — Torsión en el piso
+
+La torsión tiene dos fuentes: la **incertidumbre en la ubicación de las masas** (torsión accidental) y la **excentricidad** entre el centro de masa y el de rigidez. En análisis dinámico el análisis mismo refleja las torsiones, y el diseñador decide si incluye la torsión accidental. Con la fuerza horizontal equivalente se aplican A.3.6.7.1 a A.3.6.7.3 (<NormaRef s="A.3.6.7" pag="A-47" />):
+
+- **Torsión accidental (A.3.6.7.1):** se supone la masa de cada piso desplazada, hacia cualquier lado, una distancia igual al **5 %** de la dimensión de la edificación en ese piso, medida perpendicular a la dirección estudiada. Con irregularidades **1aP o 1bP**, la torsión accidental se multiplica por el coeficiente $A_x$:
+
+<Ecuacion num="A.3.6-2" titulo="Amplificación de la torsión accidental">
+
+$$
+A_x=\left[\frac{\delta_{max}}{1.2\,\delta_{prom}}\right]^2\le 3.0
+$$
+
+- $\delta_{max}$: desplazamiento horizontal máximo en el nivel $x$.
+- $\delta_{prom}$: promedio de los desplazamientos en los puntos extremos de la estructura en el nivel $x$.
+
+</Ecuacion>
+
+- **No coincidencia de centros (A.3.6.7.2):** si el diafragma es rígido en su plano se consideran los mayores cortantes por la distribución en planta de las rigideces. El diafragma puede suponerse **flexible** cuando la máxima deflexión horizontal dentro de él ante $F_s$ es **más de 2 veces el promedio** de sus deflexiones; se compara la deflexión en el punto medio del diafragma con la de cada elemento vertical sometido a la fuerza de su masa aferente. Un diafragma es **rígido** si actúa como una unidad con masa y rigidez concentradas en el centro de masa y de rigidez; con irregularidades **2P y 3P** esta hipótesis debe evaluarse con cuidado.
+- **Torsión de diseño (A.3.6.7.3):** el momento torsor de un nivel es la suma de los aportes de **todos los niveles superiores**; cada nivel aporta su torsión accidental más la fuerza horizontal del nivel multiplicada por la proyección, perpendicular a la dirección de las fuerzas, de la distancia entre centro de masa y centro de rigidez.
+
+### A.3.6.8 — Diafragmas
+
+En zonas de amenaza **intermedia y alta**, los pisos y cubiertas que actúan como diafragmas deben cumplir (<NormaRef s="A.3.6.8" pag="A-48" />):
+
+- **A.3.6.8.1:** la deflexión en el plano del diafragma no debe exceder la permisible de los elementos adheridos a él.
+- **A.3.6.8.2:** se diseñan para la **aceleración de cada nivel** (ecuación A.3.6-3), con $h_{eq}$ ≈ $0.75\,h_n$. Se pueden usar estimaciones más precisas (análisis dinámico). Si el diafragma transfiere fuerzas de elementos verticales superiores a inferiores por desplazamientos o cambios de rigidez, esas fuerzas se **suman** a las de A.3.6-3.
+- **A.3.6.8.3:** los diafragmas que apoyan muros de concreto o mampostería deben tener **amarres continuos** para distribuir las fuerzas de anclaje de A.3.6.10.
+- **A.3.6.8.4:** en zona de amenaza **alta**, con irregularidades **1aP, 1bP, 2P, 3P o 4P**, las conexiones del diafragma a los elementos verticales o colectores, y entre colectores, se diseñan con las fuerzas sísmicas **multiplicadas por 1.25**.
+- **A.3.6.8.5:** en zona alta con irregularidad **2P**, el diafragma se diseña con movimientos **independientes de las alas** que se proyectan, para la condición más severa en la misma dirección o en direcciones opuestas.
+
+<Ecuacion num="A.3.6-3" titulo="Aceleración de diseño de diafragmas en cada nivel">
+
+$$
+a_i=\begin{cases}
+A_s+\dfrac{(S_a-A_s)\,h_i}{h_{eq}} & h_i\le h_{eq}\\[8pt]
+S_a\,\dfrac{h_i}{h_{eq}} & h_i\ge h_{eq}
+\end{cases}
+\qquad h_{eq}\approx 0.75\,h_n
+$$
+
+- $a_i$: aceleración del nivel $i$ como fracción de $g$.
+- $A_s$: aceleración espectral para $T = 0$ (aceleración máxima en la superficie del suelo).
+- $S_a$: aceleración espectral de diseño (Capítulo A.2).
+- $h_i$ y $h_n$: alturas del nivel $i$ y del piso más alto, medidas desde la base.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Cómo leer A.3.6-3">
+Las dos ramas coinciden en $h_i = h_{eq}$ (ambas dan $S_a$). Por debajo de $h_{eq}$ la aceleración crece linealmente desde $A_s$; por encima, tal como está impreso en el PDF, sigue creciendo como $S_a\,h_i/h_{eq}$, de modo que en la cubierta con $h_{eq}=0.75h_n$ resulta $a_i = S_a/0.75 \approx 1.33\,S_a$. La norma no da un valor numérico para $A_s$: evaluando la rama ascendente de A.2.6 en $T=0$ se obtiene $A_s = A_a F_a I$ (interpretación; no está escrito en A.3).
+</Callout>
+
+### A.3.6.9 a A.3.6.13 — Otros efectos
+
+| Sección | Qué exige |
+|---|---|
+| **A.3.6.9** Elementos bajo la base | Los elementos del sistema de resistencia sísmica entre la base y la cimentación no deben tener menos resistencia ni rigidez que la superestructura, y deben tener el **mismo grado de disipación** del sistema |
+| **A.3.6.10** Muros estructurales | Los muros de concreto o mampostería se **anclan** a los diafragmas o cubiertas que les dan apoyo lateral, para una fuerza horizontal perpendicular al plano del muro calculada con A.3.6-3, pero **no menor de $0.10\,M_p\,g$** ($M_p$ = masa del tramo de muro) |
+| **A.3.6.11** Péndulo invertido | Las columnas se diseñan para un diagrama de momentos que empieza en la base con el valor del Capítulo A.4 y **disminuye uniformemente hasta la mitad en la parte superior**. Véase la Tabla A.3-3 (fila 5) |
+| **A.3.6.12** Elementos verticales discontinuos | En zona intermedia y alta, con irregularidades **4P o 4A**: las cargas axiales de los elementos que sostienen los elementos suspendidos usan un coeficiente de carga **$0.4R$ (no menor de 1.0)** en vez de 1.0 sobre $E$ (B.2.4); las vigas que transmiten esas cargas deben resistirlas; los elementos verticales se diseñan para esas axiales con los momentos del análisis y con detallado **DES**. En esfuerzos de trabajo el coeficiente es **$0.3R$ (no menor de 0.7)** en vez de 0.7 |
+| **A.3.6.13** Aceleraciones verticales | En zona alta e intermedia: (a) **voladizos**, con una fuerza vertical, ascendente o descendente, en la punta igual al **30 %** (zona alta) o **15 %** (zona intermedia) de la carga muerta del voladizo; (b) **concreto preesforzado**, con combinaciones adicionales que usen el **50 %** de la carga muerta |
+
+## A.3.7 — Fuerzas sísmicas de diseño de los elementos estructurales
+
+### A.3.7.1 — Sistema de resistencia sísmica
+
+Los elementos del sistema de resistencia sísmica y sus conexiones se diseñan con **todas las solicitaciones del Título B**, combinadas según éste. Las fuerzas del análisis $F_s$ se dividen por $R$ para obtener $E = F_s/R$, que entra a las combinaciones; el diseño y detallado cumplen el grado de disipación del material. Las fuerzas resultantes son **al nivel de resistencia**; para esfuerzos de trabajo véase A.3.1.8. Los **elementos frágiles de conexión** que requieran $\Omega_0$ usan $E$ de la ecuación A.3.3-2 (<NormaRef s="A.3.7.1" pag="A-49" />).
+
+<Ecuacion num="A.3.7-1" titulo="Fuerzas sísmicas reducidas de diseño (expresión de A.3.7.1)">
+
+$$
+E=\frac{F_s}{R},\qquad R=\phi_a\,\phi_p\,\phi_r\,R_0
+$$
+
+</Ecuacion>
+
+### A.3.7.2 — Cimentación
+
+(<NormaRef s="A.3.7.2" pag="A-50" />)
+
+- **(a) Elementos de la cimentación** (incluidas pantallas y demás elementos a los que se conecte la estructura): se usa el procedimiento de A.3.7.1 con las reacciones de la estructura y $E$, **calificando el valor de $R$** usado en la estructura. Si se requiere una evaluación particular, las acciones de la estructura sobre la cimentación se determinan con uno de tres métodos: (1) análisis **inelástico** de la estructura; (2) evaluación del **desempeño** (curvas de demanda y capacidad); (3) calculando las acciones sobre la cimentación cuando a la estructura se aplica el **cortante necesario para producir el mecanismo de plastificación**. Se siguen los requisitos del material y del Título H.
+- **(b) Esfuerzos sobre el suelo:** se usan las combinaciones de esfuerzos de trabajo de B.2.3 con $E$; los efectos resultantes se evalúan con el Título H.
+
+## A.3.8 — Estructuras aisladas sísmicamente en su base
+
+Se permite el **aislamiento sísmico en la base** siempre que se cumplan **en su totalidad** los requisitos de uno de estos documentos (<NormaRef s="A.3.8.1" pag="A-50" />): (a) *NEHRP Recommended Provisions*, edición 2003 (**FEMA 450**); o (b) **ASCE/SEI 7-05**. Además (<NormaRef s="A.3.8.2" />, <NormaRef s="A.3.8.3" />):
+
+- Se cumplen los artículos **10 y 11 de la Ley 400**, asumiendo diseñador estructural y constructor las responsabilidades allí indicadas.
+- La construcción requiere **supervisión técnica permanente** (Título I).
+
+## A.3.9 — Uso de elementos disipadores de energía
+
+Se permiten **elementos disipadores de energía** con las mismas condiciones que el aislamiento: cumplimiento total de **FEMA 450 (2003)** o **ASCE/SEI 7-05** (<NormaRef s="A.3.9.1" pag="A-50" />), cumplimiento de los artículos 10 y 11 de la Ley 400 (<NormaRef s="A.3.9.2" pag="A-51" />) y **supervisión técnica permanente** de la construcción (<NormaRef s="A.3.9.3" pag="A-51" />).
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Coeficiente R de un pórtico de concreto DES irregular">
+Un edificio de 8 pisos en **Cali** (zona de amenaza alta, grupo de uso II) usa **pórticos resistentes a momentos de concreto DES** (<NormaRef s="Tabla A.3-3" pag="A-55" />, fila 1a). Los ingenieros detectan: **torsión extrema** (1bP) y **abertura grande del diafragma** (3P) en planta; **piso flexible** (1aA) y **masa de un piso 1.6 veces la de su vecino** (2A) en altura. El pórtico cumple la condición de redundancia (c). Determinar $R$.
+
+<Paso titulo="Valor básico R₀" ref="Tabla A.3-3, fila 1a">
+Pórtico de concreto DES: $R_0$ = **{ej1.s.r0.toFixed(1)}**, $\Omega_0$ = {ej1.s.omega0.toFixed(1)}; sin límite de altura en la zona alta.
+</Paso>
+<Paso titulo="Qué irregularidades se evalúan" ref="A.3.3.6, A.3.3.7">
+Es zona **alta**: no se aplica la simplificación de A.3.3.6 ni de A.3.3.7. Se evalúan **todas** las irregularidades de las Tablas A.3-6 y A.3-7.
+</Paso>
+<Paso titulo="φp: se toma el menor en planta" ref="A.3.3.3, Tabla A.3-6">
+1bP → 0.8 y 3P → 0.9. No se multiplican: se aplica el menor, $\phi_p$ = **{ej1.phiP}**.
+</Paso>
+<Paso titulo="φa: se toma el menor en altura" ref="A.3.3.3, Tabla A.3-7">
+1aA → 0.9 y 2A → 0.9. $\phi_a$ = **{ej1.phiA}**.
+</Paso>
+<Paso titulo="φr: redundancia" ref="A.3.3.8.2">
+Sistema DES de pórtico que cumple (c) en los pisos que resisten más del 35 % del corte basal: $\phi_r$ = **{ej1.phiR}**.
+</Paso>
+<Paso titulo="Calcular R" ref="A.3.3-1">
+
+$$
+R=\phi_a\,\phi_p\,\phi_r\,R_0 = 0.9\times 0.8\times 1.0\times 7.0
+$$
+
+Resultado: $R$ = **{ej1.R.toFixed(2)}** (frente a $R_0$ = {ej1.s.r0.toFixed(1)}: una reducción del {((1 - ej1.R / ej1.s.r0) * 100).toFixed(0)} %).
+</Paso>
+<Paso titulo="Variante: si no se cumpliera la redundancia" ref="A.3.3.8.2">
+Con $\phi_r$ = {ej1.phiRsin}, $R$ = 0.9 × 0.8 × 0.75 × 7.0 = **{ej1.RSin.toFixed(2)}**.
+</Paso>
+<Resultado>
+$R$ = **{ej1.R.toFixed(2)}**. Si se hubieran multiplicado todos los $\phi$ (error común) se habría obtenido {ej1.ingenuo.toFixed(2)}, subestimando $R$. Además, por tener irregularidades 1aA y 2A, el edificio **debe analizarse con el método dinámico elástico** (A.3.4.2.2 b), y por tener 8 pisos no puede acogerse a A.3.4.2.1 (d). Compruébalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="coeficiente-r" />
+
+<Ejemplo numero={2} titulo="Elegir el sistema permitido para un edificio de 45 m">
+Se proyecta un edificio de **15 pisos** y **45 m** de altura, en concreto reforzado, en **Bucaramanga** ($A_a$ = $A_v$ = 0.25, zona **{ej2.zona.toLowerCase()}**). ¿Qué sistemas de las Tablas A.3-1 a A.3-4 se pueden usar y cuáles no?
+
+<Paso titulo="Zona de amenaza" ref="A.2.3, Tabla A.2.3-1">
+$A_a$ = $A_v$ = 0.25 > 0.20: zona de amenaza **alta**.
+</Paso>
+<Paso titulo="Descartar los grados que no se permiten en zona alta" ref="Tablas A.3-1 a A.3-4">
+- Pórtico de concreto **DMO** (A.3-3, fila 2a): {describirLimite(limiteEnZona(ej2.porticoDMO, 'alta'))}.
+- Pórtico de concreto **DMI** (A.3-3, fila 3a): {describirLimite(limiteEnZona(ej2.porticoDMI, 'alta'))}.
+Es decir, en zona alta el pórtico de concreto debe ser **DES**.
+</Paso>
+<Paso titulo="Filtrar por la altura de 45 m" ref="A.3.2.3">
+De las {ej2.nConcretos} filas de concreto (se omiten las estructuras de péndulo invertido, un caso especial), solo estas **permiten 45 m en zona alta**:
+
+<ul>
+{ej2.alta.map((s) => (
+  <li key={s.id}>Tabla {s.tabla}, fila {s.numero} — {s.sistemaSismico}: R₀ = {s.r0.toFixed(1)}, Ω₀ = {s.omega0.toFixed(1)}, {describirLimite(limiteEnZona(s, 'alta'))}.</li>
+))}
+</ul>
+
+Quedan **{ej2.alta.length}** opciones. En zona intermedia habría {ej2.intermedia} y en zona baja {ej2.baja}.
+</Paso>
+<Paso titulo="Escoger y verificar" ref="A.3.2, A.3.4.2">
+Los sistemas **duales** y de **pórtico DES** tienen el mayor $R_0$ (menor fuerza de diseño), pero la decisión también depende de la arquitectura y de la rigidez que exijan las derivas. En cuanto al método de análisis: con 15 niveles y 45 m (menos de 20 niveles y 60 m), si el edificio es **regular** puede usarse la fuerza horizontal equivalente (A.3.4.2.1 c); si es **irregular** supera los 6 niveles y 18 m de A.3.4.2.1 (d) y exige análisis dinámico. También exige análisis dinámico si combina sistemas distintos en la altura (más de 5 niveles o 20 m en zona alta, A.3.4.2.2 d).
+</Paso>
+<Resultado>
+En zona alta el edificio de 45 m en concreto debe usar **sistemas DES**: pórtico, dual o combinado de muros y pórticos DES, o muros estructurales DES hasta 50 m. De las {ej2.conteo.total} filas de las cuatro tablas, {ej2.conteo.alta} se permiten en zona alta, {ej2.conteo.intermedia} en intermedia y {ej2.conteo.baja} en baja (con alguna restricción de altura o grupo de uso).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Cuánto aumenta la fuerza de diseño por irregularidades">
+Edificio de **10 pisos** (hn = {ej3.hn} m) en **Bogotá** ($A_a$ = {ej3.aa}, $A_v$ = {ej3.av}, zona **{ej3.zona.toLowerCase()}**), grupo de uso I ($I$ = {ej3.i.toFixed(2)}), perfil de suelo D, pórticos de concreto **DMO** (Tabla A.3-3, fila 2a: $R_0$ = {ej3.s.r0.toFixed(1)}, $\Omega_0$ = {ej3.s.omega0.toFixed(1)}), masa total $M$ = {(ej3.masaKg / 1000).toFixed(0)} t. Comparar el cortante basal de diseño $E = V_s/R$ si es regular, si es irregular y si además carece de redundancia.
+
+<Paso titulo="Movimiento de diseño" ref="A.2.4, A.2.6">
+$F_a$ = {ej3.fa.toFixed(2)}, $F_v$ = {ej3.fv.toFixed(2)}. $T_C$ = {ej3.per.tc.toFixed(3)} s, $T_L$ = {ej3.per.tl.toFixed(2)} s. Período aproximado $T_a = 0.047\,h_n^{0.9}$ = **{ej3.ta.toFixed(3)} s**, entre $T_C$ y $T_L$: $S_a$ = 1.2·$A_v F_v I/T$ = **{ej3.saT.toFixed(3)} g**.
+</Paso>
+<Paso titulo="Cortante elástico en la base" ref="A.4.3-1">
+$V_s = S_a\,g\,M$ = {ej3.saT.toFixed(3)} × 9.8 m/s² × ({(ej3.masaKg / 1000).toFixed(0)} × 1000 kg) = **{ej3.vs.toFixed(0)} kN**. Este es $F_s$ (sin reducir por $R$) y es el mismo para los tres casos.
+</Paso>
+<Paso titulo="Aplicar R a cada caso" ref="A.3.3-1, A.3.7.1">
+En zona intermedia y grupo I, solo se evalúan 1aP, 1bP, 3P, 4P, 4A, 5aA y 5bA (A.3.3.7). Se supone 1bP (φp = 0.8) y 5aA (φa = 0.9).
+
+<table>
+<thead>
+<tr><th>Caso</th><th>φa</th><th>φp</th><th>φr</th><th>R</th><th>E = Vs / R (kN)</th><th>Aumento frente a regular</th></tr>
+</thead>
+<tbody>
+{ej3.casos.map((c) => (
+  <tr key={c.nombre}><td>{c.nombre}</td><td>{c.phiA}</td><td>{c.phiP}</td><td>{c.phiR}</td><td>{c.R.toFixed(2)}</td><td>{c.e.toFixed(0)}</td><td>{c.aumento.toFixed(0)} %</td></tr>
+))}
+</tbody>
+</table>
+</Paso>
+<Paso titulo="Un elemento frágil con sobrerresistencia" ref="A.3.3-2">
+Para una conexión que requiere Ω₀, con $F_s$ del elemento = {ej3.fsElem} kN, carga muerta $D$ = {ej3.d} kN y $R$ = {ej3.casos[0].R.toFixed(1)} (caso regular):
+
+$$
+E=\frac{\Omega_0 F_s}{R}\pm 0.5\,A_aF_aD=\frac{3.0\times 900}{5.0}\pm 0.5\times 0.15\times 1.5\times 500
+$$
+
+El término $\pm 0.5A_aF_aD$ vale {ej3.termino.toFixed(1)} kN: $E$ = **{ej3.eMas.toFixed(1)} kN** o {ej3.eMenos.toFixed(1)} kN; se toma el mayor en la combinación que gobierne.
+</Paso>
+<Resultado>
+Pasar de regular ($R$ = {ej3.casos[0].R.toFixed(1)}) a irregular ($R$ = {ej3.casos[1].R.toFixed(2)}) **aumenta la fuerza de diseño {ej3.casos[1].aumento.toFixed(0)} %**; si además falta redundancia ($R$ = {ej3.casos[2].R.toFixed(2)}), el aumento es **{ej3.casos[2].aumento.toFixed(0)} %**. Corregir irregularidades en el diseño arquitectónico y estructural **ahorra material**.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Multiplicar todos los $\phi$ de un mismo plano**: con varias irregularidades en planta (o en altura) se aplica solo el **menor** $\phi_p$ (o $\phi_a$), no el producto (A.3.3.3).
+- **Usar un grado de disipación no permitido en la zona**: p. ej. pórtico de concreto DMO o DMI en zona alta (Tabla A.3-3).
+- **Olvidar las irregularidades "ocultas"**: piso blando por mampostería no integrada, masas de piso o torsión por núcleos de ascensores excéntricos (A.3.3.4, A.3.3.5).
+- **Combinar sistemas en altura sin reducir $R$**: la estructura es irregular 5aA/5bA y $R$ se limita al menor $R$ de los sistemas por encima de cada nivel (A.3.2.4.1), salvo masa superior < 10 % o la Tabla A.3-5.
+- **Aplicar fuerza horizontal equivalente fuera de sus límites**: más de 20 niveles o 60 m, o irregulares de más de 6 niveles o 18 m, o 1aA/1bA/2A/3A, exigen análisis dinámico (A.3.4.2).
+- **Dividir las fuerzas del análisis por $R$ antes de calcular derivas** (la verificación de derivas usa los desplazamientos del análisis, A.3.1.1 d).
+- **Despreciar la torsión accidental** o no amplificarla con $A_x$ cuando hay 1aP o 1bP (A.3.6.7.1).
+- **Ignorar el sismo vertical en voladizos y preesforzados** en zona alta e intermedia (A.3.6.13).
+- **Tratar dual y combinado como lo mismo**: el pórtico dual debe resistir al menos 25 % del cortante y los muros/diagonales no menos del 75 % (A.3.2.1.4).
+</Callout>
+
+## Resumen en una línea
+
+**Clasifica la estructura en uno de los cuatro sistemas (y grado DES, DMO o DMI) permitido en tu zona y altura, resta a $R_0$ lo que cuestan la irregularidad ($\phi_p$, $\phi_a$) y la falta de redundancia ($\phi_r$), elige el método de análisis que exige la norma y diseña con $E = F_s/R$** (y con $\Omega_0$ para elementos frágiles).

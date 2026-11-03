@@ -1,0 +1,299 @@
+---
+codigo: 'A-4'
+tipo: apendice
+titulo: 'Valores de Aa, Av, Ae y Ad de los municipios'
+resumen: 'La tabla que le da a cada municipio colombiano sus coeficientes sísmicos Aa, Av, Ae y Ad y su zona de amenaza sísmica: qué significa cada columna, cómo leerla y qué muestran los datos.'
+objetivos:
+  - 'Explicar qué representan Aa, Av, Ae y Ad y en qué capítulo se usa cada uno'
+  - 'Localizar un municipio en el apéndice, leer sus valores y deducir su zona de amenaza'
+  - 'Reconocer las diferencias conocidas entre el apéndice y las tablas de capitales de A.2, A.10 y A.12'
+  - 'Interpretar la distribución de las zonas de amenaza sísmica en el país'
+paginasNorma: 'A-153 a A-174'
+paginaPdf: 197
+orden: 17
+calculadoras: ['municipios']
+nivel: 'basico'
+---
+
+import municipios from '../../data/municipios.json';
+import { coeficienteFa, coeficienteFv, coeficienteImportancia, periodosEspectro, sa, mesetaSa, zonaAmenaza } from '../../lib/nsr10';
+
+export const pct = (x, total) => ((100 * x) / total).toFixed(1);
+export const total = municipios.length;
+export const porZona = ['Baja', 'Intermedia', 'Alta'].map((z) => {
+  const g = municipios.filter((m) => m.zona === z);
+  return { zona: z, n: g.length, aaMax: Math.max(...g.map((m) => m.aa)), avMax: Math.max(...g.map((m) => m.av)), aaMin: Math.min(...g.map((m) => m.aa)), avMin: Math.min(...g.map((m) => m.av)) };
+});
+export const porDep = (() => {
+  const mapa = new Map();
+  for (const m of municipios) {
+    const d = mapa.get(m.departamento) ?? { nombre: m.departamento, n: 0, Baja: 0, Intermedia: 0, Alta: 0, aaMax: 0, avMax: 0 };
+    d.n += 1;
+    d[m.zona] += 1;
+    d.aaMax = Math.max(d.aaMax, m.aa);
+    d.avMax = Math.max(d.avMax, m.av);
+    mapa.set(m.departamento, d);
+  }
+  return [...mapa.values()];
+})();
+export const masAlta = [...porDep].sort((a, b) => b.Alta - a.Alta || b.n - a.n).slice(0, 10);
+export const todosAlta = porDep.filter((d) => d.Alta === d.n).map((d) => d.nombre);
+export const todosBaja = porDep.filter((d) => d.Baja === d.n).map((d) => d.nombre);
+export const distribucion = (campo) => {
+  const mapa = new Map();
+  for (const m of municipios) mapa.set(m[campo], (mapa.get(m[campo]) ?? 0) + 1);
+  return [...mapa.entries()].sort((a, b) => a[0] - b[0]);
+};
+export const rango = (campo) => [Math.min(...municipios.map((m) => m[campo])), Math.max(...municipios.map((m) => m[campo]))];
+export const topAa = municipios.filter((m) => m.aa >= 0.5);
+export const aeMayorAa = municipios.filter((m) => m.ae > m.aa).length;
+export const adMayorAe = municipios.filter((m) => m.ad > m.ae).length;
+export const fueraTablaAe = municipios.filter((m) => m.ae > 0.28);
+
+export const buscar = (codigo) => municipios.find((m) => m.codigo === codigo);
+
+export const ej1 = (() => {
+  const m = buscar('19001');
+  const fa = coeficienteFa('C', m.aa);
+  const fv = coeficienteFv('C', m.av);
+  const i = coeficienteImportancia('III');
+  const p = { aa: m.aa, av: m.av, fa, fv, i };
+  return { m, zona: zonaAmenaza(m.aa, m.av), fa, fv, i, p, per: periodosEspectro(p), meseta: mesetaSa(p), sa05: sa(0.5, p), sa10: sa(1.0, p), sa20: sa(2.0, p) };
+})();
+
+export const discrepancias = [
+  { ciudad: 'Montería', codigo: '23001', campo: 'av', a4: 0.2, cap: 0.15, tabla: 'A.2.3-2' },
+  { ciudad: 'Villavicencio', codigo: '50001', campo: 'aa', a4: 0.25, cap: 0.35, tabla: 'A.2.3-2' },
+  { ciudad: 'Cúcuta', codigo: '54001', campo: 'av', a4: 0.25, cap: 0.3, tabla: 'A.2.3-2' },
+  { ciudad: 'Armenia', codigo: '63001', campo: 'ae', a4: 0.2, cap: 0.15, tabla: 'A.10.3-2' },
+  { ciudad: 'Ibagué', codigo: '73001', campo: 'ad', a4: 0.08, cap: 0.06, tabla: 'A.12.2-2' },
+].map((d) => {
+  const m = buscar(d.codigo);
+  const aaA4 = m.aa, avA4 = m.av;
+  const aaCap = d.campo === 'aa' ? d.cap : m.aa;
+  const avCap = d.campo === 'av' ? d.cap : m.av;
+  const params = (aa, av) => ({ aa, av, fa: coeficienteFa('D', aa), fv: coeficienteFv('D', av), i: 1 });
+  const zonaA4 = zonaAmenaza(aaA4, avA4);
+  const zonaCap = zonaAmenaza(aaCap, avCap);
+  let efecto = null;
+  if (d.campo === 'aa') {
+    efecto = { texto: 'Meseta de Sa (2.5·Aa·Fa·I)', a4: mesetaSa(params(aaA4, avA4)), cap: mesetaSa(params(aaCap, avCap)) };
+  } else if (d.campo === 'av') {
+    efecto = { texto: 'Sa para T = 1.5 s', a4: sa(1.5, params(aaA4, avA4)), cap: sa(1.5, params(aaCap, avCap)) };
+  }
+  return { ...d, m, zonaA4, zonaCap, efecto };
+});
+
+## Idea central del apéndice
+
+Una frase resume por qué existe este apéndice: **los coeficientes sísmicos de diseño dependen del lugar, y esta es la tabla donde el Reglamento los publica municipio por municipio**. Para cualquier proyecto en Colombia, el primer dato que se necesita —antes de elegir sistema estructural, calcular el espectro o evaluar una edificación— sale de aquí.
+
+A diferencia de los Apéndices A-1 a A-3, que son **recomendaciones**, el A-4 es la **fuente de datos** que usa el Reglamento: A.2.2.3 manda leer $A_a$ y $A_v$ de los municipios en este apéndice (<NormaRef s="A.2.2.3" pag="A-14" />), y A.10.3 y A.12.2 remiten a él para $A_e$ y $A_d$.
+
+<Callout tipo="importante" titulo="Una fila, cuatro coeficientes y una zona">
+Cada municipio tiene en el apéndice: su **código DANE**, $A_a$, $A_v$, la **zona de amenaza sísmica** (que no es un dato independiente: sale de $A_a$ y $A_v$ según A.2.3), $A_e$ y $A_d$. Los {total.toLocaleString('en-US').replace(',', ' ')} municipios están agrupados por **departamento**, en orden alfabético.
+</Callout>
+
+## Qué significa cada coeficiente
+
+<TablaNorma numero="Coeficientes del Apéndice A-4" titulo="Qué representa cada columna y dónde se usa">
+
+| Coeficiente | Qué es | Sismo de referencia | Se usa en | Rango en el apéndice |
+|---|---|---|---|---|
+| $A_a$ | Aceleración horizontal pico efectiva para diseño (edificios bajos, períodos cortos) | De diseño: 10 % en 50 años (475 años) | A.2.2, A.2.6 → espectro de diseño | {rango('aa')[0].toFixed(2)} a {rango('aa')[1].toFixed(2)} |
+| $A_v$ | Velocidad horizontal pico efectiva para diseño, expresada como aceleración (edificios altos, períodos largos) | De diseño | A.2.2, A.2.6 → rama $1/T$ del espectro | {rango('av')[0].toFixed(2)} a {rango('av')[1].toFixed(2)} |
+| $A_e$ | Aceleración pico efectiva **reducida**, para diseño con **seguridad limitada** | De seguridad limitada: 20 % en 50 años (225 años) | A.10.3 → evaluación e intervención de edificaciones existentes | {rango('ae')[0].toFixed(2)} a {rango('ae')[1].toFixed(2)} |
+| $A_d$ | Aceleración pico efectiva para el **umbral de daño** | Del umbral de daño: 80 % en 50 años (31 años) | A.12.2 → espectro del umbral de daño de edificaciones de los grupos III y IV | {rango('ad')[0].toFixed(2)} a {rango('ad')[1].toFixed(2)} |
+
+</TablaNorma>
+
+Tres relaciones útiles para leer los datos:
+
+- $A_a$ y $A_v$ son siempre **múltiplos de 0.05** entre 0.05 y 0.50: son los valores de la Tabla A.2.2-1, donde cada número de «región» de los mapas (1 a 10) equivale a $A = 0.05\times$ región.
+- **La zona sale del mayor entre $A_a$ y $A_v$** (A.2.3): **Baja** si ambos ≤ 0.10; **Intermedia** si alguno es 0.15 o 0.20 y ninguno pasa de 0.20; **Alta** si alguno es ≥ 0.25. Los datos de la tabla cumplen esa regla en todos los municipios.
+- $A_e$ y $A_d$ son valores **más bajos** que $A_a$: el sismo de seguridad limitada y el del umbral de daño son menos severos que el de diseño. En {total - aeMayorAa} de los {total} municipios $A_e \le A_a$ (en los demás es algo mayor, casi siempre 0.16 frente a 0.15, y en unos pocos casos bastante más), y $A_d \le A_e$ en {total - adMayorAe} de {total}, es decir, en todos.
+
+## Cómo leer el apéndice
+
+El apéndice ocupa las **páginas impresas A-153 a A-174** (PDF 197 a 218, 22 páginas) y se organiza así:
+
+1. **Encabezado de departamento** («Departamento de Antioquia»), seguido de una cabecera de columnas: *Municipio · Código · Aa · Av · Zona de Amenaza Sísmica · Ae · Ad*.
+2. **Una fila por municipio**, en orden creciente de código DANE dentro del departamento (la primera suele ser la capital: 05001 Medellín, 76001 Cali…).
+3. Los departamentos van en orden alfabético, de **Amazonas** a **Vichada**. Cada uno repite la cabecera de columnas, así que una tabla puede continuar en la página siguiente sin que cambie nada.
+
+**Procedimiento para obtener los datos de un proyecto:**
+
+1. Identifica el **departamento y el municipio** (o el código DANE de 5 dígitos) donde se construirá.
+2. Lee $A_a$ y $A_v$: con ellos y el tipo de suelo se obtienen $F_a$, $F_v$ y el espectro (Capítulo [A.2](/titulo-a/a2)).
+3. La zona de amenaza condiciona los **sistemas estructurales permitidos**, el **método de análisis** y las irregularidades a evaluar (Capítulos [A.3](/titulo-a/a3) a [A.6](/titulo-a/a6)).
+4. Si la edificación es **existente**, usa $A_e$ (Capítulo [A.10](/titulo-a/a10)); si es del grupo de uso **III o IV**, usa también $A_d$ para el umbral de daño (Capítulo [A.12](/titulo-a/a12)).
+
+<Callout tipo="practica" titulo="Leer el PDF no es fácil; esta web ya lo hizo">
+En el PDF las filas de cada tabla vienen partidas en dos o tres bloques (nombres a un lado, valores al otro), y copiar y pegar mezcla municipios y zonas. Los datos de esta web se extrajeron **con las coordenadas de cada palabra** del PDF, de modo que cada municipio queda con sus propios valores. Para consultarlos usa el buscador:
+</Callout>
+
+<CalculadoraEmbed id="municipios" />
+
+<Ejemplo numero={1} titulo="De la tabla A-4 al espectro de un colegio en Popayán">
+Un colegio (grupo de uso III) se construirá en Popayán (Cauca) sobre un perfil de suelo tipo C. Obtener los coeficientes sísmicos, la zona y el espectro de diseño.
+
+<Paso titulo="Localizar el municipio" ref="Apéndice A-4, Cauca">
+En el departamento del Cauca, código DANE **{ej1.m.codigo}**: $A_a$ = **{ej1.m.aa.toFixed(2)}**, $A_v$ = **{ej1.m.av.toFixed(2)}**, zona **{ej1.m.zona}**, $A_e$ = {ej1.m.ae.toFixed(2)} y $A_d$ = {ej1.m.ad.toFixed(2)}.
+</Paso>
+<Paso titulo="Comprobar la zona" ref="A.2.3">
+El mayor entre $A_a$ = {ej1.m.aa} y $A_v$ = {ej1.m.av} es {Math.max(ej1.m.aa, ej1.m.av)} ≥ 0.25: zona **{ej1.zona}**, coincide con la tabla. Hay que usar los sistemas estructurales y las exigencias de la zona alta.
+</Paso>
+<Paso titulo="Coeficientes de sitio e importancia" ref="A.2.4, A.2.5">
+Perfil C: $F_a$ se interpola entre $A_a$ = 0.2 (1.2) y 0.3 (1.1): **{ej1.fa.toFixed(2)}**. $F_v$ con $A_v$ = 0.20: **{ej1.fv.toFixed(2)}**. Grupo III: $I$ = **{ej1.i.toFixed(2)}**.
+</Paso>
+<Paso titulo="Períodos y meseta del espectro" ref="A.2.6">
+
+$$
+T_C = 0.48\,\frac{A_vF_v}{A_aF_a},\quad T_L = 2.4\,F_v,\quad S_a^{max} = 2.5\,A_aF_aI
+$$
+
+Resultado: $T_C$ = {ej1.per.tc.toFixed(3)} s, $T_L$ = {ej1.per.tl.toFixed(2)} s y $S_a$ máx. = **{ej1.meseta.toFixed(4)} g**.
+
+</Paso>
+<Paso titulo="Leer Sa en tres períodos" ref="A.2.6-1, A.2.6-3">
+$S_a$(0.5 s) = {ej1.sa05.toFixed(4)} g (meseta); $S_a$(1.0 s) = {ej1.sa10.toFixed(4)} g; $S_a$(2.0 s) = {ej1.sa20.toFixed(4)} g.
+</Paso>
+<Resultado>
+Popayán: zona **{ej1.zona}**, $A_a$ = {ej1.m.aa.toFixed(2)}, $A_v$ = {ej1.m.av.toFixed(2)}, $S_a$ máx. = {ej1.meseta.toFixed(3)} g. Como el colegio es del grupo III, deberá verificar además el umbral de daño con $A_d$ = {ej1.m.ad.toFixed(2)} (Capítulo A.12).
+</Resultado>
+</Ejemplo>
+
+## Qué muestran los datos
+
+Los siguientes resultados se **calculan en esta página** a partir de los datos del apéndice ({total} municipios; Bogotá D. C. figura dos veces en el PDF y aquí se cuenta una sola).
+
+### Zonas de amenaza sísmica
+
+<TablaNorma numero="Estadística" titulo="Municipios por zona de amenaza sísmica" nota="Calculado desde src/data/municipios.json (Apéndice A-4).">
+<table>
+<thead><tr><th>Zona</th><th>Municipios</th><th>% del total</th><th>Aa (mín.–máx.)</th><th>Av (mín.–máx.)</th></tr></thead>
+<tbody>
+{porZona.map((z) => (
+<tr key={z.zona}><td><strong>{z.zona}</strong></td><td>{z.n}</td><td>{pct(z.n, total)} %</td><td>{z.aaMin.toFixed(2)}–{z.aaMax.toFixed(2)}</td><td>{z.avMin.toFixed(2)}–{z.avMax.toFixed(2)}</td></tr>
+))}
+</tbody>
+</table>
+</TablaNorma>
+
+**Casi la mitad de los municipios del país ({pct(porZona[2].n, total)} %) está en amenaza alta**, y solo uno de cada ocho ({pct(porZona[0].n, total)} %) en amenaza baja. Conviene recordar que esta es la clasificación por **municipio**, no por habitantes ni por área: los municipios de amenaza baja se concentran en la Amazonía, la Orinoquía y el Caribe.
+
+### Departamentos con más municipios en amenaza alta
+
+<TablaNorma numero="Estadística" titulo="Los diez departamentos con más municipios en zona de amenaza alta" nota="Orden: número de municipios en zona alta; en empate, el departamento con más municipios.">
+<table>
+<thead><tr><th>Departamento</th><th>Municipios</th><th>En zona alta</th><th>% en alta</th><th>Aa máx.</th><th>Av máx.</th></tr></thead>
+<tbody>
+{masAlta.map((d) => (
+<tr key={d.nombre}><td>{d.nombre}</td><td>{d.n}</td><td><strong>{d.Alta}</strong></td><td>{pct(d.Alta, d.n)} %</td><td>{d.aaMax.toFixed(2)}</td><td>{d.avMax.toFixed(2)}</td></tr>
+))}
+</tbody>
+</table>
+</TablaNorma>
+
+- **Todos** sus municipios están en amenaza alta en: {todosAlta.join(', ')}.
+- **Todos** sus municipios están en amenaza baja en: {todosBaja.join(', ')}.
+- Los valores más severos del país ($A_a$ = 0.50, región 10 de la Tabla A.2.2-1) se concentran en la **costa pacífica nariñense**: {topAa.map((m) => `${m.municipio} (${m.departamento})`).join(', ')}.
+
+<Detalle titulo="Tabla completa por departamento (33 filas)">
+<TablaNorma numero="Estadística" titulo="Zonas de amenaza por departamento" nota="Bogotá D. C. se cuenta como un departamento de un municipio.">
+<table>
+<thead><tr><th>Departamento</th><th>Municipios</th><th>Baja</th><th>Intermedia</th><th>Alta</th><th>Aa máx.</th><th>Av máx.</th></tr></thead>
+<tbody>
+{porDep.map((d) => (
+<tr key={d.nombre}><td>{d.nombre}</td><td>{d.n}</td><td>{d.Baja}</td><td>{d.Intermedia}</td><td>{d.Alta}</td><td>{d.aaMax.toFixed(2)}</td><td>{d.avMax.toFixed(2)}</td></tr>
+))}
+</tbody>
+</table>
+</TablaNorma>
+</Detalle>
+
+### Distribución de Aa y Av
+
+<TablaNorma numero="Estadística" titulo="Cuántos municipios tienen cada valor de Aa y de Av">
+<table>
+<thead><tr><th>Valor</th><th>Región (Tabla A.2.2-1)</th><th>Municipios con ese Aa</th><th>Municipios con ese Av</th></tr></thead>
+<tbody>
+{distribucion('aa').map(([v]) => {
+  const nAa = municipios.filter((m) => m.aa === v).length;
+  const nAv = municipios.filter((m) => m.av === v).length;
+  return <tr key={v}><td>{v.toFixed(2)}</td><td>{Math.round(v / 0.05)}</td><td>{nAa}</td><td>{nAv}</td></tr>;
+})}
+</tbody>
+</table>
+</TablaNorma>
+
+Los valores más frecuentes son $A_a$ = 0.25 y 0.15, y $A_v$ = 0.20 y 0.25. Ningún municipio tiene $A_v$ = 0.45 ni 0.50: el máximo de $A_v$ en el país es {rango('av')[1].toFixed(2)}, mientras que $A_a$ llega a {rango('aa')[1].toFixed(2)}.
+
+## Diferencias conocidas con las tablas de capitales
+
+Las capitales de departamento tienen sus valores también en las tablas **A.2.3-2** ($A_a$, $A_v$), **A.10.3-2** ($A_e$) y **A.12.2-2** ($A_d$). **Cinco capitales** tienen en el Apéndice A-4 un valor distinto al de esas tablas. Se verificaron contra la imagen de las páginas del PDF; son inconsistencias de la propia norma, no errores de transcripción:
+
+<TablaNorma numero="Comparación" titulo="Capitales con valores distintos en el Apéndice A-4 y en las tablas del capítulo" nota="Las cifras de «efecto» usan perfil de suelo D, grupo de uso I y el resto de coeficientes de A-4 de cada ciudad.">
+<table>
+<thead><tr><th>Ciudad</th><th>Coef.</th><th>Apéndice A-4</th><th>Tabla del capítulo</th><th>¿Cambia la zona?</th><th>Efecto sobre el diseño</th></tr></thead>
+<tbody>
+{discrepancias.map((d) => (
+<tr key={d.codigo}>
+<td>{d.ciudad}</td>
+<td>{d.campo.charAt(0).toUpperCase() + d.campo.slice(1)}</td>
+<td>{d.a4.toFixed(2)}</td>
+<td>{d.cap.toFixed(2)} ({d.tabla})</td>
+<td>{d.zonaA4 === d.zonaCap ? `No (${d.zonaA4})` : `Sí (${d.zonaA4} / ${d.zonaCap})`}</td>
+<td>{d.efecto ? `${d.efecto.texto}: ${d.efecto.a4.toFixed(3)} g (A-4) frente a ${d.efecto.cap.toFixed(3)} g (${((d.efecto.a4 / d.efecto.cap - 1) * 100).toFixed(0)} %)` : d.campo === 'ae' ? 'Solo en la evaluación de edificaciones existentes (A.10)' : 'Solo en el umbral de daño (A.12)'}</td>
+</tr>
+))}
+</tbody>
+</table>
+</TablaNorma>
+
+Dos lecciones prácticas:
+
+1. **Ninguna cambia la zona de amenaza**, pero tres de ellas (Montería, Villavicencio y Cúcuta) **sí cambian de forma apreciable la fuerza de diseño** (entre −19 % y +21 % en las cantidades de la tabla). Si tu proyecto está en una de estas ciudades, comprueba con la **oficina municipal de planeación o la curaduría** qué valor se está exigiendo y documéntalo en la memoria de cálculo.
+2. En el glosario y en el [buscador](/titulo-a/municipios) de esta web, los valores son **los impresos en el Apéndice A-4**; las tablas de capitales de los capítulos A.2, A.10 y A.12 se transcriben tal como están en cada capítulo.
+
+Además, en el apéndice hay tres municipios con valores de $A_e$ inusuales para el rango de la Tabla A.10.3-1 (máximo 0.28): {fueraTablaAe.map((m) => `${m.municipio} (${m.departamento}) con ${m.ae.toFixed(2)}`).join('; ')}. Se conservan como están impresos.
+
+## Municipios que el apéndice no lista
+
+El Apéndice A-4 corresponde a la división político-administrativa vigente al publicarse la norma (2010) y **no se actualiza** con las creaciones de municipios, cambios de nombre o de código posteriores. Además, el listado incluye como filas **áreas no municipalizadas** o corregimientos departamentales (por ejemplo Mirití-Paraná en Amazonas, o Pacoa, Papunahua y Yavarate en Vaupés) junto a los municipios.
+
+Si el sitio de tu proyecto pertenece a una entidad territorial que no aparece, **la norma no da su valor** y este sitio tampoco lo inventa. Opciones prudentes:
+
+- Verificar si cambió de **nombre o código** (el apéndice puede traerlo con el nombre antiguo).
+- Si es un municipio **segregado de otro**, usar los valores del municipio de origen o el más desfavorable de los vecinos, justificándolo en la memoria.
+- Consultar a la **autoridad municipal** y, si procede, a la Comisión Asesora Permanente (A.2.1.3 permite valores distintos con su aprobación previa).
+
+<Callout tipo="atencion" titulo="Estudios locales mandan">
+Si el municipio cuenta con una **microzonificación sísmica** adoptada, sus resultados reemplazan los efectos locales y el espectro de A.2.4 y A.2.6 (<NormaRef s="A.2.1.2.1" pag="A-14" />), y un estudio de sitio puede definir movimientos distintos. Los valores del apéndice son los **de referencia**, no una garantía de que el espectro final sea el que se usará.
+</Callout>
+
+<Detalle titulo="Anomalías del PDF en este apéndice">
+
+- **Filas desordenadas**: el texto extraído del PDF desalinea las columnas de cada fila (y a veces mezcla páginas); por eso los datos se obtuvieron con coordenadas de palabra.
+- **Bogotá D. C.** figura **dos veces** (1 118 filas en el PDF; {total} registros en la web).
+- **Código y nombre**: algunos nombres tienen la ortografía impresa en el PDF (por ejemplo «Itsmína» en Chocó) y se conservan.
+- **Ae fuera de la Tabla A.10.3-1** en tres municipios (ver arriba).
+- **Numeración**: el apéndice ocupa las páginas impresas A-153 a A-174 (PDF 197 a 218).
+- Las **cinco discrepancias** con las tablas de capitales se describen arriba.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar los valores de otra ciudad «cercana»** o de un mapa de internet en lugar de la fila del municipio.
+- **Confundir Aa con Av** al calcular el espectro: $A_a$ controla la meseta (períodos cortos) y $A_v$ la rama $1/T$.
+- **Usar $A_e$ o $A_d$ para diseñar un edificio nuevo**: son para evaluar edificaciones existentes (A.10) y para el umbral de daño (A.12), no para el sismo de diseño.
+- **Tomar la zona de amenaza como dato independiente**: se deduce del mayor entre $A_a$ y $A_v$; si cambias uno, recalcula la zona.
+- **No documentar la fuente cuando hay discrepancias** (Montería, Villavicencio, Cúcuta, Armenia, Ibagué).
+- **Ignorar que ya exista una microzonificación sísmica** del municipio.
+</Callout>
+
+## Resumen en una línea
+
+**El Apéndice A-4 da, por municipio, $A_a$ y $A_v$ (diseño, A.2), $A_e$ (existentes, A.10), $A_d$ (umbral de daño, A.12) y la zona de amenaza que se deduce del mayor entre $A_a$ y $A_v$: la mitad de los municipios del país está en amenaza alta.**

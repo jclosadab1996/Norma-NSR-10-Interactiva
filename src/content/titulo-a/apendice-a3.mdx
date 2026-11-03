@@ -1,0 +1,314 @@
+---
+codigo: 'A-3'
+tipo: apendice
+titulo: 'Procedimiento no lineal estático «push-over»'
+resumen: 'El método de la curva de capacidad: empujar la estructura con cargas laterales crecientes hasta el desplazamiento objetivo para ver dónde y cuándo fluye. Apéndice no obligatorio, incluido para estudio preliminar.'
+objetivos:
+  - 'Explicar qué es la curva de capacidad y el desplazamiento objetivo, y por qué el apéndice no es obligatorio'
+  - 'Seguir los pasos del procedimiento: modelo, punto de control, incrementos de carga, ajuste bilineal y Te'
+  - 'Aplicar las ecuaciones A-3.2-1 a A-3.2-5 para obtener el desplazamiento objetivo de un edificio'
+  - 'Conocer las verificaciones de deriva, resistencia de elementos y revisión independiente del diseño'
+paginasNorma: 'A-147 a A-152'
+paginaPdf: 191
+orden: 16
+calculadoras: []
+nivel: 'avanzado'
+---
+
+import { sa, periodosEspectro } from '../../lib/nsr10';
+import { procedimientoPushover, periodoEfectivoPushover, coeficienteC0, desplazamientoObjetivo, fuerzaEnDesplazamiento } from '../../lib/nsr10/apendiceA3';
+
+export const ej = (() => {
+  const p = { aa: 0.15, av: 0.2, fa: 1.5, fv: 2.0, i: 1.0 };
+  const curva = [[0, 0], [0.04, 1200], [0.08, 2300], [0.12, 3000], [0.18, 3500], [0.25, 3800], [0.35, 3900], [0.5, 3900], [0.7, 3700]].map(([d, v]) => ({ d, v: v * 1000 }));
+  const n = 8, masaNivel = 150000;
+  const masas = Array(n).fill(masaNivel);
+  const phi = masas.map((_, i) => (i + 1) / n);
+  const t1 = 1.25, d1 = 0.04, v1 = 1200e3;
+  const per = periodosEspectro(p);
+  const r = procedimientoPushover({ curva, t1, v1, d1, masas, formaModo: phi, sa: (t) => sa(t, p), tc: per.tc });
+  const k1 = v1 / d1;
+  const ke = r.vy / r.dy;
+  // Coordenadas del diagrama (viewBox 560 × 330)
+  const X0 = 64, X1 = 530, Y0 = 280, Y1 = 24, DMAX = 0.36, VMAX = 4200e3;
+  const px = (d) => X0 + (d / DMAX) * (X1 - X0);
+  const py = (v) => Y0 - (v / VMAX) * (Y0 - Y1);
+  const tramo = curva.filter((c) => c.d <= DMAX).map((c) => `${px(c.d).toFixed(1)},${py(c.v).toFixed(1)}`).join(' ');
+  const bilineal = `${px(0)},${py(0)} ${px(r.dy).toFixed(1)},${py(r.vy).toFixed(1)} ${px(1.5 * r.dT).toFixed(1)},${py(r.v150).toFixed(1)}`;
+  const elastica = `${px(0)},${py(0)} ${px(0.1).toFixed(1)},${py(k1 * 0.1).toFixed(1)}`;
+  return { p, curva, masas, phi, t1, d1, v1, per, r, k1, ke, masaTotal: n * masaNivel, X0, X1, Y0, Y1, px, py, tramo, bilineal, elastica };
+})();
+
+## Idea central del apéndice
+
+Los métodos del Título A que ya conoces (fuerza horizontal equivalente, análisis dinámico elástico) calculan **fuerzas elásticas** y las dividen por $R$ para tener en cuenta, de forma indirecta, que la estructura fluirá. El análisis no lineal estático, o **«push-over»**, hace lo contrario: **empuja** un modelo no lineal de la estructura con cargas laterales crecientes y registra cómo se va plastificando, componente por componente, hasta llegar al desplazamiento que el sismo de diseño le impondría. El resultado es una **curva de capacidad** (fuerza lateral total contra desplazamiento de un punto de control) y una lectura directa de la demanda de deformación en cada elemento.
+
+<Callout tipo="importante" titulo="Apéndice NO obligatorio">
+El prefacio lo dice sin ambigüedad: «este apéndice no es de carácter obligatorio y se ha incluido con el fin de que se estudie preliminarmente con el fin de adoptarlo en ediciones futuras del Reglamento» (<NormaRef s="A-3 Prefacio" pag="A-147" />, repetido en <NormaRef s="A-3.1.1" pag="A-147" />). Un diseño con NSR-10 **no puede basarse solo en él**: es una alternativa reconocida para edificaciones existentes y nuevas, con revisión independiente (A-3.2.10), pero no sustituye los métodos obligatorios del Título A.
+</Callout>
+
+## Prefacio — Por qué está aquí
+
+El texto de la norma cuenta tres cosas útiles:
+
+- **No es un método nuevo.** Se usa desde hace décadas en plataformas marinas y fue adoptado en guías de evaluación y rehabilitación sísmica: FEMA 350, FEMA 356 y ATC 40, y es la base de las pérdidas estimadas por HAZUS. Aunque no aparezca explícitamente, también es la base de los procedimientos de fuerza lateral equivalente para estructuras con aislamiento en la base y con disipadores de energía.
+- **Dos objeciones pendientes** explican que siga siendo apéndice: (1) cómo determinar la **deformación límite** o desplazamiento objetivo —el apéndice usa correlaciones estadísticas similares a las de FEMA 356—; (2) la falta de consenso sobre qué se considera un **buen diseño** una vez calculadas fuerzas y deformaciones.
+- Se presenta como una **alternativa más simple** que el análisis dinámico no lineal paso a paso en el tiempo, que ya está permitido en el Reglamento.
+
+## A-3.1 — General
+
+- **Propósito** (<NormaRef s="A-3.1.1" pag="A-147" />): dar recomendaciones para realizar un análisis no lineal estático.
+- **Alcance** (<NormaRef s="A-3.1.2" pag="A-147" />): análisis y diseño de edificaciones **existentes y nuevas**, con parámetros compatibles con los del Título A.
+
+### A-3.1.3 — Definiciones propias
+
+Muchos términos remiten al Capítulo A.13 (base, carga muerta y viva, corte basal, diafragma, diseñador estructural, edificación, estructura, movimientos sísmicos de diseño, piso, sistema de resistencia sísmica). Los nuevos son:
+
+| Término | Definición (resumida de A-3.1.3) |
+|---|---|
+| **Curva de capacidad** | Gráfico de la fuerza lateral total $V_j$ contra el desplazamiento lateral del punto de control, obtenido de un análisis no lineal estático. |
+| **Punto de control** | Punto que sirve para indexar el desplazamiento lateral de la estructura (A-3.2.1). |
+| **Desplazamiento objetivo** | Estimado del desplazamiento máximo esperado del punto de control para el sismo de diseño (A-3.2.5). |
+| **Resistencia efectiva a fluencia**, $V_y$ | Fuerza lateral total en la intersección de los dos tramos de la curva bilineal ajustada (A-3.2.3). |
+| **Desplazamiento de fluencia efectivo**, $\delta_y$ | Desplazamiento del punto de control en esa misma intersección. |
+| **Componente** | Parte o elemento de un sistema arquitectónico, eléctrico, mecánico o estructural. |
+
+### A-3.1.4 — Nomenclatura
+
+| Símbolo | Significado |
+|---|---|
+| $V_j$, $\delta_j$ | Fuerza lateral total y desplazamiento del punto de control en el incremento de carga $j$ |
+| $V_1$, $\delta_1$, $T_1$ | Los mismos en el **primer incremento** (comportamiento elástico), y período fundamental de ese primer paso |
+| $V_y$, $\delta_y$ | Resistencia efectiva a la fluencia y desplazamiento efectivo de fluencia (curva bilineal) |
+| $T_e$ | Período fundamental **efectivo** (A-3.2-1) |
+| $\delta_T$ | Desplazamiento objetivo del punto de control (A-3.2-2) |
+| $C_0$, $C_1$ | Factores de modificación del desplazamiento (A-3.2-3 y A-3.2-4) |
+| $R_d$ | Factor de ductilidad del sistema analizado (A-3.2-5) |
+| $S_a$, $T_C$, $C_s$ | Espectro de diseño (A.2.6), período de transición del espectro y coeficiente de respuesta sísmica ($S_a/R$) |
+| $m_i$, $\phi_i$ | Masa y amplitud del vector de forma en el nivel $i$ |
+| $\Delta$, $\gamma_i$ | Deriva de piso (A-3.2.6) y deformación del elemento $i$ |
+| $\Omega_o$ | Coeficiente de sobrerresistencia (A.3.3.9) |
+
+## A-3.2 — Procedimiento no lineal estático
+
+### A-3.2.1 — Modelación
+
+Se necesita un **modelo matemático no lineal** de la estructura que represente la distribución de masa y rigidez, incluyendo los efectos **P-Delta** (<NormaRef s="A-3.2.1" pag="A-149" />). Reglas principales:
+
+- **Dimensiones:** para estructuras regulares con sistemas ortogonales independientes se permiten modelos bidimensionales. Si hay irregularidades en planta **tipo 4P o 5P** (Tabla A.3-6) o no hay sistemas ortogonales independientes, se exige un **modelo tridimensional** con mínimo tres grados de libertad por nivel (dos traslaciones y la rotación torsional). Si los diafragmas no son rígidos respecto a los elementos verticales, se modela su flexibilidad.
+- **Componentes:** a menos que el análisis muestre que un componente permanece elástico, se usa un modelo fuerza-deformación **no lineal** (rigidez antes de fluir, resistencia a la fluencia y propiedades posteriores), consistente con la mecánica o con ensayos. La resistencia no debe exceder los valores esperados considerando la **sobrerresistencia del material y el endurecimiento por deformación**, y el modelo debe incluir la **degradación** de resistencia y rigidez.
+- **Detalles:** el modelo de columnas considera el efecto de la carga axial cuando excede 15 % de la resistencia a compresión; se considera la fisuración en concreto y mampostería y las zonas de panel en pórticos de acero.
+- **Base:** se supone **fija**, o se puede usar la rigidez real de la cimentación con datos del suelo.
+- **Punto de control:** el centro de masa del **nivel más alto** (estructuras sin altillo) o el del nivel en la base del altillo.
+
+### A-3.2.2 — Análisis
+
+- Cargas gravitacionales: **carga muerta + no menos del 25 %** de la carga viva de diseño (reducida como se permita).
+- Las fuerzas laterales se aplican en el **centro de masa de cada nivel**, **proporcionales a la forma del modo fundamental** en la dirección en estudio, y **crecen monotónicamente**.
+- Los incrementos son lo bastante pequeños para detectar fluencias, pandeos o fallas de componentes individuales; **el primer incremento debe producir comportamiento elástico**. En cada paso se registran $V_j$, $\delta_j$ y las fuerzas y deformaciones de cada componente.
+- El análisis **continúa hasta al menos 150 % del desplazamiento objetivo**.
+- Criterio de diseño: la fuerza lateral total aplicada **no debe disminuir** en ningún paso hasta **125 % de $\delta_T$**: no se admite un descenso de resistencia (pérdida de capacidad) antes de ese desplazamiento.
+
+### A-3.2.3 — Resistencia efectiva a la fluencia y período efectivo
+
+La curva de capacidad se reemplaza por una **curva bilineal equivalente** tal que (<NormaRef s="A-3.2.3" pag="A-150" />):
+
+1. el primer tramo coincide con la curva de capacidad al **60 %** de la resistencia efectiva a la fluencia;
+2. el segundo tramo coincide con la curva de capacidad **en el desplazamiento objetivo**;
+3. el **área** bajo la bilineal es igual al área bajo la curva real entre el origen y el desplazamiento objetivo.
+
+La intersección de los dos tramos da $V_y$ y $\delta_y$. El período efectivo fundamental se calcula con:
+
+<Ecuacion num="A-3.2-1" titulo="Período efectivo fundamental">
+
+$$
+T_e = T_1\sqrt{\frac{V_1/\delta_1}{V_y/\delta_y}}
+$$
+
+- $V_1/\delta_1$ es la **rigidez inicial** (primer incremento, elástico) y $V_y/\delta_y$ la **rigidez efectiva** (secante a la fluencia).
+- Como el período es inversamente proporcional a la raíz de la rigidez, un sistema que pierde rigidez al fluir tiene $T_e > T_1$.
+
+</Ecuacion>
+
+Como $\delta_T$ depende de $T_e$ y el ajuste bilineal depende de $\delta_T$, el cálculo es **iterativo**: se supone un $\delta_T$, se ajusta la bilineal, se calcula $T_e$, se recalcula $\delta_T$ y se repite hasta que converja.
+
+### A-3.2.4 — Vector característico de forma
+
+Es la forma del **primer modo** en la dirección estudiada (análisis modal con las propiedades del primer incremento), **normalizada a 1 en el punto de control**. Se permite sustituirla por la forma deflectada de la estructura en el incremento en que el desplazamiento del punto de control iguala a $\delta_y$.
+
+### A-3.2.5 — Desplazamiento objetivo
+
+<Ecuacion num="A-3.2-2" titulo="Desplazamiento objetivo">
+
+$$
+\delta_T = C_0\,C_1\,S_a\left(\frac{T_e}{2\pi}\right)^{2} g
+$$
+
+- $S_a$: aceleración espectral de A.2.6 (fracción de $g$) en el período efectivo $T_e$.
+- $S_a(T_e/2\pi)^2 g$ es el **desplazamiento espectral** $S_d$ de un oscilador elástico de período $T_e$.
+- $C_0$ pasa de ese oscilador de un grado de libertad al desplazamiento del punto de control del edificio; $C_1$ corrige por comportamiento inelástico.
+
+</Ecuacion>
+
+<Ecuacion num="A-3.2-3" titulo="Coeficiente C0">
+
+$$
+C_0=\frac{\sum_{i=1}^{n} m_i\,\phi_i}{\sum_{i=1}^{n} m_i\,\phi_i^{2}}
+$$
+
+$m_i$: masa del nivel $i$; $\phi_i$: amplitud del vector de forma en el nivel $i$ (1 en el punto de control). Para modos lineales de 8 a 10 pisos de masa uniforme vale cerca de 1.4.
+
+</Ecuacion>
+
+Si $T_e > T_C$ (el período de transición del espectro, A.2.6.1.1), **$C_1$ = 1.0**. En caso contrario:
+
+<Ecuacion num="A-3.2-4 y A-3.2-5" titulo="Coeficiente C1 y factor de ductilidad Rd">
+
+$$
+C_1=\frac{1}{R_d}\left[1+\frac{(R_d-1)\,T_C}{T_e}\right],\qquad
+R_d=\frac{S_a\,M\,g}{V_y}
+$$
+
+- $R_d$ compara la **fuerza elástica** que pediría el espectro en $T_e$ ($S_a M g$) con la **resistencia efectiva** de la estructura $V_y$: $R_d$ = 1 indica que la estructura aguanta elásticamente; $R_d$ > 1, que debe incursionar en el rango inelástico.
+- Para períodos cortos ($T_e \le T_C$) los desplazamientos inelásticos son mayores que los elásticos ($C_1 \ge 1$); para períodos largos se aplica la regla de «igual desplazamiento» ($C_1$ = 1).
+
+</Ecuacion>
+
+### A-3.2.6 a A-3.2.10 — Verificaciones
+
+| Sección | Requisito |
+|---|---|
+| **A-3.2.6** Deriva de piso | La deriva $\Delta$ en el paso en que se alcanza $\delta_T$ no debe exceder el límite de A.6.4.1 |
+| **A-3.2.7** Resistencia de los elementos | Además de este apéndice, las resistencias deben cumplir el paso 11 de A.1.3.4 con $E$ = 0 (solo gravedad), salvo que se requiera sobrerresistencia (A.3.3.9): entonces la fuerza individual obtenida en $\delta_T$ se sustituye por $\Omega_o F_s/R$ |
+| **A-3.2.8** Distribución de fuerzas | Las fuerzas laterales de diseño se aplican a la masa de cada nivel proporcionales al modo fundamental |
+| **A-3.2.9** Evaluación detallada | **No es necesario** cumplir A-3.2.9.1 y A-3.2.9.2 si $V_y$ **excede** el producto del factor de sobrerresistencia del sistema (Tablas A.3-1 a A.3-4) por el cortante basal de A.4.3.1 calculado con $T_e$ en lugar de $T$ |
+| **A-3.2.9.1** Fuerzas y deformaciones | Se toman del análisis en el paso en que se alcanza $\delta_T$ |
+| **A-3.2.9.2** Elementos | La capacidad de cada elemento y conexión se evalúa con datos de ensayos de componentes similares. La deformación de un elemento que soporta cargas de gravedad no debe exceder dos tercios de la que causa pérdida de capacidad gravitacional ni dos tercios de la deformación a la que su resistencia cae por debajo del 70 % de la pico; alternativamente, los criterios de FEMA 356 para «Seguridad de la Vida» |
+| **A-3.2.10** Revisión del diseño | Un **comité independiente** de al menos dos ingenieros facultados por la Ley 400, con experiencia en análisis no lineal, revisa el criterio sísmico del sitio y la determinación de $\delta_T$ y $V_y$; si $V_y$ es **menor** que el producto anterior, además revisa los criterios de aceptación y el diseño final completo, y emite un informe |
+
+## Curva de capacidad: lo que ve el analista
+
+El diagrama siguiente resume el procedimiento con los números del ejemplo de este apéndice: la **curva de capacidad** (trazo azul), el **primer tramo elástico** (punteado), la **curva bilineal ajustada** (naranja), y los desplazamientos **objetivo**, **125 %** y **150 %** que fija A-3.2.2.
+
+<Figura alt="Curva de capacidad de un edificio de 8 pisos: fuerza lateral contra desplazamiento del punto de control, con tramo elástico inicial, curva bilineal equivalente, desplazamiento de fluencia efectivo, desplazamiento objetivo y los límites del 125 por ciento y 150 por ciento del desplazamiento objetivo" numero="Figura didáctica" pie="Curva de capacidad del ejemplo y su ajuste bilineal. Esquema elaborado para esta web a partir de las definiciones de A-3.1.3 y las secciones A-3.2.2 y A-3.2.3; no es una figura de la norma.">
+<svg viewBox="0 0 560 330" role="img" aria-label="Diagrama de la curva de capacidad con su ajuste bilineal" style={{ width: '100%', height: 'auto', display: 'block', color: 'var(--foreground)' }}>
+  <line x1={ej.X0} y1={ej.Y0} x2={ej.X1} y2={ej.Y0} stroke="var(--muted-foreground)" stroke-width="1.5" />
+  <line x1={ej.X0} y1={ej.Y0} x2={ej.X0} y2={ej.Y1} stroke="var(--muted-foreground)" stroke-width="1.5" />
+  <text x={ej.X1} y={ej.Y0 + 34} text-anchor="end" font-size="12" fill="currentColor">Desplazamiento del punto de control δ (m)</text>
+  <text x="14" y={ej.Y1 + 4} font-size="12" fill="currentColor">V (kN)</text>
+  <line x1={ej.px(ej.r.dy)} y1={ej.Y0} x2={ej.px(ej.r.dy)} y2={ej.py(ej.r.vy)} stroke="var(--muted-foreground)" stroke-width="1" stroke-dasharray="3 3" />
+  <line x1={ej.px(ej.r.dT)} y1={ej.Y0} x2={ej.px(ej.r.dT)} y2={ej.Y1 + 14} stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="5 3" />
+  <line x1={ej.px(1.25 * ej.r.dT)} y1={ej.Y0} x2={ej.px(1.25 * ej.r.dT)} y2={ej.Y1 + 14} stroke="var(--muted-foreground)" stroke-width="1" stroke-dasharray="2 4" />
+  <line x1={ej.px(1.5 * ej.r.dT)} y1={ej.Y0} x2={ej.px(1.5 * ej.r.dT)} y2={ej.Y1 + 14} stroke="var(--muted-foreground)" stroke-width="1" stroke-dasharray="2 4" />
+  <polyline points={ej.elastica} fill="none" stroke="var(--muted-foreground)" stroke-width="1.5" stroke-dasharray="2 4" />
+  <polyline points={ej.tramo} fill="none" stroke="var(--primary)" stroke-width="3" stroke-linejoin="round" />
+  <polyline points={ej.bilineal} fill="none" stroke="var(--warn)" stroke-width="2.5" stroke-dasharray="7 4" />
+  <circle cx={ej.px(ej.d1)} cy={ej.py(ej.v1)} r="4" fill="var(--primary)" />
+  <circle cx={ej.px(ej.r.dy)} cy={ej.py(ej.r.vy)} r="4.5" fill="var(--warn)" />
+  <circle cx={ej.px(ej.r.dT)} cy={ej.py(ej.r.vT)} r="4.5" fill="var(--ok)" />
+  <text x={ej.px(ej.d1) + 8} y={ej.py(ej.v1) + 14} font-size="11" fill="currentColor">(δ₁, V₁) primer incremento</text>
+  <text x={ej.px(ej.r.dy) - 6} y={ej.py(ej.r.vy) - 12} text-anchor="end" font-size="11" fill="currentColor">(δy, Vy) fluencia efectiva</text>
+  <text x={ej.px(ej.r.dT)} y={ej.Y0 + 14} text-anchor="middle" font-size="11" fill="var(--ok)">δT</text>
+  <text x={ej.px(1.25 * ej.r.dT)} y={ej.Y0 + 14} text-anchor="middle" font-size="11" fill="currentColor">1.25 δT</text>
+  <text x={ej.px(1.5 * ej.r.dT)} y={ej.Y0 + 14} text-anchor="middle" font-size="11" fill="currentColor">1.5 δT</text>
+  <text x={ej.px(ej.r.dy)} y={ej.Y0 + 14} text-anchor="middle" font-size="11" fill="currentColor">δy</text>
+  <text x={ej.px(0.1) - 8} y={ej.py(ej.k1 * 0.1) - 6} text-anchor="end" font-size="11" fill="currentColor">rigidez inicial V₁/δ₁</text>
+  <text x={ej.px(1.5 * ej.r.dT) + 6} y={ej.py(ej.r.v150) + 18} font-size="11" fill="var(--warn)" text-anchor="end">bilineal equivalente</text>
+  <text x={ej.px(0.3)} y={ej.py(3900e3) - 8} font-size="11" fill="var(--primary)" text-anchor="end">curva de capacidad</text>
+</svg>
+</Figura>
+
+## Ejemplo resuelto
+
+<Ejemplo numero={1} titulo="Desplazamiento objetivo de un edificio de 8 pisos">
+Pórtico de concreto de 8 pisos de 3 m (24 m de altura) en Bogotá ($A_a$ = {ej.p.aa}, $A_v$ = {ej.p.av}), perfil D ($F_a$ = {ej.p.fa}, $F_v$ = {ej.p.fv}), grupo de uso I. Cada nivel tiene una masa de 150 t ($M$ = {(ej.masaTotal / 1000).toFixed(0)} t) y se supone un primer modo lineal ($\phi_i = i/8$, igual a 1 en la cubierta, que es el punto de control). El análisis push-over entrega la curva de capacidad del diagrama de arriba. El primer incremento de carga da $V_1$ = {(ej.v1 / 1000).toFixed(0)} kN con $\delta_1$ = {ej.d1} m, y el análisis modal del primer paso, $T_1$ = {ej.t1} s. Hallar $T_e$, $\delta_T$ y verificar el criterio de resistencia.
+
+<Paso titulo="Coeficiente C0 del vector de forma" ref="A-3.2-3">
+
+$$
+C_0=\frac{\sum m_i\phi_i}{\sum m_i\phi_i^2}=\frac{150\,(1+2+\dots+8)/8}{150\,(1^2+2^2+\dots+8^2)/8^2}
+$$
+
+Resultado: $C_0$ = **{ej.r.c0.toFixed(4)}**.
+
+</Paso>
+<Paso titulo="Primera estimación (sistema elástico)" ref="A-3.2-2">
+Se parte con $T_e = T_1$ = {ej.t1} s y $C_1$ = 1. Como $T_C$ = {ej.per.tc.toFixed(3)} s < {ej.t1} s, el espectro está en la rama $1/T$: $S_a$ = 1.2 $A_v F_v/T$ = {sa(ej.t1, ej.p).toFixed(4)} g y $\delta_T^{(0)}$ = $C_0 S_a (T_1/2\pi)^2 g$ = {desplazamientoObjetivo(ej.r.c0, 1, sa(ej.t1, ej.p), ej.t1).toFixed(3)} m.
+</Paso>
+<Paso titulo="Ajuste bilineal con los tres criterios" ref="A-3.2.3">
+Con $\delta_T$ del paso anterior se busca la bilineal que pasa por la curva al 60 % de $V_y$ y en $\delta_T$, con igual área. Tras iterar ({ej.r.iteraciones} ciclos hasta converger):
+
+$V_y$ = **{(ej.r.vy / 1000).toFixed(0)} kN** y $\delta_y$ = **{ej.r.dy.toFixed(4)} m**.
+
+</Paso>
+<Paso titulo="Período efectivo" ref="A-3.2-1">
+
+$$
+T_e = T_1\sqrt{\frac{V_1/\delta_1}{V_y/\delta_y}} = 1.25\sqrt{\frac{30\,000}{V_y/\delta_y}}
+$$
+
+Rigidez inicial {(ej.k1 / 1e6).toFixed(1)} MN/m y rigidez efectiva {(ej.ke / 1e6).toFixed(2)} MN/m dan $T_e$ = **{ej.r.te.toFixed(3)} s**.
+
+</Paso>
+<Paso titulo="Rd y C1" ref="A-3.2-5, A-3.2-4">
+$S_a(T_e)$ = {ej.r.saTe.toFixed(4)} g, de modo que $R_d = S_a M g/V_y$ = {ej.r.saTe.toFixed(4)} × {(ej.masaTotal / 1000).toFixed(0)} t × 9.8 / {(ej.r.vy / 1000).toFixed(0)} kN = **{ej.r.rd.toFixed(3)}**: el edificio debe incursionar levemente en el rango inelástico. Como $T_e$ = {ej.r.te.toFixed(3)} s > $T_C$ = {ej.per.tc.toFixed(3)} s, **$C_1$ = {ej.r.c1.toFixed(1)}**.
+</Paso>
+<Paso titulo="Desplazamiento objetivo" ref="A-3.2-2">
+
+$$
+\delta_T = C_0\,C_1\,S_a\left(\frac{T_e}{2\pi}\right)^{2} g
+$$
+
+Resultado: $\delta_T$ = **{ej.r.dT.toFixed(3)} m** en la cubierta, es decir {(ej.r.dT / 24 * 100).toFixed(2)} % de la altura total (8 pisos de 3 m).
+</Paso>
+<Paso titulo="Verificar que la resistencia no cae hasta 125 % de δT" ref="A-3.2.2">
+En $\delta_T$ la curva da {(ej.r.vT / 1000).toFixed(0)} kN, en 1.25 $\delta_T$ ({(1.25 * ej.r.dT).toFixed(3)} m) da {(ej.r.v125 / 1000).toFixed(0)} kN y en 1.5 $\delta_T$ ({(1.5 * ej.r.dT).toFixed(3)} m) {(ej.r.v150 / 1000).toFixed(0)} kN: **no disminuye**, se cumple el criterio. Falta, aún, revisar la deriva de cada piso en $\delta_T$ (A-3.2.6) y la deformación de cada elemento (A-3.2.9).
+</Paso>
+<Resultado>
+$T_e$ = {ej.r.te.toFixed(2)} s, $\delta_T$ = {ej.r.dT.toFixed(3)} m y $V_y$ = {(ej.r.vy / 1000).toFixed(0)} kN. Como $V_y$ ({(ej.r.vy / 1000).toFixed(0)} kN) es solo el {(ej.r.vy / (ej.r.saTe * ej.masaTotal * 9.8) * 100).toFixed(0)} % de la fuerza elástica ($S_a M g$ = {(ej.r.saTe * ej.masaTotal * 9.8 / 1000).toFixed(0)} kN), hay que comparar $V_y$ con el producto del factor de sobrerresistencia por el cortante basal de A.4.3.1 con $T_e$ para saber si se exime la evaluación detallada (A-3.2.9) y si la revisión independiente debe ser ampliada (A-3.2.10).
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="Sobre el ejemplo">
+La curva de capacidad es **ilustrativa**: no proviene de un modelo real, sino que se eligió con una forma típica de pórticos de concreto (rigidez inicial, ablandamiento progresivo y una meseta). El cálculo se hace con las funciones de `src/lib/nsr10/apendiceA3.ts`, que reproducen las ecuaciones A-3.2-1 a A-3.2-5 y el ajuste bilineal de A-3.2.3 (con sus pruebas).
+</Callout>
+
+## Resumen del procedimiento paso a paso
+
+1. **Modelar** (A-3.2.1): modelo no lineal, con P-Delta, 2D o 3D según la regularidad; punto de control en la cubierta.
+2. **Cargar** (A-3.2.2): gravedad (D + 25 % L) y luego fuerzas laterales proporcionales al modo fundamental, crecientes y monótonas, hasta 150 % de $\delta_T$.
+3. **Registrar** el primer incremento ($V_1$, $\delta_1$, $T_1$, forma modal) y la curva $V_j$–$\delta_j$.
+4. **Suponer** $\delta_T$ y **ajustar** la curva bilineal (60 % / $\delta_T$ / áreas iguales) → $V_y$, $\delta_y$.
+5. **Calcular** $T_e$ (A-3.2-1), $S_a(T_e)$, $C_0$, $R_d$, $C_1$ y el nuevo $\delta_T$ (A-3.2-2 a A-3.2-5); **iterar** hasta converger.
+6. **Verificar** que $V$ no disminuye hasta 125 % de $\delta_T$.
+7. **Revisar** derivas (A-3.2.6) y resistencia y deformación de los elementos (A-3.2.7 a A-3.2.9).
+8. **Someter a revisión independiente** (A-3.2.10).
+
+<Detalle titulo="Erratas y rarezas del PDF en este apéndice">
+
+- **FEMA 350 / FEMA 250**: el prefacio cita «FEMA-350, 2000a» pero la lista de referencias la numera como «FEMA 250 (FEMA 2000a)». Se trata de la misma publicación (criterios de diseño sísmico para edificios de acero resistentes a momentos).
+- **Tc minúscula** en la nomenclatura («Tc») frente a $T_C$ en las ecuaciones; es el mismo período (A.2.6.1.1).
+- **Símbolo «Cs»**: la nomenclatura lo define como «coeficiente de respuesta sísmica, resultado de dividir $S_a$ por $R$» y A-3.2.9 lo usa; no aparece en las ecuaciones A-3.2-1 a A-3.2-5.
+- **Subíndice «l»**: en el texto extraído, $T_1$, $V_1$, $\delta_1$ aparecen con una «ele» (l). En la imagen es el número 1.
+- **Redacción de A-3.2.2**: «la estructura se debe diseñar para que el total de la fuerza lateral aplicada no disminuya en ningún paso del análisis para los desplazamientos del punto de control en un valor menor o igual al 125 %»: la frase es confusa, y se interpreta como se explica arriba (no hay pérdida de resistencia hasta 125 % de $\delta_T$).
+- **Remisión a A.2.6.1.1** para $T_C$ y a «A.1.3.4 paso 11» para la resistencia de los elementos: se conservan como están en el PDF.
+- **Numeración de páginas**: este apéndice ocupa las páginas impresas A-147 a A-152 (PDF 191 a 196).
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Diseñar con el apéndice como si fuera obligatorio** o usarlo en lugar de los métodos de A.4 y A.5: es una referencia de estudio preliminar.
+- **Olvidar P-Delta** o la degradación de resistencia en el modelo de los componentes.
+- **Usar el modo equivocado** para las fuerzas laterales: deben ser proporcionales al primer modo en la dirección estudiada, normalizado a 1 en el punto de control.
+- **No iterar** $\delta_T$ y $T_e$: el ajuste bilineal depende del desplazamiento objetivo.
+- **Detener el análisis antes de 150 %** de $\delta_T$ o ignorar una caída de resistencia antes de 125 %.
+- **Ajustar la bilineal «a ojo»** sin cumplir los tres criterios (60 %, punto en $\delta_T$ y áreas iguales).
+- **Aceptar solo las fuerzas** sin revisar las **deformaciones** de los elementos y las derivas en $\delta_T$.
+- **Omitir la revisión independiente** (A-3.2.10), que la norma exige.
+</Callout>
+
+## Resumen en una línea
+
+**Empuja un modelo no lineal con fuerzas proporcionales al primer modo, ajusta una bilineal a la curva de capacidad, calcula $T_e$ y el desplazamiento objetivo $\delta_T = C_0C_1S_a(T_e/2\pi)^2g$ y verifica derivas, resistencia y deformación de los elementos con revisión independiente: un apéndice no obligatorio.**

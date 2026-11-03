@@ -1,0 +1,332 @@
+---
+codigo: 'A.13'
+tipo: capitulo
+titulo: 'Definiciones y nomenclatura del Título A'
+resumen: 'El diccionario del Título A: qué significa cada término técnico (A.13.1) y cada símbolo de las fórmulas (A.13.2), agrupados por temas y con un glosario completo y buscable.'
+objetivos:
+  - 'Saber cuándo consultar una definición de A.13.1 y cómo la norma encadena unos términos con otros'
+  - 'Leer cualquier símbolo del Título A (Aa, Fv, Ta, Vs, φp, δ, Δ…) y reconocer su familia por los subíndices'
+  - 'Distinguir términos parecidos que la norma define por separado (deriva e índice de deriva, ductilidad y disipación de energía, piso flexible y piso débil)'
+  - 'Identificar quién es quién en el proceso: diseñador, revisor, constructor, interventor y supervisor técnico'
+paginasNorma: 'A-125 a A-139'
+paginaPdf: 168
+orden: 13
+calculadoras: []
+nivel: 'basico'
+---
+
+import { definiciones, simbolos } from '../../data/glosario';
+import { periodoAproximado, coeficienteCu, periodoMaximo } from '../../lib/nsr10';
+
+export const retorno = (p) => -50 / Math.log(1 - p);
+export const sismos = [
+  { nombre: 'Sismo de diseño', p: 0.1, norma: 475 },
+  { nombre: 'Sismo de seguridad limitada', p: 0.2, norma: 225 },
+  { nombre: 'Sismo del umbral de daño', p: 0.8, norma: 31 },
+].map((s) => ({ ...s, tr: retorno(s.p) }));
+
+export const edificio = (() => {
+  const pisos = [3.2, 3.0, 3.0, 7.2, 3.0];
+  const cuentan = pisos.map((h) => (h > 6 ? 2 : 1));
+  return { pisos, cuentan, total: cuentan.reduce((a, b) => a + b, 0), hn: pisos.reduce((a, b) => a + b, 0) };
+})();
+
+export const ej3 = (() => {
+  const hn = 15, av = 0.2, fv = 2.0;
+  const ta = periodoAproximado('porticos-concreto', hn);
+  const cu = coeficienteCu(av, fv);
+  return { hn, av, fv, ta, cu, tmax: periodoMaximo(av, fv, ta) };
+})();
+
+## Idea central del capítulo
+
+El Capítulo A.13 no contiene requisitos de diseño: es el **diccionario del Título A**. Fija con precisión qué quiere decir la norma cuando escribe «deriva», «diafragma», «grupo de uso» o «Ωo», y qué variable representa cada letra de sus ecuaciones. Importa porque la NSR-10 es una norma legal: un término se interpreta **como lo define A.13**, no como se usa en el lenguaje cotidiano o en otros países.
+
+El capítulo tiene dos partes:
+
+1. **A.13.1 — Definiciones**: {definiciones.length} términos en orden alfabético, desde *Acabados* hasta *Zona de amenaza sísmica*.
+2. **A.13.2 — Nomenclatura**: {simbolos.length} símbolos de las fórmulas, también en orden alfabético (minúsculas, mayúsculas y letras griegas al final).
+
+<Callout tipo="importante" titulo="Cómo usar esta web con el capítulo">
+No hace falta memorizar nada: el [glosario interactivo](/titulo-a/glosario) reúne **todas** las definiciones y símbolos con buscador, filtro por tema e índice alfabético. Esta página explica cómo está organizado ese material y qué distinciones conviene tener claras antes de leer los demás capítulos.
+</Callout>
+
+Además, cada capítulo del Título A abre con su propia sección «Nomenclatura» (A.2.0, A.3.0, A.4.0…) con los símbolos que utiliza. La lista central es A.13.2; si un símbolo no aparece allí, búscalo en la nomenclatura del capítulo donde lo encuentres.
+
+## A.13.1 — Definiciones
+
+La sección empieza advirtiendo que las definiciones «corresponden al Título A». Otros Títulos (por ejemplo D para mampostería o F para acero) traen las suyas: *mampostería estructural* aparece aquí solo como remisión al Título D. Para estudiarlas es más útil agruparlas por tema que leerlas en orden alfabético.
+
+| Tema | Términos | Qué contiene |
+|---|---:|---|
+| Amenaza, suelo y uso | 28 | Sismos, fallas, suelo, microzonificación, grupos de uso e infraestructura esencial |
+| Sistema estructural y comportamiento | 60 | Pórticos, muros, diafragmas, ductilidad, disipación de energía (R, DES, DMO, DMI) |
+| Análisis y fuerzas | 24 | Espectros, modos de vibración, métodos de análisis, cortantes y efectos P-Delta |
+| Deriva y separación | 10 | Pisos, alturas, derivas y separación sísmica entre edificaciones colindantes |
+| Elementos no estructurales | 7 | Acabados, muros divisorios, apéndices y grados de desempeño |
+| Existentes, vulnerabilidad y riesgo | 3 | Sismo de seguridad limitada, vulnerabilidad y riesgo sísmico |
+| Profesionales y proceso | 13 | Diseñadores, revisor, constructor, supervisor técnico, licencia y propietario |
+| Cargas, masa y unidades | 9 | Cargas, masa, peso, solicitaciones y el Sistema Internacional de Medidas |
+
+La agrupación es didáctica (hecha para esta web); la norma presenta las definiciones solo en orden alfabético.
+
+<Callout tipo="nota">
+Varias entradas son solo **remisiones** («Véase …»): *Armadura*, *Muro de cortante*, *Riostra*, *Temblor, terremoto*, *Acabados*… Sirven para que busques el término por el nombre que te sea familiar y llegues al que la norma usa.
+</Callout>
+
+### Amenaza sísmica, suelo y uso
+
+Estos términos describen **el sismo y el lugar**. La *amenaza sísmica* es el valor esperado de futuras acciones sísmicas en el sitio, cuantificado como una aceleración horizontal con una probabilidad de excedencia en un lapso dado; la *zona de amenaza* (baja, intermedia o alta) y los coeficientes $A_a$ y $A_v$ la resumen (Capítulo [A.2](/titulo-a/a2)). El *perfil de suelo*, la *velocidad de la onda de cortante* y la *amplificación de la onda sísmica* explican por qué el mismo sismo se siente distinto sobre roca que sobre arcilla blanda, y la *microzonificación sísmica* subdivide una ciudad en zonas de comportamiento similar.
+
+La norma usa **tres sismos de referencia**, cada uno definido por una probabilidad de ser excedido en 50 años:
+
+<TablaNorma numero="Sismos definidos en A.13.1" titulo="Probabilidad de excedencia y período de retorno" pag="A-133">
+
+| Sismo | Probabilidad en 50 años | Período de retorno (norma) | Se usa en |
+|---|---:|---:|---|
+| Sismo de diseño | 10 % | 475 años | Diseño de edificaciones nuevas (A.2, A.3 a A.6) |
+| Sismo de seguridad limitada | 20 % | 225 años | Evaluación e intervención de estructuras existentes (A.10.3) |
+| Sismo del umbral de daño | 80 % | 31 años | Protección contra daños en edificaciones de los grupos III y IV (A.12) |
+
+</TablaNorma>
+
+<Ejemplo numero={1} titulo="De la probabilidad al período de retorno">
+Las definiciones de A.13.1 dan, para cada sismo, una probabilidad $p$ de ser excedido en $t$ = 50 años y su período promedio de retorno. Comprobar que son coherentes con la relación de un proceso de Poisson.
+
+<Paso titulo="Plantear la relación">
+
+Si los sismos ocurren al azar, la probabilidad de que ocurra al menos uno en $t$ años es $p = 1 - e^{-t/T_r}$. Despejando el período de retorno:
+
+$$
+T_r = \frac{-t}{\ln(1-p)}
+$$
+
+Esta fórmula es una verificación didáctica; **la norma no la escribe**, solo da los resultados redondeados.
+
+</Paso>
+<Paso titulo="Evaluar los tres sismos" ref="Definiciones: sismo de diseño, de seguridad limitada y del umbral de daño">
+- Sismo de diseño, $p$ = 0.10: $T_r$ = **{sismos[0].tr.toFixed(1)} años** (norma: {sismos[0].norma}).
+- Sismo de seguridad limitada, $p$ = 0.20: $T_r$ = **{sismos[1].tr.toFixed(1)} años** (norma: {sismos[1].norma}).
+- Sismo del umbral de daño, $p$ = 0.80: $T_r$ = **{sismos[2].tr.toFixed(1)} años** (norma: {sismos[2].norma}).
+</Paso>
+<Resultado>
+Los períodos de la norma (475, 225 y 31 años) son el resultado de la relación anterior redondeado. Nota la intuición: el sismo del umbral de daño es **frecuente** (cada ~30 años), por eso solo se exige que no haya daños importantes, mientras que el de diseño es raro y se acepta que cause daño con tal de proteger la vida.
+</Resultado>
+</Ejemplo>
+
+Completan este grupo el *grupo de uso* (clasificación de las edificaciones según su importancia para la atención y recuperación de las personas, base del coeficiente $I$ de A.2.5), las *edificaciones indispensables* (hospitales, centrales de líneas vitales: deben funcionar durante y después del sismo), las *edificaciones de atención a la comunidad* y las *líneas vitales* (redes de energía, agua, combustibles, información y transporte).
+
+### Sistema estructural y comportamiento
+
+Es el grupo más numeroso: nombra los **elementos** (cercha, cuerda, diafragma, elemento colector, elemento de borde, diagonal, muro de carga, muro estructural), los **conjuntos** (los pórticos y los cuatro sistemas del Capítulo A.3: muros de carga, combinado, pórtico y dual) y las **propiedades de comportamiento**.
+
+Dos parejas de términos se confunden con frecuencia:
+
+| Término | Qué mide |
+|---|---|
+| **Ductilidad** | Cuánta deformación más allá del límite elástico soporta el *material* sin fallar. Puede medirse en curvatura, rotación, desplazamiento o deformación unitaria. |
+| **Capacidad de disipación de energía** | Cuánta energía puede disipar el sistema, elemento o sección en ciclos histeréticos trabajando en el rango inelástico sin perder resistencia. Para el sistema completo se cuantifica con $R_0$ y, afectado por irregularidades y redundancia, con $R = \phi_a\phi_p\phi_r R_0$. |
+
+La propia definición de ductilidad advierte que muchas veces ambos términos «son confundidos». Los tres **grados de disipación** son *especial* (DES), *moderado* (DMO) y *mínimo* (DMI) y determinan los pórticos y detalles de refuerzo exigidos por los Títulos C (concreto) y F (acero).
+
+Otros pares útiles:
+
+- **Piso flexible** y **piso débil**: ambos se comparan con el piso inmediatamente superior y usan el umbral del **70 %**; el primero compara *rigidez* y el segundo *resistencia* ante fuerzas horizontales. Son la base de las irregularidades en altura (A.3.3.5).
+- **Centro de masa** y **centro de rigidez**: el primero es donde estaría la masa del piso si el diafragma fuera infinitamente rígido; el segundo, el punto donde una fuerza horizontal no produce rotación del diafragma. Si no coinciden hay torsión.
+- **Pórtico espacial**, **pórtico plano** y **pórtico para cargas verticales**: el plano solo se admite si otros elementos restringen su movimiento perpendicular y hay un diafragma que amarre el conjunto (A.3.1.5).
+- **Pórtico con diagonales concéntricas** o **excéntricas**: según si la diagonal llega al nudo viga-columna o a un punto alejado de él (solo acero).
+- **Reticular celulado** y **pórtico losa-columna**: sistemas en los que la losa hace de viga; la norma advierte que tienen «numerosas restricciones» de uso.
+
+### Análisis y fuerzas
+
+Reúne el vocabulario del cálculo: *espectro* (la colección de valores máximos de aceleración, velocidad o desplazamiento de los sistemas de un grado de libertad), *espectro de diseño*, *modos de vibración* y *modo fundamental*, *análisis dinámico elástico e inelástico*, *análisis modal* y *espectral*, *plastificación progresiva* (el método «push-over» del [Apéndice A-3](/titulo-a/apendice-a3)) y los tres **métodos de análisis**: fuerza horizontal equivalente, dinámico elástico y dinámico inelástico (Capítulos [A.4](/titulo-a/a4) y A.5).
+
+Cuatro definiciones de fuerzas conviene tenerlas siempre a mano:
+
+| Término | Definición breve |
+|---|---|
+| **Cortante en la base**, $V_s$ | Suma algebraica, tomada en la base, de todas las fuerzas sísmicas horizontales del edificio. |
+| **Cortante de piso**, $V_x$ | Suma algebraica de las fuerzas sísmicas horizontales que actúan **por encima** del piso considerado. |
+| **Rigidez de piso** | Cociente entre el cortante de piso $V_x$ y la deriva que ese cortante produce en el piso. |
+| **Efectos P-Delta** | Efectos de segundo orden causados por las cargas verticales al desplazarse horizontalmente la edificación. |
+
+### Deriva y separación
+
+Son los términos que se usan en las verificaciones del Capítulo [A.6](/titulo-a/a6):
+
+- **Deriva de piso**: diferencia entre los desplazamientos horizontales de los niveles entre los que está comprendido el piso. Es una **longitud** (m).
+- **Índice de deriva**: la deriva dividida por la altura del piso. Es **adimensional** y es lo que se compara con los límites de la Tabla A.6.4-1.
+- **Altura del piso**: distancia vertical entre los terminados de las losas de dos niveles consecutivos; si pasa de **6 m**, el piso cuenta como **dos pisos** para efectos de calcular el número de pisos.
+- **Número de pisos aéreos**: número de losas de entrepiso aéreas (cuenta la cubierta como una losa; no cuenta sótanos; una losa aérea es la que no toca el terreno en ningún punto).
+- **Separación sísmica en la colindancia**: distancia horizontal, perpendicular al plano vertical levantado sobre el lindero, medida desde la losa de entrepiso de la edificación hasta ese plano. Junto con la *coincidencia de las losas de entrepiso* y la *altura en la colindancia*, define cuánto debe retirarse una construcción nueva de su vecina (A.6.5.2).
+
+<Ejemplo numero={2} titulo="Contar pisos aéreos con las definiciones de A.13.1">
+Un edificio sin sótanos tiene cinco pisos con alturas de {edificio.pisos.join(' m, ')} m (medidas entre terminados de losa; la última llega al nivel de la impermeabilización de la cubierta). ¿Cuántos pisos aéreos cuenta la norma y qué altura total tiene?
+
+<Paso titulo="Aplicar la regla de los 6 m a cada piso" ref="Altura del piso; Número de pisos aéreos de la edificación">
+Un piso con altura mayor de 6 m cuenta como dos. Aquí solo el cuarto piso ({edificio.pisos[3]} m) supera 6 m, así que los cinco pisos cuentan: {edificio.cuentan.join(' + ')} = **{edificio.total}**.
+</Paso>
+<Paso titulo="Verificar que la cubierta se cuenta y no hay sótanos" ref="Número de pisos aéreos de la edificación">
+La cubierta se cuenta como una losa de entrepiso aérea, y el edificio no tiene sótanos. Cada piso termina en una losa que no toca el terreno, así que el número de pisos aéreos de la edificación es **{edificio.total}**.
+</Paso>
+<Paso titulo="Altura total">
+$h_n$ = {edificio.pisos.join(' + ')} = **{edificio.hn.toFixed(1)} m**. Ojo: este valor (altura real) es el que entra en $T_a = C_t h_n^\alpha$; el «conteo doble» de los pisos de más de 6 m se aplica al calcular el **número de pisos** (por ejemplo, en la separación sísmica de A.6.5.2), no a la altura.
+</Paso>
+<Resultado>
+{edificio.total} pisos aéreos para la separación sísmica y {edificio.hn.toFixed(1)} m de altura para el período. Son dos usos distintos de la misma geometría.
+</Resultado>
+</Ejemplo>
+
+### Elementos no estructurales
+
+Un **elemento no estructural** es un componente de la edificación que no hace parte de la estructura ni de su cimentación. Los *acabados* son la misma idea (la definición de uno remite a la del otro); un *apéndice* es un elemento no estructural que **sobresale** del volumen general (antepechos, marquesinas, ornamentos). Los *muros divisorios o particiones* no cumplen función estructural y los *cerramientos* son muros en el paramento del lote, separados de la edificación, de hasta 4 m de altura.
+
+El **desempeño** de los elementos no estructurales ante un sismo se clasifica en tres grados (Capítulo [A.9](/titulo-a/a9)):
+
+| Grado | Daño esperado |
+|---|---|
+| **Superior** | Mínimo; no interfiere en ningún aspecto con la operación de la edificación. |
+| **Bueno** | Totalmente reparable; puede haber alguna interferencia con la operación posterior al sismo. |
+| **Bajo** | Daños graves, inclusive no reparables. |
+
+### Existentes, vulnerabilidad y riesgo
+
+Aquí caben la *vulnerabilidad* (cuantificación del potencial de mal comportamiento de una edificación ante una solicitación) y el *riesgo sísmico* (consecuencias económicas y sociales, en términos monetarios o de víctimas, para un sitio dado un tiempo de exposición y una probabilidad de excedencia). El *sismo de seguridad limitada* es el movimiento alternativo para evaluar e intervenir ciertas estructuras existentes con las limitaciones de A.10.3 (Capítulo [A.10](/titulo-a/a10)).
+
+<Callout tipo="nota" titulo="Amenaza, vulnerabilidad y riesgo no son sinónimos">
+Con las tres definiciones de la norma se obtiene el esquema clásico: la **amenaza** es el sismo esperado en el sitio; la **vulnerabilidad** es qué tan mal se comporta la edificación ante él; el **riesgo** es la consecuencia económica y social que resulta de combinar ambos.
+</Callout>
+
+### Profesionales y proceso
+
+La NSR-10 asigna **responsabilidades personales** y por eso define cada rol con precisión:
+
+| Rol (definición de A.13.1) | Quién puede ser | Qué hace |
+|---|---|---|
+| **Diseñador estructural** | Ingeniero civil facultado | Responde por el diseño y los planos estructurales; los firma o rotula. |
+| **Diseñador arquitectónico** | Arquitecto | Responde por el diseño y los planos arquitectónicos. |
+| **Diseñador de los elementos no estructurales** | Profesional facultado | Responde por el diseño y los planos de los elementos no estructurales. |
+| **Ingeniero geotecnista** | Ingeniero civil | Firma el estudio geotécnico: parámetros de cimentación, amplificación por suelo e interacción suelo-estructura. |
+| **Revisor de los diseños** | Ingeniero civil independiente laboralmente del diseñador (o arquitecto, ingeniero civil o mecánico para los no estructurales) | Revisa diseños y estudios dentro del trámite de la licencia. |
+| **Constructor** | Ingeniero civil, arquitecto o constructor en arquitectura e ingeniería | Responde por la construcción. |
+| **Interventor** | Ingeniero civil, arquitecto o constructor en arquitectura e ingeniería | Representa al propietario y verifica el cumplimiento de reglamentos, planos y especificaciones; puede incluir cuantificación de obra y tareas administrativas. |
+| **Supervisor técnico** | Ingeniero civil, arquitecto o constructor en arquitectura e ingeniería | Realiza la supervisión técnica (Título I); puede ser la misma persona que el interventor. |
+
+Alrededor de ellos están la *licencia de construcción* (acto que autoriza la obra), el *propietario* (a cuyo nombre se expide la licencia) y el *sello seco registrado* (marca realzada sobre el plano que reemplaza la firma e incluye nombre, profesión y matrícula profesional). El flujo completo de estos actores está en el Capítulo [A.1](/titulo-a/a1).
+
+### Cargas, masa y unidades
+
+*Carga muerta* y *carga viva* remiten al Título B. La **masa** (kg) es la cantidad de materia; el **peso** es el efecto gravitacional sobre ella: masa por $g$ = 9.8 m/s², expresado en newtons. Las *solicitaciones* son «todo lo que puede afectar la estructura» (peso propio, cargas de elementos no estructurales y ocupantes, viento, sismo, asentamientos diferenciales, temperatura, efectos reológicos). Las *fuerzas mayoradas* son las multiplicadas por los coeficientes de carga de B.2.1.
+
+La última definición larga del capítulo es la del **Sistema Internacional de Medidas (SI)**: siete unidades básicas, las unidades que usa el Reglamento (m, kg, s, rad, Hz, N, Pa, J), los prefijos de exa (10¹⁸) a atto (10⁻¹⁸) y once reglas de escritura (a)–(k). Están transcritas en la pestaña *Nomenclatura* del [glosario](/titulo-a/glosario). Las más frecuentes en memorias de cálculo: no se pluraliza el símbolo (kg, no kgs), se deja un espacio entre número y unidad (12.3 m/s, pero 12°C), no se omite el cero inicial (0.123) y las unidades que honran a un científico se escriben con mayúscula (N, Pa), pero sus nombres no (newton, pascal).
+
+## A.13.2 — Nomenclatura
+
+La nomenclatura lista las **variables de las ecuaciones** del Título A. Cada línea tiene la forma «símbolo = significado, dado en A.x.y», y esa remisión es lo más útil: te dice dónde se define o se usa la variable. Dos advertencias de lectura:
+
+- La tipografía **cuenta**: $A_a$ (aceleración) no es $a_x$ (aceleración en el piso $x$); $S$ (coeficiente de sitio del umbral de daño) no es $S_a$ (espectro de aceleraciones).
+- Un mismo capítulo puede reutilizar una letra con otro significado (véase «Errores comunes»); el contexto y la sección de remisión deciden.
+
+### Cómo leer un símbolo: la letra y sus subíndices
+
+Los subíndices y superíndices siguen convenciones bastante regulares:
+
+| Marca | Significa | Ejemplos |
+|---|---|---|
+| $i$, $x$ | **nivel** o piso | $h_i$, $m_x$, $F_x$, $V_x$, $\delta_i$ |
+| $j$ | **dirección** ortogonal en planta (x o y) | $V_{tj}$, $V_{mj}$, $\bar M_j$, $\Delta^i_{j}$ |
+| $m$ | **modo** de vibración | $T_m$, $S_{am}$, $V_{mj}$, $\bar M_m$, $F_{xm}$ |
+| $d$ | **umbral de daño** | $A_d$, $S_{ad}$, $E_d$, $V_{sd}$, $T_{Cd}$, $T_{Ld}$ |
+| $w$ | **muro** estructural | $A_{wi}$, $h_{wi}$, $\ell_{wi}$, $n_w$ |
+| $p$ | elemento **no estructural** | $a_p$, $F_p$, $M_p$, $R_p$ |
+| $a$, $p$, $r$ en $\phi$ | irregularidad en **altura**, en **planta** y ausencia de **redundancia** | $\phi_a$, $\phi_p$, $\phi_r$ |
+| $e$, $c$ en $\phi$ y $A$ | edificaciones **existentes** (A.10): $A_e$ seguridad limitada; $\phi_e$ estado de la estructura; $\phi_c$ calidad del diseño y la construcción | $A_e$, $\phi_e$, $\phi_c$ |
+| raya superior | valor **total, efectivo o modificado** | $\bar M_j$, $\bar M_m$, $\bar S$ |
+
+### Los símbolos por familias
+
+Para estudiar, es más cómodo agrupar los símbolos por el problema al que sirven. Cada uno tiene su definición completa en el [glosario](/titulo-a/glosario):
+
+| Familia | Símbolos | Capítulo donde se usan |
+|---|---|---|
+| **Movimiento sísmico y sitio** | $A_a$, $A_v$, $A_e$, $A_d$, $F_a$, $F_v$, $I$, $S$, $\bar S$, $A_s$, $T_s$ | A.2, A.10, A.12 |
+| **Espectros** | $S_a$, $S_v$, $S_d$, $S_{ad}$, $S_{am}$, $T_0$, $T_C$, $T_L$, $T_{Cd}$, $T_{Ld}$ | A.2, A.12 |
+| **Parámetros de suelo** | $d_i$, $d_c$, $d_s$, $H$, $v_{si}$, $N_i$, $s_{ui}$, $w$, $IP$ | A.2 |
+| **Período y fuerza horizontal equivalente** | $T$, $T_a$, $C_t$, $C_u$, $\alpha$, $k$, $V_s$, $F_x$, $C_{vx}$, $m_i$, $h_i$, $h_n$, $M$, $g$ | A.4 |
+| **Capacidad de disipación de energía** | $R$, $R_0$, $\phi_a$, $\phi_p$, $\phi_r$, $\Omega_0$, $R_C$, $R'$, $\phi_e$, $\phi_c$ | A.3, A.10 |
+| **Deriva, torsión y estabilidad** | $\delta_i$, $\delta_{max}$, $\delta_{prom}$, $\Delta^i_{cm,j}$, $\Delta^i_{max}$, $\theta_i$, $Q_i$, $P_i$, $h^i_p$, $r_j$ | A.3, A.6 |
+| **Análisis dinámico** | $p$, $V_{mj}$, $V_{tj}$, $F_{xm}$, $\bar M_m$, $\bar M_j$, $\phi^m_{ij}$ | A.5 |
+| **Elementos no estructurales** | $a_p$, $a_x$, $F_p$, $R_p$, $M_p$ | A.8, A.9 |
+| **Muros** (período por $C_w$) | $A_{wi}$, $h_{wi}$, $\ell_{wi}$, $n_w$, $A_B$ | A.4 |
+
+<Callout tipo="atencion" titulo="Una variable que cambia de tipografía en el PDF">
+En la nomenclatura del PDF, la longitud del muro aparece como $\ell_{wi}$ (con una «ele» cursiva), pero el texto extraído del PDF la lee como «Awi», idéntica al área $A_{wi}$ de la línea de arriba. Son dos magnitudes distintas: **$A_{wi}$ es área en m²** y **$\ell_{wi}$ es longitud en m**. El glosario de esta web las separa tal como las muestra la imagen de la página A-136.
+</Callout>
+
+<Ejemplo numero={3} titulo="Leer símbolos para calcular el período máximo permisible">
+Un edificio de pórticos de concreto tiene $h_n$ = {ej3.hn} m. Está en una zona con $A_v$ = {ej3.av} y suelo con $F_v$ = {ej3.fv.toFixed(1)}. Usando solo la nomenclatura, ubicar qué símbolos se necesitan para el período máximo permisible y calcularlo.
+
+<Paso titulo="Buscar los símbolos en A.13.2">
+- $T_a$: «período de vibración fundamental aproximado, en segundos, calculado de acuerdo con A.4.2».
+- $C_t$ y $\alpha$: coeficiente y exponente para calcular $T_a$ (A.4.2.2).
+- $C_u$: «coeficiente utilizado para calcular el período máximo permisible de la estructura» (A.4.2.1), que depende de $A_v$ y $F_v$ (A.2.2 y A.2.4.5).
+</Paso>
+<Paso titulo="Calcular el período aproximado" ref="A.4.2.2">
+Para pórticos resistentes a momentos de concreto, $C_t$ = 0.047 y $\alpha$ = 0.9:
+
+$$
+T_a = C_t\,h_n^{\alpha} = 0.047\times 15^{0.9}
+$$
+
+Resultado: $T_a$ = **{ej3.ta.toFixed(3)} s**.
+</Paso>
+<Paso titulo="Calcular Cu y el período máximo" ref="A.4.2.1">
+$C_u$ = 1.75 − 1.2 $A_v F_v$ (nunca menor de 1.2) = **{ej3.cu.toFixed(2)}**, y el período del análisis no debe superar $C_u T_a$ = **{ej3.tmax.toFixed(3)} s**.
+</Paso>
+<Resultado>
+Con solo seguir las remisiones de A.13.2 se reconstruye el cálculo: $T_a$ = {ej3.ta.toFixed(3)} s y $T_{max}$ = $C_u T_a$ = {ej3.tmax.toFixed(3)} s. El Capítulo [A.4](/titulo-a/a4) desarrolla el procedimiento completo.
+</Resultado>
+</Ejemplo>
+
+## Un mapa rápido: dónde encontrar cada cosa
+
+| Si buscas… | Ve a… |
+|---|---|
+| Qué significa un término técnico | [Glosario → Definiciones](/titulo-a/glosario) |
+| Qué variable es una letra de una fórmula | [Glosario → Nomenclatura](/titulo-a/glosario) |
+| Quién firma qué en el proceso de licencia | Tabla de roles de esta página y Capítulo [A.1](/titulo-a/a1) |
+| Cómo se relacionan Aa, Av, Fa, Fv, I | Capítulo [A.2](/titulo-a/a2) |
+| Valores de coeficientes sísmicos por municipio | [Buscador de municipios](/titulo-a/municipios) y [Apéndice A-4](/titulo-a/apendice-a4) |
+
+<Detalle titulo="Erratas y rarezas del PDF en este capítulo">
+
+Al transcribir el capítulo contra la imagen de las páginas se encontraron estas anomalías (se conservan tal cual en el glosario, salvo indicación):
+
+- **$F_s$**: la nomenclatura dice «fuerzas sísmicas, véase A.3.1.1, o fuerzas sísmicas equivalentes, véase» y la frase queda **sin completar** en el PDF (falta la sección).
+- **$\ell_{wi}$ y $A_{wi}$**: ver el aviso anterior; el texto extraído confunde la longitud con el área.
+- **$E$**: la imagen muestra $E = F_s/R$ y $E = F_p/R_p$ como fracciones; la extracción de texto pierde la barra de división.
+- **$N_i$**: «número de golpes por píe» (sic, por «pie»).
+- **$P_i$**: «no hay necesidad que los coeficientes de carga de sean mayores que la unidad» (sobra «de»).
+- **$R_p$**: «y sus sistema de soporte» (concordancia).
+- **Reticular celulado / cedulado**: la definición de *pórtico losa-columna* remite a «reticular **cedulado**», pero el término se define como «reticular **celulado**».
+- **Otras erratas menores**: «equipamentos», «Pórtico para carga verticales», «el candela», «píe», «no esta en contacto».
+- **Sismo de seguridad limitada** se escribe con guion corto («-») en lugar de raya («—»); no tiene efecto.
+- Las definiciones de **DMO** (Capítulo F.3) y **DMI** (F.1 y F.2) para acero remiten a capítulos del Título F tal como están en el PDF; se conservan sin modificar.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Confundir deriva con índice de deriva**: la primera es una longitud (m); el segundo, el cociente deriva/altura de piso, y es el que se compara con el límite de la Tabla A.6.4-1.
+- **Usar la altura real donde la norma pide el número de pisos** (o al revés): un piso de más de 6 m cuenta como dos pisos para la separación sísmica, pero su altura real entra en $h_n$ y en $T_a$.
+- **Tomar la misma letra por la misma variable** en capítulos distintos: $N$ es el número de pisos, pero $N_i$ es el número de golpes del SPT y $N_{ef}$/$N_{ex}$ son resistencias efectivas y existentes (A.10); $k$ es el exponente del período en A.4.3.2 pero también el número de estratos cohesivos en $d_c$; $m$ es el modo en A.5 y el número de estratos no cohesivos en $d_s$; $S$ es el coeficiente de sitio del umbral de daño y $S_a$ el espectro.
+- **Mezclar $F_i$ con $f_i$**: $f_i$ es la fuerza horizontal para calcular el período con la ecuación A.4.2-1; $F_i$ y $F_x$ son las fuerzas horizontales sísmicas de diseño.
+- **Pensar que ductilidad y disipación de energía son lo mismo**: la propia norma avisa que son términos que se confunden.
+- **Interpretar el 70 %** de piso flexible y piso débil como el mismo criterio: uno compara rigideces y el otro resistencias.
+- **Copiar un símbolo sin su subíndice**: $T$, $T_a$, $T_C$ y $T_L$ son períodos distintos (fundamental, aproximado, de transición del espectro y de inicio de desplazamiento constante).
+</Callout>
+
+## Resumen en una línea
+
+**A.13 es el diccionario del Título A: ante cualquier duda de significado, la definición de A.13.1 manda, y cada letra de una fórmula se descifra con A.13.2 y la sección a la que remite.** Búscalas en el [glosario interactivo](/titulo-a/glosario).

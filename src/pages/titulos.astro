@@ -1,0 +1,35 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { TITULOS } from '../data/titulos';
+---
+
+<BaseLayout title="Títulos de la NSR-10" description="Los once Títulos (A–K) del Reglamento Colombiano de Construcción Sismo Resistente NSR-10. El Título A está disponible; los demás llegarán pronto.">
+  <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6">
+    <h1 class="text-3xl font-bold tracking-tight">Títulos de la NSR-10</h1>
+    <p class="mt-2 max-w-3xl text-muted-foreground">
+      El Reglamento se organiza en once Títulos. Cada uno cubre un tema de diseño y construcción; el Título A es la base
+      sismo resistente sobre la que se apoyan los demás.
+    </p>
+    <ul class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {
+        TITULOS.map((t) => (
+          <li>
+            <a
+              href={`/${t.slug}`}
+              class="group flex h-full flex-col rounded-xl border bg-card p-5 transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+            >
+              <div class="flex items-center justify-between">
+                <span class={`text-4xl font-black ${t.acento}`}>{t.letra}</span>
+                <span class:list={['rounded-full px-2 py-0.5 text-xs', t.estado === 'disponible' ? 'bg-ok/15 text-ok' : 'bg-muted text-muted-foreground']}>
+                  {t.estado === 'disponible' ? 'Disponible' : 'Próximamente'}
+                </span>
+              </div>
+              <h2 class="mt-3 text-lg font-semibold leading-snug group-hover:text-primary">Título {t.letra} — {t.nombre}</h2>
+              <p class="mt-2 text-sm text-muted-foreground">{t.resumen}</p>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</BaseLayout>

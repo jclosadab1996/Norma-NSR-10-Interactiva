@@ -1,0 +1,27 @@
+---
+/** Figura de la norma (recorte de página) o diagrama, con pie y fuente. */
+interface Props {
+  src?: string;
+  alt: string;
+  /** "Figura A.2.3-2" */
+  numero?: string;
+  pie: string;
+  pag?: string;
+}
+const { src, alt, numero, pie, pag } = Astro.props;
+---
+
+<figure class="not-prose my-6 overflow-hidden rounded-xl border bg-card">
+  {
+    src ? (
+      <div class="bg-white p-2 dark:bg-white">
+        <img src={src} alt={alt} loading="lazy" class="mx-auto h-auto max-h-[70vh] w-auto max-w-full" />
+      </div>
+    ) : (
+      <div class="p-3"><slot /></div>
+    )
+  }
+  <figcaption class="border-t bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+    {numero && <strong class="text-foreground">{numero} — </strong>}{pie}{pag && <span class="ml-2 font-mono">(Norma p. {pag})</span>}
+  </figcaption>
+</figure>

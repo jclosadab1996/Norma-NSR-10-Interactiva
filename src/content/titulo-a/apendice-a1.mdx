@@ -1,0 +1,164 @@
+---
+codigo: 'A-1'
+tipo: apendice
+titulo: 'Recomendaciones sísmicas para estructuras que se salen del alcance'
+resumen: 'Guía no obligatoria para dar fuerzas sísmicas de diseño a tanques, silos, chimeneas, torres, vallas y otras estructuras que no son edificaciones, con la Tabla A-1.3-1 de coeficientes R0.'
+objetivos:
+  - 'Reconocer qué estructuras cubre el apéndice y por qué sus recomendaciones no son obligatorias'
+  - 'Seguir el procedimiento: período, movimiento de diseño, masa, coeficiente de importancia, R0 y deriva'
+  - 'Leer la Tabla A-1.3-1 y obtener R0 para cada tipo de estructura especial'
+  - 'Calcular el cortante sísmico de diseño de una estructura especial sencilla (tanque elevado)'
+paginasNorma: 'A-139 a A-140'
+paginaPdf: 183
+orden: 14
+calculadoras: ['espectro-diseno']
+nivel: 'intermedio'
+---
+
+import { sa, periodosEspectro, mesetaSa, coeficienteFa, coeficienteFv, coeficienteImportancia } from '../../lib/nsr10';
+import { G } from '../../lib/nsr10/fuerzaHorizontal';
+
+export const ej = (() => {
+  const aa = 0.15, av = 0.2;
+  const fa = coeficienteFa('D', aa), fv = coeficienteFv('D', av);
+  const i = coeficienteImportancia('I');
+  const p = { aa, av, fa, fv, i };
+  const t = 0.6;
+  const masa = 125000;
+  const saT = sa(t, p);
+  const vs = saT * G * masa;
+  const w = masa * G;
+  const r0 = 2.0;
+  return { aa, av, fa, fv, i, p, t, masa, saT, vs, w, r0, per: periodosEspectro(p), meseta: mesetaSa(p), e: vs / r0, ratio: vs / w };
+})();
+
+## Idea central del apéndice
+
+La NSR-10 está escrita para **edificaciones**. Pero la vida real tiene tanques elevados, silos, chimeneas, torres de enfriamiento, vallas publicitarias, tolvas o monumentos, y alguien tiene que decidir con qué fuerza sísmica se diseñan. El Apéndice A-1 da una respuesta práctica: **usa el procedimiento de la norma (movimiento de diseño de A.2, métodos de A.4 o A.5) con tres ajustes**: la masa incluye el contenido, el coeficiente de importancia normalmente es 1.0 y el coeficiente de disipación de energía sale de una tabla propia (Tabla A-1.3-1).
+
+<Callout tipo="importante" titulo="No es obligatorio">
+El propio apéndice dice que estas recomendaciones «no tienen carácter obligatorio, y se incluyen únicamente por razones ilustrativas» (<NormaRef s="A-1.1.1" pag="A-139" />). No hay norma sismo resistente colombiana obligatoria para estas estructuras: el diseñador responde por su criterio. Como referencia complementaria se cita la **Norma AIS-180** (2010) de la Asociación Colombiana de Ingeniería Sísmica, traducción y adaptación del Capítulo 14 del NEHRP 2003, que trata en detalle tanques, recipientes y silos.
+</Callout>
+
+## A-1.0 — Nomenclatura
+
+El apéndice usa pocos símbolos; casi todos son los mismos del Capítulo A.13 con una diferencia en la masa:
+
+| Símbolo | Significado en A-1 |
+|---|---|
+| $g$ | Aceleración de la gravedad, 9.8 m/s² |
+| $I$ | Coeficiente de importancia, dado en A.2.5.2 |
+| $M$ | Masa total: la de la estructura **más su contenido**. En tanques, silos y almacenamientos incluye el contenido operacional normal |
+| $R_0$ | Coeficiente de capacidad de disipación de energía básico (aquí, de la Tabla A-1.3-1) |
+| $R$ | Coeficiente de disipación de energía de diseño, $R = \phi_a\phi_p\phi_r R_0$ |
+| $T$ | Período fundamental de la estructura |
+| $W$ | Peso total, $W = M g$ |
+
+## A-1.1 — General
+
+- **Propósito** (<NormaRef s="A-1.1.1" pag="A-139" />): dar recomendaciones para determinar las fuerzas sísmicas de diseño de estructuras especiales no cubiertas por el alcance de las Normas Sismo Resistentes Colombianas.
+- **Alcance** (<NormaRef s="A-1.1.2" pag="A-139" />): construcciones que se salen del alcance de la Ley 400 de 1997. Los parámetros se dan de forma compatible con lo que la norma pide para edificaciones.
+- **Requisitos aplicables** (<NormaRef s="A-1.1.3" pag="A-139" />): en general se recomienda seguir el Reglamento con las excepciones del apéndice.
+
+<Callout tipo="atencion" titulo="El viento puede gobernar">
+La norma advierte que debe tenerse «especial cuidado con las fuerzas de viento sobre estas estructuras especiales, pues en muchos casos son mayores que las fuerzas sísmicas» (<NormaRef s="A-1.1.3" pag="A-139" />). Una chimenea, una valla o un tanque vacío son esbeltos y livianos: revisa el viento (Título B) antes de dar por bueno el diseño sísmico.
+</Callout>
+
+## A-1.2 — Período fundamental de la estructura
+
+El período $T$ debe obtenerse de las propiedades del sistema de resistencia sísmica, en la dirección que se estudia, **con los principios de la dinámica estructural y un modelo linealmente elástico** (<NormaRef s="A-1.2.1" pag="A-139" />). Se admite satisfacer este requisito con la ecuación A.4.2-1 (el cálculo con desplazamientos de un análisis estático). A diferencia de las edificaciones, **no existe una fórmula aproximada $C_t h_n^\alpha$** para estas estructuras: hay que calcularlo.
+
+## A-1.3 — Cálculo de las fuerzas sísmicas de diseño
+
+El apéndice no crea un método nuevo: remite a los existentes con cinco precisiones.
+
+| Sección | Qué dice |
+|---|---|
+| **A-1.3.1** Movimientos sísmicos | Usar la definición de A.2 (probabilidad de 10 % de excedencia en 50 años) |
+| **A-1.3.2** Masa total $M$ | Incluye todas las cargas muertas y la masa del **contenido operacional normal**, en especial en tanques, silos y otras estructuras de almacenamiento |
+| **A-1.3.3** Coeficiente de importancia $I$ | $I$ = 1.0, salvo que la estructura sea parte de, o pueda afectar a, edificaciones de los grupos de uso II, III o IV. Si pertenece a un sistema de líneas vitales, se define según la redundancia del sistema y el potencial de que su falla afecte a edificaciones indispensables |
+| **A-1.3.4** Distribución en la altura | Cualquiera de los procedimientos de los Capítulos A.4 o A.5 |
+| **A-1.3.5** $R_0$ | Se recomiendan los valores de la Tabla A-1.3-1 |
+
+<TablaNorma numero="Tabla A-1.3-1" titulo="Coeficiente de capacidad de disipación de energía R0 para algunas estructuras especiales" pag="A-140" nota="Verificada contra la imagen de la página: el texto extraído del PDF desalinea los valores respecto a las filas.">
+
+| Tipo de estructura | $R_0$ |
+|---|---:|
+| Tanques, contenedores de líquidos y gases a presión, apoyados sobre columnas arriostradas, con diagonales, o no | 2.0 |
+| Silos y chimeneas de concreto reforzado vaciado en sitio, cuyas paredes son continuas hasta la fundación | 3.5 |
+| Estructuras en forma de torre cuya masa está distribuida en la altura, tales como chimeneas, silos y tanques, cuyos apoyos consisten en faldones | 3.0 |
+| Torres en celosía, autoportantes o con templetes, chimeneas y torres con templetes | 3.0 |
+| Estructuras de tipo péndulo invertido | 2.0 |
+| Tolvas sobre columnas, con o sin contravientos | 3.0 |
+| Torres de enfriamiento | 3.5 |
+| Torres o anaqueles de almacenamiento | 3.0 |
+| Avisos y vallas publicitarias | 3.5 |
+| Monumentos y estructuras de parques de diversión | 2.0 |
+| Otras estructuras autoportantes, no incluidas anteriormente | 3.0 |
+
+</TablaNorma>
+
+La norma no explica el criterio de los valores, que van de 2.0 a 3.5. Compáralos con los $R_0$ de edificaciones de las Tablas A.3-1 a A.3-4, que llegan a 8.0 en los sistemas duales con capacidad especial de disipación de energía (DES): estas estructuras especiales se diseñan **para fuerzas mucho mayores** que un edificio dúctil, porque tienen menos redundancia y menos reserva de capacidad.
+
+<Callout tipo="nota" titulo="¿Y los φ de irregularidad y redundancia?">
+El apéndice define $R = \phi_a\phi_p\phi_r R_0$ en su nomenclatura, pero la sección A-1.3.5 solo recomienda valores de $R_0$ y no explica si se aplican los coeficientes de reducción por irregularidad o ausencia de redundancia. Lo prudente es aplicar el criterio del Capítulo A.3 cuando la estructura sea claramente irregular o carezca de redundancia (un tanque sobre cuatro columnas es el caso típico); si no se justifica ninguna reducción, $R = R_0$.
+</Callout>
+
+## A-1.4 — Requisitos de deriva
+
+Los límites de deriva del Capítulo A.6 **no se aplican directamente** a estas estructuras. El diseñador debe establecer los límites «tomando en cuenta el peligro que represente para la vida la falla de elementos estructurales y no estructurales» causada por los desplazamientos del sismo de diseño (<NormaRef s="A-1.4.1" pag="A-140" />). En la práctica: un tanque con tuberías rígidas conectadas, o un silo con equipos adosados, puede tolerar mucho menos desplazamiento que un edificio.
+
+<Ejemplo numero={1} titulo="Cortante sísmico de un tanque elevado">
+Un tanque elevado de acero, apoyado sobre cuatro columnas arriostradas con diagonales, se construye en Bogotá ($A_a$ = {ej.aa}, $A_v$ = {ej.av}) sobre un perfil de suelo tipo D. Tiene 100 m³ de agua en operación normal y 25 000 kg de estructura. Un análisis dinámico con el modelo elástico da $T$ = {ej.t} s. No hay edificaciones del grupo II, III o IV que dependan de él. Calcular el cortante sísmico de diseño en la base.
+
+<Paso titulo="Movimiento de diseño y coeficientes de sitio" ref="A-1.3.1, A.2.4">
+Con el perfil D: $F_a$ = {ej.fa.toFixed(2)} (interpolado) y $F_v$ = {ej.fv.toFixed(2)}. El espectro tiene $T_C$ = {ej.per.tc.toFixed(3)} s, así que $T$ = {ej.t} s cae en la meseta.
+</Paso>
+<Paso titulo="Coeficiente de importancia" ref="A-1.3.3">
+No es parte ni afecta a edificaciones de los grupos II, III o IV, por lo que $I$ = **{ej.i.toFixed(2)}**.
+</Paso>
+<Paso titulo="Masa total, con el contenido" ref="A-1.3.2">
+$M$ = 100 000 kg (agua) + 25 000 kg (estructura) = **{ej.masa.toFixed(0)} kg**; peso $W = Mg$ = {(ej.w / 1000).toFixed(0)} kN.
+</Paso>
+<Paso titulo="Aceleración espectral" ref="A.2.6-3">
+
+$$
+S_a = 2.5\,A_a F_a I = 2.5\times 0.15\times 1.5\times 1.0
+$$
+
+Resultado: $S_a$ = **{ej.saT.toFixed(4)} g**.
+
+</Paso>
+<Paso titulo="Cortante en la base elástico" ref="A.4.3-1">
+
+$$
+V_s = S_a\,g\,M
+$$
+
+Resultado: $V_s$ = {ej.saT.toFixed(4)} × 9.8 × {ej.masa.toFixed(0)} = **{(ej.vs / 1000).toFixed(1)} kN** (el {(ej.ratio * 100).toFixed(1)} % del peso).
+
+</Paso>
+<Paso titulo="Reducción por disipación de energía" ref="Tabla A-1.3-1">
+Tanque sobre columnas arriostradas: $R_0$ = **{ej.r0.toFixed(1)}**. Sin irregularidades ni falta de redundancia que justifiquen reducirlo, $R$ = $R_0$ y las fuerzas de diseño son $E = V_s/R$ = {(ej.vs / 1000).toFixed(1)}/{ej.r0.toFixed(1)} = **{(ej.e / 1000).toFixed(1)} kN**.
+</Paso>
+<Resultado>
+Cortante elástico de {(ej.vs / 1000).toFixed(0)} kN y cortante reducido de diseño de {(ej.e / 1000).toFixed(0)} kN. Con $R_0$ tan bajo (2.0), el tanque se diseña para casi la mitad de la fuerza elástica: es una estructura de poca reserva y, como la norma advierte, hay que comparar el resultado con la fuerza de viento. Prueba tus propios datos:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="espectro-diseno" />
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Tratar el apéndice como obligatorio** o, al contrario, ignorarlo: es una guía técnica razonable que respalda el criterio del diseñador, pero no sustituye su responsabilidad.
+- **Olvidar el contenido en la masa**: un tanque lleno puede pesar varias veces más que su estructura vacía, y el sismo actúa sobre toda la masa.
+- **Usar la ecuación $C_t h_n^\alpha$** para estimar el período de un tanque o una chimenea: esa fórmula es para edificaciones; aquí $T$ se calcula con un modelo elástico.
+- **Aplicar los límites de deriva de A.6** sin análisis: el apéndice exige que los fije el diseñador.
+- **No revisar el viento**: en estructuras esbeltas o livianas puede producir fuerzas mayores que el sismo.
+- **Tomar $I$ = 1.0 sin preguntar si la estructura alimenta una edificación indispensable** (un tanque que abastece un hospital, por ejemplo).
+</Callout>
+
+## Resumen en una línea
+
+**Para una estructura que no es edificación: movimiento de diseño de A.2, masa con su contenido, $I$ = 1.0 (salvo que afecte edificaciones importantes), $R_0$ de la Tabla A-1.3-1, distribución con A.4 o A.5, deriva fijada por el diseñador, y no olvides el viento.**

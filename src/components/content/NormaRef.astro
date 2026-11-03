@@ -1,0 +1,19 @@
+---
+/**
+ * Chip en línea que cita una sección, tabla, figura o ecuación de la norma.
+ * Uso: <NormaRef s="A.2.6" /> · <NormaRef s="Tabla A.2.4-3" pag="A-23" />
+ */
+interface Props {
+  s: string;
+  /** Página impresa de la norma (p. ej. "A-23"). */
+  pag?: string;
+}
+const { s, pag } = Astro.props;
+---
+
+<span
+  class="not-prose mx-0.5 inline-flex items-baseline gap-1 whitespace-nowrap rounded-md border bg-muted px-1.5 py-0.5 align-baseline font-mono text-[0.78em] font-medium text-foreground/80"
+  title={pag ? `${s} — página ${pag} de la norma` : `Norma NSR-10, ${s}`}
+>
+  <span aria-hidden="true">§</span>{s}{pag && <span class="text-muted-foreground">· p.{pag}</span>}
+</span>

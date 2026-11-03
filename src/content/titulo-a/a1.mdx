@@ -1,0 +1,379 @@
+---
+codigo: 'A.1'
+tipo: capitulo
+titulo: 'Introducción'
+resumen: 'Qué normas rigen el diseño sismo resistente en Colombia, cómo se organiza la NSR-10, cuál es el procedimiento de diseño y construcción de una edificación en 12 pasos y qué profesional responde por cada documento.'
+objetivos:
+  - 'Identificar las normas que componen el régimen sismo resistente colombiano y el alcance (y las excepciones) de la NSR-10'
+  - 'Seguir los 12 pasos del procedimiento de diseño estructural de la Tabla A.1.3-1 y saber en qué capítulo se desarrolla cada uno'
+  - 'Saber qué estudios, planos y memorias exige la licencia de construcción y quién debe firmarlos'
+  - 'Determinar cuándo es obligatoria la supervisión técnica y cuándo se aplican los requisitos especiales de edificaciones indispensables'
+paginasNorma: 'A-1 a A-12'
+paginaPdf: 44
+orden: 1
+calculadoras: []
+nivel: 'basico'
+---
+
+## Idea central del capítulo
+
+El Capítulo A.1 es la **puerta de entrada** a la NSR-10. No trae ecuaciones de diseño: responde preguntas de contexto y de procedimiento que todo proyecto debe resolver antes de calcular nada.
+
+1. **¿Qué norma aplica?** La NSR-10 es parte de un conjunto de normas (Ley 400 de 1997, Ley 1229 de 2008 y resoluciones de la Comisión Asesora Permanente) y solo cubre *edificaciones*.
+2. **¿Qué se espera de una edificación?** Resistir sismos pequeños sin daño, moderados sin daño estructural y uno fuerte sin colapso.
+3. **¿En qué orden se hace el trabajo?** Un procedimiento de **12 pasos** (Tabla A.1.3-1) que conecta los Capítulos A.2 a A.9 y los Títulos B a K.
+4. **¿Quién firma qué?** Cada estudio, plano y memoria tiene un profesional responsable, y la construcción puede requerir **supervisión técnica**.
+
+<Callout tipo="importante" titulo="Objetivo declarado de la norma">
+La NSR-10 busca **reducir al mínimo el riesgo de pérdida de vidas humanas** y defender, en lo posible, el patrimonio del Estado y de los ciudadanos (<NormaRef s="A.1.2.2.1" pag="A-1" />). La protección del patrimonio es un beneficio secundario: se permite "en alguna medida", no se garantiza (<NormaRef s="A.1.2.2.3" pag="A-2" />).
+</Callout>
+
+## A.1.1 — Normas sismo resistentes colombianas
+
+El diseño, la construcción y la supervisión técnica de edificaciones en el territorio colombiano deben someterse a las **Normas Sismo Resistentes Colombianas**, que comprenden cuatro instrumentos (<NormaRef s="A.1.1.1" pag="A-1" />):
+
+| Instrumento | Papel |
+|---|---|
+| **Ley 400 de 1997** | Ley marco: define quién puede diseñar, revisar, construir y supervisar, y las responsabilidades de cada uno. Crea la Comisión Asesora Permanente (art. 39). |
+| **Ley 1229 de 2008** | Reconoce a los *constructores en arquitectura o ingeniería*, facultados para dirigir la construcción y, en su caso, supervisarla (<NormaRef s="A.1.3.8" pag="A-7" /> y <NormaRef s="A.1.3.9.4" pag="A-8" />). |
+| **NSR-10** | Reglamento técnico: los criterios y requisitos mínimos de diseño y construcción (este documento). |
+| **Resoluciones de la Comisión Asesora Permanente** | Aclaraciones y ajustes del Gobierno Nacional; la Comisión está adscrita al ministerio responsable de vivienda y ambiente. |
+
+## A.1.2 — Organización del reglamento
+
+### A.1.2.1 — Temario
+
+La NSR-10 se divide en once Títulos, como ordena el artículo 47 de la Ley 400 (<NormaRef s="A.1.2.1" pag="A-1" />). Este sitio desarrolla el **Título A**; los demás se citan constantemente desde él:
+
+| Título | Contenido | Dónde aparece en el procedimiento de diseño |
+|---|---|---|
+| **A** | Requisitos generales de diseño y construcción sismo resistente | Pasos 3 a 10 |
+| **B** | Cargas | Pasos 2 y 11 (combinaciones de carga, Capítulo B.2) |
+| **C** | Concreto estructural | Paso 12 |
+| **D** | Mampostería estructural | Paso 12 |
+| **E** | Casas de uno y dos pisos | Alternativa simplificada (A.1.3.11) |
+| **F** | Estructuras metálicas | Paso 12 |
+| **G** | Estructuras de madera y de guadúa | Paso 12 |
+| **H** | Estudios geotécnicos | Estudio geotécnico y cimentación (A.1.3.2 y A.1.3.5) |
+| **I** | Supervisión técnica | Construcción (A.1.3.9) |
+| **J** | Requisitos de protección contra el fuego | Diseño arquitectónico (A.1.3.3) |
+| **K** | Otros requisitos complementarios | Diseño arquitectónico (A.1.3.3) |
+
+### A.1.2.2 — Objeto: qué se espera de una edificación
+
+Una edificación diseñada con la NSR-10, además de resistir las fuerzas propias de su uso, debe comportarse así (<NormaRef s="A.1.2.2.2" pag="A-2" />):
+
+| Intensidad del temblor | Comportamiento esperado |
+|---|---|
+| **Poca intensidad** | Sin daño |
+| **Moderado** | Sin daño estructural, posiblemente con algún daño en elementos no estructurales |
+| **Fuerte** (el sismo de diseño) | Daños estructurales y no estructurales, **pero sin colapso** |
+
+Ante un sismo fuerte equivalente al de diseño deben esperarse daños **reparables**, aunque en algunos casos reparar no sea económicamente factible (<NormaRef s="A.1.2.2.4" />). Para las edificaciones **indispensables y de atención a la comunidad** (grupos de uso IV y III, Capítulo A.2) el daño debe ser reparable y *no tan severo que impida la operación y ocupación inmediata y continuada* (<NormaRef s="A.1.2.2.5" />).
+
+<Callout tipo="nota" titulo="Los movimientos de diseño son mínimos">
+Los movimientos sísmicos de diseño corresponden a **requisitos mínimos** para el diseño de elementos estructurales y no estructurales (<NormaRef s="A.1.2.2.3" />). Un propietario puede exigir más que la norma; nunca menos.
+</Callout>
+
+### A.1.2.3 — Alcance
+
+La NSR-10 contiene:
+
+- **Edificaciones nuevas** (A.1.2.3.1): requisitos mínimos para resistir las fuerzas de la naturaleza y del uso y para incrementar la resistencia ante sismos. El **Título E** ofrece requisitos simplificados para casas de uno y dos pisos del grupo de uso I.
+- **Edificaciones existentes** (A.1.2.3.2): el Capítulo A.10 regula la evaluación, adición, modificación y remodelación, el análisis de vulnerabilidad, el reforzamiento y la reparación después de un sismo.
+- **Edificaciones indispensables** (A.1.2.3.3): el Capítulo A.12 fija requisitos especiales para el grupo de uso IV y para los literales (a) a (d) del grupo III. Para los literales (e) y (f) del grupo III, el propietario (caso e) o la autoridad competente (caso f) decide si se aplica el A.12.
+
+### A.1.2.4 — Excepciones
+
+La NSR-10 se aplica a **edificaciones** (construcciones cuyo uso primordial es la habitación u ocupación por seres humanos). **No** se aplica a (<NormaRef s="A.1.2.4" pag="A-2" />):
+
+| Excepción | Qué hacer |
+|---|---|
+| Estructuras especiales: puentes, torres de transmisión, torres y equipos industriales, muelles, estructuras hidráulicas y toda construcción distinta de una edificación (A.1.2.4.1) | Fuera del alcance |
+| Estructuras cuyo comportamiento dinámico difiere del de edificaciones convencionales (A.1.2.4.2) | Si se habitan u ocupan, aplica el Capítulo II (arts. 8 a 14) de la Ley 400 |
+| Estructuras fuera de las limitaciones de cada material (A.1.2.4.3) | Igual: arts. 8 a 14 de la Ley 400 |
+
+Para el diseño sismo resistente de algunas estructuras que se salen del alcance se puede consultar el **Apéndice A-1**, que **no tiene carácter obligatorio** (<NormaRef s="A.1.2.4.4" pag="A-2" />).
+
+### A.1.2.5 — Definiciones
+
+Los términos del Título A se definen en el **Capítulo A.13** (<NormaRef s="A.1.2.5" pag="A-3" />). Allí están, por ejemplo, las definiciones de constructor, diseñador estructural, ingeniero geotecnista y supervisor técnico, a las que remite A.1.5.1.1.
+
+## A.1.3 — Procedimiento de diseño y construcción
+
+### A.1.3.1 — General
+
+El diseño y la construcción de una edificación deben llevarse a cabo en el orden que describen las secciones A.1.3.2 a A.1.3.13. Cada etapa se amplía en el capítulo o Título correspondiente (<NormaRef s="A.1.3.1" pag="A-3" />). La figura mental es una **cadena de responsabilidades**:
+
+<Callout tipo="practica" titulo="Cadena de un proyecto típico">
+**Estudio geotécnico** (ingeniero civil) → **diseño arquitectónico** (arquitecto) → **diseño estructural** (ingeniero civil) → **diseño de no estructurales e instalaciones** (profesionales facultados) → **revisión de diseños** (curaduría o revisor independiente) → **licencia** → **construcción** (con **supervisión técnica** si aplica).
+</Callout>
+
+### A.1.3.2 — Estudios geotécnicos
+
+Antes de diseñar, se explora el subsuelo del lugar y se consideran los alrededores para detectar posibles movimientos del terreno (<NormaRef s="A.1.3.2" pag="A-3" />). El alcance de la exploración y de los ensayos está en el **Título H**. El ingeniero geotecnista debe entregar un informe que incluya:
+
+- La exploración y los resultados de laboratorio.
+- Recomendaciones al ingeniero estructural para el diseño de la **cimentación y de las obras de contención**.
+- La definición de los **efectos sísmicos locales** (perfil de suelo, $F_a$ y $F_v$; véase el Capítulo A.2).
+- Los procedimientos constructivos que debe emplear el constructor y los aspectos especiales para el supervisor técnico.
+- Los **asentamientos esperados**, su variabilidad en el tiempo y las medidas para no afectar construcciones vecinas.
+
+El informe debe ir **firmado o rotulado por un ingeniero civil facultado** según la Ley 400.
+
+### A.1.3.3 — Diseño arquitectónico
+
+El proyecto arquitectónico debe cumplir la reglamentación urbana vigente y los Títulos J y K y, para efectos de la NSR-10, debe indicar (<NormaRef s="A.1.3.3" pag="A-3" />):
+
+- El **uso de cada parte** de la edificación y su **grupo de uso** (Capítulo A.2).
+- El **tipo de cada elemento no estructural** y su **grado de desempeño mínimo** (Capítulo A.9).
+
+Lo firma un **arquitecto con matrícula profesional vigente**. Si los planos arquitectónicos incluyen diseños sísmicos de elementos no estructurales, esos diseños deben ir firmados o rotulados por un profesional facultado (véase A.1.3.6).
+
+### A.1.3.4 — Diseño estructural
+
+El diseño estructural lo realiza un **ingeniero civil facultado** según la Ley 400. La estructura debe tener resistencia y rigidez adecuadas ante las cargas mínimas del Reglamento y verificarse que su **rigidez limita la deformabilidad** bajo cargas de servicio, de modo que no se afecte el funcionamiento de la edificación (<NormaRef s="A.1.3.4" pag="A-3" />).
+
+La **Tabla A.1.3-1** especifica las etapas del diseño estructural, tanto de edificaciones nuevas como de intervención de existentes. Para las nuevas, el orden de la tabla es el del procedimiento; para las existentes, la secuencia obligatoria es la del Capítulo A.10 y la tabla solo tiene carácter informativo.
+
+<TablaNorma numero="Tabla A.1.3-1" titulo="Procedimiento de diseño estructural (resumen de los 12 pasos)" pag="A-3 a A-6" nota="Resumen propio; el texto completo de cada paso está en el desplegable siguiente. Para edificaciones existentes, cada paso remite a las etapas de A.10.1.4.">
+
+| Paso | Qué se hace | Capítulo / Título | Resultado |
+|---:|---|---|---|
+| 1 | Predimensionamiento y coordinación con otros profesionales | — (existentes: A.10.1.3) | Sistema estructural y dimensiones tentativas; masa, cargas y efectos preliminares |
+| 2 | Evaluación de las solicitaciones definitivas | Título B | Peso propio, acabados, cargas muertas y vivas, viento, efectos reológicos, asentamientos; masa de la edificación |
+| 3 | Nivel de amenaza sísmica y valores de $A_a$ y $A_v$ | A.2 y Apéndice A-4 | Zona de amenaza (alta, intermedia o baja) |
+| 4 | Movimientos sísmicos de diseño | A.2 (y A.12 si aplica) | Espectro elástico con $F_a$, $F_v$ e $I$ |
+| 5 | Sistema estructural y material | A.3 | Sistema (muros de carga, combinado, pórtico o dual), material y grado DES, DMO o DMI |
+| 6 | Grado de irregularidad y procedimiento de análisis | A.3 | Método de análisis (A.4 o A.5), $\phi_a$, $\phi_p$, $\phi_r$ |
+| 7 | Determinación de las fuerzas sísmicas $F_s$ | A.4 o A.5 | Fuerzas sísmicas **sin dividir por $R$** |
+| 8 | Análisis sísmico de la estructura | A.4 o A.5 | Desplazamientos máximos y fuerzas internas |
+| 9 | Desplazamientos horizontales y derivas | A.6 | Derivas de piso, incluida la torsión |
+| 10 | Verificación de derivas | A.6 | Cumple o se rigidiza y se repiten los pasos 8 a 10 |
+| 11 | Combinación de solicitaciones | B.2 | $E = F_s/R$ y combinaciones de carga |
+| 12 | Diseño de los elementos estructurales | C, D, F, G (según material) | Dimensiones y detallado con el grado DES, DMO o DMI exigido |
+
+</TablaNorma>
+
+<Detalle titulo="Texto ampliado de cada paso (edificaciones nuevas)">
+
+1. **Predimensionamiento y coordinación.** Se define el sistema estructural y dimensiones tentativas para evaluar de forma preliminar las solicitaciones: masa, cargas muertas y vivas, efectos sísmicos y viento. Se coordinan con los demás profesionales del diseño.
+2. **Solicitaciones definitivas** (Título B). Con las dimensiones del paso 1 se evalúan todas las solicitaciones: peso propio, acabados y elementos no estructurales, cargas muertas, viento, deformaciones por efectos reológicos y asentamientos del suelo de apoyo. También se determina la **masa** de la edificación y su contenido cuando el Reglamento lo exige, que se usará para los efectos sísmicos.
+3. **Amenaza sísmica y valores de $A_a$ y $A_v$.** Se localiza el sitio en los mapas del Capítulo A.2 y se clasifica el nivel de amenaza. El Apéndice A-4 enumera los municipios con su zona y sus parámetros.
+4. **Movimientos sísmicos de diseño.** Se definen según el Capítulo A.2 (o el A.12 en edificaciones cubiertas por A.1.2.3.3), tomando en cuenta (a) la amenaza ($A_a$, $A_v$ o $A_d$ según el caso), (b) la estratificación del suelo mediante $F_a$ y $F_v$, y (c) la importancia de la edificación mediante el coeficiente $I$. Se expresan en un **espectro elástico de diseño**; hay descripciones alternativas por acelerogramas o por estudios de microzonificación.
+5. **Estructuración y material.** El sistema de resistencia sísmica debe clasificarse en uno del Capítulo A.3. Hay limitaciones según la zona de amenaza, el material (concreto, acero, mampostería o madera), la capacidad de disipación de energía (DES, DMO o DMI), la altura y el grado de irregularidad.
+6. **Irregularidad y procedimiento de análisis.** Se define el método de análisis sísmico según la regularidad en planta y en altura, la redundancia, la altura, el suelo y el nivel de amenaza (Capítulo A.3).
+7. **Fuerzas sísmicas $F_s$.** Se obtienen con los movimientos de diseño del paso 4.
+8. **Análisis sísmico.** Se aplican los movimientos de diseño a un modelo matemático apropiado. Se hace **sin dividir por $R$** y con el método definido en el paso 6. Entrega los desplazamientos máximos y las fuerzas internas.
+9. **Desplazamientos horizontales.** Se evalúan los desplazamientos, **incluyendo los efectos torsionales de toda la estructura**, y las derivas, con los procedimientos del Capítulo A.6 y los resultados del paso 8.
+10. **Verificación de derivas.** Se comprueba que las derivas no excedan los límites del Capítulo A.6. Si se exceden, es **obligatorio rigidizar** la estructura y repetir los pasos 8, 9 y 10.
+11. **Combinación de solicitaciones.** Se combinan según el Capítulo B.2, multiplicando cada solicitación por su coeficiente de carga. Para el sismo se usan efectos reducidos $E = F_s/R$, donde $R$ depende de (a) el sistema de resistencia sísmica, (b) la irregularidad, (c) la redundancia o su ausencia y (d) los requisitos de diseño y detallado del material para su grado de disipación (DMI, DMO o DES).
+12. **Diseño de los elementos.** Se hace según el sistema y el material, con el detallado del grado DMI, DMO o DES exigido por el Capítulo A.3, lo que permite a la estructura responder en el rango inelástico. Se diseña para los valores más desfavorables de las combinaciones del paso 11.
+
+**Edificaciones existentes.** Cada paso remite a etapas de A.10.1.4 (por ejemplo, los pasos 3 y 4 se hacen igual que para nuevas, salvo edificaciones declaradas patrimonio histórico que pueden usar movimientos de "seguridad limitada", A.10.9.2.5 y $A_e$ en lugar de $A_a$ y $A_v$).
+
+</Detalle>
+
+<Callout tipo="nota" titulo="Dos ideas que esta tabla fija para todo el Título A">
+(1) El análisis sísmico (paso 8) se hace con los movimientos de diseño **sin reducir por $R$**; la reducción $E = F_s/R$ solo entra al combinar cargas (paso 11). (2) Si las derivas exceden el límite, no hay alternativa: **hay que rigidizar** y repetir el análisis.
+</Callout>
+
+### A.1.3.5 — Diseño de la cimentación
+
+Los efectos de los sismos sobre la cimentación y el suelo de apoyo se obtienen de dos maneras (<NormaRef s="A.1.3.5" pag="A-6" />):
+
+- **(a) Elementos estructurales de la cimentación:** se usan las combinaciones del paso 11 con las fuerzas sísmicas reducidas $E$ a partir de las reacciones de la estructura, y los requisitos del material y del Título H.
+- **(b) Esfuerzos sobre el suelo:** se usan las combinaciones del **método de esfuerzos de trabajo** de la sección B.2.3, con $E$. Los efectos resultantes están al nivel de esfuerzos de trabajo y se evalúan según el Título H.
+
+### A.1.3.6 — Diseño sísmico de los elementos no estructurales
+
+Los elementos no estructurales (fachadas, muros divisorios, cielos, tuberías, equipos, etc.) también se diseñan para sismo (<NormaRef s="A.1.3.6" pag="A-7" />):
+
+1. Deben cumplir el **grado de desempeño** superior, bueno o bajo del Capítulo A.9, según el grupo de uso (A.1.3.6.1).
+2. Los diseñan **profesionales facultados** (arts. 26 y 29 de la Ley 400), con los parámetros de diseño sísmico que entrega el diseñador estructural (A.1.3.6.2).
+3. Sistemas como las **estanterías** se tratan como sistemas estructurales y los diseñan ingenieros estructurales (A.1.3.6.3).
+4. Se permiten elementos **diseñados e instalados por su fabricante**, cumpliendo A.1.5.1.2 (A.1.3.6.4).
+5. El **constructor que suscribe la licencia** debe recopilar todos esos diseños y documentación en una sola memoria para la curaduría y **firmarlos**, responsabilizándose de que se construyan según lo diseñado y con el grado de desempeño especificado (A.1.3.6.5).
+
+### A.1.3.7 — Revisión de los diseños
+
+Planos, memorias y estudios deben ser **revisados** para obtener la licencia (Leyes 400 y 388 de 1997). La revisión la hace la curaduría u oficina que expide licencias, o un profesional independiente a costo de quien solicita la licencia, con las cualidades que fija la Ley 400 (<NormaRef s="A.1.3.7" pag="A-7" />).
+
+### A.1.3.8 — Construcción
+
+La construcción se hace según los requisitos propios de cada material, **para el grado de disipación para el cual se diseñó**, bajo supervisión técnica cuando la Ley 400 lo exija (Título I). La **dirección de la construcción** puede ser de (<NormaRef s="A.1.3.8" pag="A-7" />):
+
+- Un **ingeniero civil** o un **arquitecto** facultados;
+- un **ingeniero mecánico**, en estructuras metálicas o prefabricadas;
+- o un **constructor en arquitectura o ingeniería** facultado por la Ley 1229 de 2008.
+
+### A.1.3.9 — Supervisión técnica
+
+La supervisión técnica es una verificación independiente de que la obra se construye según planos y especificaciones. Se exige en estos casos (<NormaRef s="A.1.3.9" pag="A-7" />):
+
+| Caso | Regla | Sección |
+|---|---|---|
+| **Por tamaño** | Edificaciones o unidades constructivas de **más de 3000 m²** de área construida, cualquiera sea su uso | A.1.3.9 |
+| **Por grupo de uso** | Edificaciones de los grupos **III y IV**, sin importar el área | A.1.3.9.1 |
+| **Por decisión de los diseñadores** | El diseñador estructural o el geotecnista pueden exigirla en cualquier edificación compleja, anotándolo en los planos estructurales o en el estudio geotécnico | A.1.3.9.3 |
+| **Exención** | Casas diseñadas y construidas con el **Título E** y **menos de 15 unidades de vivienda** | A.1.3.9.2 |
+
+Otras reglas:
+
+- **Idoneidad (A.1.3.9.4):** el supervisor técnico es un ingeniero civil o arquitecto con las cualidades de la Ley 400, o un constructor en arquitectura e ingeniería. Puede delegar labores en personal no profesional bajo su responsabilidad. La supervisión técnica es **una parte de la interventoría** y puede hacerla un profesional distinto del interventor.
+- **Alcance (A.1.3.9.5):** lo define el Título I.
+- **Sin supervisión técnica (A.1.3.9.6):** esto no exime al constructor de los **controles de calidad de los materiales** que el Reglamento exige ni de llevar **registros** de las condiciones de cimentación y geotécnicas.
+
+### A.1.3.10 — Edificaciones indispensables
+
+Las edificaciones del **grupo de uso IV** y las de los literales (a) a (d) del grupo III deben cumplir el procedimiento de A.1.3.2 a A.1.3.8 y, además, los requisitos del **Capítulo A.12**. Éste amplía el **Paso 10** de A.1.3.4: se exige verificar la edificación para los movimientos sísmicos del **umbral de daño** (<NormaRef s="A.1.3.10" pag="A-8" />). Para los literales (e) y (f) del grupo III, decide el propietario (e) o la autoridad competente (f) si se aplica el A.12.
+
+### A.1.3.11 — Casas de uno y dos pisos
+
+Las edificaciones de uno y dos pisos se diseñan con los Capítulos A.1 a A.12. Las **casas de uno y dos pisos del grupo de uso I** que **no formen parte de programas de 15 o más viviendas ni superen 3000 m²** en conjunto pueden diseñarse alternativamente con el **Título E** (<NormaRef s="A.1.3.11" pag="A-8" />).
+
+### A.1.3.12 — Aspectos fundamentales de diseño
+
+En las edificaciones del grupo I de más de 3000 m², las de un programa de 15 o más viviendas, **todas** las de los grupos II, III y IV, o cuando algún diseñador lo estime conveniente, se deben considerar aspectos especiales en diseño, construcción y supervisión (<NormaRef s="A.1.3.12" pag="A-8" />):
+
+- (a) Influencia del suelo en la **amplificación** de los movimientos y posible **resonancia** entre los períodos de la estructura y del depósito de suelo.
+- (b) Potencial de **licuación**.
+- (c) Falla de **taludes** o remoción en masa por sismo.
+- (d) Comportamiento en grupo del conjunto ante solicitaciones sísmicas, eólicas y térmicas, según las **juntas** del proyecto.
+- (e) Especificaciones complementarias sobre **calidad de materiales** y ensayos de comprobación.
+- (f) Verificación de la **concepción estructural** (cargas verticales y fuerzas horizontales).
+- (g) **Supervisión técnica** calificada, según A.1.3.9.
+
+### A.1.3.13 — Construcción responsable ambientalmente
+
+Toda construcción debe cumplir la legislación nacional, departamental y municipal o distrital sobre uso **responsable ambientalmente** de materiales y procedimientos: usar adecuadamente los recursos naturales, sin deteriorar el medio ambiente ni vulnerar la renovación o disponibilidad futura de los materiales. Esta responsabilidad se asume **desde el diseño**, se aplica y verifica en la construcción, y recae sobre **todos** los profesionales y personas que intervienen (<NormaRef s="A.1.3.13" pag="A-9" />).
+
+## A.1.4 — Consideraciones especiales
+
+- **Por tamaño y grupo de uso (A.1.4.1):** repite el criterio de A.1.3.12: en edificaciones del grupo I de más de 3000 m² o de programas de 15 o más viviendas, y en todas las de los grupos II, III y IV, debe tenerse en cuenta la **obligatoriedad de la supervisión técnica** de A.1.3.9 (<NormaRef s="A.1.4.1" pag="A-9" />).
+- **Sistemas prefabricados (A.1.4.2):** según el art. 12 de la Ley 400, se permiten sistemas de resistencia sísmica compuestos total o parcialmente por elementos prefabricados **no cubiertos por el Reglamento**, si se cumple una de dos vías (<NormaRef s="A.1.4.2" pag="A-9" />): (a) usar los criterios de diseño sísmico de **A.3.1.7** (que fija $R_0 = 1.5$), o (b) obtener **autorización previa de la Comisión Asesora Permanente** (art. 14 de la Ley 400).
+
+## A.1.5 — Diseños, planos, memorias y estudios
+
+### A.1.5.1 — Diseñador responsable
+
+La responsabilidad de cada diseño recae en el profesional **bajo cuya dirección se elabora**. Se **presume** que cuando un elemento figura en un plano o memoria es porque se tomaron todas las medidas para cumplir el propósito del Reglamento; el profesional que firma o rotula el plano responde por ese diseño (<NormaRef s="A.1.5.1" pag="A-9" />).
+
+- **A.1.5.1.1:** las definiciones de constructor, diseñador arquitectónico, diseñador estructural, ingeniero geotecnista, propietario y supervisor técnico están en el Título II de la Ley 400 y en el Capítulo A.13.
+- **A.1.5.1.2:** si un elemento lo suministra e instala el fabricante, el diseñador puede **limitarse a especificar las características** que debe cumplir; la responsabilidad de que se cumplan recae en el **constructor que suscribe la licencia**, y el supervisor técnico lo verifica cuando hay supervisión.
+
+### A.1.5.2 — Planos
+
+Los planos presentados para la licencia (arquitectónicos, estructurales y de no estructurales) **deben ser iguales a los usados en la obra**, y al menos una copia queda archivada en la curaduría o dependencia que expide licencias, que puede pedir copia digital del proyecto estructural. En proyectos con supervisión técnica se exigen además los **planos récord** (Título I) (<NormaRef s="A.1.5.2" pag="A-9" />).
+
+**Planos estructurales** (A.1.5.2.1): van **firmados o rotulados con sello seco por el ingeniero civil** diseñador estructural responsable, y contienen como mínimo:
+
+- (a) **Especificaciones de materiales**: resistencia del concreto y del acero, calidad de la mampostería y del mortero, madera estructural; si cambia en la misma edificación, dónde se usa cada una.
+- (b) **Tamaño y localización** de todos los elementos estructurales, con dimensiones y refuerzo.
+- (c) Precauciones por **cambios volumétricos** (contraflechas por humedad, retracción, flujo plástico, temperatura).
+- (d) **Fuerzas de preesfuerzo** (localización y magnitud), si se usa concreto preesforzado.
+- (e) **Conexiones y empalmes** (y, en acero, limpieza y protección anticorrosiva).
+- (f) El **grado de capacidad de disipación de energía** (DMI, DMO o DES) con que se diseñó el sistema de resistencia sísmica.
+- (g) Las **cargas vivas y de acabados** supuestas.
+- (h) El **grupo de uso** de la edificación.
+
+<Callout tipo="practica" titulo="Dos datos que el plano debe 'gritar'">
+Los literales (f) y (h) conectan el plano con el Título A: quien construye debe poder leer en el plano el **grado de disipación** (DES, DMO o DMI) y el **grupo de uso**. Sin ellos, el constructor y el supervisor no pueden saber qué detallado exige el diseño.
+</Callout>
+
+**Planos arquitectónicos y de no estructurales arquitectónicos** (A.1.5.2.2): firmados o rotulados con sello seco por un **arquitecto**, indicando el **grado de desempeño sísmico** de los no estructurales (Capítulo A.9) y todos los detalles compatibles. Si otro profesional diseñó los no estructurales, también firma los planos arquitectónicos generales.
+
+**Planos hidráulicos, sanitarios, eléctricos, mecánicos y de instalaciones especiales** (A.1.5.2.3): firmados o rotulados con sello seco por profesionales facultados, con el grado de desempeño de los elementos no estructurales no arquitectónicos.
+
+### A.1.5.3 — Memorias
+
+Los planos van acompañados de **memorias de diseño y cálculo** que describen los procedimientos (<NormaRef s="A.1.5.3" pag="A-10" />):
+
+- **Memoria estructural (A.1.5.3.1):** memoria justificativa de cálculos **firmada por el ingeniero** diseñador. Debe describir el sistema estructural y anotar claramente las **cargas verticales**, el **grado de disipación** del sistema, el **cálculo de la fuerza sísmica**, el **tipo de análisis** y la **verificación de las derivas**. Si se usa software, se entrega además la descripción de los principios del modelo y sus datos de entrada identificados; los **datos de salida** pueden ir como anexo, pero **no constituyen por sí mismos la memoria**: se necesita una memoria explicativa de su uso en el diseño.
+- **Otras memorias (A.1.5.3.2):** las justificaciones del grado de desempeño de los no estructurales las elabora el responsable (arquitecto o diseñador de no estructurales) y los diseñadores hidráulicos, eléctricos, mecánicos o de instalaciones especiales. También debe existir una memoria de las especificaciones de materiales, elementos estructurales, medios de ingreso y egreso y sistemas de detección y extinción de incendios relacionados con seguridad a la vida (Títulos J y K).
+
+### A.1.5.4 — Estudio geotécnico
+
+Para la licencia se presenta un **estudio geotécnico** según el Título H, **firmado por un ingeniero civil** facultado, que debe referirse a (<NormaRef s="A.1.5.4" pag="A-11" />): (a) lo exigido en A.1.3.2; (b) la definición de los **efectos locales** (A.2.4), incluyendo el estudio sísmico particular de sitio (A.2.10) si aplica; (c) los parámetros del suelo para la **interacción suelo-estructura** (Capítulo A.7) cuando el A.3 la requiera; y (d) lo que exija el Título H.
+
+## A.1.6 — Obligatoriedad de las normas técnicas citadas
+
+- Las **Normas Técnicas Colombianas (NTC)** citadas **hacen parte del Reglamento**. Las promulga el **ICONTEC**, único organismo nacional de normalización reconocido (<NormaRef s="A.1.6.1" pag="A-11" />).
+- Si no hay NTC, se aceptan normas **ASTM** u otras instituciones, que también hacen parte del Reglamento mientras no exista la NTC (<NormaRef s="A.1.6.2" />).
+- Las normas ASTM entre paréntesis junto a una NTC son **solo referencia**: **la norma obligatoria es siempre la NTC**. La ASTM corresponde a una norma compatible con los requisitos del Reglamento, no necesariamente la antecedente de la NTC (<NormaRef s="A.1.6.3" />).
+
+## A.1.7 — Sistema de unidades
+
+El Reglamento usa el **Sistema Internacional (SI)**, de uso obligatorio según el Decreto 1731 de 1967; la guía de aplicación es la NTC 1000 (ISO 1000) (<NormaRef s="A.1.7.1" pag="A-11" />). Las unidades de las ecuaciones son SI. Algunos Títulos traen un apéndice con las ecuaciones en SI y en mks.
+
+<Callout tipo="atencion" titulo="Raíces de esfuerzos solo en SI">
+Las ecuaciones con **raíz cuadrada de un esfuerzo** (como $\sqrt{f'_c}$ en concreto, $\sqrt{f'_m}$ en mampostería o $\sqrt{F_y}$ en acero) **producen resultados inconsistentes** si se usan esfuerzos en mks (kgf/cm²). Solo pueden emplearse con esfuerzos en SI (<NormaRef s="A.1.7.2" pag="A-11" />).
+</Callout>
+
+## Caso práctico: ¿qué documentos y quién los firma en un edificio multifamiliar de 6 pisos?
+
+<Ejemplo numero={1} titulo="Proyecto multifamiliar de 6 pisos, 5 200 m² construidos">
+Un constructor tramita la licencia de un conjunto residencial de **6 pisos**, **5 200 m²** de área construida y **48 apartamentos**, en una ciudad de amenaza sísmica alta. Es vivienda, es decir, **grupo de uso I**. Determinar qué exige el Capítulo A.1: aspectos especiales, supervisión técnica, documentos y firmas.
+
+<Paso titulo="¿Es una edificación de la NSR-10 y puede usar el Título E?" ref="A.1.2.4, A.1.3.11">
+Es una edificación (uso: habitación), así que está dentro del alcance. El Título E (casas de uno y dos pisos) **no aplica**: tiene 6 pisos, 48 viviendas y más de 3000 m².
+</Paso>
+<Paso titulo="¿Se requieren los aspectos especiales de diseño?" ref="A.1.3.12">
+Sí. Aunque sea grupo I, supera 3000 m² (5 200 m²) y forma parte de un programa de 15 o más viviendas (48). Hay que evaluar amplificación por suelo, licuación, estabilidad de taludes, comportamiento del conjunto según juntas, calidad de materiales y concepción estructural.
+</Paso>
+<Paso titulo="¿Hace falta supervisión técnica?" ref="A.1.3.9">
+Sí, por área: 5 200 m² > 3000 m². No aplica la exención del Título E. El supervisor técnico debe ser un ingeniero civil o arquitecto con las cualidades de la Ley 400 (o un constructor en arquitectura e ingeniería).
+</Paso>
+<Paso titulo="¿Es una edificación indispensable?" ref="A.1.3.10">
+No. Pertenece al grupo I, así que **no** se aplica el Capítulo A.12 ni la verificación del umbral de daño.
+</Paso>
+<Paso titulo="Documentos para la licencia y firmas" ref="A.1.3.2 a A.1.3.7, A.1.5">
+
+| Documento | Quién lo elabora y firma | Referencia |
+|---|---|---|
+| Estudio geotécnico (con efectos locales: perfil de suelo, $F_a$, $F_v$) | Ingeniero civil facultado (geotecnista) | A.1.3.2, A.1.5.4 |
+| Planos arquitectónicos (con grupo de uso y grado de desempeño de los no estructurales) | Arquitecto con matrícula vigente | A.1.3.3, A.1.5.2.2 |
+| Planos estructurales (con materiales, grado DES/DMO/DMI, cargas supuestas y grupo de uso) | Ingeniero civil diseñador estructural, con sello seco | A.1.3.4, A.1.5.2.1 |
+| Memoria de cálculo estructural (sistema, cargas, fuerza sísmica, análisis, derivas) | Ingeniero civil diseñador estructural | A.1.5.3.1 |
+| Planos hidráulicos, eléctricos, mecánicos y de instalaciones especiales | Profesionales facultados de cada especialidad | A.1.5.2.3 |
+| Diseños de elementos no estructurales (fachadas, divisiones, equipos) y memoria de desempeño | Profesional facultado; el constructor que suscribe la licencia los recopila en una sola memoria y los firma | A.1.3.6.5, A.1.5.3.2 |
+| Revisión de diseños | Curaduría u oficina de licencias, o revisor independiente | A.1.3.7 |
+
+</Paso>
+<Paso titulo="Durante la obra" ref="A.1.3.8, A.1.3.9">
+Un ingeniero civil, arquitecto o constructor facultado **dirige** la obra; el **supervisor técnico** verifica que se construya según planos (incluidos los no estructurales instalados por fabricantes, A.1.5.1.2) y el constructor mantiene los controles de calidad de materiales.
+</Paso>
+<Resultado>
+Proyecto con **aspectos especiales de A.1.3.12**, **supervisión técnica obligatoria**, **sin A.12** y con al menos **seis familias de documentos**, cada una con su profesional responsable. Los planos estructurales deben declarar el grado de disipación (p. ej. DES en zona alta) y el grupo de uso I.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Colegio de 2 pisos y 900 m²: ¿qué cambia?">
+Un colegio privado de 2 pisos y 900 m² (grupo de uso III, <NormaRef s="Tabla A.2.5-1" pag="A-26" />) se construye en la misma ciudad.
+
+<Paso titulo="Título E y supervisión por área" ref="A.1.3.11, A.1.3.9">
+No es una casa del grupo I, así que el Título E no aplica. Aunque 900 m² es menos de 3000 m², el **grupo de uso III** exige supervisión técnica **sin importar el área** (A.1.3.9.1).
+</Paso>
+<Paso titulo="Requisitos especiales" ref="A.1.3.10, A.1.3.12">
+Las guarderías, escuelas, colegios y universidades son el literal (d) de A.2.5.1.2 (grupo III). Como están entre los literales (a) a (d), se aplican además los requisitos del **Capítulo A.12**, incluida la **verificación del umbral de daño** (ampliación del Paso 10). Los literales (e) y (f) del grupo III, en cambio, dependen de la decisión del propietario o de la autoridad. Por ser grupo III también aplican los aspectos especiales de A.1.3.12.
+</Paso>
+<Resultado>
+Mismo procedimiento de 12 pasos, más **supervisión técnica obligatoria por grupo de uso** y **requisitos especiales del Capítulo A.12** (umbral de daño).
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Pensar que la NSR-10 cubre **cualquier** estructura. Puentes, torres, muelles y estructuras hidráulicas están fuera de su alcance (A.1.2.4.1).
+- Creer que el análisis sísmico se hace con las fuerzas ya divididas por $R$: el análisis usa $F_s$ y solo en la combinación de cargas se aplica $E = F_s/R$ (pasos 8 y 11 de A.1.3.4).
+- Omitir el **grupo de uso** y el **grado de disipación** en los planos estructurales (A.1.5.2.1 f y h).
+- Presentar solo la salida del programa como "memoria de cálculo": los datos de salida **no** constituyen la memoria (A.1.5.3.1).
+- Suponer que sin supervisión técnica no hay controles: el constructor sigue obligado a los controles de calidad de materiales y a los registros de cimentación (A.1.3.9.6).
+- Olvidar que los grupos **III y IV** requieren supervisión técnica **aunque sean pequeños** (A.1.3.9.1).
+- Usar fórmulas con $\sqrt{f'_c}$ con esfuerzos en kgf/cm² (A.1.7.2).
+</Callout>
+
+## Resumen en una línea
+
+**La NSR-10 es el reglamento técnico de la Ley 400 para edificaciones; el Capítulo A.1 fija qué cubre, qué se espera de la construcción (sin colapso ante el sismo de diseño) y los 12 pasos de diseño, con un responsable firmando cada estudio, plano y memoria, y supervisión técnica cuando el tamaño o el grupo de uso lo exigen.**

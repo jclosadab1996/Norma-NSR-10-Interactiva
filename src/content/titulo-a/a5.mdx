@@ -1,0 +1,561 @@
+---
+codigo: 'A.5'
+tipo: capitulo
+titulo: 'Método del análisis dinámico'
+resumen: 'Cuándo y cómo analizar una edificación con modos de vibración (espectral) o con acelerogramas (cronológico): modelo matemático, número de modos, combinación modal, ajuste del cortante dinámico al de la fuerza horizontal equivalente y efectos de dirección y torsión.'
+objetivos:
+  - 'Elegir el modelo matemático adecuado (3D rígido, 3D flexible, plano) y la rigidez que debe usar'
+  - 'Verificar que el análisis modal incluye al menos el 90 % de la masa participante y calcular el cortante modal Vmj'
+  - 'Combinar las respuestas modales (SRSS o CQC) sin combinar antes los desplazamientos al calcular derivas'
+  - 'Ajustar los resultados dinámicos al 80 % (regular) o 90 % (irregular) del cortante Vs del método de la FHE'
+  - 'Distinguir los requisitos del análisis cronológico (mínimo tres acelerogramas, ajuste al 100 % de Vs)'
+paginasNorma: 'A-67 a A-72'
+paginaPdf: 110
+orden: 5
+calculadoras: ['espectro-diseno']
+nivel: 'avanzado'
+---
+
+import { coeficienteFa, coeficienteFv, periodosEspectro, sa, mesetaSa, exponenteK, periodoAproximado, coeficienteCu, cortanteBasal } from '../../lib/nsr10';
+
+export const f = (x, d = 2) => x.toFixed(d);
+export const miles = (x) => Math.round(x).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+export const masaPart = (() => {
+  // Ejemplo de A.5.4-2 con tres niveles: m = 100 Mg c/u y forma modal φ = (0.33, 0.67, 1.00)
+  const m = [100, 100, 100];
+  const phi = [0.33, 0.67, 1.0];
+  const sumMphi = m.reduce((s, mi, i) => s + mi * phi[i], 0);
+  const sumMphi2 = m.reduce((s, mi, i) => s + mi * phi[i] ** 2, 0);
+  const mEf = sumMphi ** 2 / sumMphi2;
+  const mTot = m.reduce((a, b) => a + b, 0);
+  return { sumMphi, sumMphi2, mEf, mTot, fraccion: mEf / mTot };
+})();
+
+export const dinamico = (() => {
+  // Mismo edificio del ejemplo 1 del Capítulo A.4: 8 pisos de pórticos de concreto, Cali, perfil D.
+  const aa = 0.25, av = 0.25, i = 1.0;
+  const fa = coeficienteFa('D', aa) ?? NaN;
+  const fv = coeficienteFv('D', av) ?? NaN;
+  const p = { aa, av, fa, fv, i };
+  const per = periodosEspectro(p);
+  const meseta = mesetaSa(p);
+  const masaMg = 7 * 520 + 430;
+  const taAprox = periodoAproximado('porticos-concreto', 24);
+  const cu = coeficienteCu(av, fv);
+  const tMax = cu * taAprox;
+  const tModal1 = 0.93;
+  const tVs = Math.min(tModal1, tMax);
+  const saVs = sa(tVs, p);
+  const vs = cortanteBasal(saVs, masaMg * 1000) / 1000; // kN
+  const minReg = 0.8 * vs;
+  const minIrr = 0.9 * vs;
+  const modos = [
+    { m: 1, t: tModal1, frac: 0.75 },
+    { m: 2, t: 0.31, frac: 0.12 },
+    { m: 3, t: 0.18, frac: 0.05 },
+    { m: 4, t: 0.12, frac: 0.035 },
+  ].map((x) => {
+    const sam = sa(x.t, p, { ramaInicialT0: x.m > 1 });
+    const mEf = x.frac * masaMg;
+    const v = sam * 9.8 * mEf; // kN
+    return { ...x, sam, mEf, v, enRama: x.m > 1 && x.t < per.t0 };
+  });
+  const fracTotal = modos.reduce((s, x) => s + x.frac, 0);
+  const vSrss = Math.sqrt(modos.reduce((s, x) => s + x.v ** 2, 0));
+  const vSuma = modos.reduce((s, x) => s + x.v, 0);
+  const factReg = vSrss < minReg ? minReg / vSrss : 1;
+  const factIrr = vSrss < minIrr ? minIrr / vSrss : 1;
+  return { p, per, meseta, masaMg, taAprox, cu, tMax, tModal1, tVs, saVs, vs, minReg, minIrr, modos, fracTotal, vSrss, vSuma, factReg, factIrr, vAjustado: vSrss * factReg };
+})();
+
+export const derivaModal = (() => {
+  // Un piso, dos modos: desplazamientos modales (mm) del nivel i e i-1.
+  const m1 = { di: 60, dj: 45 };
+  const m2 = { di: -6, dj: 4 };
+  const dm1 = m1.di - m1.dj;
+  const dm2 = m2.di - m2.dj;
+  const correcta = Math.sqrt(dm1 ** 2 + dm2 ** 2);
+  const di = Math.sqrt(m1.di ** 2 + m2.di ** 2);
+  const dj = Math.sqrt(m1.dj ** 2 + m2.dj ** 2);
+  const incorrecta = Math.abs(di - dj);
+  return { m1, m2, dm1, dm2, correcta, di, dj, incorrecta, error: (incorrecta / correcta - 1) * 100 };
+})();
+
+export const torre = (() => {
+  const aa = 0.25, av = 0.25;
+  const fa = coeficienteFa('D', aa) ?? NaN;
+  const fv = coeficienteFv('D', av) ?? NaN;
+  const per = periodosEspectro({ aa, av, fa, fv });
+  const hn = 75;
+  const ta = periodoAproximado('otros-muros', hn);
+  const cu = coeficienteCu(av, fv);
+  return { fa, fv, per, hn, ta, cu, tmax: cu * ta, dosTc: 2 * per.tc };
+})();
+
+export const formasModales = (() => {
+  const n = 5;
+  const formas = [
+    (x) => Math.sin((Math.PI * x) / 2),
+    (x) => Math.sin((3 * Math.PI * x) / 2),
+    (x) => Math.sin((5 * Math.PI * x) / 2),
+  ];
+  const yBase = 205, paso = 30, amp = 40;
+  return formas.map((fn, k) => {
+    const cx = 80 + k * 160;
+    const pts = Array.from({ length: n + 1 }, (_, idx) => {
+      const x = idx / n;
+      return { x: cx + amp * fn(x), y: yBase - idx * paso };
+    });
+    return { k, cx, pts, polyline: pts.map((q) => `${q.x.toFixed(1)},${q.y}`).join(' ') };
+  });
+})();
+
+export const barras = (() => {
+  const max = Math.max(dinamico.vs, dinamico.vSuma) * 1.02;
+  const ancho = 250;
+  const filas = [
+    { etiqueta: 'Vs (FHE, A.4)', valor: dinamico.vs, clase: 'a' },
+    { etiqueta: '0.80 Vs (mínimo)', valor: dinamico.minReg, clase: 'b' },
+    { etiqueta: 'Vtj (SRSS modal)', valor: dinamico.vSrss, clase: 'c' },
+    { etiqueta: 'Vtj ajustado', valor: dinamico.vAjustado, clase: 'd' },
+  ];
+  return filas.map((fila, i) => ({ ...fila, y: 18 + i * 34, w: (fila.valor / max) * ancho }));
+})();
+
+## Idea central del capítulo
+
+El método de la fuerza horizontal equivalente (Capítulo A.4) supone que la estructura vibra casi solo en su primer modo y reparte el cortante con una fórmula. Cuando la edificación es **muy alta, muy irregular o está sobre suelos blandos**, esa simplificación deja de ser confiable. El Capítulo A.5 permite —y en ciertos casos **exige**— analizar la estructura con su verdadero comportamiento dinámico:
+
+1. **Modelar** la distribución de masa y rigidez en tres dimensiones (o en un plano, si es válido).
+2. **Representar el sismo** con el espectro de A.2.6 (análisis *espectral*) o con familias de acelerogramas (análisis *cronológico*).
+3. **Calcular modos de vibración**, la respuesta de cada uno y **combinarlos estadísticamente**.
+4. **Ajustar** los resultados para que nunca queden por debajo de un porcentaje del cortante del método de la FHE.
+5. **Reducir por $R$** las fuerzas internas y diseñar los elementos.
+
+<Callout tipo="importante" titulo="El análisis dinámico no es una forma de 'ahorrar' fuerza">
+La norma ata el análisis dinámico al método de la FHE: el cortante basal dinámico **no puede ser menor** que el 80 % (estructuras regulares) o el 90 % (irregulares) de $V_s$, y en el análisis cronológico no puede ser menor que el 100 % de $V_s$ (<NormaRef s="A.5.4.5" pag="A-70" />, <NormaRef s="A.5.5.3" pag="A-71" />). El análisis dinámico sirve para **distribuir mejor** las fuerzas y detectar el comportamiento real, no para reducir el nivel de diseño.
+</Callout>
+
+## A.5.0 — Nomenclatura
+
+Variables propias del capítulo (<NormaRef s="A.5.0" pag="A-67" />):
+
+| Símbolo | Significado |
+|---|---|
+| $E$ | Fuerzas sísmicas **reducidas** de diseño, $E = F_s/R$ |
+| $F_s$ | Fuerzas sísmicas del análisis (A.3.1.1), sin reducir |
+| $M$ | Masa total de la edificación (estructura + muros divisorios, equipos, tanques…; +25 % de la carga viva en bodegas), en kg |
+| $\bar M_j$ | Masa **actuante total** en la dirección $j$ (ecuación A.5.4-1) |
+| $\bar M_m$, $\bar M_{mj}$ | Masa **efectiva modal** del modo $m$ (ecuación A.5.4-2) |
+| $m_i$, $m_x$ | Parte de $M$ ubicada en el nivel $i$ o $x$ |
+| $p$ | Número total de modos usados en el análisis modal |
+| $R_0$, $R$ | Coeficiente básico de disipación de energía y coeficiente de diseño $R = \phi_a\phi_p\phi_rR_0$ |
+| $S_{am}$ | Valor del espectro de aceleraciones para el período $T_m$ del modo $m$ |
+| $T_a$, $T_m$ | Período aproximado (A.4.2) y período del modo $m$ (s) |
+| $V_{mj}$ | Cortante basal del modo $m$ en la dirección horizontal $j$ |
+| $V_s$ | Cortante basal de diseño por el método de la FHE (Capítulo A.4) |
+| $V_{tj}$ | Cortante basal **total** en la dirección $j$ (tras combinar modos) |
+| $\phi_{ij}^m$ | Amplitud de desplazamiento del nivel $i$, dirección $j$, cuando vibra en el modo $m$ |
+
+## A.5.1 — General
+
+Los métodos dinámicos deben cumplir este capítulo y el resto del Título A (<NormaRef s="A.5.1.1" pag="A-67" />). Cuatro ideas ordenan la sección:
+
+- **Cuándo son obligatorios** (<NormaRef s="A.5.1.2" pag="A-67" />): pueden usarse en **cualquier** edificación del Reglamento y **deben** usarse en las indicadas en A.3.4.2.2.
+- **Siempre se comparan con la FHE** (<NormaRef s="A.5.1.3" pag="A-67" />): los resultados se ajustan a unos mínimos referidos a $V_s$ (ver A.5.4.5).
+- **Principios sustentados** (<NormaRef s="A.5.1.4" pag="A-67" />): toda metodología debe basarse en mecánica estructural comprobada analítica o experimentalmente.
+- **Responsabilidad del diseñador** (<NormaRef s="A.5.1.5" pag="A-67" />): el Reglamento no obliga a un procedimiento ni a un programa; el diseñador responde de que el software elegido, manual o electrónico, describa bien la respuesta dinámica.
+
+<TablaNorma numero="A.3.4.2.2" titulo="Cuándo es obligatorio el análisis dinámico elástico (resumen)" pag="A-45" nota="Texto de A.3.4.2.2, en el Capítulo A.3; no pertenece a A.5 pero lo activa.">
+
+| Caso | Condición |
+|---|---|
+| (a) | Más de 20 niveles o más de 60 m de altura (salvo lo permitido por A.3.4.2.1 (a) y (b): zona baja, y grupo I en zona intermedia) |
+| (b) | Irregularidades verticales de los tipos 1aA, 1bA, 2A y 3A |
+| (c) | Irregularidades no descritas en A.3.3.4 ni A.3.3.5 (salvo el caso de A.3.2.4.3) |
+| (d) | Más de 5 niveles o 20 m, en **amenaza alta**, sin el mismo sistema estructural en toda la altura (salvo A.3.2.4.3) |
+| (e) | Perfil de suelo D, E o F con período mayor de $2T_C$; en este caso el análisis debe incluir **interacción suelo-estructura** (Capítulo A.7) si se modela empotrada |
+
+</TablaNorma>
+
+## A.5.2 — Modelo matemático
+
+### A.5.2.1 — Cuatro tipos de modelo
+
+El modelo debe describir la **distribución espacial de masa y rigidez** de toda la estructura, de modo que capture la respuesta dinámica relevante. Como mínimo se usa uno de estos procedimientos (<NormaRef s="A.5.2.1" pag="A-68" />):
+
+| Modelo | Idea | Cuándo **debe** usarse |
+|---|---|---|
+| **3D con diafragma rígido** (A.5.2.1.1) | Los entrepisos son infinitamente rígidos en su plano; la masa de cada piso se concentra en su **centro de masa**, con tres grados de libertad por piso (dos traslaciones y una rotación) | Irregularidades en planta tipo **1aP, 1bP, 4P o 5P** (Tabla A.3-6), o cuando es el más adecuado a juicio del diseñador |
+| **3D con diafragma flexible** (A.5.2.1.2) | Las masas aferentes a cada nudo se mueven y giran libremente; el diafragma se representa con elementos que describen su flexibilidad | No hay diafragma propiamente dicho, es flexible frente a los elementos verticales, o hay irregularidades **2P o 3P** |
+| **Plano vertical** (A.5.2.1.3) | Un pórtico o sistema plano que se mueve en una sola dirección | Todos los casos **no** cubiertos por los dos anteriores. La torsión se evalúa aparte y se **suma** (diafragma rígido) o se desprecia (flexible); igual los efectos de dirección del sismo |
+| **Otros** (A.5.2.1.4) | Análisis inelástico dinámico o métodos alternos de A.3.4.1 | Si la rigidez o la masa lo exigen, a juicio del diseñador |
+
+<Callout tipo="nota" titulo="Los nombres de las irregularidades en planta (Tabla A.3-6)">
+1aP = irregularidad torsional; 1bP = torsional extrema; 2P = retrocesos en las esquinas; 3P = irregularidad del diafragma; 4P = desplazamiento de los planos de acción; 5P = sistemas no paralelos.
+</Callout>
+
+### A.5.2.2 — Masa de la edificación
+
+La masa del modelo debe ser **representativa de la que existirá durante el sismo** y estar distribuida como en la realidad. Puede tomarse $M$ como se define en A.4.0 (estructura + elementos no estructurales + equipos permanentes + contenidos de tanques, y 25 % de la carga viva en depósitos y bodegas) (<NormaRef s="A.5.2.2" pag="A-68" />).
+
+### A.5.2.3 — Rigidez en métodos elásticos
+
+La rigidez de los elementos debe ser **representativa de cuando se vean sometidos a los movimientos de diseño** (<NormaRef s="A.5.2.3" pag="A-68" />). En concreto y mampostería debe ser **coherente con el grado de fisuración** que tendrán. Si hay elementos verticales de rigideces muy distintas que contribuyen a la misma componente del movimiento, a cada uno se le asigna una rigidez consistente con su nivel de deformación. Los valores concretos se toman de A.3.4.3 y del título de cada material.
+
+### A.5.2.4 — Rigidez en métodos inelásticos
+
+Los modelos histeréticos deben ser consistentes con la capacidad de disipación del material y las deformaciones esperadas, e incluir degradación de rigidez y resistencia, "estrangulamiento" de los lazos histeréticos y endurecimiento por deformación del acero; todo adecuadamente sustentado analítica o experimentalmente (<NormaRef s="A.5.2.4" pag="A-69" />).
+
+## A.5.3 — Representación de los movimientos sísmicos
+
+Según cómo se represente el sismo hay dos familias de procedimientos (<NormaRef s="A.5.3.1" pag="A-69" />):
+
+| Procedimiento | Movimiento de diseño | Referencia |
+|---|---|---|
+| **Espectral** | Espectro elástico de diseño del Capítulo A.2 (A.5.3.2) | A.2.6 |
+| **Cronológico** | Familias de **acelerogramas**, tal como las define A.2.7 (A.5.3.3) | A.2.7 |
+
+El espectral entrega solo **máximos** (modales combinados estadísticamente); el cronológico integra la ecuación de movimiento paso a paso y entrega la historia completa de respuestas.
+
+## A.5.4 — Análisis dinámico elástico espectral
+
+### A.5.4.1 — Metodología: siete pasos
+
+La norma pide recorrer estos pasos (<NormaRef s="A.5.4.1" pag="A-69" />):
+
+1. **(a) Modos de vibración**: obtenerlos con dinámica estructural, incluyendo todos los que contribuyan de forma significativa (A.5.4.2).
+2. **(b) Respuesta espectral modal**: la respuesta máxima de cada modo se lee con la ordenada del espectro de diseño (A.5.3.2) para el **período propio del modo**.
+3. **(c) Respuesta total**: las máximas modales —deflexiones, derivas, fuerzas de piso, cortantes de piso, cortante basal y fuerzas en elementos— se **combinan estadísticamente** (A.5.4.4).
+4. **(d) Ajuste de resultados**: si la respuesta total es menor que los mínimos de A.5.4.5, **todos** los resultados se ajustan (deflexiones, derivas, fuerzas…).
+5. **(e) Derivas**: las derivas totales, ya ajustadas, no pueden exceder los límites del Capítulo A.6.
+6. **(f) Fuerzas de diseño**: las fuerzas internas $F_s$, ya ajustadas, se **dividen por $R$** (modificado por irregularidad y redundancia, A.3.3.3) para obtener $E$ y se combinan con las demás cargas del Título B.
+7. **(g) Diseño de elementos**: se diseñan y detallan según el grado de capacidad de disipación de energía del material (Capítulo A.3).
+
+<Figura alt="Esquema de los tres primeros modos de vibración de un edificio de cinco pisos: el primer modo se desplaza hacia un solo lado; el segundo cruza el eje una vez; el tercero cruza dos veces" numero="Esquema" pie="Tres primeros modos de vibración de un edificio de 5 pisos (ejemplo de un edificio tipo 'cortante'). Cada modo tiene su propio período Tm y su propia forma φ; el modo 1 es el fundamental (el más largo y el que mueve más masa).">
+<svg viewBox="0 0 480 250" role="img" aria-label="Formas modales 1, 2 y 3 de un edificio de cinco pisos" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="0" y="0" width="480" height="250" fill="none" />
+  {formasModales.map((m) => (
+    <g key={m.k}>
+      <line x1={m.cx} y1="205" x2={m.cx} y2="55" stroke="currentColor" strokeOpacity="0.35" strokeDasharray="4 4" />
+      <polyline points={m.polyline} fill="none" stroke="currentColor" strokeWidth="2.5" />
+      {m.pts.slice(1).map((q, idx) => (
+        <rect key={idx} x={q.x - 18} y={q.y - 3} width="36" height="6" rx="2" fill="currentColor" fillOpacity="0.55" />
+      ))}
+      <line x1={m.cx - 45} y1="205" x2={m.cx + 45} y2="205" stroke="currentColor" strokeWidth="3" />
+      <text x={m.cx} y="232" textAnchor="middle" fontSize="13" fill="currentColor">{`Modo ${m.k + 1}`}</text>
+      <text x={m.cx} y="40" textAnchor="middle" fontSize="12" fill="currentColor" fillOpacity="0.75">{['T1 (mayor)', 'T2 ≈ T1/3', 'T3 ≈ T1/5'][m.k]}</text>
+    </g>
+  ))}
+</svg>
+</Figura>
+
+<Callout tipo="nota" titulo="Intuición">
+Un edificio no vibra de una sola manera: tiene una "familia" de formas naturales (modos). El modo 1 es el movimiento lento de todo el edificio hacia un lado; los modos superiores son oscilaciones más rápidas con "nodos" que cruzan el eje. Cada modo responde con su propia aceleración espectral $S_{am}$, y la respuesta final suma el aporte de todos con una regla estadística.
+</Callout>
+
+### A.5.4.2 — Número de modos: al menos 90 % de la masa
+
+Se usan **todos los modos que contribuyan significativamente**. La norma lo da por cumplido cuando, con $p$ modos, la **masa participante** en cada dirección horizontal $j$ llega a **al menos el 90 %** de la masa total (<NormaRef s="A.5.4.2" pag="A-69" />):
+
+<Ecuacion num="A.5.4-1 y A.5.4-2" titulo="Masa participante y masa efectiva modal">
+
+$$
+\bar M_j=\sum_{m=1}^{p}\bar M_{mj}\;\ge\;0.90\,M
+\qquad\qquad
+\bar M_{mj}=\frac{\left(\displaystyle\sum_{i=1}^{n} m_i\,\phi_{ij}^{m}\right)^{2}}{\displaystyle\sum_{i=1}^{n} m_i\left(\phi_{ij}^{m}\right)^{2}}
+$$
+
+- $\bar M_{mj}$: masa efectiva del modo $m$ en la dirección $j$; los modos con mucha masa efectiva son los "importantes".
+- $\phi^m_{ij}$: forma modal (amplitud en el nivel $i$ y dirección $j$ cuando vibra en el modo $m$).
+- La suma de las masas efectivas de **todos** los modos es igual a $M$; por eso el 90 % se alcanza con unos pocos.
+
+</Ecuacion>
+
+<Detalle titulo="Ejemplo mínimo de masa efectiva con tres niveles">
+
+Tres niveles de 100 Mg cada uno con una forma modal supuesta $\phi$ = (0.33, 0.67, 1.00):
+
+$$
+\bar M_{1}=\frac{\left(100\cdot0.33+100\cdot0.67+100\cdot1.00\right)^2}{100\cdot0.33^2+100\cdot0.67^2+100\cdot1.00^2}
+$$
+
+El numerador es ({f(masaPart.sumMphi, 0)})² = {miles(masaPart.sumMphi ** 2)} y el denominador {f(masaPart.sumMphi2, 1)}, de modo que $\bar M_1$ = **{f(masaPart.mEf, 1)} Mg**, es decir **{f(masaPart.fraccion * 100, 1)} %** de la masa total (300 Mg). Para llegar al 90 % haría falta incluir el modo 2 (y, si hiciera falta, el 3).
+
+</Detalle>
+
+### A.5.4.3 — Cortante modal en la base
+
+La parte del cortante basal aportada por el modo $m$ en la dirección $j$ (<NormaRef s="A.5.4.3" pag="A-70" />):
+
+<Ecuacion num="A.5.4-3" titulo="Cortante basal del modo m">
+
+$$
+V_{mj}=S_{am}\,g\,\bar M_{mj}
+$$
+
+- $S_{am}$: ordenada del espectro elástico de A.2.6 para el período $T_m$ del modo.
+- $\bar M_{mj}$: masa efectiva de A.5.4-2 (en kg ⇒ $V_{mj}$ en N; en Mg ⇒ kN).
+
+</Ecuacion>
+
+Es exactamente la lógica de A.4.3-1, pero modo por modo y con la **masa efectiva** del modo en lugar de la masa total. El cortante basal total $V_{tj}$ resulta de combinar los $V_{mj}$ según A.5.4.4.
+
+<Callout tipo="atencion" titulo="La rama T < T₀ y el modo fundamental">
+Para modos **distintos del fundamental** con $T_m < T_0$ se permite la rama ascendente $S_a = 2.5A_aF_aI\,(0.4 + 0.6T/T_0)$ de A.2.6.1.3 (<NormaRef s="A.2.6.1.3" pag="A-27" />). Para el modo fundamental se usa la meseta.
+</Callout>
+
+<CalculadoraEmbed id="espectro-diseno" />
+
+### A.5.4.4 — Combinación de los modos
+
+Los máximos de cada modo **no ocurren al mismo tiempo**; sumarlos aritméticamente sería demasiado conservador. La norma exige combinarlos con métodos "apropiados y debidamente sustentados, tales como la raíz cuadrada de la suma de los cuadrados u otros" (<NormaRef s="A.5.4.4" pag="A-70" />):
+
+$$
+R_{\text{total}}=\sqrt{\sum_{m=1}^{p} R_m^{2}}\qquad \text{(SRSS)}
+$$
+
+donde $R_m$ es la respuesta máxima del modo $m$ (cortante, fuerza, desplazamiento…). Tres precauciones de la norma:
+
+- **Modelos tridimensionales**: deben considerarse los efectos de **interacción modal**, "tales como la combinación cuadrática total" (**CQC**). SRSS supone modos independientes; cuando hay modos con períodos muy cercanos (frecuente en 3D, p. ej. traslación y torsión), SRSS puede subestimar o sobrestimar y se debe usar CQC.
+- **Derivas**: se calcula la deriva máxima **de cada modo por separado** y **después** se combinan. **No está permitido** obtener las derivas totales a partir de deflexiones que ya fueron combinadas.
+- Se combinan **todas** las respuestas: deflexiones, derivas, fuerzas de piso, cortantes de piso, cortante basal y fuerzas en elementos.
+
+<Detalle titulo="La forma de la CQC (no está escrita en la norma)">
+
+La NSR-10 solo nombra la CQC; su expresión habitual (Der Kiureghian) es
+
+$$
+R_{\text{total}}=\sqrt{\sum_{m=1}^{p}\sum_{n=1}^{p}\rho_{mn}\,R_m R_n},\qquad
+\rho_{mn}=\frac{8\xi^{2}(1+r)\,r^{3/2}}{(1-r^{2})^{2}+4\xi^{2}\,r\,(1+r)^{2}},\quad r=\frac{\omega_n}{\omega_m}
+$$
+
+con $\xi$ el amortiguamiento (5 % en el espectro de la norma) y $\rho_{mn}$ el coeficiente de correlación (1 si $m=n$; casi 0 si los modos están muy separados, y entonces la CQC se reduce a la SRSS). Es una referencia del análisis estructural, no una ecuación del Reglamento.
+
+</Detalle>
+
+<Detalle titulo="Por qué no se combinan primero las deflexiones (ejemplo numérico)">
+
+Un piso con dos modos; desplazamientos modales en mm del nivel $i$ y $i-1$:
+
+| Modo | $\delta_i$ | $\delta_{i-1}$ | Deriva del modo |
+|---|---:|---:|---:|
+| 1 | {derivaModal.m1.di} | {derivaModal.m1.dj} | {derivaModal.dm1} |
+| 2 | {derivaModal.m2.di} | {derivaModal.m2.dj} | {derivaModal.dm2} |
+
+- **Correcto**: se combinan las derivas modales: $\sqrt{15^2+(-10)^2}$ = **{f(derivaModal.correcta, 2)} mm**.
+- **Prohibido**: combinar primero los desplazamientos ($\sqrt{60^2+6^2}$ = {f(derivaModal.di, 2)} y $\sqrt{45^2+4^2}$ = {f(derivaModal.dj, 2)} mm) y restar: {f(derivaModal.incorrecta, 2)} mm, que **subestima** la deriva en {f(Math.abs(derivaModal.error), 1)} %.
+
+La raíz cuadrada elimina los signos; al restar luego, se pierde que el modo 2 empuja el piso en sentido contrario al desplazamiento del nivel inferior, lo que **aumenta** la deriva.
+
+</Detalle>
+
+### A.5.4.5 — Ajuste de los resultados
+
+Aquí está el vínculo con el Capítulo A.4. El cortante dinámico total $V_{tj}$, tras combinar modos y para **cualquier dirección de análisis $j$**, no puede ser menor que (<NormaRef s="A.5.4.5" pag="A-70" />):
+
+<TablaNorma numero="A.5.4.5" titulo="Cortante dinámico mínimo respecto al de la FHE" pag="A-70" nota="Vs: cortante basal del método de la fuerza horizontal equivalente, calculado con el período T del análisis dinámico limitado a Cu·Ta.">
+
+| Tipo de estructura | Mínimo de $V_{tj}$ | Factor de modificación si $V_{tj}$ es menor |
+|---|---|---|
+| **Regular** | 80 % de $V_s$ | $0.80\,V_s / V_{tj}$ (A.5.4-4) |
+| **Irregular** | 90 % de $V_s$ | $0.90\,V_s / V_{tj}$ (A.5.4-5) |
+
+</TablaNorma>
+
+Las **condiciones** que acompañan el ajuste:
+
+- **(a) Cómo se calcula $V_s$ para comparar**: se usa el período fundamental obtenido en el análisis dinámico, **pero sin exceder $C_uT_a$** (A.4.2). Si se emplean procedimientos de **interacción suelo-estructura** se permite usar un $V_s$ reducido por esa razón.
+- **(b) Si $V_{tj}$ queda por debajo** del 80 % (regular) o 90 % (irregular), **todos los parámetros de la respuesta** de esa dirección —deflexiones, derivas, fuerzas de piso, cortantes de piso, cortante basal, fuerzas en elementos— se **multiplican por el factor** anterior.
+- **(c) Si $V_{tj}$ excede** esos valores en alguna dirección principal, los parámetros de respuesta **pueden reducirse proporcionalmente**, a juicio del diseñador. La norma no dice hasta dónde; la lectura prudente es que no se baje de los mínimos de A.5.4.5.
+
+<Callout tipo="atencion" titulo="Verificación de porcentajes: 80 % / 90 % (y 100 % solo en el cronológico)">
+El porcentaje depende del método: **espectral → 80 % (regular) o 90 % (irregular)** de $V_s$; **cronológico → 100 %** de $V_s$ (A.5.5.3). No existe en A.5.4.5 un "100 % para irregulares" como a veces se cita de memoria. Además, el literal (c) del PDF dice "excede los valores prescritos en (a)", pero los valores mínimos están en el encabezado y en el literal (b); se interpreta como una remisión imprecisa a esos mínimos.
+</Callout>
+
+Una consecuencia práctica: el período de un modelo flexible o con poca rigidez es largo y da un $V_{tj}$ pequeño, pero como $V_s$ se evalúa con $T \le C_uT_a$, **el ajuste lo corrige hacia arriba**.
+
+<Figura alt="Barras horizontales que comparan el cortante basal de la FHE, el mínimo del 80 por ciento, el cortante modal SRSS y el cortante ajustado" numero="Esquema" pie="Cortantes basales del ejemplo numérico 1: Vtj (SRSS) queda por debajo del 80 % de Vs y se escala hasta alcanzarlo.">
+<svg viewBox="0 0 480 160" role="img" aria-label="Comparación de cortantes basales Vs, 0.80 Vs, Vtj SRSS y Vtj ajustado" className="mx-auto h-auto w-full max-w-xl">
+  {barras.map((b, i) => (
+    <g key={b.etiqueta}>
+      <text x="0" y={b.y + 15} fontSize="12" fill="currentColor">{b.etiqueta}</text>
+      <rect x="140" y={b.y} width={b.w} height="22" rx="3" fill="currentColor" fillOpacity={[0.85, 0.35, 0.5, 0.7][i]} />
+      <text x={140 + b.w + 6} y={b.y + 15} fontSize="12" fill="currentColor">{miles(b.valor)} kN</text>
+    </g>
+  ))}
+</svg>
+</Figura>
+
+### A.5.4.6 — Efectos direccionales y de la componente vertical
+
+- **Dirección del sismo** (<NormaRef s="A.5.4.6" pag="A-71" />): se aplican los requisitos de A.3.6.3 —en amenaza intermedia o alta se consideran los efectos ortogonales, combinando el **100 % del sismo en una dirección con el 30 % en la perpendicular** (tomando la combinación más desfavorable), o la raíz cuadrada de la suma de cuadrados de los efectos de cada dirección actuando independientemente—. Se exceptúan diafragmas flexibles y edificios de un piso sin irregularidad 5P.
+- **Componente vertical**: en **voladizos** y elementos **preesforzados** se sigue A.3.6.13 (en voladizos, una fuerza vertical ascendente o descendente del 30 % de la carga muerta en amenaza alta y del 15 % en intermedia; en preesforzados, combinaciones adicionales con el 50 % de la carga muerta), o alternativamente un análisis dinámico, **sin que el resultado sea menor** que el de A.3.6.13.
+
+Así, el análisis considera las **tres componentes** del movimiento: dos horizontales (combinadas 100/30 o SRSS) y la vertical (tratada con reglas simplificadas para los elementos sensibles).
+
+### A.5.4.7 — Torsión
+
+El análisis dinámico debe incluir los **efectos torsionales de toda la estructura** de A.3.6.7 (<NormaRef s="A.5.4.7" pag="A-71" />). Un punto sutil de A.3.6.7: en un análisis dinámico el propio modelo (3D con diafragma rígido) refleja la excentricidad entre centros de masa y rigidez, y **queda a opción del diseñador** incluir o no la **torsión accidental** (desplazar la masa de cada piso el 5 % de la dimensión perpendicular a la dirección en estudio). En el método de la FHE, en cambio, sí es obligatoria (A.3.6.7.1), con amplificación $A_x$ cuando hay irregularidades 1aP o 1bP.
+
+### A.5.4.8 — Sistemas duales
+
+En un **sistema dual** (A.3.2.1.4), el conjunto debe resistir el **cortante total en la base** del análisis dinámico. El pórtico espacial resistente a momentos, analizado independientemente como exige A.3.2.1.4 (b), puede verificarse con un análisis dinámico o con la fuerza horizontal equivalente del Capítulo A.4 (<NormaRef s="A.5.4.8" pag="A-71" />).
+
+## A.5.5 — Método de análisis dinámico cronológico
+
+Se integran las ecuaciones de movimiento **paso a paso** con familias de acelerogramas.
+
+### A.5.5.1 — Generalidades
+
+Puede usarse cuando, a juicio del diseñador, **describe adecuadamente** las propiedades dinámicas y da resultados representativos del sismo de diseño. El modelo puede ser **elástico o inelástico**; si es inelástico, hay que cumplir A.3.4.2.3 (<NormaRef s="A.5.5.1" pag="A-71" />), que exige **revisión por dos profesionales independientes** del diseñador, quienes firman un memorial de que los procedimientos consultan las mejores metodologías y de que la edificación tiene un comportamiento similar al de una diseñada por los otros métodos; el memorial se anexa a la solicitud de licencia.
+
+### A.5.5.2 — Respuesta máxima
+
+Se determinan los máximos de deflexiones, derivas, fuerzas y cortantes (de piso y basal) para el conjunto de la familia de acelerogramas de A.2.7.1, que en este caso **no debe tener menos de tres registros** (<NormaRef s="A.5.5.2" pag="A-71" />).
+
+### A.5.5.3 — Ajuste de los resultados
+
+El **máximo** cortante dinámico total $V_{tj}$ en cualquiera de las direcciones principales **no puede ser menor que $V_s$** (100 %), con $V_s$ calculado según A.4 y A.5.4.5(a). Si es menor, todos los parámetros de respuesta de esa dirección se multiplican por (<NormaRef s="A.5.5.3" pag="A-71" />):
+
+<Ecuacion num="A.5.5-1" titulo="Factor de modificación en el análisis cronológico">
+
+$$
+\frac{V_s}{V_{tj}}
+$$
+
+</Ecuacion>
+
+- Con un **modelo inelástico**, los resultados ya incorporan el efecto de $R$, y debe tenerse en cuenta para el ajuste.
+- Con **siete o más** acelerogramas, en lugar del valor máximo de $V_{tj}$ se puede usar el **promedio** de los valores de todos los registros.
+
+<TablaNorma numero="Comparación" titulo="Espectral frente a cronológico (ajuste al cortante de la FHE)" pag="A-70">
+
+| Aspecto | Espectral (A.5.4) | Cronológico (A.5.5) |
+|---|---|---|
+| Movimiento | Espectro de A.2.6 | Mínimo 3 acelerogramas (A.2.7.1) |
+| Combinación | SRSS / CQC de modos | Máximos de la historia de respuesta |
+| Mínimo de $V_{tj}$ | 80 % $V_s$ (regular), 90 % (irregular) | 100 % $V_s$ (máximo, o promedio si hay ≥ 7 registros) |
+| Factor | $0.80V_s/V_{tj}$ o $0.90V_s/V_{tj}$ | $V_s/V_{tj}$ |
+| Modelo | Elástico | Elástico o inelástico |
+
+</TablaNorma>
+
+### A.5.5.4 — Fuerzas de diseño en los elementos
+
+Se usan las fuerzas internas máximas $F_s$ ya ajustadas según A.5.5.3 (<NormaRef s="A.5.5.4" pag="A-72" />):
+
+- **(a) Análisis elástico**: se dividen por $R$ (modificado por irregularidad y ausencia de redundancia, A.3.3.3) para obtener $E$ y se combinan con las otras cargas del Título B.
+- **(b) Análisis inelástico**: las fuerzas al nivel donde ocurre la plastificación **ya son** las fuerzas reducidas $E$ y **no se dividen por $R$**. Al hacer el ajuste de A.5.5.3 se permite comparar con $V_s/R$. Debe verificarse que las combinaciones del Título B **sin sismo** no conduzcan a esfuerzos mayores que los de plastificación.
+
+### A.5.5.5 — Fuerzas de diseño en la cimentación
+
+En análisis elástico se cumple lo de A.3.7.2. En el **inelástico** no hace falta dividir por $R$ para obtener $E$ de los elementos de cimentación ni los esfuerzos sobre el suelo; solo se multiplican por el coeficiente de carga **0.7** (<NormaRef s="A.5.5.5" pag="A-72" />).
+
+## Ejemplos y casos prácticos
+
+<Ejemplo numero={1} titulo="Combinación modal SRSS y ajuste al 80 % de Vs">
+Se retoma el edificio de 8 pisos de pórticos de concreto del Capítulo A.4 (Cali, $A_a$ = $A_v$ = 0.25, perfil D, $F_a$ = {f(dinamico.p.fa)}, $F_v$ = {f(dinamico.p.fv)}, $I$ = 1.0, $M$ = {miles(dinamico.masaMg)} Mg), clasificado como **regular**. Un programa de análisis modal entrega cuatro modos en la dirección de estudio (valores supuestos para el ejemplo). Calcular $V_{tj}$ por SRSS y el factor de ajuste de A.5.4.5.
+
+<Paso titulo="Verificar la masa participante" ref="A.5.4-1">
+Masas efectivas modales: {dinamico.modos.map((x) => `${f(x.frac * 100, 1)} %`).join(' + ')} = **{f(dinamico.fracTotal * 100, 1)} %** ≥ 90 %. Los cuatro modos bastan.
+</Paso>
+<Paso titulo="Cortante Vs de la FHE para comparar" ref="A.4.2.1, A.5.4.5(a)">
+El modo 1 tiene $T_1$ = {f(dinamico.tModal1, 2)} s; el límite es $C_uT_a$ = {f(dinamico.cu, 2)} × {f(dinamico.taAprox, 3)} = {f(dinamico.tMax, 3)} s, que no se excede; se usa $T$ = {f(dinamico.tVs, 2)} s. Entonces $S_a$ = {f(dinamico.saVs, 4)} g y $V_s = S_a\,g\,M$ = **{miles(dinamico.vs)} kN**. El mínimo para una estructura regular es 0.80$V_s$ = **{miles(dinamico.minReg)} kN**.
+</Paso>
+<Paso titulo="Cortante de cada modo" ref="A.5.4-3">
+
+$$
+V_{mj}=S_{am}\,g\,\bar M_{mj}
+$$
+
+Con $T_C$ = {f(dinamico.per.tc, 3)} s, $T_0$ = {f(dinamico.per.t0, 3)} s y meseta = {f(dinamico.meseta, 4)} g:
+
+<table>
+  <thead>
+    <tr><th>Modo</th><th>T (s)</th><th>Sam (g)</th><th>Masa efectiva (%)</th><th>Masa efectiva (Mg)</th><th>Vmj (kN)</th></tr>
+  </thead>
+  <tbody>
+    {dinamico.modos.map((x) => (
+      <tr key={x.m}>
+        <td>{x.m}</td><td>{f(x.t, 2)}</td><td>{f(x.sam, 4)}{x.enRama ? ' (rama T < T0)' : ''}</td><td>{f(x.frac * 100, 1)}</td><td>{f(x.mEf, 0)}</td><td>{miles(x.v)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+El modo 4 ($T$ = 0.12 s &lt; $T_0$) usa la rama ascendente permitida para modos distintos del fundamental.
+
+</Paso>
+<Paso titulo="Combinación SRSS" ref="A.5.4.4">
+
+$$
+V_{tj}=\sqrt{V_{1}^{2}+V_{2}^{2}+V_{3}^{2}+V_{4}^{2}}
+$$
+
+Resultado: $V_{tj}$ = **{miles(dinamico.vSrss)} kN** (la suma aritmética daría {miles(dinamico.vSuma)} kN, excesivamente conservadora).
+
+</Paso>
+<Paso titulo="Ajuste al mínimo" ref="A.5.4-4">
+
+$V_{tj}$ = {miles(dinamico.vSrss)} kN &lt; 0.80$V_s$ = {miles(dinamico.minReg)} kN, así que hay que ajustar:
+
+$$
+\text{factor}=\frac{0.80\,V_s}{V_{tj}}
+$$
+
+Factor = **{f(dinamico.factReg, 3)}**: todas las respuestas (desplazamientos, derivas, fuerzas de piso, cortantes y fuerzas en elementos) se multiplican por {f(dinamico.factReg, 3)}. El cortante ajustado queda en {miles(dinamico.vAjustado)} kN. Si la estructura fuera **irregular** el mínimo sería 0.90$V_s$ = {miles(dinamico.minIrr)} kN y el factor {f(dinamico.factIrr, 3)}.
+
+</Paso>
+<Resultado>
+Masa participante {f(dinamico.fracTotal * 100, 1)} % (cumple), $V_{tj}$ (SRSS) = {miles(dinamico.vSrss)} kN, mínimo 80 % $V_s$ = {miles(dinamico.minReg)} kN, **factor de ajuste = {f(dinamico.factReg, 3)}**. Después se dividen las fuerzas internas por $R$ y se verifican las derivas con las respuestas ya ajustadas (y sin dividir por $R$).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Caso práctico: ¿qué método de análisis para una torre de 25 pisos en Cali?">
+Una torre de vivienda de **25 pisos** ($h_n$ = {torre.hn} m), con sistema de muros estructurales, en **Cali** sobre perfil **D** ($A_a$ = $A_v$ = 0.25). El equipo debe decidir el método de análisis y ordenar el trabajo.
+
+<Paso titulo="¿Basta la fuerza horizontal equivalente?" ref="A.3.4.2.1, A.3.4.2.2">
+No. Tiene más de 20 niveles y más de 60 m (A.3.4.2.2 (a)); además, el perfil es D y el período probablemente supere $2T_C$: con $F_a$ = {f(torre.fa)}, $F_v$ = {f(torre.fv)}, $T_C$ = {f(torre.per.tc, 3)} s y $2T_C$ = {f(torre.dosTc, 2)} s, mientras que el período aproximado (muros, $C_t$ = 0.049, $\alpha$ = 0.75) es $T_a$ = {f(torre.ta, 2)} s y puede crecer hasta $C_uT_a$ = {f(torre.tmax, 2)} s. Si el modelo da $T > 2T_C$ en suelo D, A.3.4.2.2 (e) exige análisis dinámico **con interacción suelo-estructura** (Capítulo A.7).
+</Paso>
+<Paso titulo="Escoger y construir el modelo" ref="A.5.2.1">
+Modelo 3D con **diafragma rígido** (A.5.2.1.1), tanto por ser el habitual en edificios con losas macizas como porque si aparecen irregularidades en planta 1aP/1bP/4P/5P es el modelo obligatorio. Se verifica antes si alguna irregularidad (p. ej. 2P o 3P) obliga a diafragma flexible.
+</Paso>
+<Paso titulo="Masa y rigidez" ref="A.5.2.2, A.5.2.3">
+Masa $M$ con cargas muertas reales, particiones y equipos; rigideces **fisuradas** coherentes con A.3.4.3 y el título del concreto. Se documentan los criterios.
+</Paso>
+<Paso titulo="Modos y masa participante" ref="A.5.4.2">
+Se extraen modos hasta que, en **cada** dirección horizontal, la masa participante supere el 90 %. En una torre de 25 pisos suelen necesitarse del orden de una docena o más de modos, y debe revisarse que haya modos torsionales.
+</Paso>
+<Paso titulo="Espectro, combinación y ajuste" ref="A.5.3.2, A.5.4.4, A.5.4.5">
+Se usa el espectro de A.2.6 con el $I$ del grupo de uso (vivienda: grupo I). Combinación **CQC** (modelo 3D con modos cercanos). Se calcula $V_s$ con $T \le C_uT_a$ y se comparan $V_{tj}$ en $x$ e $y$ con el 80 % (si es regular) o 90 % (si es irregular).
+</Paso>
+<Paso titulo="Derivas, torsión y direcciones" ref="A.6, A.5.4.6, A.5.4.7">
+Las derivas se combinan modo por modo (nunca desde deflexiones ya combinadas), se escalan con el factor de ajuste y se comparan con el 1.0 % de $h_{pi}$ del Capítulo A.6. Los efectos ortogonales se toman 100 % + 30 %, y se decide (y se documenta) si se incluye torsión accidental.
+</Paso>
+<Paso titulo="Diseño y documentos">
+Las fuerzas internas ajustadas se dividen por $R$ y se combinan según el Título B. El diseñador estructural es responsable del software y de las hipótesis (A.5.1.5). Si se hubiera decidido un análisis dinámico **inelástico**, la licencia necesitaría además el memorial de **dos revisores independientes** (A.3.4.2.3).
+</Paso>
+<Resultado>
+La torre se analiza con un modelo **3D, dinámico elástico espectral**, con combinación **CQC**, ajuste de $V_{tj}$ al 80/90 % de $V_s$ y consideración de la interacción suelo-estructura si $T > 2T_C$.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Confundir los porcentajes**: espectral = 80 % (regular) o 90 % (irregular) de $V_s$; cronológico = 100 % de $V_s$.
+- **Calcular $V_s$ con un período mayor que $C_uT_a$** al comparar: el período del análisis dinámico se limita a $C_uT_a$ (A.5.4.5 (a)).
+- **No incluir suficientes modos**: la masa participante debe ser ≥ 90 % **en cada dirección** horizontal, no solo en una.
+- **Combinar las deflexiones antes de calcular derivas**: está prohibido; se combinan las derivas modales (A.5.4.4).
+- **Aplicar la rama $T < T_0$ al modo fundamental**: solo vale para los otros modos.
+- **Usar SRSS en 3D con modos de períodos muy cercanos**: la norma pide la interacción modal (CQC).
+- **Ajustar solo el cortante basal** y no las derivas, desplazamientos y fuerzas en elementos: el factor de A.5.4.5 afecta **todos** los resultados de esa dirección.
+- **Olvidar dividir por $R$** las fuerzas internas (pero **no** dividir por $R$ las derivas) o, en análisis inelástico, dividir por $R$ lo que ya está reducido.
+- **Usar rigideces brutas sin criterio** en concreto o mampostería, cuando A.5.2.3 pide coherencia con la fisuración.
+</Callout>
+
+## Resumen en una línea
+
+**Modela masa y rigidez en 3D → calcula modos hasta ≥ 90 % de masa → lee $S_{am}$ por modo → combina con SRSS/CQC (derivas modo por modo) → exige $V_{tj} \ge 0.80V_s$ (regular) o $0.90V_s$ (irregular), o $V_s$ en el cronológico, escalando todos los resultados → divide por $R$ y diseña.**

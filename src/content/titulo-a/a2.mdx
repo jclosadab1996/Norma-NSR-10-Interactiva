@@ -1,0 +1,403 @@
+---
+codigo: 'A.2'
+tipo: capitulo
+titulo: 'Zonas de amenaza sísmica y movimientos sísmicos de diseño'
+resumen: 'Cómo la norma define cuánto tiembla el suelo en cada lugar (Aa, Av), cómo lo modifica el tipo de suelo (Fa, Fv), la importancia de la edificación (I) y cómo todo se resume en el espectro de diseño.'
+objetivos:
+  - 'Ubicar un sitio en zona de amenaza baja, intermedia o alta'
+  - 'Obtener Aa y Av y los coeficientes de sitio Fa y Fv'
+  - 'Clasificar una edificación en su grupo de uso y hallar I'
+  - 'Construir el espectro de diseño y leer Sa para un período T'
+paginasNorma: 'A-13 a A-38'
+paginaPdf: 56
+orden: 2
+calculadoras: ['zona-amenaza', 'efectos-locales', 'espectro-diseno', 'municipios']
+nivel: 'intermedio'
+---
+
+import { coeficienteFa, coeficienteFv, coeficienteImportancia, periodosEspectro, sa, mesetaSa, velocidadMediaCortante, perfilPorVs } from '../../lib/nsr10';
+
+export const ej = (() => {
+  const aa = 0.15, av = 0.2;
+  const fa = coeficienteFa('D', aa);
+  const fv = coeficienteFv('D', av);
+  const i = coeficienteImportancia('III');
+  const p = { aa, av, fa, fv, i };
+  return { aa, av, fa, fv, i, p, per: periodosEspectro(p), meseta: mesetaSa(p), sa06: sa(0.6, p), sa12: sa(1.2, p), sa6: sa(6, p) };
+})();
+
+export const vsEj = velocidadMediaCortante([
+  { espesor: 8, vs: 150 },
+  { espesor: 12, vs: 250 },
+  { espesor: 10, vs: 450 },
+]);
+
+## Idea central del capítulo
+
+Antes de calcular cualquier fuerza sobre una edificación hay que responder una pregunta: **¿qué movimiento del terreno debe resistir?** El Capítulo A.2 la responde en cuatro pasos encadenados:
+
+1. **Dónde está el proyecto** → los coeficientes $A_a$ y $A_v$ (y con ellos la *zona de amenaza sísmica*).
+2. **Qué suelo hay debajo** → los coeficientes de sitio $F_a$ y $F_v$ que amplifican (o reducen) el movimiento.
+3. **Qué tan importante es la edificación** → el coeficiente de importancia $I$.
+4. **Cómo se resume todo** → el *espectro de diseño* $S_a(T)$, que da la aceleración de diseño según el período de vibración.
+
+<Callout tipo="importante" titulo="Probabilidad de diseño">
+Los movimientos de diseño corresponden a una probabilidad del **10 % de ser excedidos en 50 años** (<NormaRef s="A.2.2.1" pag="A-14" />), lo que equivale a un período de retorno de unos 475 años. Para edificaciones de los grupos II, III y IV, el coeficiente $I$ sube el nivel de diseño.
+</Callout>
+
+## A.2.1 — General
+
+Toda estructura debe ubicarse en una de las tres zonas de amenaza sísmica y usar los movimientos de diseño del capítulo, ya sea mediante el **espectro elástico** (A.2.6) o mediante **familias de acelerogramas** (A.2.7) (<NormaRef s="A.2.1.1" pag="A-14" />).
+
+Se permiten movimientos distintos a los prescritos solo en casos justificados:
+
+- **Microzonificación sísmica** aprobada por el municipio (<NormaRef s="A.2.1.2.1" />): sus resultados reemplazan A.2.4 y A.2.6.
+- **Estudio sísmico particular de sitio** hecho por el geotecnista (<NormaRef s="A.2.1.2.2" />, ver A.2.10).
+- **Valores de Aa, Av o Ae diferentes** a los del Reglamento: requieren aprobación de la oficina municipal que expide licencias, previo concepto de la Comisión Asesora Permanente (<NormaRef s="A.2.1.3" />).
+
+## A.2.2 — Movimientos sísmicos de diseño
+
+Dos parámetros describen la sacudida esperada en roca:
+
+| Parámetro | Qué representa | Rango de períodos que gobierna |
+|---|---|---|
+| $A_a$ | Aceleración horizontal pico efectiva (fracción de $g$) | Edificios bajos, períodos de 0.1 a 0.5 s (1 a 5 pisos aprox.) |
+| $A_v$ | Velocidad horizontal pico efectiva (expresada como aceleración) | Edificios altos, períodos cercanos a 1 s (10 pisos o más) |
+
+El NSR-98 usaba solo $A_a$; el NSR-10 agrega $A_v$ para representar mejor cómo se atenúan las ondas con la distancia.
+
+Para obtenerlos se ubica el sitio en los mapas de las Figuras A.2.3-2 ($A_a$) y A.2.3-3 ($A_v$) y se lee el valor de la región en la Tabla A.2.2-1. Para **capitales de departamento** se usa la Tabla A.2.3-2 y para **todos los municipios** el Apéndice A-4 (<NormaRef s="A.2.2.3" pag="A-14" />). En esta web puedes consultarlos en el [buscador de municipios](/titulo-a/municipios).
+
+<TablaNorma numero="Tabla A.2.2-1" titulo="Valores de Aa y Av según la región de los mapas" pag="A-15">
+
+| Región Nº | Aa o Av |
+|---:|---:|
+| 10 | 0.50 |
+| 9 | 0.45 |
+| 8 | 0.40 |
+| 7 | 0.35 |
+| 6 | 0.30 |
+| 5 | 0.25 |
+| 4 | 0.20 |
+| 3 | 0.15 |
+| 2 | 0.10 |
+| 1 | 0.05 |
+
+</TablaNorma>
+
+## A.2.3 — Zonas de amenaza sísmica
+
+La zona se define con el **mayor valor entre $A_a$ y $A_v$** (<NormaRef s="Tabla A.2.3-1" pag="A-15" />):
+
+<TablaNorma numero="Tabla A.2.3-1" titulo="Nivel de amenaza sísmica según Aa y Av" pag="A-15">
+
+| Mayor valor entre Aa y Av | Región | Amenaza sísmica |
+|---|---|---|
+| ≤ 0.10 | 1 y 2 | **Baja** |
+| 0.15 y 0.20 | 3 y 4 | **Intermedia** |
+| ≥ 0.25 | 5 a 10 | **Alta** |
+
+</TablaNorma>
+
+- **Baja** (<NormaRef s="A.2.3.1" />): $A_a$ y $A_v$ ≤ 0.10.
+- **Intermedia** (<NormaRef s="A.2.3.2" />): alguno es mayor de 0.10 y ninguno excede 0.20.
+- **Alta** (<NormaRef s="A.2.3.3" />): alguno es mayor de 0.20.
+
+<Callout tipo="practica">
+La zona de amenaza no es un detalle administrativo: de ella dependen qué **sistemas estructurales** se permiten y hasta qué altura (Tablas A.3-1 a A.3-4), qué **irregularidades** hay que evaluar, el **método de análisis** mínimo y la **separación sísmica** entre vecinos.
+</Callout>
+
+<CalculadoraEmbed id="zona-amenaza" />
+
+<Detalle titulo="Mapas de amenaza sísmica de la norma (Figuras A.2.3-1, A.2.3-2 y A.2.3-3)" abierto>
+
+<Figura src="/img/titulo-a/figura-a2-3-1-zonas-amenaza.png" alt="Mapa de Colombia con las zonas de amenaza sísmica baja, intermedia y alta" numero="Figura A.2.3-1" pie="Zonas de amenaza sísmica aplicable a edificaciones en función de Aa y Av." pag="A-17" />
+
+<Figura src="/img/titulo-a/figura-a2-3-2-mapa-aa.png" alt="Mapa de Colombia con las regiones de valores de Aa del 1 al 10" numero="Figura A.2.3-2" pie="Mapa de valores de Aa (se lee la región y se obtiene el valor con la Tabla A.2.2-1)." pag="A-18" />
+
+<Figura src="/img/titulo-a/figura-a2-3-3-mapa-av.png" alt="Mapa de Colombia con las regiones de valores de Av del 1 al 10" numero="Figura A.2.3-3" pie="Mapa de valores de Av." pag="A-19" />
+
+</Detalle>
+
+<Detalle titulo="Ejemplos de capitales (Tabla A.2.3-2)">
+
+| Ciudad | Aa | Av | Zona |
+|---|---:|---:|---|
+| Bogotá D. C. | 0.15 | 0.20 | Intermedia |
+| Medellín | 0.15 | 0.20 | Intermedia |
+| Cali | 0.25 | 0.25 | Alta |
+| Bucaramanga | 0.25 | 0.25 | Alta |
+| Cúcuta | 0.35 | 0.30 | Alta |
+| Barranquilla | 0.10 | 0.10 | Baja |
+| Cartagena | 0.10 | 0.10 | Baja |
+| Leticia | 0.05 | 0.05 | Baja |
+
+Algunas capitales difieren levemente entre la Tabla A.2.3-2 y el Apéndice A-4 (por ejemplo Cúcuta: Av 0.30 vs 0.25). Ninguna cambia la zona, pero verifica siempre el valor oficial vigente de tu municipio.
+
+</Detalle>
+
+## A.2.4 — Efectos locales
+
+El suelo bajo la edificación **amplifica o atenúa** el movimiento de la roca. La norma lo recoge con dos factores: $F_a$ (zona de períodos cortos) y $F_v$ (períodos intermedios). El perfil de suelo lo determina el **ingeniero geotecnista** (<NormaRef s="A.2.4" pag="A-20" />).
+
+### Tipos de perfil de suelo
+
+Hay seis tipos (A a F). Los parámetros se calculan sobre los **30 m superiores** del perfil, con ensayos al menos cada 1.50 m:
+
+<TablaNorma numero="Tabla A.2.4-1" titulo="Clasificación de los perfiles de suelo" pag="A-22">
+
+| Tipo | Descripción | Definición |
+|---|---|---|
+| **A** | Perfil de roca competente | $v_s ≥ 1500$ m/s |
+| **B** | Perfil de roca de rigidez media | 1500 > $v_s$ ≥ 760 m/s |
+| **C** | Suelos muy densos o roca blanda | 760 > $v_s$ ≥ 360 m/s; $N ≥ 50$ o $s_u ≥ 100$ kPa |
+| **D** | Suelos rígidos | 360 > $v_s$ ≥ 180 m/s; 50 > $N ≥ 15$ o 100 > $s_u ≥ 50$ kPa |
+| **E** | Suelos blandos | $v_s$ < 180 m/s; o más de 3 m de arcilla blanda (IP > 20, $w ≥ 40$ %, $s_u$ < 50 kPa) |
+| **F** | Requiere estudio de sitio | Suelos licuables, turba y arcillas orgánicas, arcillas de muy alta plasticidad, arcillas blandas de gran espesor (F1 a F4) |
+
+</TablaNorma>
+
+### Parámetros para clasificar
+
+La velocidad media de la onda de cortante se calcula como un promedio **ponderado por el tiempo de viaje** (<NormaRef s="A.2.4-1" />):
+
+<Ecuacion num="A.2.4-1" titulo="Velocidad media de la onda de cortante">
+
+$$
+\bar v_s=\frac{\sum_{i=1}^{n} d_i}{\sum_{i=1}^{n}\dfrac{d_i}{v_{si}}}
+$$
+
+- $d_i$: espesor del estrato $i$ dentro de los 30 m superiores (la suma debe ser 30 m).
+- $v_{si}$: velocidad de onda de cortante medida en campo en el estrato $i$ (m/s).
+
+</Ecuacion>
+
+El número medio de golpes $N$ del ensayo de penetración estándar (SPT, corregido por energía $N_{60}$) se promedia igual, con $N_i$ ≤ 100 (<NormaRef s="A.2.4-2" />), y la resistencia al corte no drenado $\bar s_u$ se promedia solo en los estratos cohesivos con $s_{ui}$ ≤ 250 kPa (<NormaRef s="A.2.4-4" />).
+
+### Procedimiento de clasificación (A.2.4.5)
+
+1. **Paso 1** — ¿Es un perfil tipo F? Si sí, se requiere un estudio sísmico particular (A.2.10).
+2. **Paso 2** — ¿Hay 3 m o más de arcilla blanda ($s_u$ < 50 kPa, $w$ > 40 %, IP > 20)? Entonces es tipo **E**.
+3. **Paso 3** — Clasificar con $v_s$ si se dispone de él (prevalece); si no, con $N$; o bien con $N_{ch}$ (suelos no cohesivos) y $s_u$ (cohesivos) y, si difieren, tomar el **perfil más blando**.
+
+<Callout tipo="atencion">
+Los perfiles donde existan **más de 3 m de suelo** entre la superficie de la roca y la parte inferior de la fundación **no pueden clasificarse como A o B** (<NormaRef s="A.2.4.5.4" pag="A-23" />). Los valores de Fa y Fv **no incluyen efectos de ladera** (<NormaRef s="A.2.4.5.7" />).
+</Callout>
+
+### Coeficientes Fa y Fv
+
+Se leen de las tablas según el perfil y la intensidad ($A_a$ para $F_a$; $A_v$ para $F_v$); **para valores intermedios se interpola linealmente** entre columnas del mismo perfil.
+
+<TablaNorma numero="Tabla A.2.4-3" titulo="Coeficiente Fa — zona de períodos cortos" pag="A-23" nota="Para el perfil F debe realizarse una investigación geotécnica particular (A.2.10).">
+
+| Perfil | Aa ≤ 0.1 | Aa = 0.2 | Aa = 0.3 | Aa = 0.4 | Aa ≥ 0.5 |
+|---|---:|---:|---:|---:|---:|
+| A | 0.8 | 0.8 | 0.8 | 0.8 | 0.8 |
+| B | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| C | 1.2 | 1.2 | 1.1 | 1.0 | 1.0 |
+| D | 1.6 | 1.4 | 1.2 | 1.1 | 1.0 |
+| E | 2.5 | 1.7 | 1.2 | 0.9 | 0.9 |
+| F | — | — | — | — | — |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla A.2.4-4" titulo="Coeficiente Fv — zona de períodos intermedios" pag="A-24" nota="Para el perfil F debe realizarse una investigación geotécnica particular (A.2.10).">
+
+| Perfil | Av ≤ 0.1 | Av = 0.2 | Av = 0.3 | Av = 0.4 | Av ≥ 0.5 |
+|---|---:|---:|---:|---:|---:|
+| A | 0.8 | 0.8 | 0.8 | 0.8 | 0.8 |
+| B | 1.0 | 1.0 | 1.0 | 1.0 | 1.0 |
+| C | 1.7 | 1.6 | 1.5 | 1.4 | 1.3 |
+| D | 2.4 | 2.0 | 1.8 | 1.6 | 1.5 |
+| E | 3.5 | 3.2 | 2.8 | 2.4 | 2.4 |
+| F | — | — | — | — | — |
+
+</TablaNorma>
+
+Fíjate en la tendencia: **cuanto más blando es el suelo y más débil el sismo, mayor la amplificación**. Con sismos fuertes el suelo blando se degrada y amplifica menos (por eso $F_a$ del perfil E baja de 2.5 a 0.9).
+
+<Ejemplo numero={1} titulo="Perfil de suelo y coeficientes de sitio">
+Un lote tiene tres estratos en los 30 m superiores: 8 m con $v_s$ = 150 m/s, 12 m con 250 m/s y 10 m con 450 m/s. El proyecto está en una zona con $A_a$ = 0.15 y $A_v$ = 0.20. Determinar el perfil de suelo, $F_a$ y $F_v$.
+
+<Paso titulo="Velocidad media de onda de cortante" ref="A.2.4-1">
+
+$$
+\bar v_s=\frac{8+12+10}{\dfrac{8}{150}+\dfrac{12}{250}+\dfrac{10}{450}}=\frac{30}{0.0533+0.0480+0.0222}
+$$
+
+Resultado: $\bar v_s$ = **{vsEj.toFixed(1)} m/s**.
+
+</Paso>
+<Paso titulo="Clasificar el perfil" ref="Tabla A.2.4-1">
+Con $v_s$ = {vsEj.toFixed(0)} m/s, que está entre 180 y 360 m/s, el perfil es **tipo {perfilPorVs(vsEj).perfil}** (suelos rígidos).
+</Paso>
+<Paso titulo="Interpolar Fa con Aa = 0.15" ref="A.2.4.5.5">
+Para el perfil D, $F_a$ = 1.6 con $A_a$ = 0.1 y 1.4 con $A_a$ = 0.2. Con $A_a$ = 0.15, a medio camino: $F_a$ = (1.6 + 1.4)/2 = **{ej.fa.toFixed(2)}**.
+</Paso>
+<Paso titulo="Leer Fv con Av = 0.20" ref="A.2.4.5.6">
+Para el perfil D, $A_v$ = 0.2 está tabulado: $F_v$ = **{ej.fv.toFixed(2)}**.
+</Paso>
+<Resultado>
+Perfil **D**, $F_a$ = {ej.fa.toFixed(2)}, $F_v$ = {ej.fv.toFixed(2)}. Compruébalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="efectos-locales" />
+
+## A.2.5 — Coeficiente de importancia
+
+Toda edificación se clasifica en un **grupo de uso** según la consecuencia de su falla o su necesidad después de un sismo (<NormaRef s="A.2.5.1" pag="A-25" />). El coeficiente $I$ aumenta las fuerzas de diseño para los grupos más importantes:
+
+<TablaNorma numero="Tabla A.2.5-1" titulo="Coeficiente de importancia I" pag="A-26">
+
+| Grupo de uso | Tipo de edificación (ejemplos) | I |
+|---|---|---:|
+| **IV** — Indispensables | Hospitales con cirugía/urgencias, aeropuertos, centrales de telecomunicación, refugios de emergencia, centros de operación de líneas vitales, edificaciones con materiales explosivos o tóxicos | 1.50 |
+| **III** — Atención a la comunidad | Bomberos, policía, defensa civil, cuarteles, centros de atención de emergencias, escuelas, colegios y universidades | 1.25 |
+| **II** — Ocupación especial | Salones con más de 200 personas, graderías con más de 2000 personas, centros comerciales de más de 500 m² por piso, edificios con más de 3000 ocupantes, edificios gubernamentales, otros hospitales y clínicas | 1.10 |
+| **I** — Ocupación normal | Todas las demás edificaciones dentro del alcance del Reglamento | 1.00 |
+
+</TablaNorma>
+
+<Callout tipo="nota">
+El propietario puede subir voluntariamente una edificación del grupo II al III para tener seguridad adicional (<NormaRef s="A.2.5.1.2" />). Las administraciones también pueden designar otras edificaciones en el grupo III.
+</Callout>
+
+## A.2.6 — Espectro de diseño
+
+Un espectro de respuesta indica la **aceleración máxima** que experimenta un sistema de un grado de libertad de período $T$. El espectro del Reglamento es elástico, con **5 % de amortiguamiento crítico**, y tiene tres tramos: una meseta de aceleración constante, una rama descendente $\propto 1/T$ y otra $\propto 1/T^2$.
+
+### Períodos característicos
+
+<Ecuacion num="A.2.6-2, -4 y -6" titulo="Períodos que delimitan el espectro">
+
+$$
+T_C = 0.48\,\frac{A_v F_v}{A_a F_a}\qquad
+T_L = 2.4\,F_v\qquad
+T_0 = 0.1\,\frac{A_v F_v}{A_a F_a}
+$$
+
+</Ecuacion>
+
+### Aceleración espectral
+
+<Ecuacion num="A.2.6-1, -3 y -5" titulo="Espectro elástico de aceleraciones Sa (fracción de g)">
+
+$$
+S_a=\begin{cases}
+2.5\,A_a F_a I & T \le T_C\\[4pt]
+\dfrac{1.2\,A_v F_v I}{T} & T_C < T \le T_L\\[8pt]
+\dfrac{1.2\,A_v F_v T_L I}{T^2} & T > T_L
+\end{cases}
+$$
+
+- La **meseta** $2.5A_aF_aI$ se debe al movimiento a períodos cortos (edificios bajos y rígidos).
+- Entre $T_C$ y $T_L$ la aceleración decrece como $1/T$ (zona controlada por $A_v$).
+- Después de $T_L$ decrece como $1/T^2$ (desplazamiento aproximadamente constante).
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="La rama T < T0">
+Para análisis dinámico (Capítulo A.5) y **solo para modos distintos al fundamental**, con períodos menores que $T_0$ se puede usar $S_a = 2.5A_aF_aI\,(0.4+0.6\,T/T_0)$ (<NormaRef s="A.2.6.1.3" pag="A-27" />). Para el modo fundamental se usa la meseta.
+</Callout>
+
+Además de $S_a$, la norma define el **espectro de velocidades** $S_v$ (ecuaciones A.2.6-8 a A.2.6-11, en m/s) y el de **desplazamientos** $S_d$ (A.2.6-12 a A.2.6-15, en m), con las mismas $T_C$ y $T_L$:
+
+| | $T ≤ T_C$ | $T_C < T ≤ T_L$ | $T > T_L$ |
+|---|---|---|---|
+| $S_v$ (m/s) | $3.9\,A_aF_a I\,T$ | $1.87\,A_vF_vI$ | $1.87\,A_vF_vI\,T_L/T$ |
+| $S_d$ (m) | $0.62\,A_aF_aI\,T^2$ | $0.3\,A_vF_vI\,T$ | $0.3\,A_vF_vI\,T_L$ |
+
+<Ejemplo numero={2} titulo="Espectro de diseño de un colegio en Bogotá">
+Un colegio (grupo de uso III, $I$ = 1.25) se construye en Bogotá ($A_a$ = 0.15, $A_v$ = 0.20) sobre un perfil de suelo tipo D. Calcular el espectro y $S_a$ para $T$ = 0.6 s, 1.2 s y 6 s.
+
+<Paso titulo="Coeficientes de sitio e importancia" ref="A.2.4, A.2.5">
+$F_a$ = {ej.fa.toFixed(2)} (interpolado), $F_v$ = {ej.fv.toFixed(2)}, $I$ = {ej.i.toFixed(2)}.
+</Paso>
+<Paso titulo="Períodos característicos" ref="A.2.6-2, -4, -6">
+
+$$
+T_0 = 0.1\,\frac{0.20\times 2.0}{0.15\times 1.5},\quad
+T_C = 0.48\,\frac{0.20\times 2.0}{0.15\times 1.5},\quad
+T_L = 2.4\times 2.0
+$$
+
+Resultado: $T_0$ = **{ej.per.t0.toFixed(3)} s**, $T_C$ = **{ej.per.tc.toFixed(3)} s**, $T_L$ = **{ej.per.tl.toFixed(2)} s**.
+
+</Paso>
+<Paso titulo="Meseta del espectro" ref="A.2.6-3">
+
+$$
+S_a = 2.5\times 0.15\times 1.5\times 1.25
+$$
+
+Resultado: $S_a$ = **{ej.meseta.toFixed(4)} g**.
+
+</Paso>
+<Paso titulo="Leer Sa en cada período" ref="A.2.6-1, -3, -5">
+- $T$ = 0.6 s es menor que $T_C$ (= {ej.per.tc.toFixed(3)} s), así que está en la meseta: $S_a$ = **{ej.sa06.toFixed(4)} g**.
+- $T$ = 1.2 s está entre $T_C$ y $T_L$: $S_a = 1.2\times 0.20\times 2.0\times 1.25/1.2$ = **{ej.sa12.toFixed(4)} g**.
+- $T$ = 6 s es mayor que $T_L$: $S_a = 1.2\times 0.20\times 2.0\times 4.8\times 1.25/6^2$ = **{ej.sa6.toFixed(4)} g**.
+</Paso>
+<Resultado>
+Meseta de {ej.meseta.toFixed(3)} g hasta $T_C$ = {ej.per.tc.toFixed(2)} s; luego $S_a$ cae como $1/T$ hasta $T_L$ = {ej.per.tl.toFixed(1)} s y como $1/T^2$ después. Prueba tus propios datos:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="espectro-diseno" />
+
+## A.2.7 — Familias de acelerogramas
+
+Cuando el análisis es **dinámico cronológico** (paso a paso en el tiempo, A.5.5) se usan acelerogramas en lugar del espectro. Requisitos principales (<NormaRef s="A.2.7.1" pag="A-29" />):
+
+- Mínimo **tres** acelerogramas representativos del sitio (magnitud, distancia y mecanismo de ruptura similares). Con **siete o más** puede usarse el promedio de resultados en vez del máximo.
+- Pueden completarse con registros **sintéticos** si no hay suficientes reales.
+- Escalados, ninguno puede quedar por debajo del **80 %** del espectro de A.2.6 en el rango $0.8T$ a $1.2T$, y su promedio no debe ser menor que el espectro entre $0.2T$ y $1.5T$.
+- En análisis tridimensional se usan las **dos componentes horizontales del mismo registro** con el mismo factor de escala (y raíz de la suma de cuadrados).
+
+## A.2.8 — Componente vertical
+
+Si se usa la componente vertical del sismo, como mínimo debe tomarse como **dos terceras partes** de los valores horizontales (en el espectro o en los acelerogramas) (<NormaRef s="A.2.8.1" pag="A-30" />).
+
+## A.2.9 — Estudios de microzonificación sísmica
+
+Un municipio puede sustituir A.2.4 y A.2.6 con una reglamentación **obligatoria** basada en un estudio de microzonificación (<NormaRef s="A.2.9.1" />). Las **capitales de departamento y ciudades de más de 100 000 habitantes** en zonas de amenaza intermedia y alta deben armonizar su ordenamiento territorial con un estudio de este tipo (<NormaRef s="A.2.9.2" />).
+
+El alcance mínimo (<NormaRef s="A.2.9.3" />) cubre: geología y neotectónica, sismología regional, fuentes sismogénicas, aceleración y velocidad esperadas en roca, estudios geotécnicos (sondeos de al menos 30 m o hasta roca), análisis de amplificación de onda y síntesis en zonas de comportamiento similar con sus coeficientes $F_a$ y $F_v$.
+
+<Callout tipo="atencion">
+Un estudio solo puede **reducir** los valores de $A_a$, $A_v$, o usar un $T_0$ mayor o $T_C$ y $T_L$ menores que los de la norma con **autorización especial de la Comisión Asesora Permanente** (<NormaRef s="A.2.9.3.4" pag="A-33" />). Para ser exigible en licencias, necesita concepto favorable de la Comisión (<NormaRef s="A.2.9.3.7" />).
+</Callout>
+
+## A.2.10 — Estudios sísmicos particulares de sitio
+
+Se exigen **siempre para perfiles tipo F** y pueden requerirse en edificaciones cuya altura, grupo de uso o tamaño lo ameriten, o cuando los efectos de A.2.4 no representen el lugar (<NormaRef s="A.2.10.1" pag="A-35" />). Incluyen exploración geotécnica adicional (al menos un sondeo hasta roca o hasta un estrato con contraste notable de $v_s$), análisis de respuesta dinámica del subsuelo y la definición del espectro en superficie. Forman parte del estudio geotécnico presentado para la licencia (<NormaRef s="A.2.10.3" pag="A-38" />).
+
+<TablaNorma numero="Tabla A.2.10-1" titulo="Casos que requieren estudio sísmico particular de sitio" pag="A-36">
+
+| Perfil | Subtipo | Descripción |
+|---|---|---|
+| F | F1 | Suelos susceptibles a falla o colapso por la excitación sísmica (licuables, arcillas sensitivas, dispersivos, débilmente cementados) |
+| F | F2 | Turba y arcillas orgánicas y muy orgánicas ($H$ > 3 m) |
+| F | F3 | Arcillas de muy alta plasticidad ($H$ > 7.5 m con IP > 75) |
+| F | F4 | Arcillas de rigidez mediana a blanda de gran espesor ($H$ > 36 m) |
+
+</TablaNorma>
+
+## A.2.11 — Normas técnicas citadas
+
+El capítulo exige ensayos bajo NTC/ASTM: contenido de agua (NTC 1495), compresión inconfinada (NTC 1527), triaxial UU (NTC 2041), penetración estándar (ASTM D 1586) e índice de plasticidad (ASTM D 4318).
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Usar $A_a$ para todo: el tramo $1/T$ del espectro se controla con $A_v$ y $F_v$.
+- Olvidar el coeficiente $I$ en edificaciones de los grupos II, III y IV (colegios, hospitales, edificios gubernamentales).
+- Clasificar el suelo con un solo ensayo o por apariencia: debe sustentarlo el geotecnista con datos de los 30 m superiores.
+- Aplicar $F_a$/$F_v$ de un perfil a un sitio inestable o en ladera (<NormaRef s="A.2.4.1.1" />).
+- Tomar la rama $T<T_0$ del espectro para el modo fundamental.
+</Callout>
+
+## Resumen en una línea
+
+**Ubica el sitio ($A_a$, $A_v$) → clasifica el suelo ($F_a$, $F_v$) → define el grupo de uso ($I$) → arma el espectro $S_a(T)$** que alimentará los métodos de análisis de los capítulos A.4 y A.5.

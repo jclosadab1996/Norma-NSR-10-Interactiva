@@ -1,0 +1,31 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { buttonVariants } from '../components/ui/button';
+import { cn } from '../lib/utils';
+import { TITULOS } from '../data/titulos';
+
+export function getStaticPaths() {
+  return TITULOS.filter((t) => t.estado === 'proximamente').map((t) => ({
+    params: { letra: t.letra.toLowerCase() },
+    props: { titulo: t },
+  }));
+}
+
+const { titulo } = Astro.props;
+---
+
+<BaseLayout title={`Título ${titulo.letra} — ${titulo.nombre}`} description={titulo.resumen}>
+  <div class="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6">
+    <span class={`text-7xl font-black ${titulo.acento}`}>{titulo.letra}</span>
+    <h1 class="mt-3 text-3xl font-bold tracking-tight">Título {titulo.letra} — {titulo.nombre}</h1>
+    <p class="mt-4 text-lg text-muted-foreground">{titulo.resumen}</p>
+    <p class="mx-auto mt-8 max-w-xl rounded-xl border border-dashed bg-muted/40 p-5 text-sm text-muted-foreground">
+      Este Título todavía no está disponible. Por ahora la web desarrolla en detalle el <strong class="text-foreground">Título A</strong>
+      (requisitos generales de diseño y construcción sismo resistente), que es la base para los demás.
+    </p>
+    <div class="mt-8 flex flex-wrap justify-center gap-3">
+      <a href="/titulo-a" class={cn(buttonVariants({ size: 'lg' }))}>Ir al Título A</a>
+      <a href="/titulos" class={cn(buttonVariants({ size: 'lg', variant: 'outline' }))}>Ver todos los Títulos</a>
+    </div>
+  </div>
+</BaseLayout>

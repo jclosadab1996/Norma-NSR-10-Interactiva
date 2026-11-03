@@ -1,0 +1,579 @@
+---
+codigo: 'A.10'
+tipo: capitulo
+titulo: 'Evaluación e intervención de edificaciones existentes'
+resumen: 'Cómo evaluar la vulnerabilidad sísmica de una edificación construida antes del NSR-10 (índices de sobreesfuerzo y flexibilidad), qué movimientos de diseño usar (nuevo o con seguridad limitada, Ae) y qué exige cada tipo de intervención: ampliación adosada, ampliación en altura, rehabilitación o reparación tras un sismo.'
+objetivos:
+  - 'Calificar una edificación existente y calcular su resistencia efectiva y sus índices de sobreesfuerzo y flexibilidad'
+  - 'Obtener Ae y construir el espectro con seguridad limitada, sabiendo cuándo se permite usarlo'
+  - 'Elegir el nivel de seguridad exigido al rehabilitar según el grupo de uso y la época de diseño'
+  - 'Distinguir los requisitos de una ampliación adosada, una ampliación en altura y una reparación por sismo'
+paginasNorma: 'A-97 a A-112'
+paginaPdf: 140
+orden: 10
+calculadoras: ['espectro-diseno', 'municipios']
+nivel: 'avanzado'
+---
+
+import { coeficienteFa, coeficienteFv, periodoAproximado, periodosEspectro, mesetaSa, sa } from '../../lib/nsr10';
+import { parametrosSeguridadLimitada, resistenciaEfectiva, indiceSobreesfuerzo, nivelRehabilitacion } from '../../lib/nsr10/existentes';
+import municipios from '../../data/municipios.json';
+
+export const cali = municipios.find((m) => m.codigo === '76001');
+
+export const ej1 = (() => {
+  const dis = { aa: cali.aa, av: cali.av, fa: coeficienteFa('D', cali.aa), fv: coeficienteFv('D', cali.av), i: 1 };
+  const lim = parametrosSeguridadLimitada(cali.ae, 'D', 1);
+  const filas = [0.3, 0.7, 1.0, 1.5, 3.0].map((t) => ({ t, sd: sa(t, dis), sl: sa(t, lim), r: sa(t, lim) / sa(t, dis) }));
+  return { dis, lim, pd: periodosEspectro(dis), pl: periodosEspectro(lim), md: mesetaSa(dis), ml: mesetaSa(lim), filas };
+})();
+
+export const ej2 = (() => {
+  const dis = { aa: 0.25, av: 0.25, fa: coeficienteFa('D', 0.25), fv: coeficienteFv('D', 0.25), i: 1 };
+  const lim = parametrosSeguridadLimitada(0.15, 'D', 1);
+  const ta = periodoAproximado('porticos-concreto', 14);
+  const ta5 = periodoAproximado('porticos-concreto', 17.5);
+  const razon = sa(ta, lim) / sa(ta, dis);
+  const demNueva = 410; // kN·m, solicitación equivalente (E = Fs/R′) del análisis a nivel de edificación nueva
+  const nex = 520; // kN·m, resistencia existente de la columna crítica
+  const nef = resistenciaEfectiva(nex, 'regular', 'regular');
+  const isNueva = indiceSobreesfuerzo(demNueva, nex, 'regular', 'regular');
+  const demLim = demNueva * razon;
+  const isLim = indiceSobreesfuerzo(demLim, nex, 'regular', 'regular');
+  const ifNueva = 1.12; // % de deriva máxima obtenida a nivel nuevo (límite 1.00 %)
+  const ifLim = ifNueva * razon;
+  const factorAltura = 1.25 * (sa(ta5, dis) / sa(ta, dis)); // un piso más: +25 % de masa
+  const demAltura = demNueva * factorAltura;
+  const nefActualizada = resistenciaEfectiva(nex, 'regular', 'buena');
+  const nexNecesaria = demAltura / (0.8 * 1.0);
+  const nexSinActualizar = demAltura / 0.64;
+  const isRPrima5 = indiceSobreesfuerzo(demNueva * (3.5 / 5), nex, 'regular', 'regular');
+  const nivel = nivelRehabilitacion('I', new Date(Date.UTC(1991, 5, 1)));
+  return { ta, ta5, razon, demNueva, nex, nef, isNueva, demLim, isLim, ifNueva, ifLim, factorAltura, demAltura, nefActualizada, nexNecesaria, nexSinActualizar, isRPrima5, nivel,
+    saDis: sa(ta, dis), saLim: sa(ta, lim) };
+})();
+
+## Idea central del capítulo
+
+Los capítulos anteriores dicen cómo **diseñar** una edificación nueva. El Capítulo A.10 resuelve otro problema, muy frecuente en la práctica: **¿qué hacer con una edificación que ya existe?** Puede ser que el propietario quiera ampliarla, cambiarle el uso, reforzarla, o que un sismo la haya dañado. La norma propone una secuencia de trabajo con tres ideas:
+
+1. **Evaluar primero.** Se estima cuánta fuerza sísmica recibiría la estructura hoy y cuánta es capaz de resistir en su estado actual (castigando su resistencia por la mala calidad de la obra original o por su deterioro).
+2. **Medir con dos índices.** El **índice de sobreesfuerzo** (demanda/capacidad) y el **índice de flexibilidad** (deriva obtenida/deriva permitida) deben quedar **menores que 1** una vez intervenida la edificación.
+3. **Escoger la intervención y el nivel de seguridad.** Según el tipo de obra (ampliación adosada, en altura, rehabilitación, reparación) y la edad y uso de la edificación, la norma pide un nivel de seguridad **equivalente al de una edificación nueva** o, en ciertos casos, uno **limitado** (con el espectro reducido de $A_e$).
+
+<Callout tipo="importante" titulo="Un criterio que cambia todo">
+El Capítulo A.10 le deja mucho al **criterio del ingeniero** (calificar la calidad de la obra, escoger $R'$, estimar la resistencia existente). Por eso exige memoria justificativa, firma de un ingeniero civil matriculado y supervisión técnica, y dice expresamente que el diseñador responde por la correcta aplicación del Reglamento y por el comportamiento futuro de la edificación (<NormaRef s="A.10.1.7" pag="A-99" />).
+</Callout>
+
+<Figura src="/img/titulo-a/flujo-a10-evaluacion-intervencion.svg" alt="Diagrama de flujo: información previa, solicitaciones equivalentes, análisis y resistencia, índices de sobreesfuerzo y flexibilidad, decisión, tipo de intervención y diseño y construcción." numero="Diagrama" pie="Flujo de decisión del Capítulo A.10: de la evaluación a la intervención (elaborado a partir de las 12 etapas de A.10.1.4 y de A.10.6 a A.10.10)." pag="A-98" />
+
+## A.10.0 — Nomenclatura
+
+El capítulo introduce símbolos propios; los esenciales son:
+
+<Detalle titulo="Símbolos del Capítulo A.10">
+
+| Símbolo | Significado |
+|---|---|
+| $A_e$ | Aceleración pico efectiva **reducida** para diseño con seguridad limitada (A.10.3) |
+| $F_s$ | Fuerzas sísmicas equivalentes de A.4 (A.10.4.2.5) |
+| $R'$ | Coeficiente de capacidad de disipación de energía asignado a la edificación **existente** |
+| $E$ | Fuerzas sísmicas reducidas para revisar la estructura existente: $E = F_s/R'$ |
+| $N_{ex}$ | Resistencia **existente** de un elemento (A.10.4.3.3) |
+| $N_{ef}$ | Resistencia **efectiva** (A.10.4.3.4) |
+| $\varphi_c$ | Coeficiente de reducción de resistencia por **calidad** del diseño y la construcción |
+| $\varphi_e$ | Coeficiente de reducción de resistencia por **estado** de la estructura |
+| $\varphi_a,\ \varphi_p,\ \varphi_r$ | Reducciones de $R$ por irregularidad en altura, en planta y ausencia de redundancia (A.3) |
+
+</Detalle>
+
+## A.10.1 — Propósito y alcance
+
+### Propósito
+
+Una edificación intervenida según este capítulo debe poder resistir **temblores pequeños sin daño**, **temblores moderados sin daño estructural** (aunque sí con algún daño no estructural) y **temblores fuertes sin colapso** (<NormaRef s="A.10.1.2" pag="A-97" />). Es el mismo propósito general de la NSR-10 (A.1.2.2), aplicado a lo ya construido.
+
+### Alcance y casos especiales
+
+El capítulo se aplica a edificaciones **diseñadas y construidas antes de la vigencia del NSR-10** que se modifiquen o rehabiliten (<NormaRef s="A.10.1.3" pag="A-97" />). Sus subsecciones fijan qué queda dentro y fuera:
+
+- **Reparaciones y cambios menores** que no afectan el sistema de resistencia sísmica ni la integridad estructural: no requieren los estudios del capítulo (<NormaRef s="A.10.1.3.1" pag="A-98" />).
+- **Excepción — cambio de uso:** aun en reparaciones menores, si cambia el uso urbanístico (por ejemplo de vivienda a comercio) o se pasa a un **grupo de uso superior** (A.2.5.1), hay que evaluar el efecto del cambio ante cargas verticales, horizontales y, sobre todo, sísmicas (<NormaRef s="A.10.1.3.2" pag="A-98" />).
+- **Vulnerabilidad:** los criterios sirven también para diagnosticar la vulnerabilidad sísmica de edificaciones existentes (<NormaRef s="A.10.1.3.3" />).
+- **Modificaciones:** diseño y construcción de ampliaciones adosadas o en altura, actualizaciones al Reglamento y alteraciones (<NormaRef s="A.10.1.3.4" />).
+- **Reforzamiento:** actualización y rehabilitación sísmica, en especial según A.10.9 (<NormaRef s="A.10.1.3.5" />).
+- **Reparación de edificaciones dañadas por sismos** con daños moderados a severos (estructurales, no estructurales o ambos) que **no hayan sido designadas para demolición total** (<NormaRef s="A.10.1.3.6" />).
+
+### Procedimiento: las 12 etapas
+
+La norma ordena el trabajo en 12 etapas (<NormaRef s="A.10.1.4" pag="A-98" />), agrupadas en tres bloques:
+
+| Bloque | Etapa | Qué se hace | Dónde |
+|---|---|---|---|
+| **Información preliminar** | 1 | Verificar que la intervención está en el alcance | A.10.1.3 |
+| | 2 | Reunir información del diseño y la construcción originales y de sus modificaciones; explorar la edificación | A.10.2 |
+| | 3 | Calificar el estado del sistema estructural: calidad del diseño/construcción y estado de conservación | A.10.2.2 |
+| **Evaluación de la estructura existente** | 4 | Definir las solicitaciones equivalentes | A.10.4.2 |
+| | 5 | Análisis elástico de la estructura y su cimentación | A.10.4.2.7 |
+| | 6 | Determinar la resistencia existente | A.10.4.3.3 |
+| | 7 | Obtener la resistencia efectiva (reducida por $\varphi_c$ y $\varphi_e$) | A.10.4.3.4 |
+| | 8 | Calcular el **índice de sobreesfuerzo** (máximo cociente demanda/resistencia efectiva) | A.10.4.3.1–2 |
+| | 9 | Obtener las derivas del análisis | A.6 |
+| | 10 | Calcular el **índice de flexibilidad** horizontal (derivas) y vertical (deflexiones) | A.10.4.3.5 |
+| **Intervención** | 11 | Definir la intervención: ampliación adosada, ampliación en altura o actualización al Reglamento | A.10.6 |
+| | 12 | Analizar el conjunto con la intervención y diseñarla para esas fuerzas | A.10.7 a A.10.10 |
+
+### Memoria, supervisión y responsabilidad
+
+- **Memoria de cálculos** (<NormaRef s="A.10.1.5" pag="A-99" />): debe relacionar los documentos originales usados (planos, memorias, estudios de suelos, registros de interventoría, libros de obra, consultas a quienes participaron), describir la evaluación del estado actual y de la cimentación, justificar los parámetros adoptados, incluir el diseño de la modificación y demostrar que la estructura final, trabajando en conjunto con la original, tendrá la resistencia esperada. Debe ir **firmada por un ingeniero civil matriculado** (Artículos 26 y 27 de la Ley 400 de 1997, <NormaRef s="A.10.1.5.1" />).
+- **Supervisión técnica** (<NormaRef s="A.10.1.6" pag="A-99" />): siempre, en el alcance del Título I. El supervisor debe dejar constancia de que las hipótesis del diseñador se confirmaron en obra; si hay discrepancias, debe constar que el diseñador fue informado y qué acciones correctivas fijó (<NormaRef s="A.10.1.6.1" />).
+- **Responsabilidad del ingeniero** (<NormaRef s="A.10.1.7" />): este tipo de diseño exige el mejor criterio y experiencia, y el diseñador responde por la correcta aplicación del Reglamento y por el comportamiento futuro.
+
+## A.10.2 — Estudios e investigaciones requeridas
+
+### Información previa
+
+Antes de calcular nada hay que **conocer la edificación** (<NormaRef s="A.10.2.1" pag="A-100" />). Las investigaciones mínimas son:
+
+1. Si existen documentos del diseño original, **constatar en sitio** que coinciden con lo construido, con exploraciones en lugares representativos (y dejar constancia de su alcance).
+2. Determinar de manera **cualitativa** la calidad de la construcción original.
+3. Evaluar cualitativamente el **estado de conservación**.
+4. Buscar evidencia de **fallas locales, deflexiones excesivas, corrosión** de la armadura y otros indicios de comportamiento.
+5. Investigar **asentamientos** de la cimentación y su efecto en la estructura.
+6. Determinar si ocurrieron **eventos extraordinarios** (explosión, incendio, sismo, remodelaciones previas, acabados que aumentaron las cargas, otras modificaciones).
+
+### Calificación del sistema estructural
+
+La norma pide una calificación **totalmente cualitativa** en dos aspectos (<NormaRef s="A.10.2.2" pag="A-100" />). El resultado alimenta directamente los coeficientes $\varphi_c$ y $\varphi_e$ de la Tabla A.10.4-1.
+
+| Aspecto | Qué se mira | Calificación |
+|---|---|---|
+| **Calidad del diseño y la construcción originales** (<NormaRef s="A.10.2.2.1" />) | Se mide contra la **mejor tecnología de la época** en que se construyó. Se apoya en registros de interventoría y ensayos. Incluye el potencial de mal comportamiento por masa o rigidez irregular, ausencia de diafragmas, anclajes y amarres | Buena, regular o mala |
+| **Estado de la estructura** (<NormaRef s="A.10.2.2.2" />) | Sismos que la hayan afectado, fisuración por temperatura, corrosión, asentamientos diferenciales, reformas, deflexiones excesivas, estado de las uniones | Bueno, regular o malo |
+
+<Callout tipo="nota">
+Observa que la **calidad** se juzga con la vara de la época de construcción, mientras que la evaluación sísmica se hace con las exigencias de hoy. Una obra bien hecha en 1975 puede tener $\varphi_c$ = 1.0 y aun así necesitar refuerzo.
+</Callout>
+
+## A.10.3 — Movimientos sísmicos de diseño con seguridad limitada
+
+### Qué es y cuándo se usa
+
+Los movimientos sísmicos de diseño del Capítulo A.2 se definen para una probabilidad del 10 % de ser excedidos en 50 años (período de retorno cercano a 475 años). Para evaluar e intervenir edificaciones existentes, la norma permite en ciertos casos un nivel menor: los **movimientos con seguridad limitada**, definidos para una probabilidad del **20 % de ser excedidos en 50 años** (período de retorno de unos 225 años) y representados por la **aceleración pico efectiva reducida $A_e$** (<NormaRef s="A.10.3.1" pag="A-100" />).
+
+<Callout tipo="atencion" titulo="Solo para edificaciones existentes">
+Los movimientos de seguridad limitada **no se pueden usar en edificaciones nuevas bajo ninguna circunstancia** (<NormaRef s="A.10.3.1" />). Dentro del capítulo, el nivel limitado solo se autoriza **explícitamente** en la rehabilitación de edificaciones anteriores a 1998 (A.10.9.2.3 y A.10.9.2.4), con las condiciones que se verán más adelante.
+</Callout>
+
+### Cómo se obtiene Ae
+
+Se determina el número de región en el mapa de la Figura A.10.3-1 y se lee $A_e$ en la Tabla A.10.3-1; para **capitales de departamento** se usa la Tabla A.10.3-2 y para **todos los municipios**, el Apéndice A-4 (<NormaRef s="A.10.3.2" pag="A-100" />).
+
+<TablaNorma numero="Tabla A.10.3-1" titulo="Valor de Ae según las regiones de la Figura A.10.3-1" pag="A-101" nota="Las regiones representan rangos de valores. Debe consultarse el Apéndice A-4 para determinar el valor de Ae en cada municipio.">
+
+| Región Nº | Ae |
+|---:|---|
+| 7 | 0.25 – 0.28 |
+| 6 | 0.21 – 0.24 |
+| 5 | 0.17 – 0.20 |
+| 4 | 0.13 – 0.16 |
+| 3 | 0.09 – 0.12 |
+| 2 | 0.05 – 0.08 |
+| 1 | 0.00 – 0.04 |
+
+</TablaNorma>
+
+<Figura src="/img/titulo-a/figura-a10-3-1-mapa-ae.png" alt="Mapa de Colombia con regiones numeradas del 1 al 7 que indican los valores de Ae." numero="Figura A.10.3-1" pie="Mapa de valores de Ae. Las regiones representan rangos; el valor por municipio está en el Apéndice A-4." pag="A-102" />
+
+<TablaNorma numero="Tabla A.10.3-2" titulo="Valor de Ae para las ciudades capitales de departamento" pag="A-101">
+
+| Ciudad | Ae | Ciudad | Ae |
+|---|---:|---|---:|
+| Arauca | 0.10 | Neiva | 0.20 |
+| Armenia | 0.15 | Pasto | 0.15 |
+| Barranquilla | 0.05 | Pereira | 0.20 |
+| Bogotá | 0.13 | Popayán | 0.15 |
+| Bucaramanga | 0.15 | Puerto Carreño | 0.04 |
+| Cali | 0.15 | Puerto Inírida | 0.04 |
+| Cartagena | 0.05 | Quibdó | 0.25 |
+| Cúcuta | 0.25 | Riohacha | 0.07 |
+| Florencia | 0.10 | San Andrés, Isla | 0.05 |
+| Ibagué | 0.15 | San José del Guaviare | 0.04 |
+| Leticia | 0.04 | Santa Marta | 0.10 |
+| Manizales | 0.20 | Sincelejo | 0.07 |
+| Medellín | 0.13 | Tunja | 0.15 |
+| Mitú | 0.04 | Valledupar | 0.05 |
+| Mocoa | 0.20 | Villavicencio | 0.20 |
+| Montería | 0.07 | Yopal | 0.15 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Una diferencia entre tablas">
+Para **Armenia** la Tabla A.10.3-2 trae $A_e$ = 0.15, pero el Apéndice A-4 (que es el que debe consultarse para cualquier municipio) trae 0.20. Es una de las diferencias entre las tablas de capitales y el apéndice; verifica siempre el valor oficial vigente de tu municipio en el [buscador de municipios](/titulo-a/municipios).
+</Callout>
+
+### Variación local y forma del espectro
+
+- **Microzonificación o red acelerográfica local:** el municipio puede **modificar $A_e$** mediante acuerdo municipal, pero **nunca por debajo del valor del Reglamento** (<NormaRef s="A.10.3.3" pag="A-103" />, véase A.2.9.3.6).
+- **Forma del espectro:** se obtiene de A.2.6 **sustituyendo $A_a$ y $A_v$ por $A_e$** (<NormaRef s="A.10.3.4" />). Es decir, se usan las mismas ecuaciones de A.2.6 con $A_a = A_v = A_e$.
+- **Estudio particular de sitio:** si se hace y se usa el procedimiento limitado, deben cumplirse los requisitos de A.2.10.2.6 (<NormaRef s="A.10.3.5" />).
+
+<Callout tipo="practica" titulo="¿Fa y Fv con Ae?">
+El texto de A.10.3.4 solo dice que se sustituyen $A_a$ y $A_v$ por $A_e$. La lectura natural (y la que usa esta página) es entrar también a las tablas A.2.4-3 y A.2.4-4 con $A_e$ para obtener $F_a$ y $F_v$, tal como A.12.3.1 lo dice expresamente para $A_d$. El coeficiente de importancia $I$ es el del grupo de uso que tendrá la edificación **después** de la modificación (<NormaRef s="A.10.4.2.2" pag="A-103" />).
+</Callout>
+
+<Ejemplo numero={1} titulo="Espectro con seguridad limitada para Cali">
+Un edificio de uso normal (grupo I, $I$ = 1.0) en **Cali** sobre un perfil de suelo tipo D se va a rehabilitar con nivel de seguridad limitada. Obtener el espectro y compararlo con el de una edificación nueva en el mismo sitio.
+
+<Paso titulo="Parámetros del municipio" ref="Apéndice A-4">
+Para {cali.municipio} (código {cali.codigo}) el Apéndice A-4 da $A_a$ = {cali.aa.toFixed(2)}, $A_v$ = {cali.av.toFixed(2)} (zona de amenaza **{cali.zona.toLowerCase()}**) y $A_e$ = **{cali.ae.toFixed(2)}**, valor que coincide con la Tabla A.10.3-2.
+</Paso>
+<Paso titulo="Coeficientes de sitio, perfil D" ref="A.2.4.5.5, A.2.4.5.6">
+- Edificación nueva (con $A_a$ = {ej1.dis.aa.toFixed(2)} y $A_v$ = {ej1.dis.av.toFixed(2)}): $F_a$ = {ej1.dis.fa.toFixed(2)} y $F_v$ = {ej1.dis.fv.toFixed(2)}.
+- Seguridad limitada (con $A_e$ = {cali.ae.toFixed(2)}): interpolando entre 0.1 y 0.2, $F_a$ = (1.6 + 1.4)/2 = **{ej1.lim.fa.toFixed(2)}** y $F_v$ = (2.4 + 2.0)/2 = **{ej1.lim.fv.toFixed(2)}**.
+</Paso>
+<Paso titulo="Períodos característicos" ref="A.2.6-2, -4, -6">
+
+Con $A_a = A_v = A_e$ los períodos quedan $T_C = 0.48\,F_v/F_a$ y $T_L = 2.4\,F_v$:
+
+- Seguridad limitada: $T_C$ = **{ej1.pl.tc.toFixed(3)} s**, $T_L$ = **{ej1.pl.tl.toFixed(2)} s**.
+- Edificación nueva: $T_C$ = {ej1.pd.tc.toFixed(3)} s, $T_L$ = {ej1.pd.tl.toFixed(2)} s.
+
+</Paso>
+<Paso titulo="Meseta del espectro" ref="A.2.6-3">
+
+$$
+S_a = 2.5\,A_e F_a I = 2.5 \times 0.15 \times 1.5 \times 1.0
+$$
+
+Resultado: meseta limitada = **{ej1.ml.toFixed(4)} g**, frente a {ej1.md.toFixed(4)} g de la edificación nueva (2.5 × 0.25 × 1.3 × 1.0).
+</Paso>
+<Paso titulo="Comparación a distintos períodos" ref="A.2.6-1, -3, -5">
+
+| T (s) | Sa nueva (g) | Sa limitada (g) | Limitada / nueva |
+|---:|---:|---:|---:|
+| {ej1.filas[0].t.toFixed(1)} | {ej1.filas[0].sd.toFixed(3)} | {ej1.filas[0].sl.toFixed(3)} | {ej1.filas[0].r.toFixed(2)} |
+| {ej1.filas[1].t.toFixed(1)} | {ej1.filas[1].sd.toFixed(3)} | {ej1.filas[1].sl.toFixed(3)} | {ej1.filas[1].r.toFixed(2)} |
+| {ej1.filas[2].t.toFixed(1)} | {ej1.filas[2].sd.toFixed(3)} | {ej1.filas[2].sl.toFixed(3)} | {ej1.filas[2].r.toFixed(2)} |
+| {ej1.filas[3].t.toFixed(1)} | {ej1.filas[3].sd.toFixed(3)} | {ej1.filas[3].sl.toFixed(3)} | {ej1.filas[3].r.toFixed(2)} |
+| {ej1.filas[4].t.toFixed(1)} | {ej1.filas[4].sd.toFixed(3)} | {ej1.filas[4].sl.toFixed(3)} | {ej1.filas[4].r.toFixed(2)} |
+
+</Paso>
+<Resultado>
+En Cali el nivel de seguridad limitada reduce las aceleraciones espectrales a cerca del **{(ej1.filas[0].r * 100).toFixed(0)} %** de las de una edificación nueva (el cociente es casi el mismo en todos los períodos porque, con $A_a = A_v$, el producto $A\,F$ cambia en proporción parecida en ambos tramos). Compruébalo con la calculadora, escribiendo el mismo valor en $A_a$ y en $A_v$:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="espectro-diseno" />
+
+<CalculadoraEmbed id="municipios" />
+
+## A.10.4 — Criterios de evaluación de la estructura existente
+
+### Idea general
+
+La pregunta es si la edificación, **en su estado actual**, resiste adecuadamente las cargas del Reglamento (<NormaRef s="A.10.4.1" pag="A-103" />). Para responderla se establece una **equivalencia** entre lo que el Reglamento exige y lo que la estructura puede dar hoy (<NormaRef s="A.10.4.2" />).
+
+### Solicitaciones equivalentes (A.10.4.2)
+
+| Ref. | Tema | Qué dice |
+|---|---|---|
+| A.10.4.2.1 | Nivel de seguridad **equivalente al de una edificación nueva** | Se usan los movimientos de A.2 del lugar, para el **grupo de uso que tendrá** la edificación tras la modificación, analizándola como si fuera nueva |
+| A.10.4.2.2 | Nivel de **seguridad limitada** | Se usan los movimientos de A.10.3, para el grupo de uso final, solo cuando A.10.9 lo permita explícitamente |
+| A.10.4.2.3 | Sistema estructural | Se clasifica en uno de los sistemas del Capítulo A.3 |
+| A.10.4.2.4 | $R'$ | Se asigna según la información disponible (ver abajo) |
+| A.10.4.2.5 | Fuerzas sísmicas $F_s$ | Fuerza horizontal equivalente (A.4), con su distribución en altura; se permite análisis dinámico (A.5) si hay información suficiente |
+| A.10.4.2.6 | Otras cargas | Título B, **excepto las cargas muertas**, que se evalúan con observaciones y mediciones de campo (y nunca pueden ser menores que las del Título B) |
+| A.10.4.2.7 | Análisis estructural | Con uno de los modelos matemáticos permitidos por el Reglamento |
+| A.10.4.2.8 | Combinación de solicitaciones | Combinaciones del Capítulo B.2 por el método de diseño de cada material, usando los efectos sísmicos reducidos $E = F_s/R'$ |
+
+### El coeficiente R′
+
+A diferencia de una edificación nueva, el $R'$ de una existente **no sale directamente de las tablas**: el ingeniero lo asigna según la información que tenga sobre el diseño original (<NormaRef s="A.10.4.2.4" pag="A-103" />). Recuerda que $R = \varphi_a\varphi_p\varphi_r R_0$ (Capítulo A.3).
+
+<TablaNorma numero="A.10.4.2.4 (a) a (d)" titulo="Cómo asignar R′ según la información disponible" pag="A-103">
+
+| Situación | Valor de R′ |
+|---|---|
+| (a) Buena información del diseño original (planos y memorias) | Por **comparación** con los requisitos del material y sistema; si el cumplimiento es parcial, se puede **interpolar** entre valores de $R$ del Capítulo A.3 |
+| (b) Información incompleta o fragmentaria | El que defina el ingeniero con su mejor criterio, **sin exceder** el $R$ que da A.3 para el mismo sistema y material |
+| (c) Ninguna información | Se permite $R'$ = **¾ del valor de A.3** para el mismo sistema y material; no hay necesidad de que sea menor que 1 |
+| (d) Mampostería no reforzada | $R'$ = **1.0** |
+
+</TablaNorma>
+
+### Efectos sísmicos reducidos
+
+Tras calcular las fuerzas con el método de A.4, los efectos sísmicos de revisión se obtienen dividiendo por $R'$ (<NormaRef s="A.10.4.2.8" pag="A-104" />, ecuación sin numerar):
+
+$$
+E = \frac{F_s}{R'}
+$$
+
+Estos efectos se combinan con las demás cargas según el Capítulo B.2 y se comparan con la resistencia de cada elemento.
+
+### Resistencia existente y efectiva (A.10.4.3)
+
+La **resistencia existente** $N_{ex}$ es el nivel de fuerza o esfuerzo al que el elemento deja de responder en el rango elástico (materiales dúctiles: inicio de fluencia; frágiles: resistencia máxima). Se calcula con los modelos de resistencia del Reglamento y la información disponible, a juicio del ingeniero (<NormaRef s="A.10.4.3.3" pag="A-104" />).
+
+La **resistencia efectiva** reduce la existente por la calidad y el estado calificados en A.10.2.2 (<NormaRef s="A.10.4.3.4" pag="A-105" />):
+
+<Ecuacion num="A.10-1" titulo="Resistencia efectiva">
+
+$$
+N_{ef} = \varphi_c\,\varphi_e\,N_{ex}
+$$
+
+- $N_{ef}$: resistencia efectiva del elemento o de la estructura.
+- $N_{ex}$: resistencia existente.
+- $\varphi_c$, $\varphi_e$: coeficientes de la Tabla A.10.4-1.
+
+</Ecuacion>
+
+<TablaNorma numero="Tabla A.10.4-1" titulo="Valores de φc y φe" pag="A-105">
+
+| | Buena | Regular | Mala |
+|---|---:|---:|---:|
+| $\varphi_c$ o $\varphi_e$ | 1.0 | 0.8 | 0.6 |
+
+</TablaNorma>
+
+Como los dos factores se multiplican, una estructura de calidad regular y estado regular conserva solo el **64 %** de su resistencia existente (0.8 × 0.8); una de calidad mala y estado malo, el **36 %** (0.6 × 0.6).
+
+### Índices de sobreesfuerzo y de flexibilidad
+
+- **Índice de sobreesfuerzo (IS)** (<NormaRef s="A.10.4.3.1" pag="A-104" />, <NormaRef s="A.10.4.3.2" />): cociente entre la solicitación equivalente (combinaciones mayoradas del Título B con $E = F_s/R'$) y la resistencia efectiva, para cada elemento y cada efecto (cortante, flexión, torsión…). Se habla de IS **de los elementos** y IS **de la estructura**, que es el mayor valor entre los elementos que puedan poner en peligro la estabilidad general.
+- **Índice de flexibilidad (IF)** (<NormaRef s="A.10.4.3.5" pag="A-105" />): cociente entre la deflexión o deriva obtenida del análisis y la permitida por el Reglamento. Hay IF **de piso** y **de la estructura** (el mayor de los pisos), y se evalúa tanto para derivas (horizontal) como para deflexiones verticales.
+
+$$
+IS = \frac{\text{solicitación equivalente}}{N_{ef}}\qquad
+IF = \frac{\text{deriva obtenida}}{\text{deriva permitida}}
+$$
+
+Ambos deben terminar **menores que 1** (salvo la tolerancia de IF hasta 1.5 de A.10.9.2.3).
+
+### Metodologías alternas
+
+En vez de lo prescrito en A.10.4 se permite usar las recomendaciones de **ASCE/SEI 31-03**, **ATC-40** o **FEMA 178**, siempre que se garanticen los criterios de resistencia y capacidad de funcionamiento de A.10.9 (<NormaRef s="A.10.4.4" pag="A-105" />).
+
+## A.10.5 — Análisis de vulnerabilidad
+
+### Edificaciones en general
+
+El análisis de vulnerabilidad sísmica consiste en (<NormaRef s="A.10.5.1" pag="A-105" />):
+
+1. Calcular los **índices de sobreesfuerzo individuales** de todos los elementos estructurales.
+2. Formular una **hipótesis de secuencia de falla** según la línea de menor resistencia, identificando la falla progresiva de elementos desde los de mayor índice.
+3. Definir un **índice de sobreesfuerzo general**. Su **inverso** expresa la vulnerabilidad como la fracción de la resistencia que tendría una edificación nueva (IS general = 1.25 equivale a tener el 80 % de la resistencia de una nueva).
+4. Obtener un **índice de flexibilidad general**; su inverso expresa la vulnerabilidad como fracción de la **rigidez** de una edificación nueva (<NormaRef s="A.10.5.1" pag="A-106" />).
+
+### Edificaciones indispensables
+
+Para las existentes del grupo IV (y las que se verifiquen con el mismo rigor), además de lo anterior debe incluirse al menos (<NormaRef s="A.10.5.2" pag="A-106" />):
+
+- **(a)** Identificar la influencia de los movimientos de diseño de A.2 **y** de los del **umbral de daño** del Capítulo A.12.
+- **(b)** Determinar el **cortante basal resistente** de toda la edificación (por flexión o cortante), considerando los distintos mecanismos de colapso; puede usarse el procedimiento del **Apéndice A-3**, con la distribución en altura de A.4 o A.5.
+- **(c)** Identificar, con **metodologías inelásticas** sustentadas (como la del Apéndice A-3), el **modo de falla prevaleciente** (flexión o cortante). El $R'$ empleado debe ser coherente con esa sustentación, la secuencia de degradación de rigidez y resistencia y su influencia en la vulnerabilidad.
+
+## A.10.6 — Tipos de modificación
+
+La norma distingue tres familias de intervención (<NormaRef s="A.10.6" pag="A-106" />):
+
+| Tipo | Qué es | Requisitos |
+|---|---|---|
+| **Ampliación adosada** (A.10.6.1a) | Se amplía el **área sin modificar la altura** | A.10.7 |
+| **Ampliación en altura** (A.10.6.1b) | Se **modifica la altura**, con o sin aumento del área en planta | A.10.8 |
+| **Actualización al Reglamento** (A.10.6.2) | Sin ampliación de área ni altura; el propietario quiere **voluntariamente** que la estructura resista lo que exige el NSR-10 | A.10.9 |
+| **Modificaciones** (A.10.6.3) | Construcciones o renovaciones distintas de una ampliación | Ver abajo |
+
+Para las **modificaciones** (A.10.6.3), la norma permite ejecutarlas **sin revalidar la capacidad** de la estructura si la modificación cumple el Reglamento y, a la vez, **no incrementa la solicitación sísmica en ningún elemento existente en más de 10 %** ni **reduce la capacidad de ningún elemento en más de 10 %**. Si cualquiera de las dos condiciones se supera, hay que revisar la capacidad sísmica de **toda** la construcción, incluida la modificación.
+
+<Callout tipo="practica" titulo="La regla del 10 %">
+Abrir un vano en un muro estructural, retirar una columna o sumar un tanque en la cubierta son ejemplos típicos donde hay que comprobar ese 10 % elemento por elemento. En la práctica, si no puedes demostrar que el incremento de solicitación y la pérdida de capacidad son ≤ 10 %, **revisa todo el edificio**.
+</Callout>
+
+## A.10.7 — Ampliación adosada
+
+Requisitos cuando se construye un cuerpo nuevo pegado al existente **sin aumentar la altura** de este (<NormaRef s="A.10.7" pag="A-106" />):
+
+### Necesidad de intervenir lo existente (A.10.7.1)
+
+- Si los índices IS e IF de la estructura existente son **menores que 1**, **no hay necesidad de intervenirla**, siempre que la parte nueva se **separe con una junta apropiada** según el Capítulo A.6; la parte nueva se diseña como edificación nueva (<NormaRef s="A.10.7.1" pag="A-106" />).
+- Si IS o IF son **mayores que 1**, **hay que intervenir** la parte existente hasta que ambos sean menores que 1, **incluso si queda separada por una junta** (<NormaRef s="A.10.7.1.1" pag="A-107" />).
+
+### Resistencia y funcionamiento requeridos (A.10.7.2)
+
+La edificación resultante (parte nueva y antigua) se analiza de nuevo y los elementos nuevos se diseñan para que IS e IF queden menores que 1 (<NormaRef s="A.10.7.2" />). Hay dos configuraciones:
+
+| Configuración | Qué exige |
+|---|---|
+| **Con junta** (A.10.7.2.1) | La parte nueva se diseña **completa** según el Reglamento. La parte existente se modifica hasta tener IS e IF ≤ 1. Solo si la licencia **no cubre** la parte antigua puede dejarse sin intervenir, marcándolo claramente en planos y documentos (su comportamiento puede diferir del de la parte nueva) |
+| **Trabajando en conjunto** (A.10.7.2.2) | Las fuerzas horizontales se reparten **en proporción a las rigideces relativas**; hay que demostrar que se evitaron **efectos torsionales nocivos**. Si la parte antigua se interviene bien, se permite modificar $R'$, la calificación de su estado y usar el nuevo $\varphi_e$ en el cálculo de IS |
+
+### Requisitos constructivos y cimentación
+
+- **Constructivos** (<NormaRef s="A.10.7.3" />): la parte nueva cumple los requisitos de material y sistema estructural del Reglamento para la zona de amenaza donde se ubica.
+- **Cimentación** (<NormaRef s="A.10.7.4" />): debe demostrarse que la cimentación nueva **no afecta** a la antigua y que el conjunto se comportará bien en asentamientos y capacidad portante. Si la cimentación antigua debe cargar la parte nueva, se **explora** bajo supervisión del ingeniero geotecnista para demostrar que tiene capacidad.
+
+## A.10.8 — Ampliación en altura
+
+Aquí las dos porciones **trabajan siempre en conjunto**, para fuerzas horizontales y verticales (<NormaRef s="A.10.8.1" pag="A-107" />): todo análisis y diseño integra la parte antigua y la nueva, con elementos de **amarre** adecuados.
+
+### Resistencia y funcionamiento requeridos (A.10.8.2)
+
+La edificación completa se analiza de nuevo y debe demostrarse que resiste lo que el Reglamento exige, **incluida la cimentación modificada** (<NormaRef s="A.10.8.2" />). La resistencia se evalúa así:
+
+- **Cargas verticales** (<NormaRef s="A.10.8.2.1" />): la estructura entera debe resistir las cargas verticales del Reglamento. La resistencia de los elementos antiguos **no puede exceder** la resistencia efectiva (A.10.4.3.4); para esta evaluación, $\varphi_e$ **puede actualizarse** al estado posterior a la intervención.
+- **Fuerzas horizontales** (<NormaRef s="A.10.8.2.2" pag="A-108" />): se usa el mismo $R'$ empleado en el índice de sobreesfuerzo, y las solicitaciones se calculan **para toda la edificación**. Nuevamente, la resistencia de los elementos antiguos no puede sobrepasar su resistencia efectiva, con $\varphi_e$ actualizable tras la intervención.
+
+### Demás requisitos
+
+- **Elementos adicionales en la parte antigua** (<NormaRef s="A.10.8.3" />): si el conjunto muestra IS o IF mayores que 1 por falta de resistencia o rigidez de la parte antigua, hay que **añadir elementos** (muros, diagonales, encamisados) hasta que queden menores que 1.
+- **Empalmes nuevos-antiguos** (<NormaRef s="A.10.8.4" />): se demuestra por **análisis o ensayo** que transfieren las fuerzas.
+- **Requisitos constructivos** (<NormaRef s="A.10.8.5" />): todo elemento nuevo (en la porción nueva o antigua) cumple los requisitos del material para el grado de capacidad de disipación de energía apropiado.
+- **Cimentación** (<NormaRef s="A.10.8.6" />): se investiga bajo supervisión de un geotecnista el efecto de fuerzas horizontales y verticales sobre el conjunto: capacidad portante, asentamientos y, en especial, **volcamiento** por las fuerzas horizontales actuando sobre una altura mayor.
+
+<Callout tipo="importante" titulo="Ampliar en altura = nivel de edificación nueva">
+Ni A.10.7 ni A.10.8 mencionan el nivel de seguridad limitada: A.10.8.2 exige demostrar que el conjunto resiste "las solicitaciones que exige el Reglamento". El nivel limitado de $A_e$ solo aparece permitido de forma explícita en la rehabilitación (A.10.9.2.3 y A.10.9.2.4), así que para ampliar en altura lo prudente es trabajar con el nivel de edificación nueva.
+</Callout>
+
+## A.10.9 — Rehabilitación sísmica
+
+Trata de las estructuras que deben **reforzarse o actualizarse** al Reglamento vigente (<NormaRef s="A.10.9" pag="A-108" />).
+
+### Alcance (A.10.9.1)
+
+Aplica a edificaciones (<NormaRef s="A.10.9.1" />): **(a)** designadas por la Ley 400 de 1997 y sus decretos como de obligatoria actualización; **(b)** que deban reforzarse por cambio de uso o por modificaciones que exigen intervención estructural; **(c)** dañadas por sismos; y **(d)** que el propietario quiera actualizar voluntariamente.
+
+### Nivel de seguridad según el uso y la edad (A.10.9.2)
+
+Es el núcleo del capítulo: **el nivel exigido depende del grupo de uso y de la época en que se diseñó y construyó** la edificación.
+
+<TablaNorma numero="A.10.9.2" titulo="Nivel mínimo de seguridad al rehabilitar" pag="A-108">
+
+| Edificación | Nivel de seguridad exigido | Índices tras la intervención | Ref. |
+|---|---|---|---|
+| **Grupos de uso III y IV**, de cualquier época | **Equivalente al de edificación nueva** (A.10.4.2.1) | IS < 1 e IF < 1 | A.10.9.2.1 |
+| Diseñadas y construidas **después del 19 de febrero de 1998** (vigencia de la Ley 400 / NSR-98) | **Equivalente al de edificación nueva** | IS < 1 e IF < 1 | A.10.9.2.2 |
+| **Entre el 1° de diciembre de 1984 y el 19 de febrero de 1998** (Decreto 1400 de 1984) | **(a)** nivel nuevo, con IF permitido hasta **1.5** (IS no mayor que 1); **o (b)** seguridad limitada (A.10.4.2.2) con IS e IF < 1, con **memorial** | (a) IS ≤ 1, IF ≤ 1.5 · (b) IS e IF < 1 | A.10.9.2.3 |
+| **Antes del 1° de diciembre de 1984** | **Como mínimo seguridad limitada** (A.10.4.2.2), con **memorial** | IS e IF < 1 | A.10.9.2.4 |
+| Declaradas **patrimonio histórico** (excepto grupos III y IV) | Se permite un nivel **menor**, justificado | Según memorial | A.10.9.2.5 |
+
+</TablaNorma>
+
+Detalles que conviene no olvidar:
+
+- **Grupos III y IV** (<NormaRef s="A.10.9.2.1" pag="A-108" />): la intervención de elementos no estructurales puede limitarse a **fachadas, columnas cortas o cautivas** y los que estén en mal estado y representen peligro para la vida (véase A.9.5.2). Si la edificación ya fue intervenida bajo el NSR-98 y **mantiene el mismo grupo de uso**, no hay obligación de intervenirla otra vez.
+- **Memorial para seguridad limitada** (<NormaRef s="A.10.9.2.3" pag="A-109" />, <NormaRef s="A.10.9.2.4" />): solo se permite si el **propietario lo acepta** y se incluye, entre los documentos de licencia, un memorial **firmado por el diseñador estructural y el propietario** declarando que se usó seguridad limitada, **protocolizado por escritura pública en Notaría**.
+- **No estructurales** en el caso A.10.9.2.3(c): igual limitación que en grupos III y IV.
+- **Patrimonio histórico** (<NormaRef s="A.10.9.2.5" />): el menor nivel debe justificarlo el ingeniero y aceptarlo el propietario, con un memorial conjunto que incluya las razones, el nivel de seguridad propuesto y las **medidas para restringir el acceso del público** u otros procedimientos de protección de los ocupantes; también se protocoliza en Notaría.
+
+### Requisitos constructivos y metodologías alternas
+
+- La modificación debe cumplir los requisitos del material y sistema estructural para **el grado de capacidad de disipación de energía** usado al determinar el IS de la edificación existente (<NormaRef s="A.10.9.3" pag="A-109" />).
+- Solo en la **evaluación de vulnerabilidad**, en reemplazo de A.10.4 y siempre que se garanticen los criterios de A.10.9, se permiten las secciones de rehabilitación de **ASCE/SEI 41-06**, **FEMA 356** o **ATC-40** (<NormaRef s="A.10.9.4" pag="A-109" />).
+
+## A.10.10 — Reparación de edificaciones dañadas por sismos
+
+### General (A.10.10.1)
+
+Tras un sismo, las edificaciones con **daños moderados a severos** (estructurales, no estructurales o ambos) deben **evaluarse** con estudios como los de A.10.10.2, para establecer si **es técnicamente factible repararlas**. Esa evaluación da criterios al propietario o a la autoridad para decidir **demoler totalmente** o **apelar** la demolición ya decidida antes de contar con el estudio (<NormaRef s="A.10.10.1" pag="A-110" />). La reparación de las que no sean designadas para demolición se hace con los criterios siguientes:
+
+- **Objeto** (<NormaRef s="A.10.10.1.1" />): la edificación reparada debe cumplir el propósito de las normas sismo resistentes (art. 1 de la Ley 400 y A.1.2.2).
+- **Ocupación durante la obra** (<NormaRef s="A.10.10.1.3" />): puede ocuparse mientras se repara si los profesionales de diseño y dirección emiten **concepto positivo**, por no haber peligro para la vida.
+
+### Alcance de la reparación (A.10.10.1.2)
+
+Salvo los grupos III y IV (que deben cumplir A.10.9.2.1), el alcance depende del tipo de daño:
+
+| Tipo de daño | Alcance de la reparación |
+|---|---|
+| **1.** Solo en elementos **no estructurales**, sin daño estructural | Intervenir los no estructurales afectados, según el Capítulo A.9 |
+| **2.** Daño estructural **imputable a interacción adversa** con elementos no estructurales | Reparar los estructurales afectados **y eliminar la interacción adversa**, según A.9 |
+| **3.** **Otro tipo** de daños | Se evalúa la estructura **en general**; la intervención cubre como mínimo: **(a)** los estructurales dañados, **(b)** los del sistema de resistencia sísmica necesarios para dar la **resistencia mínima requerida**, **(c)** los necesarios para cumplir la **deriva**, y **(d)** los no estructurales dañados |
+
+Observa que en el caso 3 **se interviene más de lo que está dañado**: se corrige también lo que hace falta para que toda la estructura alcance la resistencia y la deriva exigidas.
+
+### Estudios e investigaciones (A.10.10.2)
+
+- **Procedimiento** (<NormaRef s="A.10.10.2.1" pag="A-111" />): se sigue A.10.1.4; en las etapas 11 y 12 se aplican los requisitos de A.10.10.
+- **Información sobre la estructura y su estado:** se siguen los requisitos de A.10.2.
+- **Criterios de diseño de la reparación:** los de A.10.4, **modificados según A.10.9.2 por la edad** de la edificación. Para concreto estructural y mampostería se permiten las recomendaciones de **FEMA 306, 307 y 308** y de **ASCE/SEI 41-06**.
+- **Cálculos, memorias y planos:** deben ajustarse a A.10.1.5.
+- **Supervisión técnica:** la que exijan la Ley 400 y sus reglamentos.
+
+<Callout tipo="nota" titulo="Numeración repetida en el PDF">
+En la página A-111 los numerales A.10.10.2.2 y A.10.10.2.3 aparecen **dos veces** (primero para información y criterios de diseño; luego para cálculos y supervisión). No cambia el contenido; solo conviene citar por el título del requisito. La última página del capítulo (A-112) está en blanco, reservada a notas.
+</Callout>
+
+## Caso práctico: ¿reparar, rehabilitar o ampliar?
+
+<Ejemplo numero={2} titulo="Edificio de oficinas de 1991 en Cali: tres decisiones, una evaluación">
+Un edificio de oficinas de **4 pisos** (altura total $h_n$ = 14 m) con pórticos de concreto, **diseñado y construido en 1991** (vigencia del Decreto 1400 de 1984), está en **Cali** sobre suelo tipo D (grupo de uso I). El propietario evalúa tres cosas: (A) reparar fisuras tras un sismo, (B) actualizarlo voluntariamente, (C) agregar un quinto piso. Del análisis de la estructura se obtienen estos datos de la **columna crítica del primer piso** y de la estructura:
+
+- Planos incompletos y obra de calidad **regular**; estado actual **regular** (corrosión leve y fisuración): $\varphi_c = \varphi_e$ = 0.8.
+- Sistema de pórticos de concreto con confinamiento parcial: entre DMI ($R_0$ = 2.5) y DMO ($R_0$ = 5.0); el ingeniero adopta $R'$ = **3.5** (A.10.4.2.4 b, sin exceder el $R$ de A.3).
+- Momento solicitante de la columna, con $E = F_s/R'$ y espectro de **edificación nueva**: **{ej2.demNueva} kN·m**. Resistencia existente: $N_{ex}$ = **{ej2.nex} kN·m**.
+- Deriva máxima obtenida a nivel de edificación nueva: **1.12 %** de $h_{pi}$ (límite de A.6.4: 1.00 %).
+
+<Paso titulo="Período y espectros del edificio" ref="A.4.2, A.10.3.4">
+$T_a = C_t h_n^{\alpha}$ = 0.047 × 14^0.9 = **{ej2.ta.toFixed(3)} s**, dentro de la meseta de ambos espectros ($T_C$ ≈ 0.70 s). En Cali ($A_a = A_v$ = 0.25, $A_e$ = 0.15): $S_a$ nueva = {ej2.saDis.toFixed(4)} g y $S_a$ limitada = {ej2.saLim.toFixed(4)} g, cociente **{ej2.razon.toFixed(3)}**.
+</Paso>
+<Paso titulo="Resistencia efectiva e índice de sobreesfuerzo a nivel nuevo" ref="A.10-1, A.10.4.3.2">
+
+$$
+N_{ef} = 0.8 \times 0.8 \times 520
+$$
+
+Resultado: $N_{ef}$ = **{ej2.nef.toFixed(1)} kN·m** y $IS$ = {ej2.demNueva}/{ej2.nef.toFixed(1)} = **{ej2.isNueva.toFixed(2)}**. Además IF = 1.12/1.00 = **{ej2.ifNueva.toFixed(2)}**. Con el nivel de edificación nueva, el edificio **no cumple**: IS > 1.
+</Paso>
+<Paso titulo="Mismo edificio con seguridad limitada" ref="A.10.4.2.2, A.10.9.2.3(b)">
+Como las fuerzas son proporcionales a $S_a$ (mismo período y mismo $R'$), la solicitación baja a {ej2.demNueva} × {ej2.razon.toFixed(3)} = **{ej2.demLim.toFixed(0)} kN·m**: $IS$ = **{ej2.isLim.toFixed(2)}** e $IF$ = {ej2.ifNueva.toFixed(2)} × {ej2.razon.toFixed(3)} = **{ej2.ifLim.toFixed(2)}**. Ambos son menores que 1.
+</Paso>
+<Paso titulo="Decisión A: reparación tras el sismo" ref="A.10.10.1.2">
+- Si las fisuras están **solo en los muros divisorios** y la estructura no se afectó: se aplica el caso 1 (reparar los no estructurales según A.9).
+- Si hubo daño estructural **causado por los muros de mampostería que no estaban aislados** (columnas cortas, por ejemplo): caso 2; se reparan las columnas **y se elimina la interacción** (juntas, aislamiento del muro).
+- Si el daño es de **otro tipo** (agrietamiento por cortante en columnas o vigas): caso 3. Se evalúa toda la estructura (IS e IF como arriba); como el edificio es de 1991, el nivel exigido es el de A.10.9.2.3 y la intervención debe cubrir los elementos dañados **y** los necesarios para llegar a la resistencia y la deriva mínimas.
+</Paso>
+<Paso titulo="Decisión B: actualización voluntaria" ref="A.10.9.2.3">
+Para un edificio diseñado y construido en 1991 la norma aplica <NormaRef s="A.10.9.2.3" pag="A-109" />: nivel **nuevo o limitado**, a elección. Dos caminos:
+
+- **Nivel nuevo** (inciso a): IS debe bajar a ≤ 1 (hay que subir la capacidad de la columna en al menos {((ej2.isNueva - 1) * 100).toFixed(0)} %, por ejemplo con encamisado) y se tolera IF = {ej2.ifNueva.toFixed(2)} porque no excede **1.5**.
+- **Seguridad limitada** (inciso b): ya cumple con IS = {ej2.isLim.toFixed(2)} e IF = {ej2.ifLim.toFixed(2)}, pero se necesita el **memorial** firmado por diseñador y propietario y protocolizado ante Notaría.
+
+Ojo con $R'$: si el ingeniero adoptara $R'$ = 5.0 sin sustento, el IS a nivel nuevo bajaría a {ej2.isRPrima5.toFixed(2)} y el edificio parecería cumplir. Por eso la norma limita $R'$ a lo que sustenten los planos y las inspecciones.
+</Paso>
+<Paso titulo="Decisión C: ampliación en altura de un piso" ref="A.10.8.2, A.10.8.3">
+Un quinto piso aumenta la masa en ≈ 25 % ($T_a$ pasa a {ej2.ta5.toFixed(3)} s, aún en la meseta), por lo que la solicitación de la columna crece en un primer estimativo a {ej2.demNueva} × {ej2.factorAltura.toFixed(2)} = **{ej2.demAltura.toFixed(0)} kN·m** (en la obra real habría que **re-analizar el conjunto**, A.10.8.2). Como no hay opción de seguridad limitada, se usa el nivel nuevo:
+
+- Sin mejorar la columna: $N_{ef}$ = {ej2.nef.toFixed(1)} kN·m, $IS$ = {(ej2.demAltura / ej2.nef).toFixed(2)}. **No cumple.**
+- Con encamisado y estado posterior "bueno" ($\varphi_e$ = 1.0, permitido por A.10.8.2.1) pero $\varphi_c$ = 0.8: se necesita $N_{ex}$ ≥ {ej2.demAltura.toFixed(0)} / 0.8 = **{ej2.nexNecesaria.toFixed(0)} kN·m**, es decir **+{(((ej2.nexNecesaria / ej2.nex) - 1) * 100).toFixed(0)} %** sobre la resistencia existente. Sin poder actualizar $\varphi_e$ haría falta {ej2.nexSinActualizar.toFixed(0)} kN·m (+{(((ej2.nexSinActualizar / ej2.nex) - 1) * 100).toFixed(0)} %).
+- Además hay que diseñar los **empalmes** nuevo-antiguo (A.10.8.4) y revisar la cimentación por capacidad portante, asentamientos y **volcamiento** (A.10.8.6).
+</Paso>
+<Resultado>
+Una sola evaluación (IS = {ej2.isNueva.toFixed(2)} a nivel nuevo; {ej2.isLim.toFixed(2)} con seguridad limitada) alimenta las tres decisiones: **reparar** solo lo dañado según el tipo de daño; **rehabilitar** escogiendo entre el nivel nuevo (con IF hasta 1.5) y el limitado (con memorial notarial); y **ampliar en altura** únicamente con el conjunto reanalizado a nivel de edificación nueva y los elementos antiguos reforzados hasta IS e IF menores que 1. Los valores de momento y deriva son datos supuestos del ejemplo; los demás salen de las funciones del proyecto y de las ecuaciones de la norma.
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="practica" titulo="Quién firma qué">
+- **Ingeniero civil matriculado**: la memoria de cálculos (A.10.1.5.1) y el diseño de la intervención.
+- **Diseñador estructural y propietario**: el memorial de seguridad limitada (A.10.9.2.3/4) o de menor nivel en patrimonio (A.10.9.2.5), protocolizado en **Notaría**.
+- **Ingeniero geotecnista**: la exploración de cimentaciones antiguas que reciban cargas nuevas (A.10.7.4, A.10.8.6).
+- **Supervisor técnico**: la constancia de que las hipótesis del diseñador se confirmaron en obra (A.10.1.6.1).
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Dar por hecho que **toda** edificación antigua puede rehabilitarse con $A_e$: el nivel limitado solo aplica a las anteriores a 1998 (A.10.9.2.3/4), exige memorial notarial y **nunca** a los grupos III y IV ni a edificaciones nuevas.
+- Aplicar $\varphi_c$ y $\varphi_e$ por separado: se **multiplican** (A.10-1); regular × regular da 0.64, no 0.8.
+- Suponer que, si la ampliación adosada queda separada por una junta, la parte vieja "no cuenta": si IS o IF > 1, hay que intervenirla de todos modos (A.10.7.1.1).
+- Tomar un $R'$ optimista sin sustento documental; no puede exceder el $R$ de A.3 y en mampostería no reforzada es 1.0.
+- Reparar solo lo que está visiblemente dañado: en daños "de otro tipo" la intervención debe cubrir también lo necesario para resistencia mínima y deriva (A.10.10.1.2).
+- Olvidar la regla del 10 % en modificaciones menores (A.10.6.3), o el estudio por **cambio de uso** aun en reparaciones menores (A.10.1.3.2).
+- Dejar sin supervisión técnica la intervención: es obligatoria en todos los casos (A.10.1.6).
+</Callout>
+
+## Resumen en una línea
+
+**Evalúa con la información real de la obra y castiga la resistencia por calidad y estado ($N_{ef}=\varphi_c\varphi_e N_{ex}$), calcula IS e IF, y deja ambos menores que 1 con el nivel de seguridad que fija el tipo de intervención y la edad de la edificación (nuevo o limitado con $A_e$), firmando memoria, memorial y supervisión.**

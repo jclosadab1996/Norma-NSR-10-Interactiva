@@ -1,0 +1,265 @@
+---
+codigo: 'A.11'
+tipo: capitulo
+titulo: 'Instrumentación sísmica'
+resumen: 'Qué edificaciones deben llevar acelerógrafos según la zona de amenaza, el área construida y el número de pisos; dónde se colocan, cómo debe ser el espacio y quién paga instalación, mantenimiento y vigilancia.'
+objetivos:
+  - 'Determinar si una edificación o un conjunto habitacional debe instrumentarse y con cuántos aparatos'
+  - 'Ubicar los instrumentos (base, mitad de altura, cubierta o campo abierto) según el tipo de arreglo'
+  - 'Diseñar el espacio físico que exige la norma para alojar el acelerógrafo'
+  - 'Repartir correctamente los costos y las obligaciones entre constructor, propietarios y entidades'
+paginasNorma: 'A-113 a A-116'
+paginaPdf: 156
+orden: 11
+calculadoras: []
+nivel: 'basico'
+---
+
+import { zonaAmenaza } from '../../lib/nsr10';
+import { instrumentacionEdificacion, instrumentacionConjunto } from '../../lib/nsr10/instrumentacion';
+import municipios from '../../data/municipios.json';
+
+export const ciudad = (codigo) => {
+  const m = municipios.find((x) => x.codigo === codigo);
+  return { nombre: m.municipio, zona: zonaAmenaza(m.aa, m.av), aa: m.aa, av: m.av };
+};
+
+export const casos = [
+  { desc: 'Torre de vivienda, 24 pisos, 38 000 m²', cod: '11001', area: 38000, pisos: 24 },
+  { desc: 'Misma torre, 24 pisos, 38 000 m²', cod: '76001', area: 38000, pisos: 24 },
+  { desc: 'Centro comercial, 3 pisos, 25 000 m²', cod: '05001', area: 25000, pisos: 3 },
+  { desc: 'Mismo centro comercial, 3 pisos, 25 000 m²', cod: '76001', area: 25000, pisos: 3 },
+  { desc: 'Edificio de oficinas, 15 pisos, 22 000 m²', cod: '76001', area: 22000, pisos: 15 },
+  { desc: 'Mismo edificio, 15 pisos, 22 000 m²', cod: '08001', area: 22000, pisos: 15 },
+  { desc: 'Bodega de 2 pisos, 40 000 m²', cod: '76001', area: 40000, pisos: 2 },
+].map((c) => {
+  const u = ciudad(c.cod);
+  return { ...c, ...u, req: instrumentacionEdificacion(u.zona, c.area, c.pisos) };
+});
+
+export const conjuntos = [
+  { cod: '76001', unidades: 250 },
+  { cod: '11001', unidades: 250 },
+  { cod: '11001', unidades: 350 },
+].map((c) => {
+  const u = ciudad(c.cod);
+  return { ...c, ...u, campo: instrumentacionConjunto(u.zona, c.unidades, false) };
+});
+
+## Idea central del capítulo
+
+Cada sismo fuerte es un experimento a escala natural: lo que hizo una edificación real durante un temblor enseña más que cualquier modelo. El Capítulo A.11 convierte esa idea en una obligación: **las edificaciones más grandes o más altas, en las zonas de mayor amenaza, deben llevar acelerógrafos** que registren su respuesta. La información alimenta la Red Nacional de Acelerógrafos y sirve para ajustar el Reglamento en futuras ediciones.
+
+El capítulo responde cuatro preguntas prácticas:
+
+1. **¿Cuándo** debo instrumentar? (A.11.2, según zona, área y pisos)
+2. **¿Dónde** pongo los aparatos? (A.11.1.3: base, altura, campo abierto o arreglo)
+3. **¿Cómo** debe ser el cuarto del instrumento? (A.11.1.4)
+4. **¿Quién paga** y quién responde? (A.11.1.5)
+
+<Callout tipo="importante" titulo="Sin espacio previsto no hay licencia">
+La curaduría o la entidad que expide licencias **no puede expedirla** (incluidas las de remodelación y reforzamiento futuros) si el proyecto arquitectónico no incluye los espacios del instrumento y el reglamento de propiedad horizontal no consigna las obligaciones de la copropiedad; y tampoco puede expedirse el permiso de ocupación si el instrumento no se instaló (<NormaRef s="A.11.1.3.2" pag="A-114" />).
+</Callout>
+
+## A.11.1 — General
+
+### Alcance (A.11.1.1)
+
+El capítulo indica **cuándo** deben colocarse instrumentos sísmicos, **en dónde** deben localizarse y **quién asume** los costos de los instrumentos, del espacio que ocupan y de su mantenimiento y vigilancia (<NormaRef s="A.11.1.1" pag="A-113" />).
+
+### Acelerógrafos (A.11.1.2)
+
+Deben emplearse **acelerógrafos digitales de movimiento fuerte** (<NormaRef s="A.11.1.2" pag="A-113" />). Los objetivos de la instrumentación son recoger registros que permitan:
+
+- medir los **períodos de vibración** de la edificación bajo sismos;
+- determinar el **nivel de daño** que ocurrió tras un evento;
+- identificar **efectos de sitio** (amplificación por los estratos de suelo);
+- estimar la **atenuación** de las ondas desde la fuente hasta el sitio;
+- mejorar el conocimiento nacional de los sismos y su efecto en las construcciones, para ajustar el Reglamento y reducir la vulnerabilidad y, a la larga, el costo de la seguridad sísmica.
+
+**Aprobación del tipo de instrumento** (<NormaRef s="A.11.1.2" pag="A-113" /> literal b): la norma designa al **INGEOMINAS**, entidad que operaba la Red Nacional de Acelerógrafos, para aprobar los tipos de instrumento y mantener la lista de especificaciones mínimas. Independientemente de quién sea el propietario, la Red y la autoridad municipal o distrital deben recibir **copia gratuita de los registros, al menos una vez al año**. Si el municipio desarrolló una red propia de acelerógrafos de movimientos fuertes (A.2.9.3.7(d)), la entidad que la administre puede asumir las funciones del INGEOMINAS informándole.
+
+<Callout tipo="nota" titulo="Entidades que cambiaron de nombre">
+El NSR-10 nombra al INGEOMINAS. Esa entidad fue reorganizada con posterioridad y sus funciones sismológicas y de la red de acelerógrafos las ejerce hoy el Servicio Geológico Colombiano. Antes de comprar un instrumento, consulta con la autoridad vigente la lista de equipos aprobados.
+</Callout>
+
+### Localización de los instrumentos (A.11.1.3)
+
+La definición de dónde van los instrumentos **es responsabilidad del ingeniero que hace el diseño estructural**, atendiendo A.11.1.3 y A.11.1.4. Debe ser alguno de estos cuatro tipos (<NormaRef s="A.11.1.3" pag="A-113" />):
+
+| Tipo | Descripción | Requisito de los sensores |
+|---|---|---|
+| **(a) En la altura** | Mínimo **tres instrumentos**: uno en la **base**, uno **hacia media altura** y uno en el **nivel superior** | El de la base: sensores triaxiales (2 horizontales ortogonales + 1 vertical). Los otros dos pueden tener solo 2 sensores horizontales ortogonales |
+| **(b) Instrumento único** | Un solo instrumento en la edificación | Se coloca en la **base** |
+| **(c) Campo abierto** | Un instrumento sobre el terreno, **alejado de las edificaciones por lo menos una distancia igual a su altura** | — |
+| **(d) Arreglo** | Conjunto de instrumentos que cubre las localizaciones anteriores | Deben tener un dispositivo que **inicie el registro simultáneamente** en todos |
+
+Además:
+
+- **Estudio geotécnico** (<NormaRef s="A.11.1.3.1" pag="A-114" />): en toda edificación instrumentada debe hacerse un estudio geotécnico cuyo alcance permita definir las **propiedades dinámicas del suelo** en el sitio.
+- **Licencias y permiso de ocupación** (<NormaRef s="A.11.1.3.2" />): ver el recuadro de arriba.
+
+### El espacio del instrumento (A.11.1.4)
+
+El cuarto donde se instala el acelerógrafo es parte del proyecto arquitectónico y debe cumplir (<NormaRef s="A.11.1.4" pag="A-114" />):
+
+<TablaNorma numero="A.11.1.4" titulo="Requisitos del espacio del instrumento" pag="A-114">
+
+| Aspecto | Requisito |
+|---|---|
+| Área en planta | **≥ 2 m²**, con dimensión mínima de **1 m** |
+| Altura libre | **≥ 2 m** |
+| Localización | Lejos de zonas de alta circulación y de maquinaria o equipos que induzcan vibraciones |
+| Cerramiento | Espacio **cerrado pero con ventilación adecuada**, de material que garantice la seguridad del instrumento |
+| Instalaciones eléctricas | **Toma doble**, **breaker de 15 A** y una salida de iluminación con interruptor |
+| Piso | De **concreto**, con espesor suficiente para el anclaje del instrumento (**mínimo 15 cm**) |
+| Uso | **Exclusivo** para el instrumento; no puede servir para ningún otro fin |
+| Arreglos | Los espacios de los distintos instrumentos se conectan con un **tubo de PVC de diámetro mínimo 1″** para las conexiones eléctricas |
+
+</TablaNorma>
+
+### Costos y responsabilidades (A.11.1.5)
+
+<TablaNorma numero="A.11.1.5" titulo="Quién asume cada costo" pag="A-114">
+
+| Concepto | Responsable | Detalles |
+|---|---|---|
+| **Instrumentos** (<NormaRef s="A.11.1.5" /> a) | **Titular de la licencia de construcción** | Los compra e instala. La propiedad es de quien los adquiere. El INGEOMINAS puede colocar instrumentos adicionales **a su costo** en los mismos espacios. Se envía copia gratuita de los registros a la Red Sismológica Nacional y a la autoridad municipal |
+| **Espacios** (b) | **Propietarios de la edificación** | Dan libre acceso a los funcionarios (o delegados) para instalación, mantenimiento y retiro de registros. En copropiedad, el reglamento incluye cláusulas al respecto |
+| **Mantenimiento** (c) | **Propietarios** | Lo presta alguien **aprobado por el INGEOMINAS**; con la frecuencia que pida el fabricante y **como máximo cada año**. La obligación debe constar en el reglamento de copropiedad |
+| **Vigilancia** (d) | **Propietarios** (sean o no dueños del instrumento) | Responden por su seguridad y deben **adquirir y mantener una póliza de seguros** que cubra la reposición por hurto, substracción u otra eventualidad |
+
+</TablaNorma>
+
+## A.11.2 — Colocación de instrumentos sísmicos
+
+Dentro de las construcciones cubiertas por el Reglamento, deben colocarse instrumentos en los casos siguientes. La **zona de amenaza** (alta, intermedia o baja) es la que define el municipio según A.2.3: se obtiene con $A_a$ y $A_v$ (consulta el [buscador de municipios](/titulo-a/municipios)).
+
+### Zonas de amenaza sísmica alta (A.11.2.1)
+
+<TablaNorma numero="A.11.2.1" titulo="Instrumentación en zonas de amenaza sísmica alta" pag="A-115">
+
+| Literal | Edificación | Instrumentos | Localización |
+|---|---|---|---|
+| (a) | **Más de 20 000 m²** y **3 a 10 pisos** | **1** como mínimo | En el espacio colindante con el sistema estructural, en el **nivel inferior** |
+| (b) | **Más de 20 000 m²** y **11 a 20 pisos** | **2** como mínimo | Nivel inferior y **cerca de la cubierta** (el de la cubierta puede tener solo 2 sensores horizontales ortogonales) |
+| (c) | **21 o más pisos**, sin importar el área | **3**, formando un **arreglo** | Nivel inferior, **hacia mitad de altura** y en **inmediaciones de la cubierta**. Alternativa: 3 sensores de aceleración (1 triaxial y 2 biaxiales, como en A.11.1.3(a)) conectados a un sistema central de captura |
+| (d) | **Conjunto habitacional** con **más de 200 unidades** de vivienda que **no sean de interés social** | **1** de **campo abierto** | Sobre el terreno, separado de las edificaciones |
+
+</TablaNorma>
+
+### Zonas de amenaza sísmica intermedia (A.11.2.2)
+
+<TablaNorma numero="A.11.2.2" titulo="Instrumentación en zonas de amenaza sísmica intermedia" pag="A-115">
+
+| Literal | Edificación | Instrumentos | Localización |
+|---|---|---|---|
+| (a) | **Más de 30 000 m²** y **5 a 15 pisos** | **1** como mínimo | Espacio colindante con el sistema estructural, en el **nivel inferior** |
+| (b) | **Más de 30 000 m²** y **16 a 25 pisos** | **2** como mínimo | Nivel inferior y **cerca de la cubierta** |
+| (c) | **Más de 25 pisos**, sin importar el área | **3**, formando un **arreglo** | Nivel inferior, mitad de altura y cubierta. Alternativa: **3 sensores triaxiales** conectados a un sistema central de captura |
+| (d) | **Conjunto habitacional** con **más de 300 unidades** que **no sean de interés social** | **1** de **campo abierto** | Sobre el terreno |
+
+</TablaNorma>
+
+### Zonas de amenaza sísmica baja (A.11.2.3)
+
+**No hay obligación** de colocar instrumentos (<NormaRef s="A.11.2.3" pag="A-115" />).
+
+<Callout tipo="nota" titulo="Los umbrales cambian de una zona a otra">
+Fíjate en que, para la misma cantidad de instrumentos, la zona intermedia exige **más área** (30 000 m² en vez de 20 000 m²) y **más pisos** (rangos de 5–15 y 16–25 pisos frente a 3–10 y 11–20; y los tres instrumentos se exigen con más de 25 pisos frente a 21 o más en zona alta). Cuanto mayor la amenaza, antes se pide instrumentación. Los conjuntos habitacionales siguen la misma lógica: 200 unidades en zona alta, 300 en intermedia.
+</Callout>
+
+### Lista de decisión
+
+Para saber qué exige A.11 a un proyecto:
+
+1. **Zona de amenaza del municipio** (A.2.3). Si es **baja**, no hay obligación: terminaste.
+2. **¿Es un conjunto habitacional?** Si no es de interés social y supera 200 unidades (zona alta) o 300 (zona intermedia), añade **un instrumento de campo abierto**.
+3. **Cuenta los pisos.** En zona alta, 21 o más pisos implica **3 instrumentos en arreglo**; en intermedia, más de 25.
+4. Si no, **mira el área construida** (más de 20 000 m² en alta, 30 000 m² en intermedia) y ubica el rango de pisos: 1 instrumento en el rango bajo (3–10 alta, 5–15 intermedia) o 2 en el rango medio (11–20 alta, 16–25 intermedia).
+5. Prevé en el **proyecto arquitectónico** los espacios (A.11.1.4), consigna las obligaciones en el **reglamento de propiedad horizontal** y programa el **estudio geotécnico** de propiedades dinámicas del suelo (A.11.1.3.1).
+
+<Detalle titulo="Casos que el texto no cubre">
+
+Aplicando los literales tal como están escritos, algunas combinaciones **quedan sin exigencia**:
+
+- Edificaciones de **1 o 2 pisos** de gran área (una bodega de 40 000 m²), porque las bandas comienzan en 3 pisos (zona alta) o 5 pisos (zona intermedia).
+- En zona intermedia, edificaciones de **hasta 4 pisos**, aunque tengan más de 30 000 m².
+- **Saltos bruscos:** en zona alta, un edificio de 20 pisos y 15 000 m² no lleva instrumentos y uno de 21 pisos sí lleva tres; en zona intermedia ocurre lo mismo entre 25 y 26 pisos (el literal (c) pide "más de 25" y el (b) exige además más de 30 000 m²).
+
+No son errores del PDF sino consecuencia de cómo se definieron las bandas. Si tu proyecto cae en uno de estos huecos, el instrumento no es obligatorio, pero nada impide instalarlo voluntariamente.
+
+</Detalle>
+
+## Caso práctico: ¿cuántos acelerógrafos lleva mi proyecto?
+
+<Ejemplo numero={1} titulo="Siete proyectos, una lista de decisión">
+La zona de amenaza de cada ciudad se obtiene con $A_a$ y $A_v$ del Apéndice A-4 (A.2.3), y los instrumentos se deducen de A.11.2. Resultados, calculados con las mismas reglas que acabas de leer:
+
+<Paso titulo="Edificaciones aisladas" ref="A.11.2.1, A.11.2.2, A.11.2.3">
+
+<table>
+  <thead>
+    <tr><th>Proyecto</th><th>Ciudad</th><th>Zona</th><th>Instrumentos</th><th>Literal</th></tr>
+  </thead>
+  <tbody>
+    {casos.map((c) => (
+      <tr>
+        <td>{c.desc}</td>
+        <td>{c.nombre}</td>
+        <td>{c.zona}</td>
+        <td><strong>{c.req.instrumentos}</strong>{c.req.arreglo ? ' (arreglo)' : ''}</td>
+        <td>{c.req.ref}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Paso titulo="Lectura de los resultados">
+- **Misma torre, dos ciudades:** en Bogotá (zona intermedia) 24 pisos y 38 000 m² caen en el literal (b) (16 a 25 pisos y más de 30 000 m²): **2 instrumentos**, uno en el nivel inferior y otro cerca de la cubierta. En Cali (zona alta) basta con 21 o más pisos: **3 instrumentos en arreglo**.
+- **El mismo centro comercial:** en Medellín (zona intermedia) tiene 3 pisos y 25 000 m², menos de lo exigido; en Cali (alta) basta con más de 20 000 m² y 3 a 10 pisos: **1 instrumento** en el nivel inferior.
+- **Edificio de oficinas:** en Cali, con 15 pisos y más de 20 000 m², caben 2 instrumentos; en Barranquilla (zona baja) **ninguno**.
+- **Bodega de 2 pisos:** por mucha área que tenga, ningún literal la alcanza (ver "Casos que el texto no cubre").
+</Paso>
+<Paso titulo="Conjuntos habitacionales (no VIS)" ref="A.11.2.1(d), A.11.2.2(d)">
+
+<table>
+  <thead>
+    <tr><th>Ciudad</th><th>Zona</th><th>Unidades</th><th>Instrumento de campo abierto</th></tr>
+  </thead>
+  <tbody>
+    {conjuntos.map((c) => (
+      <tr>
+        <td>{c.nombre}</td>
+        <td>{c.zona}</td>
+        <td>{c.unidades}</td>
+        <td><strong>{c.campo ? 'Sí (1)' : 'No'}</strong></td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Paso titulo="Qué hay que dejar documentado en el proyecto" ref="A.11.1.3, A.11.1.4, A.11.1.5">
+Para la torre de 24 pisos de Cali (3 instrumentos en arreglo): (1) el **ingeniero estructural** define la localización (base con sensores triaxiales; mitad de altura y cubierta, con sensores horizontales); (2) el **arquitecto** dibuja en planos tres cuartos de mínimo 2 m² y 2 m de altura libre, con piso de concreto de 15 cm, toma doble, breaker de 15 A, luz y un tubo de PVC de 1″ que los conecte; (3) el **reglamento de propiedad horizontal** consigna el acceso, el mantenimiento anual y la póliza de seguro; (4) el **constructor titular de la licencia** compra e instala los instrumentos aprobados; y (5) el **geotecnista** incluye en el estudio de suelos las propiedades dinámicas del sitio.
+</Paso>
+<Resultado>
+Una torre de 24 pisos y 38 000 m² necesita **2 acelerógrafos en Bogotá** y **3 en arreglo en Cali**; un conjunto de 250 viviendas no VIS lleva instrumento de campo abierto en Cali (zona alta) pero **no en Bogotá** (zona intermedia, umbral de 300).
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- No prever el cuarto del instrumento en el proyecto arquitectónico: sin él **no se expide la licencia** ni el permiso de ocupación (A.11.1.3.2).
+- Confundir el responsable de cada costo: el instrumento lo compra el titular de la licencia, pero **mantenimiento, vigilancia, seguro y espacio** son de los propietarios (A.11.1.5).
+- Aplicar los umbrales de zona alta a una ciudad de zona intermedia (o al revés): 20 000 m² y 3–10 pisos no son lo mismo que 30 000 m² y 5–15 pisos.
+- Olvidar el **instrumento de campo abierto** de los conjuntos habitacionales grandes.
+- Dejar el instrumento sin póliza o sin mantenimiento anual, o con un proveedor no aprobado.
+- Olvidar el **estudio geotécnico** con propiedades dinámicas del suelo exigido en toda edificación instrumentada (A.11.1.3.1).
+</Callout>
+
+## Resumen en una línea
+
+**Ubica la zona de amenaza, cuenta pisos y área (o unidades de vivienda) para saber si llevas 1, 2 o 3 acelerógrafos —o ninguno—, deja los cuartos de 2 m² en el proyecto y en el reglamento de copropiedad, y recuerda que los instrumentos los paga quien tramita la licencia y el espacio, el mantenimiento y la vigilancia, los propietarios.**

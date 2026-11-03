@@ -1,0 +1,585 @@
+---
+codigo: 'A.4'
+tipo: capitulo
+titulo: 'Método de la fuerza horizontal equivalente'
+resumen: 'Cómo convertir el espectro de diseño en fuerzas estáticas por piso: período fundamental (T, Ta, Cu), cortante basal Vs = Sa·g·M, distribución en la altura con el exponente k y qué debe incluir el análisis de la estructura.'
+objetivos:
+  - 'Calcular el período aproximado Ta y el límite Cu·Ta, incluyendo la alternativa para muros (Cw) y la regla 0.1·N'
+  - 'Obtener el cortante sísmico en la base Vs a partir de Sa y de la masa total, cuidando las unidades del SI'
+  - 'Distribuir Vs en la altura con Cvx y k, y hallar el cortante acumulado en cada piso'
+  - 'Saber qué debe tener en cuenta el análisis de la estructura (diafragmas, torsión, vuelco, fisuración) y qué resultados debe entregar'
+paginasNorma: 'A-63 a A-66'
+paginaPdf: 106
+orden: 4
+calculadoras: ['periodo-fundamental', 'fuerza-horizontal']
+nivel: 'intermedio'
+---
+
+import {
+  coeficienteFa, coeficienteFv, coeficienteCu, periodoAproximado, periodoPorPisos,
+  periodoMaximo, periodosEspectro, sa, mesetaSa, exponenteK, cortanteBasal, distribuirFuerzas,
+  coeficienteCw, ctMuros, periodoAproximadoCtAlpha,
+} from '../../lib/nsr10';
+
+export const f = (x, d = 2) => x.toFixed(d);
+export const miles = (x) => Math.round(x).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+export const e1 = (() => {
+  const aa = 0.25, av = 0.25, i = 1.0;
+  const fa = coeficienteFa('D', aa) ?? NaN;
+  const fv = coeficienteFv('D', av) ?? NaN;
+  const p = { aa, av, fa, fv, i };
+  const n = 8, hp = 3;
+  const hn = n * hp;
+  const masasMg = [520, 520, 520, 520, 520, 520, 520, 430];
+  const masaMg = masasMg.reduce((a, b) => a + b, 0);
+  const masaKg = masaMg * 1000;
+  const cuBruto = 1.75 - 1.2 * av * fv;
+  const cu = coeficienteCu(av, fv);
+  const ta = periodoAproximado('porticos-concreto', hn);
+  const tPisos = periodoPorPisos(n);
+  const tmax = periodoMaximo(av, fv, ta);
+  const per = periodosEspectro(p);
+  const meseta = mesetaSa(p);
+  const saT = sa(ta, p);
+  const vsN = cortanteBasal(saT, masaKg);
+  const vs = vsN / 1000; // kN
+  const peso = (masaKg * 9.8) / 1000; // kN
+  const k = exponenteK(ta);
+  const niveles = masasMg.map((m, idx) => ({ h: hp * (idx + 1), m: m * 1000 }));
+  const dist = distribuirFuerzas(niveles, vsN, ta);
+  const sumaFx = dist.reduce((s, d) => s + d.fx, 0) / 1000;
+  // Iteración supuesta (A.4.2.3): el análisis modal da T = 0.93 s.
+  const tModal = 0.93;
+  const difModal = (tModal - ta) / ta;
+  const saIter = sa(tModal, p);
+  const vsIter = cortanteBasal(saIter, masaKg) / 1000;
+  const kIter = exponenteK(tModal);
+  return { aa, av, fa, fv, i, p, n, hp, hn, masaMg, masaKg, cuBruto, cu, ta, tPisos, tmax, per, meseta, saT, vs, peso, k, dist, sumaFx, tModal, difModal, saIter, vsIter, kIter };
+})();
+
+export const e2 = (() => {
+  const aa = 0.15, av = 0.2, i = 1.25;
+  const fa = coeficienteFa('C', aa) ?? NaN;
+  const fv = coeficienteFv('C', av) ?? NaN;
+  const p = { aa, av, fa, fv, i };
+  const n = 6, hp = 3, hn = n * hp;
+  const ab = 15 * 25; // m²
+  const esp = 0.25; // m
+  const muros = [
+    { nombre: 'A', cantidad: 4, lwi: 6.0 },
+    { nombre: 'B', cantidad: 2, lwi: 3.0 },
+  ].map((m) => ({ ...m, hwi: hn, awi: esp * m.lwi }));
+  const lista = muros.flatMap((m) => Array.from({ length: m.cantidad }, () => ({ awi: m.awi, hwi: m.hwi, lwi: m.lwi })));
+  const terminos = muros.map((m) => ({ ...m, termino: ((hn / m.hwi) ** 2 * m.awi) / (1 + 0.83 * (m.hwi / m.lwi) ** 2) }));
+  const suma = terminos.reduce((s, t) => s + t.cantidad * t.termino, 0);
+  const cw = coeficienteCw(lista, ab, hn);
+  const { ct, alpha } = ctMuros(cw);
+  const taCw = periodoAproximadoCtAlpha(ct, alpha, hn);
+  const taTabla = periodoAproximado('otros-muros', hn);
+  const cu = coeficienteCu(av, fv);
+  const tmax = cu * taCw;
+  const per = periodosEspectro(p);
+  const meseta = mesetaSa(p);
+  const saT = sa(taCw, p);
+  const masaMg = 6 * 450;
+  const vs = cortanteBasal(saT, masaMg * 1000) / 1000;
+  const k = exponenteK(taCw);
+  const niveles = Array.from({ length: n }, (_, idx) => ({ h: hp * (idx + 1), m: 450_000 }));
+  const dist = distribuirFuerzas(niveles, vs * 1000, taCw);
+  return { aa, av, fa, fv, i, n, hn, ab, esp, muros, terminos, suma, cw, ct, alpha, taCw, taTabla, cu, tmax, per, meseta, saT, masaMg, vs, k, dist, nMuros: lista.length };
+})();
+
+export const e3 = (() => {
+  const base = e1;
+  const casos = [
+    { etiqueta: 'T ≤ 0.5 s', t: 0.4 },
+    { etiqueta: 'T del ejemplo 1', t: base.ta },
+    { etiqueta: 'T = 1.5 s', t: 1.5 },
+    { etiqueta: 'T ≥ 2.5 s', t: 3.0 },
+  ].map((c) => {
+    const niveles = Array.from({ length: base.n }, (_, idx) => ({ h: base.hp * (idx + 1), m: [520, 520, 520, 520, 520, 520, 520, 430][idx] * 1000 }));
+    const d = distribuirFuerzas(niveles, base.vs * 1000, c.t);
+    const k = exponenteK(c.t);
+    const vuelco = d.reduce((s, x) => s + (x.fx / 1000) * x.h, 0); // kN·m
+    return { ...c, k, d, vuelco, alturaResultante: vuelco / base.vs, fTop: d[d.length - 1].fx / 1000, fBase: d[0].fx / 1000, vPiso1: d[0].cortantePiso / 1000, vPiso4: d[3].cortantePiso / 1000 };
+  });
+  return { casos };
+})();
+
+## Idea central del capítulo
+
+El Capítulo A.2 dijo **cuánto** tiembla el suelo (el espectro $S_a(T)$). El Capítulo A.4 responde ahora una pregunta muy práctica: **¿qué fuerzas horizontales debo aplicar a cada piso para representar ese sismo con un análisis estático?** Lo hace en cuatro pasos:
+
+1. **Estimar el período fundamental** $T$ de la edificación (con fórmulas aproximadas o con un modelo), y verificar que no exceda $C_u T_a$.
+2. **Leer $S_a$ del espectro** con ese $T$ y calcular el **cortante sísmico en la base**, $V_s = S_a\,g\,M$.
+3. **Repartir $V_s$ en la altura** con el coeficiente $C_{vx}$ (que depende de la masa, la altura y el exponente $k$), obteniendo la fuerza $F_x$ en cada piso.
+4. **Analizar la estructura** con esas fuerzas (diafragmas, torsión, vuelco, fisuración) para obtener desplazamientos, derivas y fuerzas internas.
+
+<Callout tipo="importante" titulo="Vs es una fuerza elástica, todavía sin dividir por R">
+Las fuerzas del método de la fuerza horizontal equivalente (FHE) representan la respuesta **elástica** del espectro, incluido el coeficiente de importancia $I$ (porque $S_a$ ya lo contiene). **No** están reducidas por la capacidad de disipación de energía: esa reducción $E = F_s/R$ ocurre después, al diseñar cada elemento (<NormaRef s="A.3.7.1" pag="A-49" />). En cambio, las **derivas** (Capítulo A.6) se calculan con las fuerzas **sin** dividir por $R$.
+</Callout>
+
+## A.4.0 — Nomenclatura
+
+Estas son las variables del capítulo (<NormaRef s="A.4.0" pag="A-63" />). Las más usadas:
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $M$ | Masa total de la edificación: estructura **más** muros divisorios, particiones, equipos permanentes, tanques y sus contenidos. En depósitos y bodegas se suma además el **25 %** de la masa asociada a la carga viva | kg |
+| $m_i, m_x$ | Parte de $M$ ubicada en el nivel $i$ o $x$ | kg |
+| $h_i, h_x$ | Altura del nivel $i$ o $x$ medida desde la **base** | m |
+| $h_n$ | Altura del piso más alto medida desde la base | m |
+| $h_p$ | Altura de piso (de diafragma a diafragma) | m |
+| $N$ | Número de pisos | — |
+| $S_a$ | Aceleración espectral (fracción de $g$) para el período $T$, leída en A.2.6 | — |
+| $T$, $T_a$ | Período fundamental (A.4.2-1) y período aproximado (A.4.2-3) | s |
+| $C_t$, $\alpha$ | Parámetros del período aproximado (Tabla A.4.2-1) | — |
+| $C_u$ | Coeficiente del período máximo permisible (A.4.2-2) | — |
+| $V_s$ | Cortante sísmico en la base | N o kN |
+| $F_x$, $C_{vx}$, $k$ | Fuerza en el nivel $x$, coeficiente de distribución y exponente (A.4.3) | — |
+| $A_B$ | Área de la edificación en su base | m² |
+| $A_{wi}$, $\ell_{wi}$, $h_{wi}$ | Área mínima de cortante, longitud (en el primer nivel) y altura del muro $i$ | m², m, m |
+| $n_w$ | Número de muros efectivos para resistir las fuerzas sísmicas en la dirección en estudio | — |
+| $f_i$, $\delta_i$ | Fuerza horizontal en el nivel $i$ y desplazamiento que produce, para la ecuación A.4.2-1 | — |
+
+<Callout tipo="nota" titulo="Anomalías de transcripción en la nomenclatura del PDF">
+En la lista de A.4.0 del PDF, el símbolo de la longitud del muro aparece escrito como "A<sub>wi</sub>" (dos veces) y no como $\ell_{wi}$; la ecuación A.4.2-4 (página A-65) sí usa correctamente $\ell_{wi}$. Además, las definiciones de $N$ y de $n_w$ aparecen intercaladas con otras en el texto extraído. Aquí se siguen las ecuaciones tal como están impresas.
+</Callout>
+
+## A.4.1 — General
+
+Este capítulo regula la obtención de las fuerzas sísmicas horizontales y el análisis de la edificación con el método de la FHE, de acuerdo con los requisitos del Capítulo A.3 (<NormaRef s="A.4.1.1" pag="A-63" />).
+
+¿Cuándo se **permite** este método? Lo define A.3.4.2.1 (no es de este capítulo, pero conviene tenerlo presente):
+
+- Todas las edificaciones, regulares o irregulares, en zonas de **amenaza sísmica baja**.
+- Edificaciones del grupo de uso I (regulares o irregulares) en zonas de amenaza **intermedia**.
+- Edificaciones **regulares** de 20 niveles o menos y 60 m o menos, en cualquier zona, salvo suelos D, E o F con períodos mayores de $2T_C$.
+- Edificaciones **irregulares** de hasta 6 niveles y 18 m.
+- Estructuras flexibles apoyadas sobre estructuras más rígidas que cumplan A.3.2.4.3.
+
+<Callout tipo="practica">
+Si tu edificio no cumple ninguna de esas condiciones —por ejemplo, 12 pisos con irregularidad de piso flexible— el método de la FHE **no es válido** y se requiere el análisis dinámico elástico del <NormaRef s="A.5" pag="A-67" />. Revisa siempre A.3.4.2 antes de empezar.
+</Callout>
+
+## A.4.2 — Período fundamental de la edificación
+
+El período $T$ gobierna la lectura de $S_a$ (y el exponente $k$). La norma da **tres caminos** para obtenerlo, de más a menos preciso.
+
+### Camino 1 — Modelo matemático (A.4.2.1)
+
+$T$ debe obtenerse de las propiedades del sistema de resistencia sísmica, en la dirección estudiada, con un modelo linealmente elástico. Se acepta cumplirlo con la ecuación de Rayleigh (<NormaRef s="A.4.2.1" pag="A-64" />):
+
+<Ecuacion num="A.4.2-1" titulo="Período fundamental con fuerzas y desplazamientos de nivel">
+
+$$
+T = 2\pi\sqrt{\frac{\sum_{i=1}^{n} m_i\,\delta_i^{2}}{\sum_{i=1}^{n} f_i\,\delta_i}}
+$$
+
+- $m_i$: masa del nivel $i$.
+- $f_i$: fuerzas horizontales distribuidas aproximadamente según A.4.3-2 y A.4.3-3 (o cualquier distribución racional parecida al primer modo).
+- $\delta_i$: desplazamientos horizontales causados por esas fuerzas $f_i$.
+
+</Ecuacion>
+
+Pero hay un **tope**: el período obtenido con el modelo **no puede exceder $C_u T_a$** (<NormaRef s="A.4.2.1" pag="A-64" />):
+
+<Ecuacion num="A.4.2-2" titulo="Coeficiente Cu">
+
+$$
+C_u = 1.75 - 1.2\,A_v F_v \qquad (C_u \ge 1.2)
+$$
+
+</Ecuacion>
+
+Con sismos fuertes y suelos blandos ($A_vF_v \ge 0.458$) el valor calculado cae por debajo de 1.2 y se toma $C_u = 1.2$. En sitios de baja amenaza, $C_u$ puede acercarse a 1.7.
+
+<Callout tipo="nota" titulo="¿Por qué existe el tope Cu·Ta?">
+Un modelo con muy poca rigidez (o mal hecho) daría un período largo y, por la forma decreciente del espectro, una fuerza sísmica pequeña. El tope impide "ahorrar" fuerza con un período artificialmente alto: si tu modelo da $T > C_uT_a$, **usas $C_uT_a$** para leer $S_a$.
+</Callout>
+
+### Camino 2 — Período aproximado Ta (A.4.2.2)
+
+Alternativamente se toma $T = T_a$ con una fórmula empírica de la altura (<NormaRef s="A.4.2.2" pag="A-64" />):
+
+<Ecuacion num="A.4.2-3" titulo="Período aproximado">
+
+$$
+T_a = C_t\,h_n^{\,\alpha}
+$$
+
+- $h_n$ en metros, medida desde la base hasta el piso más alto.
+- $C_t$ y $\alpha$ de la Tabla A.4.2-1.
+
+</Ecuacion>
+
+<TablaNorma numero="Tabla A.4.2-1" titulo="Valor de los parámetros Ct y α para el cálculo del período aproximado Ta" pag="A-64">
+
+| Sistema estructural de resistencia sísmica | $C_t$ | $\alpha$ |
+|---|---:|---:|
+| Pórticos resistentes a momentos de **concreto reforzado** que resisten la totalidad de las fuerzas sísmicas y no están limitados o adheridos a componentes más rígidos, estructurales o no, que limiten los desplazamientos horizontales | 0.047 | 0.9 |
+| Pórticos resistentes a momentos de **acero estructural** (mismas condiciones) | 0.072 | 0.8 |
+| Pórticos arriostrados de acero con **diagonales excéntricas** restringidas a pandeo | 0.073 | 0.75 |
+| **Todos los otros** sistemas basados en muros de rigidez similar o mayor a la de muros de concreto o mampostería | 0.049 | 0.75 |
+| **Alternativa** para estructuras con muros estructurales de concreto reforzado o mampostería estructural (con $C_w$ de A.4.2-4) | $0.0062/\sqrt{C_w}$ | 1.00 |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="La condición 'no limitados por elementos más rígidos'">
+Los valores de pórticos (0.047 y 0.072) **solo** aplican si el pórtico resiste *todas* las fuerzas sísmicas y no está "pegado" a muros de mampostería, culatas u otros elementos que lo rigidicen. Un pórtico con mampostería de relleno adherida es, en la práctica, más rígido y tendrá un período menor que el de la fórmula; si hay duda, usa el modelo del Camino 1.
+</Callout>
+
+#### Alternativa para muros: el coeficiente Cw
+
+Para estructuras con **muros estructurales** de concreto reforzado o mampostería estructural se puede reemplazar el $C_t$ de la tabla por $0.0062/\sqrt{C_w}$ con $\alpha = 1.00$, donde $C_w$ mide cuánta rigidez de cortante aportan los muros respecto al área de la planta (<NormaRef s="A.4.2-4" pag="A-65" />):
+
+<Ecuacion num="A.4.2-4" titulo="Coeficiente Cw">
+
+$$
+C_w = \frac{100}{A_B}\sum_{i=1}^{n_w}\left[\left(\frac{h_n}{h_{wi}}\right)^{2}\frac{A_{wi}}{1+0.83\left(\dfrac{h_{wi}}{\ell_{wi}}\right)^{2}}\right]
+$$
+
+- $A_B$: área de la edificación en su base (m²).
+- $A_{wi}$: área mínima de cortante del muro $i$ en el primer nivel y en la dirección en estudio (m²). Para un muro rectangular, espesor × longitud.
+- $h_{wi}$, $\ell_{wi}$: altura del muro (desde la base) y longitud horizontal del muro en el primer nivel (m).
+- $n_w$: número de muros efectivos en la dirección estudiada.
+
+</Ecuacion>
+
+El factor $1/(1+0.83(h_w/\ell_w)^2)$ reduce la contribución de los muros esbeltos (flexión domina) frente a los anchos (cortante domina); $(h_n/h_{wi})^2$ penaliza a los muros que no llegan hasta la cubierta.
+
+### Camino 3 — Pórticos de pocos pisos: Ta = 0.1·N (ecuación A.4.2-5)
+
+Para edificaciones de **12 pisos o menos** con alturas de piso $h_p \le 3$ m, cuyo sistema sea **pórticos resistentes a momentos de concreto reforzado o de acero estructural**:
+
+<Ecuacion num="A.4.2-5" titulo="Período aproximado por número de pisos">
+
+$$
+T_a = 0.1\,N
+$$
+
+- $N$: número de pisos; $T_a$ en segundos.
+
+</Ecuacion>
+
+<Callout tipo="practica" titulo="Regla de bolsillo">
+Un piso ≈ 0.1 s: un edificio de 8 pisos de pórticos ronda 0.8 s; uno de 20 pisos, cerca de 2 s (aunque para más de 12 pisos esta fórmula **ya no se permite**).
+</Callout>
+
+<CalculadoraEmbed id="periodo-fundamental" />
+
+### Refinamiento: iterar hasta converger (A.4.2.3)
+
+Los períodos de A.4.2-1, A.4.2-3 y A.4.2-5 son **estimativos iniciales** para predecir las fuerzas con que se dimensiona la estructura (<NormaRef s="A.4.2.3" pag="A-65" />). Una vez dimensionada, hay que calcular el período ajustado con análisis modal (o con A.4.2-1) y compararlo con el estimado inicial:
+
+> Si el período de la estructura diseñada difiere **en más del 10 %** del estimado inicial, se repite el análisis usando el último período calculado como nuevo estimado, hasta converger dentro de la tolerancia del 10 %.
+
+Recuerda que, aun después de iterar, el período con que se lee $S_a$ no puede exceder $C_uT_a$.
+
+<Detalle titulo="Resumen del flujo para decidir T">
+
+1. Calcula $T_a$ con A.4.2-3 (o A.4.2-4 en muros, o A.4.2-5 en pórticos pequeños) y $C_u$ con A.4.2-2.
+2. Estima fuerzas con $T = T_a$ y dimensiona la estructura.
+3. Calcula $T$ con el modelo (modal o A.4.2-1).
+4. Usa $T_{\text{diseño}} = \min(T_{\text{modelo}},\,C_uT_a)$.
+5. Si $|T_{\text{diseño}} - T_{\text{usado}}|/T_{\text{usado}} > 10\,\%$, repite desde el paso 2 con el nuevo período.
+
+</Detalle>
+
+## A.4.3 — Fuerzas sísmicas horizontales equivalentes
+
+### Cortante sísmico en la base
+
+El cortante en la base equivale a **todos los efectos inerciales horizontales** del sismo de diseño en la dirección estudiada (<NormaRef s="A.4.3.1" pag="A-65" />):
+
+<Ecuacion num="A.4.3-1" titulo="Cortante sísmico en la base">
+
+$$
+V_s = S_a\,g\,M
+$$
+
+- $S_a$: aceleración espectral (fracción de $g$) del espectro de A.2.6 para el período $T$ de la edificación.
+- $g = 9.8$ m/s².
+- $M$: masa **total** de la edificación (ver A.4.0), en kg si se quiere $V_s$ en newtons.
+
+</Ecuacion>
+
+Es la segunda ley de Newton: fuerza = masa × aceleración, con la aceleración máxima del terreno amplificada por el espectro. Equivale a "una fracción $S_a$ del peso total aplicada lateralmente".
+
+### Distribución en la altura
+
+La fuerza en cada nivel $x$ es una fracción $C_{vx}$ del cortante basal (<NormaRef s="A.4.3.2" pag="A-65" />):
+
+<Ecuacion num="A.4.3-2 y A.4.3-3" titulo="Fuerza en el nivel x y coeficiente de distribución">
+
+$$
+F_x = C_{vx}\,V_s
+\qquad\qquad
+C_{vx} = \frac{m_x\,h_x^{\,k}}{\displaystyle\sum_{i=1}^{n} m_i\,h_i^{\,k}}
+$$
+
+- $m_x$, $h_x$: masa y altura (desde la base) del nivel $x$.
+- $k$: exponente relacionado con el período fundamental $T$.
+- Como $\sum C_{vx} = 1$, la suma de las $F_x$ recupera $V_s$.
+
+</Ecuacion>
+
+El exponente $k$ vale:
+
+| Período $T$ | Exponente $k$ | Forma de las fuerzas |
+|---|---|---|
+| $T \le 0.5$ s | $k = 1.0$ | Distribución **triangular** (proporcional a $m\,h$) |
+| $0.5 < T \le 2.5$ s | $k = 0.75 + 0.5\,T$ | Intermedia: va de 1.0 a 2.0 |
+| $T > 2.5$ s | $k = 2.0$ | **Parabólica**: carga más concentrada arriba |
+
+Físicamente, $k$ representa la influencia de los **modos superiores**: en estructuras flexibles (período largo) la respuesta se concentra más en los pisos altos. Con $k=1$ las fuerzas crecen linealmente con la altura (modo fundamental casi recto); con $k=2$ crecen con el cuadrado.
+
+<Callout tipo="nota" titulo="Del Fx al cortante de piso">
+El **cortante de piso** en el nivel $x$ es la suma de las fuerzas de ese nivel y de todos los de arriba: $V_x = \sum_{i=x}^{n} F_i$ (ecuación A.3.6-1, <NormaRef s="A.3.6.6" pag="A-47" />). El cortante del primer piso es $V_s$. Es el que se reparte entre pórticos y muros, y el que entra al índice de estabilidad $Q_i$ del Capítulo A.6.
+</Callout>
+
+<CalculadoraEmbed id="fuerza-horizontal" />
+
+## A.4.4 — Análisis de la estructura
+
+Las fuerzas $F_x$ se aplican a un **modelo matemático linealmente elástico** que represente bien el sistema estructural, con los principios de la mecánica estructural (<NormaRef s="A.4.4.1" pag="A-65" />). El análisis debe tener en cuenta, como mínimo:
+
+- **(a) Condiciones de apoyo**, sobre todo cuando se combinan elementos verticales con rigideces muy distintas.
+- **(b) Efecto de diafragma** (rígido o flexible) de los entrepisos en la distribución del cortante de piso a los elementos verticales.
+- **(c) Variaciones de carga axial** en los elementos verticales causadas por los momentos de vuelco.
+- **(d) Efectos torsionales** prescritos en A.3.6.7 (torsión accidental del 5 % de la dimensión del piso, excentricidad entre centros de masa y rigidez, y amplificación $A_x$ si hay irregularidades 1aP/1bP).
+- **(e) Dirección de aplicación** de la fuerza sísmica según A.3.6.3 (100 % + 30 % ortogonal, o raíz cuadrada de la suma de cuadrados, en amenaza intermedia y alta).
+- **(f)** En **concreto reforzado y mampostería estructural**, a juicio del diseñador, el **grado de fisuración** de los elementos, compatible con las fuerzas y con el grado de capacidad de disipación de energía del material.
+- **(g)** Consultar los requisitos de **A.3.4.3** (rigideces).
+
+El listado impreso llega hasta el literal (g), que es solo una remisión a A.3.4.3.
+
+Como **resultados mínimos** el análisis debe entregar (<NormaRef s="A.4.4.2" pag="A-66" />):
+
+1. **(a)** Los desplazamientos horizontales, incluyendo la torsión, para verificar las derivas del Capítulo A.6.
+2. **(b)** La distribución del cortante de piso, con torsión, a **todos** los elementos verticales del sistema.
+3. **(c)** Los efectos de las fuerzas sísmicas en la **cimentación**.
+4. **(d)** Las fuerzas internas (momento, cortante, axial, torsión) de cada elemento del sistema de resistencia sísmica.
+
+## A.4.5 — Uso del SI en el cálculo de las fuerzas sísmicas
+
+La ecuación A.4.3-1 es la segunda ley de Newton, así que las unidades importan (<NormaRef s="A.4.5" pag="A-66" />). En el SI el kilogramo es **masa**, no fuerza:
+
+| Si la masa $M$ está en… | y $g$ = 9.8 m/s², entonces $V_s$ queda en… |
+|---|---|
+| kg | **N** (newtons) |
+| **Mg** (megagramos; 1 Mg = 1000 kg = 1 t) | **kN** (kilonewtons) |
+
+$$
+V_s = S_a\cdot g\ (\text{m/s}^2)\cdot M\ (\text{Mg}) \;=\; S_a\cdot g\cdot M\ (\text{kN})
+$$
+
+Como en el diseño práctico el kg y el N son unidades muy pequeñas, lo conveniente es expresar la masa en **Mg** y obtener la fuerza en **kN**. Referencia con el antiguo sistema mks: 1 kgf ≈ 10 N; 1 tonelada-fuerza ≈ 10 kN; es decir, **1 kN ≈ 0.1 tonf** (la norma dice "un décimo de tonelada").
+
+<Callout tipo="atencion" titulo="El error clásico de unidades">
+Si ingresas el **peso** en kN (o el peso en toneladas) como si fuera masa, $V_s$ sale errado por un factor de $g$ (≈ 10). Pasa de kN a Mg dividiendo por 9.8 (por ejemplo, un piso de 5000 kN de peso tiene una masa de 510 Mg). Y recuerda: si la masa está en kg, $V_s$ está en **newtons**, no en kN.
+</Callout>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Edificio de pórticos de concreto de 8 pisos en Cali">
+Edificio de oficinas (grupo de uso I, $I$ = 1.00) de **8 pisos** con pórticos resistentes a momentos de concreto reforzado, en **Cali** ($A_a$ = {f(e1.aa)}, $A_v$ = {f(e1.av)}), sobre un perfil de suelo **tipo D**. Altura de entrepiso $h_p$ = {e1.hp} m en todos los pisos ($h_n$ = {e1.hn} m). Masa por nivel: 520 Mg en los pisos 1 a 7 y 430 Mg en la cubierta ($M$ = {miles(e1.masaMg)} Mg = {miles(e1.masaKg)} kg). Calcular $T_a$, $C_uT_a$, $S_a$, $V_s$, las fuerzas $F_x$ y el cortante de cada piso.
+
+<Paso titulo="Coeficientes de sitio" ref="A.2.4">
+Con perfil D: $F_a$ = {f(e1.fa)} (interpolando 1.4 y 1.2 para $A_a$ = 0.25) y $F_v$ = {f(e1.fv)} (interpolando 2.0 y 1.8 para $A_v$ = 0.25).
+</Paso>
+<Paso titulo="Período aproximado Ta" ref="A.4.2-3, Tabla A.4.2-1">
+
+Pórticos de concreto: $C_t$ = 0.047 y $\alpha$ = 0.9.
+
+$$
+T_a = 0.047\times 24^{0.9}
+$$
+
+Resultado: $T_a$ = **{f(e1.ta, 3)} s**. (Con la regla A.4.2-5, $T_a = 0.1\times 8$ = {f(e1.tPisos, 2)} s: válida porque hay 8 pisos ≤ 12 y $h_p$ = 3 m; los dos métodos concuerdan.)
+
+</Paso>
+<Paso titulo="Coeficiente Cu y período máximo" ref="A.4.2-2">
+
+$$
+C_u = 1.75 - 1.2\times 0.25\times 1.9
+$$
+
+Da {f(e1.cuBruto, 3)}, que es menor de 1.2; por lo tanto $C_u$ = **{f(e1.cu)}**. El período máximo permitido es $C_uT_a$ = {f(e1.cu)} × {f(e1.ta, 3)} = **{f(e1.tmax, 3)} s**. Usaremos $T = T_a$ = {f(e1.ta, 3)} s (≤ {f(e1.tmax, 3)} s).
+
+</Paso>
+<Paso titulo="Aceleración espectral Sa" ref="A.2.6">
+
+Períodos del espectro: $T_C$ = {f(e1.per.tc, 3)} s, $T_L$ = {f(e1.per.tl, 2)} s. Como $T_C < T$ = {f(e1.ta, 3)} s ≤ $T_L$, se está en la rama $1/T$:
+
+$$
+S_a = \frac{1.2\,A_vF_vI}{T} = \frac{1.2\times 0.25\times 1.9\times 1.0}{0.821}
+$$
+
+Resultado: $S_a$ = **{f(e1.saT, 4)} g** (la meseta sería {f(e1.meseta, 4)} g).
+
+</Paso>
+<Paso titulo="Cortante sísmico en la base" ref="A.4.3-1">
+
+$$
+V_s = S_a\,g\,M = 0.6944\times 9.8\times 4070\ \text{Mg}
+$$
+
+Resultado: $V_s$ = **{miles(e1.vs)} kN** (equivale a {f(e1.saT, 3)} del peso total de {miles(e1.peso)} kN; con la masa en kg se obtendría {miles(e1.vs * 1000)} N).
+
+</Paso>
+<Paso titulo="Exponente k" ref="A.4.3.2">
+Como 0.5 < $T$ ≤ 2.5 s: $k = 0.75 + 0.5\,T$ con $T$ = {f(e1.ta, 3)} s; es decir, **$k$ = {f(e1.k, 4)}**.
+</Paso>
+<Paso titulo="Fuerzas Fx y cortante de piso" ref="A.4.3-2, A.4.3-3, A.3.6-1">
+
+Se aplica $C_{vx} = m_xh_x^k/\sum m_ih_i^k$ (calculado con `distribuirFuerzas`):
+
+<table>
+  <thead>
+    <tr><th>Nivel</th><th>h (m)</th><th>m (Mg)</th><th>m·h^k</th><th>Cvx</th><th>Fx (kN)</th><th>Vx (kN)</th></tr>
+  </thead>
+  <tbody>
+    {[...e1.dist].reverse().map((d, idx) => (
+      <tr key={idx}>
+        <td>{e1.dist.length - idx}</td>
+        <td>{d.h}</td>
+        <td>{d.m / 1000}</td>
+        <td>{f(d.mhk / 1000, 0)}</td>
+        <td>{f(d.cvx, 4)}</td>
+        <td>{f(d.fx / 1000, 0)}</td>
+        <td>{f(d.cortantePiso / 1000, 0)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+Comprobación: $\sum F_x$ = {miles(e1.sumaFx)} kN = $V_s$.
+
+</Paso>
+<Paso titulo="Iterar el período (supuesto)" ref="A.4.2.3">
+Supón que, una vez dimensionado el edificio, el análisis modal entrega $T$ = {f(e1.tModal)} s. Frente al estimado inicial de {f(e1.ta, 3)} s la diferencia es {f(e1.difModal * 100, 1)} %, mayor de 10 %, así que se repite el análisis con $T$ = {f(e1.tModal)} s (que sigue siendo ≤ $C_uT_a$ = {f(e1.tmax, 3)} s): $S_a$ = {f(e1.saIter, 4)} g, $k$ = {f(e1.kIter, 3)} y $V_s$ = {miles(e1.vsIter)} kN. Si el modelo hubiera dado, por ejemplo, 1.10 s, se leería $S_a$ con **{f(e1.tmax, 3)} s**, no con 1.10 s.
+</Paso>
+<Resultado>
+$T_a$ = {f(e1.ta, 3)} s, $C_uT_a$ = {f(e1.tmax, 3)} s, $S_a$ = {f(e1.saT, 3)} g, **$V_s$ = {miles(e1.vs)} kN**, $k$ = {f(e1.k, 3)}; la fuerza en la cubierta es {miles(e1.dist[7].fx / 1000)} kN y el cortante del primer piso es $V_s$. Verifícalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Edificio con muros: Cw, Ct y período aproximado">
+Un colegio (grupo III, $I$ = 1.25) de **6 pisos** ($h_p$ = 3 m, $h_n$ = {e2.hn} m) en **Bogotá** ($A_a$ = {f(e2.aa)}, $A_v$ = {f(e2.av)}), perfil de suelo **C**, tiene una planta de 15 m × 25 m ($A_B$ = {e2.ab} m²) y en la dirección en estudio lo resisten **{e2.nMuros} muros de concreto** de {e2.esp} m de espesor que llegan hasta la cubierta: 4 muros de 6.0 m de longitud (tipo A) y 2 de 3.0 m (tipo B). Masa de 450 Mg por piso. Calcular $T_a$ por las dos vías (Tabla A.4.2-1 y $C_w$), $V_s$ y $F_x$.
+
+<Paso titulo="Coeficientes" ref="A.2.4, A.2.5, A.4.2-2">
+$F_a$ = {f(e2.fa)}, $F_v$ = {f(e2.fv)}, $I$ = {f(e2.i)}. $C_u = 1.75 - 1.2\times 0.20\times 1.6$ = **{f(e2.cu, 3)}**.
+</Paso>
+<Paso titulo="Término de cada tipo de muro" ref="A.4.2-4">
+
+Para cada muro: $A_{wi} = e\cdot \ell_{wi}$ y el término $\left(\dfrac{h_n}{h_{wi}}\right)^2\dfrac{A_{wi}}{1+0.83(h_{wi}/\ell_{wi})^2}$, con $h_n/h_{wi} = 1$ (todos llegan a la cubierta).
+
+<table>
+  <thead>
+    <tr><th>Tipo</th><th>Cantidad</th><th>ℓwi (m)</th><th>hwi (m)</th><th>Awi (m²)</th><th>Término por muro</th></tr>
+  </thead>
+  <tbody>
+    {e2.terminos.map((t) => (
+      <tr key={t.nombre}>
+        <td>{t.nombre}</td><td>{t.cantidad}</td><td>{f(t.lwi, 1)}</td><td>{t.hwi}</td><td>{f(t.awi)}</td><td>{f(t.termino, 4)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+Suma: $\sum$ = 4 × {f(e2.terminos[0].termino, 4)} + 2 × {f(e2.terminos[1].termino, 4)} = {f(e2.suma, 4)}.
+
+</Paso>
+<Paso titulo="Cw, Ct y Ta" ref="A.4.2-4, Tabla A.4.2-1">
+
+$$
+C_w = \frac{100}{375}\times 0.7570 \qquad C_t = \frac{0.0062}{\sqrt{C_w}} \qquad T_a = C_t\,h_n^{1.00}
+$$
+
+Resultados: $C_w$ = **{f(e2.cw, 4)}**, $C_t$ = **{f(e2.ct, 5)}**, $T_a$ = {f(e2.ct, 5)} × {e2.hn} = **{f(e2.taCw, 3)} s**.
+
+Con la fila genérica de la tabla ("otros sistemas basados en muros"): $T_a = 0.049\times 18^{0.75}$ = **{f(e2.taTabla, 3)} s**. La alternativa con $C_w$ da un período más corto porque los muros de este edificio son **muy rígidos** frente al promedio que supone la tabla.
+
+</Paso>
+<Paso titulo="Aceleración espectral y Vs" ref="A.2.6, A.4.3-1">
+
+Para $A_vF_v/(A_aF_a)$: $T_C$ = {f(e2.per.tc, 3)} s. Los dos períodos están por debajo, es decir, **en la meseta**:
+
+$$
+S_a = 2.5\,A_aF_aI = 2.5\times 0.15\times 1.2\times 1.25
+$$
+
+Resultado: $S_a$ = **{f(e2.saT, 4)} g**, con **cualquiera** de los dos períodos. $V_s = 0.5625\times 9.8\times 2700$ = **{miles(e2.vs)} kN**.
+
+</Paso>
+<Paso titulo="Distribución" ref="A.4.3.2">
+
+Con $T_a$ = {f(e2.taCw, 3)} s ≤ 0.5 s, $k$ = **1.0** (también con {f(e2.taTabla, 3)} s): las fuerzas son proporcionales a $m_xh_x$ y, como las masas son iguales, a la altura: $F_x = V_s\,h_x/\sum h_i$.
+
+<table>
+  <thead>
+    <tr><th>Nivel</th><th>h (m)</th><th>Cvx</th><th>Fx (kN)</th><th>Vx (kN)</th></tr>
+  </thead>
+  <tbody>
+    {[...e2.dist].reverse().map((d, idx) => (
+      <tr key={idx}>
+        <td>{e2.dist.length - idx}</td><td>{d.h}</td><td>{f(d.cvx, 4)}</td><td>{f(d.fx / 1000, 0)}</td><td>{f(d.cortantePiso / 1000, 0)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Resultado>
+$T_a$ = {f(e2.taCw, 3)} s con $C_w$ ({f(e2.taTabla, 3)} s con la tabla), $C_uT_a$ = {f(e2.tmax, 3)} s, $S_a$ = {f(e2.saT, 3)} g, **$V_s$ = {miles(e2.vs)} kN**. Lección: cuando $T$ está en la **meseta** del espectro, el valor exacto de $T_a$ no cambia $V_s$; solo importaría para $k$ (si $T$ pasara de 0.5 s) y para el límite $C_uT_a$ que se impone al modelo (con $C_w$ es más estricto: {f(e2.tmax, 3)} s).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Efecto del exponente k en la distribución de fuerzas">
+Se conserva el edificio del ejemplo 1 ($V_s$ = {miles(e1.vs)} kN, mismas masas) y se cambia **solo** el período con que se calcula $k$ para ver cómo se redistribuye el mismo cortante basal.
+
+<Paso titulo="Exponente k y fuerzas extremas" ref="A.4.3.2">
+
+<table>
+  <thead>
+    <tr><th>Caso</th><th>T (s)</th><th>k</th><th>F piso 1 (kN)</th><th>F cubierta (kN)</th><th>V piso 4 (kN)</th><th>M vuelco (kN·m)</th><th>Altura de la resultante (m)</th></tr>
+  </thead>
+  <tbody>
+    {e3.casos.map((c) => (
+      <tr key={c.etiqueta}>
+        <td>{c.etiqueta}</td><td>{f(c.t, 2)}</td><td>{f(c.k, 3)}</td><td>{f(c.fBase, 0)}</td><td>{f(c.fTop, 0)}</td><td>{f(c.vPiso4, 0)}</td><td>{miles(c.vuelco)}</td><td>{f(c.alturaResultante, 2)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+</Paso>
+<Paso titulo="Interpretación">
+- Con $k$ = 1 (período corto) la fuerza crece linealmente con la altura: la resultante de las fuerzas queda a unos {f(e3.casos[0].alturaResultante, 1)} m del suelo (cerca de 2/3 de $h_n$, como corresponde a una distribución triangular).
+- Al aumentar $k$, las fuerzas **se desplazan hacia arriba**: la cubierta pasa de {miles(e3.casos[0].fTop)} a {miles(e3.casos[3].fTop)} kN y el primer piso de {miles(e3.casos[0].fBase)} a {miles(e3.casos[3].fBase)} kN. La resultante sube hasta {f(e3.casos[3].alturaResultante, 1)} m.
+- El cortante basal no cambia (es $V_s$), pero el **momento de vuelco** crece {f((e3.casos[3].vuelco / e3.casos[0].vuelco - 1) * 100, 0)} % entre $k$ = 1 y $k$ = 2, y los cortantes de los pisos superiores aumentan. Por eso un período subestimado no solo cambia $S_a$ sino también cómo se carga la estructura.
+</Paso>
+<Resultado>
+El exponente $k$ no altera $V_s$ pero sí la **forma** de la distribución y, con ella, el vuelco y los cortantes de piso. Para el edificio del ejemplo 1 ($k$ = {f(e1.k, 3)}) la distribución es casi triangular con un leve sesgo hacia los pisos altos.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar $T_a$ como "el" período sin revisar el tope**: el período del modelo no puede exceder $C_uT_a$ (A.4.2.1); leer $S_a$ con un $T$ mayor subestima la fuerza.
+- **Aplicar $C_t = 0.047$ o $0.072$ a pórticos rigidizados** por mampostería, muros o culatas: la fórmula solo vale para pórticos que resisten solas las fuerzas sísmicas.
+- **Usar $T_a = 0.1N$ fuera de su alcance**: solo para pórticos de concreto o acero, hasta 12 pisos y $h_p \le 3$ m.
+- **Confundir masa con peso o kN con N**: la masa en kg da $V_s$ en N; en Mg, en kN (A.4.5). Recuerda incluir muros divisorios, equipos y el 25 % de la carga viva en bodegas.
+- **Olvidar que $I$ ya está en $S_a$**: no lo multipliques otra vez; y para las **derivas** la norma permite usar $I = 1.0$ (A.6.2.1.2).
+- **Dividir $V_s$ por $R$ antes de calcular desplazamientos**: las derivas se obtienen con las fuerzas elásticas, no reducidas.
+- **No repetir el análisis** cuando el período final difiere más de 10 % del supuesto (A.4.2.3).
+- **Usar $k$ del período equivocado**: $k$ depende del mismo $T$ que se usó para $S_a$.
+- **Aplicar la FHE donde A.3.4.2 exige análisis dinámico** (irregularidades verticales graves, más de 20 pisos o 60 m, etc.).
+</Callout>
+
+## Resumen en una línea
+
+**Estima $T$ (≤ $C_uT_a$) → lee $S_a$ → $V_s = S_a\,g\,M$ (masa en kg ⇒ N; en Mg ⇒ kN) → repártelo con $F_x = C_{vx}V_s$ y $k$ según $T$ → analiza el modelo elástico con torsión y diafragmas → itera si $T$ cambia más de 10 %.**

@@ -1,0 +1,27 @@
+---
+/**
+ * Recuadro destacado dentro de los capítulos.
+ * tipo: nota (info) · importante · atencion (riesgo) · practica (en obra/oficina) · error (error común)
+ */
+interface Props {
+  tipo?: 'nota' | 'importante' | 'atencion' | 'practica' | 'error';
+  titulo?: string;
+}
+const { tipo = 'nota', titulo } = Astro.props;
+
+const estilos = {
+  nota: { clase: 'border-note/40 bg-note/10', etiqueta: 'Nota', color: 'text-note' },
+  importante: { clase: 'border-primary/40 bg-primary/10', etiqueta: 'Importante', color: 'text-primary' },
+  atencion: { clase: 'border-warn/50 bg-warn/10', etiqueta: 'Atención', color: 'text-warn' },
+  practica: { clase: 'border-ok/40 bg-ok/10', etiqueta: 'En la práctica', color: 'text-ok' },
+  error: { clase: 'border-danger/40 bg-danger/10', etiqueta: 'Error común', color: 'text-danger' },
+} as const;
+const e = estilos[tipo];
+---
+
+<aside class:list={['not-prose my-6 rounded-xl border-l-4 border p-4 text-sm leading-relaxed', e.clase]} role="note">
+  <p class:list={['mb-1 text-xs font-bold uppercase tracking-wider', e.color]}>{titulo ?? e.etiqueta}</p>
+  <div class="callout-body overflow-x-auto [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_code]:rounded [&_code]:bg-background/60 [&_code]:px-1">
+    <slot />
+  </div>
+</aside>
