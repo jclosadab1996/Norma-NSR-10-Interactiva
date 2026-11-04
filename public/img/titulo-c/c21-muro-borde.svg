@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 330" font-family="Arial, Helvetica, sans-serif" font-size="12">
+<rect width="640" height="330" fill="#ffffff"/>
+<rect x="60" y="150" width="520" height="50" fill="#f4f4f5" stroke="#222" stroke-width="1.5"/>
+<rect x="60" y="150" width="98.0" height="50" fill="#bfdbfe" fill-opacity="0.8" stroke="#1d4ed8" stroke-width="2"/>
+<line x1="66.0" y1="154" x2="66.0" y2="196" stroke="#1d4ed8" stroke-width="1.2"/>
+<line x1="80.0" y1="154" x2="80.0" y2="196" stroke="#1d4ed8" stroke-width="1.2"/>
+<line x1="94.0" y1="154" x2="94.0" y2="196" stroke="#1d4ed8" stroke-width="1.2"/>
+<line x1="108.0" y1="154" x2="108.0" y2="196" stroke="#1d4ed8" stroke-width="1.2"/>
+<line x1="122.0" y1="154" x2="122.0" y2="196" stroke="#1d4ed8" stroke-width="1.2"/>
+<line x1="136.0" y1="154" x2="136.0" y2="196" stroke="#1d4ed8" stroke-width="1.2"/>
+<line x1="150.0" y1="154" x2="150.0" y2="196" stroke="#1d4ed8" stroke-width="1.2"/>
+<circle cx="68.0" cy="159" r="3.5" fill="#111"/>
+<circle cx="68.0" cy="191" r="3.5" fill="#111"/>
+<circle cx="96.7" cy="159" r="3.5" fill="#111"/>
+<circle cx="96.7" cy="191" r="3.5" fill="#111"/>
+<circle cx="125.3" cy="159" r="3.5" fill="#111"/>
+<circle cx="125.3" cy="191" r="3.5" fill="#111"/>
+<circle cx="150.0" cy="159" r="3.5" fill="#111"/>
+<circle cx="150.0" cy="191" r="3.5" fill="#111"/>
+<circle cx="176.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="176.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="206.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="206.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="236.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="236.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="266.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="266.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="296.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="296.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="326.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="326.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="356.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="356.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="386.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="386.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="416.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="416.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="446.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="446.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="476.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="476.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="506.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="506.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="536.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="536.0" cy="191" r="2.2" fill="#555"/>
+<circle cx="566.0" cy="159" r="2.2" fill="#555"/>
+<circle cx="566.0" cy="191" r="2.2" fill="#555"/>
+<line x1="210" y1="110" x2="210" y2="226" stroke="#b91c1c" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="216" y="120" fill="#b91c1c">eje neutro</text>
+<g fill="#111" stroke="none">
+<line x1="60" y1="132" x2="210" y2="132" stroke="#444" stroke-width="1"/>
+<line x1="60" y1="127" x2="60" y2="137" stroke="#444"/><line x1="210" y1="127" x2="210" y2="137" stroke="#444"/>
+<text x="135.0" y="126" text-anchor="middle">c</text>
+<line x1="60" y1="222" x2="158.0" y2="222" stroke="#444" stroke-width="1"/>
+<line x1="60" y1="217" x2="60" y2="227" stroke="#444"/><line x1="158.0" y1="217" x2="158.0" y2="227" stroke="#444"/>
+<text x="60" y="252" text-anchor="start">ℓ borde ≥ mayor de c − 0.1ℓw y c/2</text>
+<line x1="60" y1="260" x2="580" y2="260" stroke="#444" stroke-width="1"/>
+<line x1="60" y1="255" x2="60" y2="265" stroke="#444"/><line x1="580" y1="255" x2="580" y2="265" stroke="#444"/>
+<text x="320.0" y="276" text-anchor="middle">ℓw (longitud del muro)</text>
+<text x="380.0" y="144" text-anchor="middle" font-size="11">alma: ρℓ y ρt ≥ 0.0025, s ≤ 450 mm</text>
+<text x="380.0" y="216" text-anchor="middle" font-size="11">(dos capas si Vu &gt; 0.17 Acv λ √f′c)</text>
+<text x="60" y="98" font-size="11">Elemento especial de borde (planta): se exige si c ≥ ℓw / [600 (δu/hw)] (Ec. C.21-11)</text>
+</g>
+<text x="60" y="305" font-size="10" fill="#555">Esquema del autor (no es figura de la norma); sin escala. Verticalmente el borde se prolonga max(ℓw, Mu/4Vu) desde la sección crítica.</text>
+</svg>

@@ -1,0 +1,316 @@
+---
+codigo: 'C-G'
+tipo: apendice
+titulo: 'Diseño a flexión por esfuerzos admisibles'
+resumen: 'Procedimiento alterno de diseño a flexión con cargas de servicio y esfuerzos admisibles (0.45 f′c en el concreto, 120 o 170 MPa en el acero): hipótesis elásticas, relación modular, profundidad del eje neutro k, brazo j y las ecuaciones C-G-1 a C-G-6, con ejemplos numéricos.'
+objetivos:
+  - 'Explicar qué cambia entre el diseño por resistencia (C.10) y el método de esfuerzos admisibles del Apéndice C-G'
+  - 'Calcular la relación modular n, el eje neutro k y el brazo j de una sección rectangular'
+  - 'Obtener los esfuerzos en el concreto y el acero con las Ecs. C-G-1 a C-G-3 y compararlos con los admisibles'
+  - 'Hallar el momento admisible de una sección y aplicar la regla del 75 % con viento o sismo'
+paginasNorma: 'C-259 a C-262'
+paginaPdf: 561
+orden: 30
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import { beta1 } from '../../lib/nsr10/concreto';
+import { flexionViga } from '../../lib/nsr10/flexionConcreto';
+import {
+  fcAdmisible,
+  fsAdmisible,
+  kSimple,
+  relacionModularDesdeFc,
+  seccionServicio,
+} from '../../lib/nsr10/esfuerzosAdmisibles';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const s = { b: 300, d: 440, As: 1530, fc: 21, fy: 420 };
+  const r = seccionServicio(s);
+  const res = flexionViga({ b: 300, h: 500, d: 440, fc: 21, fy: 420, As: 1530 });
+  return { s, r, res, nrho: r.n * r.rho, AsReq: null };
+})();
+
+export const ej2 = (() => {
+  const s = { b: 300, d: 440, As: 1530, fc: 21, fy: 420 };
+  const r = seccionServicio({ ...s, M: 70 });
+  const rViento = seccionServicio({ ...s, M: 0.75 * 100 });
+  return { r, rViento, Mviento: 100, Mdl: 60 };
+})();
+
+export const ej3 = (() => {
+  const s = { b: 300, d: 440, As: 1530, fc: 21, fy: 420 };
+  const simple = seccionServicio({ ...s, M: 80 });
+  const doble = seccionServicio({ ...s, AsPrima: 600, dPrima: 60, M: 80 });
+  return { simple, doble, dpd: 60 / 440 };
+})();
+
+export const tabN = [14, 17, 21, 28, 35].map((fc) => ({ fc, n: relacionModularDesdeFc(fc) }));
+
+## Idea central del apéndice
+
+Hasta antes del Reglamento de 1984 (y aún en algunos países), el concreto reforzado se diseñaba con cargas **de servicio** y limitando los **esfuerzos** del concreto y el acero a una fracción de su resistencia: el método de **esfuerzos admisibles** o «de la elástica». La NSR-10 lo conserva como **procedimiento alterno** para el diseño a flexión de elementos de concreto no preesforzado (<NormaRef s="C-G.1.1" pag="C-259" />). El apéndice es corto: da los esfuerzos admisibles, las hipótesis elásticas y seis ecuaciones para hallar los esfuerzos en la sección.
+
+El procedimiento es sencillo: con la sección **fisurada y transformada** (el concreto no resiste tracción, el acero se reemplaza por $n$ veces su área de concreto), se calcula la profundidad del eje neutro $kd$ y el brazo interno $jd$; con ellos, $f_s = M/(A_sjd)$ y $f_c = 2M/(bd^2jk)$ se comparan con $120$–$170$ MPa y $0.45f'_c$.
+
+<Callout tipo="importante" titulo="Cargas de servicio, sin factores de carga ni φ">
+En este método **los factores de carga y los coeficientes de reducción φ valen 1.0** (<NormaRef s="C-G.2.1" pag="C-259" />): $M$ es el momento de **servicio**, no el mayorado de C.9.2. Por eso un mismo elemento da resultados distintos al de resistencia última: el método de esfuerzos admisibles no tiene un margen explícito contra el colapso, solo contra superar un esfuerzo.
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este apéndice (autoría del proyecto)">
+Los ejemplos usan `src/lib/nsr10/esfuerzosAdmisibles.ts`. Lo marcado **«autoría del proyecto»** (momento admisible como menor entre acero y concreto, lectura de «0.50 fy o 210 MPa» como el **menor**, tabla de $n$) no es texto de la norma. Unidades: mm, MPa, kN·m. Este apéndice del PDF **no tiene figuras ni tablas** numeradas; las pistas visuales son la Ec. C-G-1 a C-G-6.
+</Callout>
+
+## C-G.0 — Nomenclatura
+
+<TablaNorma numero="C-G.0" titulo="Nomenclatura del Apéndice C-G" pag="C-259">
+
+| Símbolo | Significado (unidades) |
+|---|---|
+| $A_s$ | Área del refuerzo no preesforzado que trabaja a tracción (mm²) |
+| $A'_s$ | Área del refuerzo a compresión (mm²) |
+| $b$ | Ancho de la cara a compresión del elemento (mm) |
+| $d$ | Distancia de la fibra extrema en compresión al centroide del acero en tracción (mm) |
+| $d'$ | Distancia de la fibra extrema en compresión al centroide del acero en compresión (mm) |
+| $E_c$, $E_s$ | Módulos de elasticidad del concreto (véase C.8.5.4 en el PDF) y del refuerzo (C.8.5.5 en el PDF), MPa |
+| $f_c$ | Esfuerzo de compresión en la fibra extrema del concreto (MPa) |
+| $f'_c$ | Resistencia nominal del concreto a la compresión (MPa) |
+| $f_s$ | Esfuerzo de tracción en el acero de refuerzo (MPa) |
+| $f'_s$ | Esfuerzo de compresión en el acero de refuerzo en compresión (MPa) |
+| $f_y$ | Resistencia nominal a la fluencia del acero de refuerzo (MPa) |
+| $n$ | Relación modular de elasticidad, $E_s/E_c$ |
+| $\phi$ | Coeficiente de reducción de resistencia (véase C.9.3) |
+| $\rho$ | Cuantía del refuerzo no preesforzado en tracción, $A_s/(bd)$ |
+| $\rho'$ | Cuantía del refuerzo a compresión, $A'_s/(bd)$ |
+
+</TablaNorma>
+
+## C-G.1 — Alcance
+
+- <NormaRef s="C-G.1.1" pag="C-259" />: los elementos de concreto **no preesforzado** se pueden diseñar a flexión con **cargas de servicio (sin factores de carga)** y **esfuerzos admisibles bajo cargas de servicio**, según el apéndice.
+- <NormaRef s="C-G.1.2" pag="C-259" />: para el diseño de elementos no incluidos en el apéndice se aplican las disposiciones apropiadas del Título C.
+- <NormaRef s="C-G.1.3" pag="C-259" />: todas las disposiciones aplicables del Reglamento para concreto no preesforzado, **excepto C.8.5.12**, aplican a los elementos diseñados con este método (ver erratas: probablemente C.8.4).
+- <NormaRef s="C-G.1.4" pag="C-259" />: los elementos a flexión deben cumplir los requisitos de **control de deflexiones de C.9.5** y los de **C.10.4 a C.10.7** (apoyos laterales, refuerzo mínimo, distribución del refuerzo, vigas de gran altura).
+
+## C-G.2 — Definiciones
+
+- <NormaRef s="C-G.2.1" pag="C-259" />: factores de carga y φ se toman como **1.0** (véase B.2.3).
+- <NormaRef s="C-G.2.2" pag="C-259" />: los elementos pueden dimensionarse para el **75 % de la capacidad requerida** en otras partes del apéndice cuando se combinan **viento o sismo** con otras cargas, siempre que la sección resultante **no sea menor** que la requerida para la combinación de carga viva y muerta (véase B.2.3).
+- <NormaRef s="C-G.2.3" pag="C-260" />: cuando la **carga muerta reduce** los efectos de otras cargas, los elementos se diseñan para el **85 % de la carga muerta** combinada con las demás cargas (véase B.2.3).
+
+## C-G.3 — Esfuerzos admisibles bajo cargas de servicio
+
+<TablaNorma numero="C-G.3" titulo="Esfuerzos admisibles" pag="C-260">
+
+| Numeral | Material | Esfuerzo admisible |
+|---|---|---|
+| C-G.3.1 | Concreto en la fibra extrema comprimida, $f_c$ | $f_c \le 0.45f'_c$ |
+| C-G.3.2 | Acero de refuerzo con $f_y \le 240$ MPa | $f_s \le 120$ MPa |
+| C-G.3.2 | Acero con $f_y \ge 420$ MPa y malla electrosoldada (liso o corrugado) | $f_s \le 170$ MPa |
+| C-G.3.2 | Barras No. 3 (3/8″) o 10M (10 mm) o menores, en **losas en una dirección de luz menor de 3.50 m** | $f_s \le 0.50f_y$ o 210 MPa |
+
+</TablaNorma>
+
+Sobre el último renglón la norma escribe «0.50 fy o 210 MPa» sin decir cuál; el ACI 318 original lo limita a 0.50 $f_y$ **sin pasar de** 210 MPa, y así se programa aquí (el **menor**; lectura del proyecto). Para aceros con $240 < f_y < 420$ MPa (p. ej. 280 MPa) **la norma no da valor**: `fsAdmisible` devuelve nulo y la calculadora de ejemplos usa 120 MPa por prudencia (decisión del proyecto).
+
+## C-G.4 — Flexión
+
+Los esfuerzos ante cargas de servicio se investigan con la teoría elástica y las siguientes suposiciones:
+
+| Numeral | Suposición |
+|---|---|
+| <NormaRef s="C-G.4.1" pag="C-260" /> | Las deformaciones varían **linealmente** con la distancia al eje neutro, salvo en **elementos de gran altura** con relación altura total/luz libre mayor que **2/5** (continuos) o **4/5** (simples), donde se considera distribución no lineal (véase C.10.7) |
+| <NormaRef s="C-G.4.2" pag="C-260" /> | La relación esfuerzo-deformación del concreto es una **línea recta** bajo cargas de servicio dentro del rango de esfuerzos admisibles |
+| <NormaRef s="C-G.4.3" pag="C-260" /> | En elementos de concreto reforzado, el concreto **no resiste tracción** |
+| <NormaRef s="C-G.4.4" pag="C-260" /> | La relación modular $n = E_s/E_c$ puede tomarse como el **entero más cercano**, **no menor de 6**. Salvo en deflexiones, $n$ del concreto liviano es el del normal de la misma resistencia |
+| <NormaRef s="C-G.4.5" pag="C-260" /> | En vigas **doblemente reforzadas** se usa una relación modular efectiva de **$2E_s/E_c$** para transformar el acero de compresión; su esfuerzo no excede el esfuerzo de tracción permisible |
+
+Con $E_c = 4700\sqrt{f'_c}$ y $E_s$ = 200 000 MPa, $n$ resulta (cálculo del proyecto): {tabN.map((x) => `f′c = ${x.fc} MPa → n = ${x.n}`).join('; ')}.
+
+### C-G.4.6 — Ecuaciones de los esfuerzos
+
+Los requisitos anteriores se consideran satisfechos con las siguientes ecuaciones (<NormaRef s="C-G.4.6" pag="C-260" />):
+
+<Ecuacion num="C-G-1" titulo="Esfuerzo en el acero de refuerzo en tracción">
+
+$$
+f_s = \frac{M}{A_s\,j\,d} \;\le\; \left(f_s\right)_{admisible}
+$$
+
+- $M$: momento de **servicio** en la sección (N·mm si $A_s$ en mm², $d$ en mm y $f_s$ en MPa).
+
+</Ecuacion>
+
+<Ecuacion num="C-G-2" titulo="Esfuerzo en el acero de refuerzo en compresión">
+
+$$
+f'_s = 2f_s\,\frac{k - \dfrac{d'}{d}}{1 - k} \;\le\; \left(f_s\right)_{admisible}
+$$
+
+- El factor 2 es la relación modular efectiva $2E_s/E_c$ de C-G.4.5 (la deformación del acero de compresión sobre su posición relativa al eje neutro).
+
+</Ecuacion>
+
+<Ecuacion num="C-G-3" titulo="Esfuerzo en el concreto a compresión">
+
+$$
+f_c = \frac{2M}{b\,d^{2}\,j\,k} \;\le\; \left(f_c\right)_{admisible}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C-G-4" titulo="Brazo interno j">
+
+$$
+j = 1 - \frac{k}{3}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C-G-5" titulo="Eje neutro, solo refuerzo en tracción">
+
+$$
+k = \sqrt{(n\rho)^{2} + 2n\rho} - n\rho
+$$
+
+- $k = kd/d$: profundidad relativa del eje neutro, medida desde la fibra comprimida.
+
+</Ecuacion>
+
+<Ecuacion num="C-G-6" titulo="Eje neutro, sección con refuerzo a compresión">
+
+$$
+k = \sqrt{n^{2}(\rho + \rho')^{2} + 2n\left(\rho + \rho'\,\frac{d'}{d}\right)} - n(\rho + \rho')
+$$
+
+</Ecuacion>
+
+<Callout tipo="practica" titulo="De dónde salen (comprobación del proyecto)">
+Con $\rho' = 0$ la Ec. C-G-6 se reduce a la C-G-5. La C-G-5 es la solución de $b(kd)^2/2 = nA_s(d - kd)$ (momento estático de la sección transformada igual a cero respecto al eje neutro): $k^2 + 2n\rho k - 2n\rho = 0$, cuya raíz positiva es $k = \sqrt{(n\rho)^2 + 2n\rho} - n\rho$. La Ec. C-G-3 viene de $M = \tfrac12 f_c\,k\,bd\cdot jd$.
+</Callout>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Momento admisible de una viga rectangular simplemente armada">
+Viga con $b$ = {ej1.s.b} mm, $d$ = {ej1.s.d} mm, $A_s$ = {ej1.s.As} mm² (3 barras No. 8), $f'_c$ = {ej1.s.fc} MPa y $f_y$ = {ej1.s.fy} MPa. Hallar el momento de servicio admisible.
+
+<Paso titulo="Relación modular y cuantía" ref="C-G.4.4">
+
+$E_c = 4700\sqrt{21}$ = 21 538 MPa; $E_s/E_c$ = 9.29 → $n$ = **{ej1.r.n}** (entero más cercano, no menor de 6). $\rho = A_s/(bd)$ = **{f(ej1.r.rho, 5)}**; $n\rho$ = {f(ej1.nrho, 4)}.
+
+</Paso>
+<Paso titulo="Eje neutro y brazo" ref="C-G-5, C-G-4">
+
+$$
+k = \sqrt{(n\rho)^2 + 2n\rho} - n\rho
+\qquad
+j = 1 - \frac{k}{3}
+$$
+
+Resultado: $k$ = **{f(ej1.r.k, 4)}** y $j$ = **{f(ej1.r.j, 4)}**; el eje neutro está a $kd$ = {f(ej1.r.k * 440, 0)} mm de la fibra comprimida.
+
+</Paso>
+<Paso titulo="Esfuerzos admisibles" ref="C-G.3.1, C-G.3.2">
+$f_y$ = 420 MPa → $f_s \le$ **{ej1.r.fsAdm} MPa**; $f_c \le 0.45(21)$ = **{f(ej1.r.fcAdm, 2)} MPa**.
+</Paso>
+<Paso titulo="Momento admisible por el acero" ref="C-G-1">
+
+$$
+M = f_s\,A_s\,j\,d = 170\,(1530)\,j\,(440)
+$$
+
+Resultado: $M_{adm,s}$ = **{f(ej1.r.MadmAcero, 1)} kN·m**.
+
+</Paso>
+<Paso titulo="Momento admisible por el concreto" ref="C-G-3">
+
+$$
+M = \frac{f_c\,b\,d^2\,j\,k}{2} = \frac{9.45\,(300)(440)^2\,j\,k}{2}
+$$
+
+Resultado: $M_{adm,c}$ = **{f(ej1.r.MadmConcreto, 1)} kN·m**.
+
+</Paso>
+<Paso titulo="Gobernante y comparación con el diseño por resistencia">
+Gobierna el **{ej1.r.gobierna}**: $M_{adm}$ = **{f(ej1.r.Madm, 1)} kN·m** (autoría del proyecto: el momento admisible es el menor de los dos). Con la misma sección (h = 500 mm) por resistencia (Capítulo C.10): $\phi M_n$ = {f(ej1.res.phiMn, 1)} kN·m, es decir {f(ej1.res.phiMn / ej1.r.Madm, 2)} veces el momento admisible de servicio, un margen del orden de los factores de carga de C.9.2 (1.2 a 1.6).
+</Paso>
+<Resultado>
+$n$ = {ej1.r.n}, $k$ = {f(ej1.r.k, 3)}, $j$ = {f(ej1.r.j, 3)}; $M_{adm}$ = **{f(ej1.r.Madm, 1)} kN·m**, controlado por el {ej1.r.gobierna}.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Verificar esfuerzos para un momento dado y regla del 75 % con viento">
+La misma viga debe resistir un momento de servicio $M_{D+L}$ = {ej2.Mdl} kN·m por carga muerta y viva y un momento $M_{D+L+W}$ = {ej2.Mviento} kN·m con viento. ¿Cumple? Y ¿cuánto vale $f_c$ con $M$ = 70 kN·m?
+
+<Paso titulo="Esfuerzos con M = 70 kN·m" ref="C-G-1, C-G-3">
+
+$$
+f_s = \frac{70\times 10^6}{1530\,j\,(440)}
+\qquad
+f_c = \frac{2\,(70\times 10^6)}{300\,(440)^2\,j\,k}
+$$
+
+Resultado: $f_s$ = **{f(ej2.r.fs, 1)} MPa** (≤ {ej2.r.fsAdm}: {ej2.r.fs <= ej2.r.fsAdm ? 'cumple' : 'no cumple'}) y $f_c$ = **{f(ej2.r.fcCalc, 2)} MPa** (≤ {f(ej2.r.fcAdm, 2)}: {ej2.r.fcCalc <= ej2.r.fcAdm ? 'cumple' : 'no cumple'}).
+
+</Paso>
+<Paso titulo="Combinación con viento: 75 % de la capacidad" ref="C-G.2.2">
+Con viento se permite dimensionar para el 75 % de la capacidad requerida: 0.75 × {ej2.Mviento} = **{f(0.75 * ej2.Mviento, 1)} kN·m**. Pero la sección no puede ser menor que la requerida para carga muerta y viva: {ej2.Mdl} kN·m. Se usa el **mayor**: {f(Math.max(0.75 * ej2.Mviento, ej2.Mdl), 1)} kN·m.
+</Paso>
+<Paso titulo="Comprobar la sección con ese momento" ref="C-G.2.2, C-G-3">
+Con $M$ = 75 kN·m: $f_s$ = {f(ej2.rViento.fs, 1)} MPa y $f_c$ = {f(ej2.rViento.fcCalc, 2)} MPa, frente a {ej2.rViento.fsAdm} y {f(ej2.rViento.fcAdm, 2)} MPa: **{ej2.rViento.fcCalc <= ej2.rViento.fcAdm && ej2.rViento.fs <= ej2.rViento.fsAdm ? 'cumple' : 'no cumple'}**.
+</Paso>
+<Resultado>
+Con 70 kN·m la viga cumple ($f_s$ = {f(ej2.r.fs, 0)} MPa, $f_c$ = {f(ej2.r.fcCalc, 1)} MPa). Con viento, el momento equivalente es 75 kN·m y {ej2.rViento.fcCalc <= ej2.rViento.fcAdm ? 'también cumple' : 'no cumple'} (el concreto trabaja a {f(ej2.rViento.fcCalc / ej2.rViento.fcAdm * 100, 0)} % de su admisible).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Viga doblemente armada (Ecs. C-G-6 y C-G-2)">
+La viga anterior con $A'_s$ = 600 mm² a $d'$ = 60 mm ($d'/d$ = {f(ej3.dpd, 3)}) y $M$ = 80 kN·m.
+
+<Paso titulo="Sin acero de compresión" ref="C-G-5, C-G-3">
+$k$ = {f(ej3.simple.k, 4)}; $f_c$ = **{f(ej3.simple.fcCalc, 2)} MPa**, mayor que 9.45 MPa: {ej3.simple.fcCalc <= ej3.simple.fcAdm ? 'cumple' : '**no cumple**'}.
+</Paso>
+<Paso titulo="Con acero de compresión" ref="C-G-6">
+
+$$
+k = \sqrt{n^2(\rho+\rho')^2 + 2n\left(\rho + \rho'\frac{d'}{d}\right)} - n(\rho+\rho')
+$$
+
+Con $\rho'$ = {f(ej3.doble.rhoPrima, 5)}: $k$ = **{f(ej3.doble.k, 4)}** (menor que {f(ej3.simple.k, 4)}: el acero de compresión baja el eje neutro) y $j$ = {f(ej3.doble.j, 4)}.
+</Paso>
+<Paso titulo="Esfuerzos" ref="C-G-1, C-G-2, C-G-3">
+$f_s$ = **{f(ej3.doble.fs, 1)} MPa**; $f'_s = 2f_s\,(k - d'/d)/(1-k)$ = **{f(ej3.doble.fsPrima, 1)} MPa** (≤ {ej3.doble.fsAdm}: {ej3.doble.fsPrima <= ej3.doble.fsAdm ? 'cumple' : 'no cumple'}); $f_c$ = **{f(ej3.doble.fcCalc, 2)} MPa** (≤ {f(ej3.doble.fcAdm, 2)}: {ej3.doble.fcCalc <= ej3.doble.fcAdm ? 'cumple' : 'no cumple'}).
+</Paso>
+<Resultado>
+Para $M$ = 80 kN·m, la sección simplemente armada {ej3.simple.fcCalc <= ej3.simple.fcAdm ? 'cumple' : 'no cumple'} por el concreto ({f(ej3.simple.fcCalc, 2)} MPa frente a {f(ej3.simple.fcAdm, 2)}); con $A'_s$ = 600 mm², {ej3.doble.fcCalc <= ej3.doble.fcAdm && ej3.doble.fsPrima <= ej3.doble.fsAdm ? 'cumple' : 'no cumple'} ($f_c$ = {f(ej3.doble.fcCalc, 2)} MPa, $f'_s$ = {f(ej3.doble.fsPrima, 1)} MPa).
+</Resultado>
+</Ejemplo>
+
+## Erratas y observaciones del PDF
+
+- **C-G.1.3 (C-259)** excluye «C.8.5.12», numeral que **no existe** en C.8.5 (que termina en C.8.5.3). El texto equivalente del ACI 318 excluye 8.4 (**redistribución de momentos**), que en la NSR-10 es **C.8.4**. Lectura del proyecto.
+- **Nomenclatura (C-259):** $E_c$ remite a «C.8.5.4» y $E_s$ a «C.8.5.5»; en esta edición son **C.8.5.1** ($E_c$) y **C.8.5.2** ($E_s$) (C.8.5.3 es $E_p$).
+- **C-G.3.2 (C-260):** deja **sin valor** los aceros con $240 < f_y < 420$ MPa y no aclara si «0.50 fy o 210 MPa» es el menor o el mayor de los dos.
+- **C-G.1.4 y C-G.2.1** remiten a «B.2.3» sin el prefijo de la norma correspondiente: se refieren a las combinaciones de carga del Título B; las combinaciones del Título C (C.9.2) usan factores de carga que **no** se usan en este apéndice.
+- **Fuera del PDF:** C-G.4.4 permite concreto liviano con el $n$ del normal de la misma resistencia, salvo para deflexiones.
+- **C-G-6** transcrita de la imagen (C-261): el término $\rho'\,d'/d$ multiplica solo a $\rho'$; con $\rho' = 0$ recupera C-G-5.
+- **Página C-262:** hoja de «Notas» en blanco.
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar el momento mayorado** ($M_u$) en las Ecs. C-G-1 a C-G-3: son **cargas de servicio** (<NormaRef s="C-G.2.1" pag="C-259" />).
+- **Mezclar φ y factores de carga** con los esfuerzos admisibles: en este método valen 1.0.
+- **Usar $n$ < 6 o decimal:** $n$ es el entero más cercano y no menor de 6 (<NormaRef s="C-G.4.4" pag="C-260" />).
+- **Olvidar el 2 en el acero de compresión:** $n_{efectivo} = 2E_s/E_c$ (<NormaRef s="C-G.4.5" pag="C-260" />) y su esfuerzo no puede exceder el admisible de tracción.
+- **Aplicar la regla del 75 %** (<NormaRef s="C-G.2.2" pag="C-259" />) y dimensionar por debajo de la combinación carga muerta + viva.
+- **Suponer 170 MPa para todo acero:** con $f_y \le 240$ MPa el admisible es 120 MPa; con $240 < f_y < 420$ la norma no da valor.
+- **Olvidar las demás disposiciones del Título C** (deflexiones C.9.5, C.10.4 a C.10.7, detallado): el apéndice solo reemplaza el cálculo de esfuerzos de flexión (<NormaRef s="C-G.1.3" pag="C-259" />, <NormaRef s="C-G.1.4" pag="C-259" />).
+</Callout>
+
+## Resumen en una línea
+
+**El método de esfuerzos admisibles verifica, con cargas de servicio y factores 1.0, que $f_c = 2M/(bd^2jk) \le 0.45f'_c$ y $f_s = M/(A_sjd) \le 120$ o 170 MPa, con $n = E_s/E_c \ge 6$, $k = \sqrt{(n\rho)^2+2n\rho}-n\rho$ y $j = 1 - k/3$.**

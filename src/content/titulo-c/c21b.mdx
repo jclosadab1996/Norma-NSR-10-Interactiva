@@ -1,0 +1,505 @@
+---
+codigo: 'C.21b'
+tipo: capitulo
+titulo: 'Requisitos de diseño sismo resistente (2/2): nudos, muros, diafragmas y cimentaciones'
+resumen: 'Continuación del C.21: nudos viga–columna, pórticos prefabricados, muros estructurales especiales (cortante, elementos de borde, vigas de acople), diafragmas y cerchas, cimentaciones y elementos no designados como parte del sistema sísmico.'
+objetivos:
+  - 'Verificar el cortante y el anclaje de las barras de viga en un nudo viga–columna especial'
+  - 'Calcular el cortante nominal de un muro especial con la Ec. C.21-10 y decidir si necesita elementos de borde'
+  - 'Aplicar los requisitos de vigas de acople con barras diagonales'
+  - 'Conocer los requisitos de diafragmas, colectores, cimentaciones y elementos no designados'
+  - 'Reconocer las erratas y referencias cruzadas dudosas del PDF'
+paginasNorma: 'C-187 a C-200'
+paginaPdf: 489
+orden: 21
+calculadoras: []
+nivel: 'avanzado'
+---
+
+import { buscarBarra } from '../../data/refuerzoDetalles';
+import {
+  anchoEfectivoNudo,
+  areaEfectivaNudo,
+  cortanteNudo,
+  vnMaximoNudo,
+  dimensionColumnaMinimaNudo,
+  longitudGanchoNudo,
+  longitudRectaNudo,
+  cortanteNominalMuro,
+  vuLimiteReduccionCuantia,
+  vuLimiteDosCapas,
+  vnMaximoMachon,
+  bordePorDesplazamiento,
+  extensionElementoBorde,
+  ashRequerido,
+  clasificarVigaAcople,
+  cortanteNominalAcopleDiagonal,
+  cortanteNominalDiafragma,
+  cortanteJuntaDiafragma,
+} from '../../lib/nsr10/sismoConcreto';
+
+export const ej4 = (() => {
+  const fc = 28, fy = 420, hCol = 550, bCol = 550, bViga = 450, vCol = 250;
+  const n8 = buscarBarra('No.8');
+  const AsSup = 4 * n8.area;
+  const AsInf = 3 * n8.area;
+  const bj = anchoEfectivoNudo(bCol, bViga, hCol, bCol / 2);
+  const Aj = areaEfectivaNudo(hCol, bj);
+  const vuj = cortanteNudo(AsSup, AsInf, fy, vCol);
+  const vn = vnMaximoNudo(fc, Aj, 'cuatro-caras');
+  const hook = longitudGanchoNudo(fy, n8.db, fc);
+  return {
+    fc, fy, hCol, bCol, bViga, vCol, n8, AsSup, AsInf, bj, Aj, vuj, vn,
+    tracciones: (1.25 * fy * (AsSup + AsInf)) / 1000,
+    cubierta: bViga / bCol,
+    minimoCol: dimensionColumnaMinimaNudo(n8.db),
+    vnOtros: vnMaximoNudo(fc, Aj, 'otros'),
+    vnTres: vnMaximoNudo(fc, Aj, 'tres-caras-o-dos-opuestas'),
+    hook,
+    ld300: longitudRectaNudo(hook.ldh, 250),
+    ldMas300: longitudRectaNudo(hook.ldh, 350),
+  };
+})();
+
+export const ej5 = (() => {
+  const tw = 300, lw = 6000, hw = 24000, fc = 28, fy = 420, Vu = 2400, Mu = 38000;
+  const Acv = tw * lw;
+  const n4 = buscarBarra('No.4');
+  const sBarras = 300;
+  const rhoT = (2 * n4.area) / (tw * sBarras);
+  const vn = cortanteNominalMuro({ Acv, fc, rhoT, fy, hwSobreLw: hw / lw });
+  const rhoReq = (phi) => ((Vu / phi) * 1000 / Acv - vn.alfaC * Math.sqrt(fc)) / fy;
+  const c = 1450, deriva = 0.01;
+  const borde = bordePorDesplazamiento(c, lw, deriva);
+  const ext = extensionElementoBorde(c, lw, Mu, Vu);
+  const rec = 40;
+  const bcT = tw - 2 * rec;
+  const bcL = ext.horizontal - 2 * rec;
+  const s = Math.floor(tw / 3 / 5) * 5;
+  const base = { s, fc, fyt: fy, Ag: tw * ext.horizontal, Ach: bcT * bcL };
+  const ashT = ashRequerido('DES', { ...base, bc: bcT }).ashMinimo;
+  const ashL = ashRequerido('DES', { ...base, bc: bcL }).ashMinimo;
+  return {
+    tw, lw, hw, fc, fy, Vu, Mu, Acv, n4, sBarras, rhoT, vn, c, deriva, borde, ext, rec, bcT, bcL, s, ashT, ashL,
+    razon: hw / lw,
+    vuRed: vuLimiteReduccionCuantia(Acv, fc),
+    vu2: vuLimiteDosCapas(Acv, fc),
+    vnMach: vnMaximoMachon(Acv, fc),
+    phiVn75: 0.75 * vn.vnDiseno,
+    phiVn60: 0.6 * vn.vnDiseno,
+    rhoReq75: rhoReq(0.75),
+    rhoReq60: rhoReq(0.6),
+    ramasL: Math.ceil(ashL / n4.area),
+    ramasT: Math.ceil(ashT / n4.area),
+  };
+})();
+
+export const ej6 = (() => {
+  const bw = 300, h = 900, ln = 1200, fc = 28, fy = 420, Vu = 520;
+  const Acw = bw * h;
+  const n7 = buscarBarra('No.7');
+  const Avd = 4 * n7.area;
+  const alfa = (Math.atan((h - 2 * 70) / ln) * 180) / Math.PI;
+  const r = cortanteNominalAcopleDiagonal(Avd, fy, alfa, Acw, fc);
+  return {
+    bw, h, ln, fc, fy, Vu, Acw, n7, Avd, alfa, r,
+    trat: clasificarVigaAcople(ln, h, Vu, Acw, fc),
+    limite: (0.33 * Math.sqrt(fc) * Acw) / 1000,
+    phiVn: 0.85 * r.vnDiseno,
+    relacion: ln / h,
+  };
+})();
+
+export const ej7 = (() => {
+  const esp = 100, L = 12000, fc = 28, fy = 420, rhoT = 0.0025, Avf = 1500;
+  const Acv = esp * L;
+  return { esp, L, fc, fy, rhoT, Avf, Acv, d: cortanteNominalDiafragma(Acv, fc, rhoT, fy), junta: cortanteJuntaDiafragma(Avf, fy) };
+})();
+
+## Idea central de esta segunda parte
+
+La [primera parte](/titulo-c/c21) cubre los requisitos generales y los pórticos (vigas y columnas). Falta lo que une y complementa a esos elementos: el **nudo** donde se cruzan, los **muros** que toman la mayor parte del cortante sísmico en sistemas duales o de muros, los **diafragmas** que reparten las fuerzas, las **cimentaciones** que las entregan al suelo y los elementos que «no hacen parte» del sistema sísmico pero igualmente deben acompañar los desplazamientos.
+
+<Callout tipo="importante" titulo="El hilo conductor sigue siendo la ductilidad">
+En el nudo se limita el **cortante** y se garantiza el **anclaje** con $1.25 f_y$. En muros se previene la falla por cortante frágil (Ec. C.21-10) y se **confina el borde** comprimido cuando la profundidad del eje neutro supera un valor que depende de la deriva de diseño (Ec. C.21-11). En diafragmas y cimentaciones se asegura que la **trayectoria de las fuerzas** sea continua hasta el suelo.
+</Callout>
+
+## C.21.7 — Nudos de pórticos especiales (DES)
+
+### C.21.7.1 y C.21.7.2 — Alcance y requisitos generales
+
+Aplica a los nudos viga–columna de pórticos especiales que forman parte del sistema sísmico (<NormaRef s="C.21.7.1" pag="C-187" />):
+
+- Las fuerzas en el refuerzo longitudinal de la viga **en la cara del nudo** se determinan suponiendo que el refuerzo de tracción por flexión trabaja a **1.25 $f_y$** (<NormaRef s="C.21.7.2.1" pag="C-187" />).
+- El refuerzo longitudinal de una viga que termina en una columna se prolonga hasta la **cara más distante del núcleo confinado** y se ancla en tracción según C.21.7.5 y en compresión según el Capítulo C.12 (<NormaRef s="C.21.7.2.2" pag="C-187" />).
+- Donde la barra de viga **atraviesa** el nudo, la dimensión de la columna paralela a la barra no es menor que **20 $d_b$** de la barra de viga de mayor diámetro en concreto de peso normal (**26 $d_b$** en concreto liviano) (<NormaRef s="C.21.7.2.3" pag="C-187" />).
+
+### C.21.7.3 — Refuerzo transversal en el nudo
+
+- El nudo lleva el refuerzo transversal de C.21.6.4.4(a) o (b) y además cumple C.21.6.4.2, C.21.6.4.3 y C.21.6.4.7, salvo lo permitido en C.21.7.3.2 (<NormaRef s="C.21.7.3.1" pag="C-187" />).
+- Si llegan elementos a las **cuatro caras** del nudo y cada uno mide al menos **tres cuartas partes** del ancho de la columna, basta la **mitad** del refuerzo de C.21.6.4.4 dentro de la altura $h$ del elemento de menor altura, y la separación de C.21.6.4.3 puede subir a **150 mm** (<NormaRef s="C.21.7.3.2" pag="C-187" />).
+- Debe haber refuerzo transversal que **atraviese** el nudo para confinar el refuerzo longitudinal de viga que pasa **fuera** del núcleo de la columna, con las separaciones de C.21.5.3.2 y los requisitos de C.21.5.3.3 y C.21.5.3.6, cuando una viga que llegue al nudo no suministra ese confinamiento (<NormaRef s="C.21.7.3.3" pag="C-187" />).
+
+### C.21.7.4 — Resistencia al cortante del nudo
+
+<TablaNorma numero="C.21.7.4.1" titulo="Cortante nominal máximo del nudo, Vn (concreto de peso normal)" pag="C-188" nota="Unidades: MPa y mm²; Vn en N. Aj = área efectiva del nudo.">
+
+| Confinamiento del nudo | $V_n$ máximo |
+|---|---|
+| Confinado en las **cuatro caras** | $1.7\sqrt{f'_c}\,A_j$ |
+| Confinado en **tres caras o en dos caras opuestas** | $1.2\sqrt{f'_c}\,A_j$ |
+| Otros casos | $1.0\sqrt{f'_c}\,A_j$ |
+
+</TablaNorma>
+
+- **Cara confinada:** un elemento confina el nudo si cubre **al menos 3/4** de la cara. Se admiten como elementos de confinamiento las extensiones de viga que se prolongan al menos una altura total $h$ más allá de la cara del nudo, siempre que cumplan C.21.5.1.3, C.21.5.2.1, C.21.5.3.2, C.21.5.3.3 y C.21.5.3.6. El nudo está **confinado** si hay elementos de confinamiento en todas las caras.
+- **$A_j$** es la profundidad del nudo (la altura total $h$ de la columna) por su **ancho efectivo**. El ancho efectivo es el ancho total de la columna, salvo cuando la viga llega a una columna más ancha: no excede el menor de (a) el ancho de la viga más la altura del nudo y (b) dos veces la distancia perpendicular más pequeña entre el eje longitudinal de la viga y el lado de la columna.
+- **Concreto liviano:** $V_n$ no excede las **tres cuartas partes** de los límites anteriores (<NormaRef s="C.21.7.4.2" pag="C-188" />).
+
+### C.21.7.5 — Longitud de desarrollo de barras en tracción
+
+Aplica a barras No. 3 (10M) a No. 11 (36M).
+
+<Ecuacion num="C.21-9" titulo="Longitud de desarrollo de barras con gancho estándar de 90°">
+
+$$
+\ell_{dh} = \frac{f_y\,d_b}{5.4\sqrt{f'_c}}
+$$
+
+Concreto de peso normal: $\ell_{dh}$ no menor que el mayor de **8 $d_b$**, **150 mm** y el valor de la Ec. C.21-9. Concreto liviano: no menor que el mayor de **10 $d_b$**, **190 mm** y **1.25** veces el valor de la ecuación. El gancho de 90° se coloca dentro del núcleo confinado de una columna o elemento de borde (<NormaRef s="C.21.7.5.1" pag="C-188" />).
+
+</Ecuacion>
+
+- **Barra recta:** $\ell_d$ no menor que el mayor de (a) **2.5 veces** la longitud de C.21.7.5.1 si el concreto fresco colocado en una operación bajo la barra no excede 300 mm, y (b) **3.25 veces** si excede 300 mm (<NormaRef s="C.21.7.5.2" pag="C-188" />).
+- Las barras rectas que terminan en un nudo pasan por el núcleo confinado de la columna o del elemento de borde; la parte de $\ell_d$ **fuera** del núcleo se multiplica por **1.6** (<NormaRef s="C.21.7.5.3" pag="C-188" />).
+- Con refuerzo recubierto con epóxico, las longitudes se multiplican por el factor de C.12.2.4 o C.12.5.2 (<NormaRef s="C.21.7.5.4" pag="C-189" />).
+
+<Ejemplo numero={4} titulo="Cortante y anclaje en un nudo interior">
+
+Nudo interior de una columna de {ej4.bCol} × {ej4.hCol} mm con vigas de {ej4.bViga} mm de ancho en las cuatro caras. $f'_c$ = {ej4.fc} MPa, $f_y$ = {ej4.fy} MPa. La viga lleva 4 No. 8 arriba ({ej4.AsSup} mm²) y 3 No. 8 abajo ({ej4.AsInf} mm²). El cortante de la columna sobre el nudo es de {ej4.vCol} kN. (Datos hipotéticos del autor.)
+
+<Paso titulo="Dimensión de la columna frente al diámetro de la barra" ref="C.21.7.2.3">
+$20\,d_b$ = 20 × {ej4.n8.db} = {ej4.minimoCol.toFixed(0)} mm $\le$ {ej4.hCol} mm ✓. (Con una columna de 500 mm no cumpliría: 508 mm > 500 mm; habría que pasar a barras No. 7 o ampliar la columna.)
+</Paso>
+<Paso titulo="Cortante en el nudo con 1.25 fy" ref="C.21.7.2.1">
+$T_1 + T_2$ = 1.25 × {ej4.fy} × ({ej4.AsSup} + {ej4.AsInf}) / 1000 = {ej4.tracciones.toFixed(0)} kN. Cortante en el nudo $V_{u,j}$ = {ej4.tracciones.toFixed(0)} − {ej4.vCol} = **{ej4.vuj.toFixed(0)} kN** (estática del autor).
+</Paso>
+<Paso titulo="Confinamiento y área efectiva" ref="C.21.7.4.1">
+Las vigas cubren {ej4.bViga}/{ej4.bCol} = {(ej4.cubierta*100).toFixed(0)} % de cada cara (≥ 75 %): el nudo está **confinado en las cuatro caras**. Ancho efectivo $b_j$ = {ej4.bj.toFixed(0)} mm (columna más ancha que la viga: el menor de {ej4.bCol}, {ej4.bViga} + {ej4.hCol} y 2 × {ej4.bCol/2}). $A_j$ = {ej4.hCol} × {ej4.bj.toFixed(0)} = {ej4.Aj.toLocaleString('en-US')} mm².
+</Paso>
+<Paso titulo="Cortante nominal máximo" ref="C.21.7.4.1, C.9.3.4(c)">
+$V_n \le 1.7\sqrt{f'_c}A_j$ = **{ej4.vn.toFixed(0)} kN** (con tres caras sería {ej4.vnTres.toFixed(0)} kN y en «otros casos», {ej4.vnOtros.toFixed(0)} kN). Con $\phi$ = 0.85 (C.9.3.4(c)): $\phi V_n$ = {(0.85*ej4.vn).toFixed(0)} kN {(0.85*ej4.vn >= ej4.vuj) ? '≥' : '<'} {ej4.vuj.toFixed(0)} kN: {(0.85*ej4.vn >= ej4.vuj) ? 'cumple' : 'no cumple'}.
+</Paso>
+<Paso titulo="Gancho estándar de 90° de la barra No. 8 superior" ref="C.21.7.5.1, Ec. C.21-9">
+Ec. C.21-9: {ej4.fy} × {ej4.n8.db} / (5.4 √{ej4.fc}) = {ej4.hook.requerida.toFixed(0)} mm; 8 $d_b$ = {(8*ej4.n8.db).toFixed(0)} mm; 150 mm → **$\ell_{dh}$ = {ej4.hook.ldh.toFixed(0)} mm**, medidos desde la cara más lejana del núcleo, con el gancho dentro del núcleo confinado. Si la barra fuera recta: $\ell_d$ = 2.5 $\ell_{dh}$ = {ej4.ld300.toFixed(0)} mm (hasta 300 mm de concreto fresco bajo la barra) o 3.25 $\ell_{dh}$ = {ej4.ldMas300.toFixed(0)} mm (más de 300 mm).
+</Paso>
+<Resultado>
+El nudo cumple: $V_{u,j}$ = {ej4.vuj.toFixed(0)} kN frente a $\phi V_n$ = {(0.85*ej4.vn).toFixed(0)} kN, columna de {ej4.hCol} mm ≥ 20 $d_b$, y ganchos con $\ell_{dh}$ ≈ {ej4.hook.ldh.toFixed(0)} mm dentro del núcleo.
+</Resultado>
+</Ejemplo>
+
+## C.21.8 — Pórticos especiales prefabricados (DES)
+
+Aplica a pórticos especiales construidos con concreto prefabricado que forman parte del sistema sísmico (<NormaRef s="C.21.8.1" pag="C-189" />).
+
+- **Conexiones dúctiles** (<NormaRef s="C.21.8.2" pag="C-189" />): cumplen todo lo exigido a los pórticos construidos en obra y además (a) $V_n$ de las conexiones, según C.11.6.4, **no menor que $2V_e$** (con $V_e$ de C.21.5.4.1 o C.21.6.5.1); (b) los empalmes mecánicos del refuerzo de la viga se ubican a **no menos de $h/2$** de la cara del nudo y cumplen los requisitos de «C.21.2.6» (ver erratas).
+- **Conexiones fuertes** (<NormaRef s="C.21.8.3" pag="C-189" />): cumplen lo de los pórticos en obra y además (a) C.21.5.1.2 se aplica a los segmentos entre las zonas donde se espera fluencia por flexión; (b) $\phi S_n \ge S_e$; (c) el refuerzo longitudinal principal es **continuo** a través de la conexión y se desarrolla fuera de la conexión fuerte y de la rótula; (d) en conexiones columna–columna, $\phi S_n \ge 1.4 S_e$, $\phi M_n \ge 0.4 M_{pr}$ de la columna en la altura del piso y $\phi V_n \ge V_e$ según C.21.6.5.1.
+- **Otros pórticos prefabricados** que no cumplan C.21.8.2 ni C.21.8.3: deben cumplir **ACI 374.1** y que (a) detalles y materiales de los ensayos sean representativos y (b) el procedimiento de diseño de los especímenes defina el mecanismo con que el pórtico resiste efectos sísmicos y de gravedad y fije los valores de aceptación (<NormaRef s="C.21.8.4" pag="C-189" />).
+
+## C.21.9 — Muros estructurales especiales y vigas de acople (DES)
+
+### C.21.9.1 — Alcance
+
+Aplica a muros especiales de concreto reforzado, prefabricados o en obra, y a vigas de acople (<NormaRef s="C.21.9.1" pag="C-189" />).
+
+### C.21.9.2 — Refuerzo
+
+- Las cuantías del alma $\rho_\ell$ (vertical) y $\rho_t$ (horizontal) **no son menores que 0.0025**, y la separación en cada dirección no excede **450 mm**. Si $V_u \le 0.083 A_{cv}\lambda\sqrt{f'_c}$, las cuantías pueden reducirse a las de C.14.3. El refuerzo que contribuye a $V_n$ es continuo y se distribuye a través del plano de cortante (<NormaRef s="C.21.9.2.1" pag="C-190" />).
+- Edificaciones del **Grupo de Uso I** (A.2.5.1) de hasta tres pisos y solo de vivienda pueden usar las cuantías de C.14.3 (<NormaRef s="C.21.9.2.2" pag="C-190" />).
+- **Al menos dos capas** de refuerzo cuando $V_u > 0.17 A_{cv}\lambda\sqrt{f'_c}$ (<NormaRef s="C.21.9.2.3" pag="C-190" />).
+- El refuerzo se desarrolla o empalma para $f_y$ en tracción según el Capítulo C.12, con estas excepciones (<NormaRef s="C.21.9.2.4" pag="C-190" />): (a) la altura efectiva de C.12.10.3 puede ser $0.8\,\ell_w$; (b) se pueden obviar C.12.11, C.12.12 y C.12.13; (c) donde sea probable la fluencia, las longitudes de desarrollo son **1.25 veces** las calculadas para $f_y$; (d) empalmes mecánicos y soldados según C.21.1.6 y C.21.1.7.
+
+### C.21.9.3 y C.21.9.4 — Fuerzas de diseño y resistencia al cortante
+
+$V_u$ se obtiene del análisis lateral con las combinaciones de carga (<NormaRef s="C.21.9.3" pag="C-190" />).
+
+<Ecuacion num="C.21-10" titulo="Resistencia nominal a cortante de muros estructurales especiales">
+
+$$
+V_n = A_{cv}\left(\alpha_c\,\lambda\sqrt{f'_c} + \rho_t\,f_y\right)
+$$
+
+$\alpha_c$ = **0.25** para $h_w/\ell_w \le 1.5$; **0.17** para $h_w/\ell_w = 2.0$ (y mayor); varía **linealmente** entre 0.25 y 0.17 para $h_w/\ell_w$ entre 1.5 y 2.0 (<NormaRef s="C.21.9.4.1" pag="C-190" />). $A_{cv}$ es el área bruta de la sección de cortante (espesor del alma por longitud), $\rho_t$ la cuantía del refuerzo horizontal.
+
+</Ecuacion>
+
+- Para **segmentos** de un muro, $h_w/\ell_w$ es el **mayor** entre el del muro completo y el del segmento (<NormaRef s="C.21.9.4.2" pag="C-190" />).
+- El refuerzo de cortante distribuido da resistencia en **dos direcciones ortogonales**; si $h_w/\ell_w \le 2.0$, $\rho_\ell$ no es menor que $\rho_t$ (<NormaRef s="C.21.9.4.3" pag="C-190" />).
+- **Topes:** para todos los machones que comparten una fuerza lateral común, $V_n \le 0.66\,A_{cv}\sqrt{f'_c}$; para un machón individual, $V_n \le 0.83\,A_{cw}\sqrt{f'_c}$ (<NormaRef s="C.21.9.4.4" pag="C-190" />). Para segmentos horizontales de muro y vigas de acople, $V_n \le 0.83\,A_{cw}\sqrt{f'_c}$ (<NormaRef s="C.21.9.4.5" pag="C-191" />).
+
+### C.21.9.5 — Flexión y carga axial
+
+Los muros se diseñan con C.10.2 y C.10.3, **sin** aplicar C.10.3.7 ni los requisitos de deformación no lineal de C.10.2.2. Son efectivos el concreto y el refuerzo longitudinal desarrollado dentro del ancho efectivo de ala, elemento de borde y alma, y se consideran las aberturas (<NormaRef s="C.21.9.5.1" pag="C-191" />). Salvo análisis más detallado, el ancho efectivo de ala se extiende desde la cara del alma una distancia igual al **menor** entre la mitad de la distancia al alma de un muro adyacente y el **25 %** de la altura total del muro (<NormaRef s="C.21.9.5.2" pag="C-191" />).
+
+### C.21.9.6 — Elementos de borde
+
+La necesidad de elementos especiales de borde se evalúa con C.21.9.6.2 o C.21.9.6.3, y se cumplen también C.21.9.6.4 y C.21.9.6.5 (<NormaRef s="C.21.9.6.1" pag="C-191" />).
+
+**Método por desplazamientos (C.21.9.6.2).** Para muros y pilas efectivamente continuos desde la base hasta la parte superior, diseñados para una **única sección crítica** de flexión y carga axial (<NormaRef s="C.21.9.6.2" pag="C-191" />):
+
+<Ecuacion num="C.21-11" titulo="Necesidad de elementos especiales de borde por desplazamiento">
+
+$$
+c \ge \frac{\ell_w}{600\,(\delta_u/h_w)}
+$$
+
+$c$ es la **mayor profundidad del eje neutro** calculada para la fuerza axial mayorada y la resistencia nominal a momento congruente con el desplazamiento de diseño $\delta_u$. El cociente $\delta_u/h_w$ **no se toma menor que 0.007** (0.0035 en muros DMO, C.21.4.4.1). Si se cumple la desigualdad, las zonas de compresión se refuerzan con elementos especiales de borde.
+
+</Ecuacion>
+
+El refuerzo del elemento especial de borde se extiende **verticalmente** desde la sección crítica una distancia no menor que el mayor entre $\ell_w$ y $M_u/4V_u$ (<NormaRef s="C.21.9.6.2" pag="C-191" />).
+
+**Método por esfuerzos (C.21.9.6.3).** Los muros que no se diseñan con C.21.9.6.2 llevan elementos especiales de borde en los bordes y alrededor de aberturas cuando el esfuerzo de compresión máximo en la fibra extrema, para fuerzas mayoradas con $E$, **sobrepase 0.2 $f'_c$**; se pueden descontinuar donde el esfuerzo calculado sea **menor que 0.15 $f'_c$**. Los esfuerzos se calculan con modelo lineal elástico y propiedades de la **sección bruta**; en muros con alas se usa el ancho efectivo de C.21.9.5.2 (<NormaRef s="C.21.9.6.3" pag="C-191" />).
+
+**Requisitos del elemento especial de borde (C.21.9.6.4)** (<NormaRef s="C.21.9.6.4" pag="C-191" />):
+
+- (a) Se extiende horizontalmente desde la fibra extrema en compresión una distancia no menor que el **mayor** entre $c - 0.1\ell_w$ y $c/2$.
+- (b) En secciones con alas incluye el ancho efectivo del ala en compresión y se extiende al menos **300 mm** dentro del alma.
+- (c) Su refuerzo transversal cumple C.21.6.4.2 a C.21.6.4.4, excepto que **no se necesita la Ec. C.21-7** y el límite de separación de C.21.6.4.3(a) debe ser «de al menos un tercio» de la dimensión menor del elemento de borde (se interpreta como $s \le$ un tercio de esa dimensión; véase erratas).
+- (d) En la base del muro, el refuerzo transversal se extiende dentro del apoyo al menos $\ell_d$ del refuerzo longitudinal de mayor diámetro, o **300 mm** dentro de la zapata o losa de cimentación.
+- (e) El refuerzo horizontal del alma se ancla para desarrollar $f_y$ dentro del núcleo confinado del borde.
+
+**Cuando no se requieren elementos especiales de borde (C.21.9.6.5):** (a) si la cuantía longitudinal en el borde del muro es **mayor que $2.8/f_y$**, el refuerzo transversal del borde cumple C.21.6.4.2 y C.21.9.6.4(a), con separación longitudinal máxima de **200 mm**; (b) salvo que $V_u < 0.083A_{cv}\lambda\sqrt{f'_c}$, el refuerzo transversal que termine en los bordes tiene **gancho estándar** que enganche el refuerzo de borde, o éste se abraza con estribos en U empalmados al refuerzo horizontal, del mismo tamaño y espaciamiento (<NormaRef s="C.21.9.6.5" pag="C-192" />).
+
+<Figura src="/img/titulo-c/c21-muro-borde.svg" alt="Planta de un muro con elemento especial de borde, profundidad del eje neutro c y extensión del borde" numero="Esquema del autor" pie="Planta de un muro especial: profundidad c del eje neutro, extensión horizontal del elemento de borde (C.21.9.6.4(a)) y refuerzo distribuido del alma (C.21.9.2). No es una figura de la norma." />
+
+### C.21.9.7 — Vigas de acople
+
+<TablaNorma numero="C.21.9.7" titulo="Tratamiento de las vigas de acople según la relación luz libre/altura" pag="C-192" nota="Organización de la tabla: del autor, a partir de C.21.9.7.1 a C.21.9.7.3.">
+
+| Relación $\ell_n/h$ | Tratamiento | Numeral |
+|---|---|---|
+| $\ge 4$ | Cumplen **C.21.5** (vigas de pórtico especial); no se exigen C.21.5.1.3 ni C.21.5.1.4 si se demuestra por análisis estabilidad lateral adecuada | C.21.9.7.1 |
+| $< 2$ **y** $V_u > 0.33\lambda\sqrt{f'_c}A_{cw}$ | **Dos grupos de barras que se intersecan en diagonal**, simétricas respecto al centro de la luz (salvo que se demuestre que la pérdida de rigidez y resistencia no debilita la capacidad vertical, la evacuación ni la integridad de los no estructurales) | C.21.9.7.2 |
+| Los demás | A elección: dos grupos de barras diagonales, o cumplir C.21.5.2 a C.21.5.4 | C.21.9.7.3 |
+
+</TablaNorma>
+
+**Vigas con barras diagonales** (no se aplica C.11.7) cumplen (a), (b) y (c) o (d) (<NormaRef s="C.21.9.7.4" pag="C-192" />):
+
+<Ecuacion num="C.21-12" titulo="Resistencia a cortante de vigas de acople con refuerzo diagonal">
+
+$$
+V_n = 2\,A_{vd}\,f_y\,\operatorname{sen}\alpha \;\le\; 0.83\sqrt{f'_c}\,A_{cw}
+$$
+
+$A_{vd}$ es el área total del refuerzo en **cada grupo** de barras diagonales y $\alpha$ el ángulo entre las diagonales y el eje longitudinal de la viga.
+
+</Ecuacion>
+
+- (b) Cada grupo tiene **al menos cuatro barras** en dos o más capas, embebidas en el muro no menos de **1.25** veces la longitud de desarrollo para $f_y$.
+- (c) Cada grupo se confina con refuerzo transversal de dimensiones exterior a exterior no menores que **$b_w/2$** en la dirección paralela a $b_w$ y **$b_w/5$** en los otros lados, que cumpla C.21.6.4.2 a C.21.6.4.4, con separación a lo largo de las diagonales según C.21.6.4.3(c) y **no mayor de 6 $d_b$** de la diagonal, y ganchos o ramas con separación $\le$ **350 mm**. Para $A_g$ en C.10-5 y C.21-7 se supone el recubrimiento de C.7.7 en los cuatro lados de cada grupo. Además, refuerzo longitudinal y transversal alrededor del perímetro de la viga con área en cada dirección $\ge 0.002\,b_w s$ y separación $\le$ **300 mm**.
+- (d) Alternativamente, refuerzo transversal en **toda la sección** de la viga (C.21.6.4.2, C.21.6.4.4 y C.21.6.4.7) con separación longitudinal $\le$ menor de **150 mm** y 6 $d_b$ de las diagonales, y ganchos o ramas a $\le$ **200 mm** vertical y horizontalmente; cada gancho enlaza una barra longitudinal de igual o mayor diámetro.
+
+### C.21.9.8 y C.21.9.9 — Juntas de construcción y muros discontinuos
+
+Las juntas de construcción cumplen C.6.4 y la superficie de contacto se hace rugosa como en C.11.6.9 (<NormaRef s="C.21.9.8" pag="C-193" />). Las columnas que soportan muros discontinuos se refuerzan según C.21.6.4.6 (<NormaRef s="C.21.9.9" pag="C-193" />).
+
+<Ejemplo numero={5} titulo="Cortante y elementos de borde de un muro especial">
+
+Muro especial de {ej5.tw} mm de espesor, $\ell_w$ = {ej5.lw/1000} m y $h_w$ = {ej5.hw/1000} m ($h_w/\ell_w$ = {ej5.razon.toFixed(1)}), $f'_c$ = {ej5.fc} MPa y $f_y$ = {ej5.fy} MPa. El análisis da $V_u$ = {ej5.Vu} kN y $M_u$ = {ej5.Mu.toLocaleString('en-US')} kN·m en la base; el análisis de flexión (con $\delta_u/h_w$ = {ej5.deriva} y la carga axial mayorada) arroja $c$ = {ej5.c} mm. Refuerzo horizontal propuesto: **dos capas de No. 4 cada {ej5.sBarras} mm**. (Datos hipotéticos del autor.)
+
+<Paso titulo="Cuantía y número de capas" ref="C.21.9.2.1, C.21.9.2.3">
+$A_{cv}$ = {ej5.tw} × {ej5.lw} = {ej5.Acv.toLocaleString('en-US')} mm². $\rho_t$ = 2 × {ej5.n4.area} / ({ej5.tw} × {ej5.sBarras}) = **{ej5.rhoT.toFixed(5)}** $\ge$ 0.0025 ✓ ($s$ = {ej5.sBarras} mm $\le$ 450 ✓). $0.083A_{cv}\sqrt{f'_c}$ = {ej5.vuRed.toFixed(0)} kN $<$ $V_u$: las cuantías no se reducen a las de C.14.3. $0.17A_{cv}\sqrt{f'_c}$ = {ej5.vu2.toFixed(0)} kN $<$ {ej5.Vu} kN: **se exigen al menos dos capas** ✓.
+</Paso>
+<Paso titulo="Resistencia nominal a cortante" ref="C.21.9.4.1, Ec. C.21-10">
+$h_w/\ell_w$ = {ej5.razon.toFixed(1)} $\ge$ 2.0 → $\alpha_c$ = {ej5.vn.alfaC}. $V_n = A_{cv}(\alpha_c\sqrt{f'_c} + \rho_t f_y)$ = {ej5.Acv.toLocaleString('en-US')} × ({ej5.vn.alfaC} × √{ej5.fc} + {ej5.rhoT.toFixed(5)} × {ej5.fy}) / 1000 = **{ej5.vn.vn.toFixed(0)} kN**. Tope $0.66A_{cv}\sqrt{f'_c}$ = {ej5.vn.vnTope.toFixed(0)} kN: {ej5.vn.gobiernaTope ? 'gobierna el tope' : 'no gobierna'}.
+</Paso>
+<Paso titulo="Verificación con φ = 0.75 o 0.60" ref="C.9.3.4(a)">
+Con $\phi$ = 0.75: $\phi V_n$ = {ej5.phiVn75.toFixed(0)} kN {ej5.phiVn75 >= ej5.Vu ? '≥' : '<'} {ej5.Vu} kN. Pero C.9.3.4(a) obliga a $\phi$ = **0.60** si $V_n$ es menor que el cortante correspondiente a la resistencia nominal a flexión: entonces $\phi V_n$ = {ej5.phiVn60.toFixed(0)} kN {ej5.phiVn60 >= ej5.Vu ? '≥' : '<'} {ej5.Vu} kN. Para cumplir incluso con $\phi$ = 0.60 se requiere $\rho_t \ge$ {ej5.rhoReq60.toFixed(5)}; con $\phi$ = 0.75 bastaría {ej5.rhoReq75.toFixed(5)}, pero rige el mínimo de 0.0025. Dos capas de No. 4 cada 250 mm dan {(2*ej5.n4.area/(ej5.tw*250)).toFixed(5)}, que cubre ambos casos.
+</Paso>
+<Paso titulo="¿Elementos especiales de borde?" ref="C.21.9.6.2, Ec. C.21-11">
+$\delta_u/h_w$ = {ej5.deriva} ≥ 0.007, así que se usa {ej5.borde.derivaUsada}. $c_{\text{lím}}$ = $\ell_w/[600(\delta_u/h_w)]$ = {ej5.lw} / (600 × {ej5.borde.derivaUsada}) = **{ej5.borde.cLimite.toFixed(0)} mm**. Como $c$ = {ej5.c} mm {ej5.borde.requiere ? '≥' : '<'} {ej5.borde.cLimite.toFixed(0)} mm, {ej5.borde.requiere ? 'se requieren elementos especiales de borde' : 'no se requieren elementos especiales de borde'}.
+</Paso>
+<Paso titulo="Extensiones del borde" ref="C.21.9.6.4(a), C.21.9.6.2(b)">
+Horizontal: mayor de $c - 0.1\ell_w$ = {(ej5.c-0.1*ej5.lw).toFixed(0)} mm y $c/2$ = {(ej5.c/2).toFixed(0)} mm → **{ej5.ext.horizontal.toFixed(0)} mm**. Vertical desde la sección crítica: mayor de $\ell_w$ = {ej5.lw} mm y $M_u/4V_u$ = {(ej5.Mu*1000/(4*ej5.Vu)).toFixed(0)} mm → **{ej5.ext.vertical.toFixed(0)} mm**.
+</Paso>
+<Paso titulo="Confinamiento del borde" ref="C.21.9.6.4(c), C.21.6.4.4(b)">
+No se exige la Ec. C.21-7; rige la Ec. C.21-8: $A_{sh} = 0.09\,s\,b_c f'_c/f_{yt}$. Separación: un tercio de la dimensión menor = {ej5.tw}/3 = 100 mm (y menor que 6 $d_b$ y $s_o$ para barras usuales) → $s$ = **{ej5.s} mm**. En la dirección del espesor, $b_c$ = {ej5.bcT} mm → $A_{sh}$ = {ej5.ashT.toFixed(0)} mm² (≈ {ej5.ramasT} ramas No. 4); en la dirección de la longitud del borde, $b_c$ = {ej5.bcL.toFixed(0)} mm → $A_{sh}$ = {ej5.ashL.toFixed(0)} mm², es decir **{ej5.ramasL} ramas No. 4** que crucen el espesor del borde cada {ej5.s} mm (estribo perimetral más ganchos suplementarios, con $h_x \le$ 350 mm).
+</Paso>
+<Resultado>
+$V_n$ = {ej5.vn.vn.toFixed(0)} kN con dos capas de No. 4 cada {ej5.sBarras} mm; con $\phi$ = 0.60 hay que subir el refuerzo horizontal. Hay elementos especiales de borde ($c$ = {ej5.c} mm > {ej5.borde.cLimite.toFixed(0)} mm): {ej5.ext.horizontal.toFixed(0)} mm de longitud, {ej5.ext.vertical.toFixed(0)} mm de altura y estribos cada {ej5.s} mm.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={6} titulo="Viga de acople con barras diagonales">
+
+Viga de acople de {ej6.bw} × {ej6.h} mm entre dos muros, con luz libre de {ej6.ln} mm ($\ell_n/h$ = {ej6.relacion.toFixed(2)}), $f'_c$ = {ej6.fc} MPa, $f_y$ = {ej6.fy} MPa y $V_u$ = {ej6.Vu} kN. Cada grupo diagonal: 4 No. 7 ({ej6.Avd} mm²) con las barras a 70 mm de cada cara. (Datos hipotéticos del autor.)
+
+<Paso titulo="Tratamiento" ref="C.21.9.7.2">
+$\ell_n/h$ = {ej6.relacion.toFixed(2)} $<$ 2 y $0.33\sqrt{f'_c}A_{cw}$ = {ej6.limite.toFixed(0)} kN $<$ {ej6.Vu} kN: **diagonales obligatorias** ({ej6.trat === 'diagonalesObligatorias' ? 'confirmado por la función' : 'revisar'}).
+</Paso>
+<Paso titulo="Ángulo y resistencia" ref="Ec. C.21-12">
+$\alpha$ = arctan[({ej6.h} − 2·70)/{ej6.ln}] = {ej6.alfa.toFixed(1)}°. $V_n = 2A_{vd}f_y\,\operatorname{sen}\alpha$ = 2 × {ej6.Avd} × {ej6.fy} × sen {ej6.alfa.toFixed(1)}° / 1000 = **{ej6.r.vn.toFixed(0)} kN**. Tope $0.83\sqrt{f'_c}A_{cw}$ = {ej6.r.tope.toFixed(0)} kN: {ej6.r.gobiernaTope ? 'gobierna el tope' : 'no gobierna'}.
+</Paso>
+<Paso titulo="Comparación" ref="C.9.3.4(c)">
+$\phi$ = 0.85: $\phi V_n$ = {ej6.phiVn.toFixed(0)} kN {ej6.phiVn >= ej6.Vu ? '≥' : '<'} {ej6.Vu} kN: {ej6.phiVn >= ej6.Vu ? 'cumple' : 'no cumple'}.
+</Paso>
+<Resultado>
+Con dos grupos de 4 No. 7 inclinados {ej6.alfa.toFixed(0)}° la viga resiste $\phi V_n$ = {ej6.phiVn.toFixed(0)} kN ≥ {ej6.Vu} kN. Quedan por detallar el confinamiento de cada grupo ($b_w/2$ × $b_w/5$) o el de toda la sección, y el refuerzo perimetral $\ge 0.002\,b_w s$.
+</Resultado>
+</Ejemplo>
+
+## C.21.10 — Muros especiales prefabricados (DES)
+
+Los muros especiales prefabricados cumplen **todo C.21.9** para muros en obra, además de C.21.4.2 y C.21.4.3 (conexiones que fluyen en acero o refuerzo y elementos de conexión que no fluyen con al menos $1.5S_y$) (<NormaRef s="C.21.10.2" pag="C-193" />). Se permiten muros prefabricados con **tendones postensados** que no cumplan C.21.10.1 si satisfacen **ACI ITG-5.1** (<NormaRef s="C.21.10.3" pag="C-193" />).
+
+## C.21.11 — Diafragmas y cerchas (DES)
+
+### C.21.11.1 a C.21.11.6 — Alcance, fuerzas, trayectoria y espesor
+
+- Aplica a losas de piso y cubierta que actúan como diafragmas, a elementos colectores y a cerchas del sistema sísmico (<NormaRef s="C.21.11.1" pag="C-193" />).
+- Las fuerzas de diseño salen del **Título A** con las combinaciones aplicables (<NormaRef s="C.21.11.2" pag="C-194" />).
+- Los diafragmas y sus conexiones transfieren **todas** las fuerzas a los colectores y a los elementos verticales (<NormaRef s="C.21.11.3.1" pag="C-194" />); los elementos del diafragma sometidos principalmente a fuerza axial (alrededor de aberturas o discontinuidades) cumplen C.21.11.7.5 y C.21.11.7.6 (<NormaRef s="C.21.11.3.2" pag="C-194" />).
+- Un **afinado compuesto** en sitio sobre piso prefabricado puede actuar como diafragma si está reforzado y la superficie previa está limpia, libre de lechada y **intencionalmente rugosa** (<NormaRef s="C.21.11.4" pag="C-194" />). Un afinado **no compuesto** sirve como diafragma si por sí mismo resiste y se detalla para las fuerzas sísmicas (<NormaRef s="C.21.11.5" pag="C-194" />).
+- **Espesor mínimo:** 50 mm para losas y afinados compuestos; **65 mm** para afinados sobre prefabricado que no dependen de la acción compuesta (<NormaRef s="C.21.11.6" pag="C-194" />).
+
+### C.21.11.7 — Refuerzo
+
+- Cuantía mínima según C.7.12; salvo losas postensadas, separación en ambos sentidos $\le$ **450 mm**. En afinados con malla electrosoldada sobre prefabricados, los alambres paralelos a los elementos prefabricados se espacian a **no menos de 250 mm**. El refuerzo de cortante es continuo y se distribuye uniformemente (<NormaRef s="C.21.11.7.1" pag="C-194" />).
+- Tendones adheridos usados como refuerzo de colectores, cortante o tracción por flexión: esfuerzo bajo las fuerzas de diseño $\le$ **420 MPa**; la precompresión de tendones no adheridos puede resistir fuerzas de diafragma si hay trayectoria para la carga sísmica (<NormaRef s="C.21.11.7.2" pag="C-194" />).
+- Todo refuerzo de colectores, cortante o tracción por flexión se desarrolla o traslapa para $f_y$ (<NormaRef s="C.21.11.7.3" pag="C-194" />). Empalmes mecánicos entre diafragma y elementos verticales: **Tipo 2** (<NormaRef s="C.21.11.7.4" pag="C-194" />).
+- **Colectores** con compresión mayor que **0.2 $f'_c$** llevan refuerzo transversal como C.21.9.6.4(c); se puede suspender donde la compresión sea menor que **0.15 $f'_c$**. Si las fuerzas se amplificaron por sobrerresistencia, los límites suben a **0.5 $f'_c$** y **0.4 $f'_c$** (<NormaRef s="C.21.11.7.5" pag="C-195" />).
+- En empalmes y anclajes de colectores: (a) separación entre barras $\ge$ **3 $d_b$** y $\ge$ 40 mm, con recubrimiento libre $\ge$ **2.5 $d_b$** y $\ge$ 50 mm; o (b) refuerzo transversal según C.11.4.6.3 (<NormaRef s="C.21.11.7.6" pag="C-195" />).
+
+### C.21.11.8 a C.21.11.10 — Flexión, cortante y juntas
+
+- Flexión según C.10.2 y C.10.3, sin la distribución no lineal de esfuerzos de C.10.2.2 para vigas de gran altura, considerando las aberturas (<NormaRef s="C.21.11.8" pag="C-195" />).
+
+<Ecuacion num="C.21-13" titulo="Resistencia a cortante de diafragmas">
+
+$$
+V_n = A_{cv}\left(0.17\,\lambda\sqrt{f'_c} + \rho_t\,f_y\right)
+$$
+
+En afinados colocados en sitio sobre prefabricado, $A_{cv}$ usa solo el espesor del afinado si es **no compuesto**, y el espesor combinado del prefabricado y el afinado si es **compuesto**; en este último caso $f'_c$ no excede el menor entre el de los prefabricados y el del afinado. Además $V_n \le 0.66\,A_{cv}\sqrt{f'_c}$ (<NormaRef s="C.21.11.9.1" pag="C-195" /> y <NormaRef s="C.21.11.9.2" pag="C-195" />).
+
+</Ecuacion>
+
+<Ecuacion num="C.21-14" titulo="Cortante por fricción sobre juntas de elementos prefabricados">
+
+$$
+V_n = A_{vf}\,f_y\,\mu
+$$
+
+Sobre las juntas entre prefabricados en diafragmas no compuestos o con afinado compuesto; $A_{vf}$ es el área total del refuerzo de cortante por fricción dentro del afinado (distribuido y de borde) perpendicular a las juntas, y $\mu = 1.0\lambda$ con $\lambda$ de C.11.7.4.3. Al menos la **mitad** de $A_{vf}$ se distribuye uniformemente a lo largo del plano de cortante, y el refuerzo de distribución del afinado cumple C.7.12.2.1 en cada dirección (<NormaRef s="C.21.11.9.3" pag="C-195" />). Sobre esas juntas $V_n$ no excede los límites de C.11.6.5 con $A_c$ calculada solo con el espesor del afinado (<NormaRef s="C.21.11.9.4" pag="C-195" />).
+
+</Ecuacion>
+
+- Las juntas de construcción cumplen C.6.4 y su superficie se hace rugosa (C.11.6.9) (<NormaRef s="C.21.11.10" pag="C-195" />).
+
+### C.21.11.11 — Cerchas estructurales
+
+Los elementos de cerchas con compresión mayor que **0.2 $f'_c$** en cualquier sección llevan refuerzo transversal como se exige en C.21.6.4.2 a C.21.6.4.4 y C.21.6.4.7 (<NormaRef s="C.21.11.11.1" pag="C-196" />). Todo refuerzo continuo de las cerchas se desarrolla y empalma para $f_y$ en tracción (<NormaRef s="C.21.11.11.2" pag="C-196" />).
+
+<Ejemplo numero={7} titulo="Cortante de un diafragma de losa maciza">
+
+Diafragma de losa de {ej7.esp} mm de espesor ($\ge$ 50 mm ✓) y {ej7.L/1000} m de longitud en la dirección del cortante, $f'_c$ = {ej7.fc} MPa, malla con $\rho_t$ = {ej7.rhoT} y $f_y$ = {ej7.fy} MPa. Datos hipotéticos del autor.
+
+<Paso titulo="Área de cortante" ref="C.21.11.9.1">
+$A_{cv}$ = {ej7.esp} × {ej7.L.toLocaleString('en-US')} = {ej7.Acv.toLocaleString('en-US')} mm².
+</Paso>
+<Paso titulo="Resistencia nominal" ref="Ec. C.21-13, C.21.11.9.2">
+$V_n = A_{cv}(0.17\sqrt{f'_c} + \rho_t f_y)$ = {ej7.d.vn.toFixed(0)} kN. Tope $0.66A_{cv}\sqrt{f'_c}$ = {ej7.d.tope.toFixed(0)} kN: {ej7.d.gobiernaTope ? 'gobierna el tope' : 'no gobierna'}.
+</Paso>
+<Paso titulo="Junta entre prefabricados (si la hubiera)" ref="Ec. C.21-14">
+Con $A_{vf}$ = {ej7.Avf} mm² perpendicular a la junta y $\mu$ = 1.0: $V_n = A_{vf}f_y\mu$ = {ej7.junta.toFixed(0)} kN.
+</Paso>
+<Resultado>
+$V_n$ = {ej7.d.vn.toFixed(0)} kN en el diafragma monolítico; en una junta entre prefabricados con {ej7.Avf} mm² de refuerzo transversal a ella, $V_n$ = {ej7.junta.toFixed(0)} kN.
+</Resultado>
+</Ejemplo>
+
+## C.21.12 — Cimentaciones (DES)
+
+### C.21.12.1 a C.21.12.2 — Alcance, zapatas, losas y cabezales de pilotes
+
+Las cimentaciones que resisten o transfieren fuerzas sísmicas cumplen C.21.12 y los demás requisitos aplicables del Título H y del Capítulo C.15 (<NormaRef s="C.21.12.1.1" pag="C-196" />).
+
+- El refuerzo longitudinal de columnas y muros que resisten sismo se prolonga dentro de la zapata, losa o cabezal y se **desarrolla totalmente en tracción en la interfaz** (<NormaRef s="C.21.12.2.1" pag="C-196" />). Las columnas supuestas **empotradas** en la cimentación llevan, si requieren ganchos, ganchos de 90° cerca del fondo con el extremo libre hacia el centro de la columna (<NormaRef s="C.21.12.2.2" pag="C-196" />).
+- Columnas o elementos de borde de muros con un borde a una distancia de la mitad de la profundidad de la zapata o menos: refuerzo transversal de C.21.6.4.2 a C.21.6.4.4 bajo la parte superior de la zapata, extendido dentro de ella y desarrollando $f_y$ del refuerzo longitudinal en tracción (<NormaRef s="C.21.12.2.3" pag="C-196" />).
+- Si el sismo produce **levantamiento** en bordes de muros o columnas, hay refuerzo de flexión en la parte superior de la zapata, no menor que el de C.10.5 (<NormaRef s="C.21.12.2.4" pag="C-196" />). Para concreto simple véase C.21.12.2.5 y C.22.10.
+
+### C.21.12.3 — Vigas y losas sobre el terreno
+
+- Vigas de amarre horizontal entre zapatas o cabezales: refuerzo longitudinal **continuo**, desarrollado dentro o más allá de la columna o anclado en la zapata en todas las discontinuidades (<NormaRef s="C.21.12.3.1" pag="C-196" />).
+- Vigas que acoplan zapatas o cabezales: menor dimensión transversal $\ge$ **luz libre entre columnas / 20**, sin necesidad de pasar de **450 mm**; estribos cerrados con separación $\le$ la menor entre la **mitad** de la menor dimensión transversal y **300 mm** (<NormaRef s="C.21.12.3.2" pag="C-196" />).
+- Vigas sobre el terreno o de una losa de cimentación sometidas a flexión por columnas del sistema sísmico cumplen **C.21.5** (<NormaRef s="C.21.12.3.3" pag="C-197" />).
+- Las losas sobre el terreno que reciben fuerzas sísmicas de muros o columnas se diseñan como **diafragmas** (C.21.11) y los planos deben indicar que son diafragma estructural y parte del sistema sísmico (<NormaRef s="C.21.12.3.4" pag="C-197" />).
+
+### C.21.12.4 — Pilotes, pilas y cajones de cimentación
+
+- Los que resisten tracción llevan refuerzo longitudinal **continuo** en la zona traccionada, detallado para transferir las fuerzas desde el cabezal (<NormaRef s="C.21.12.4.2" pag="C-197" />). Si la tracción pasa por barras con mortero inyectado o postinstaladas en un pilote prefabricado, se demuestra con ensayos que el sistema desarrolla al menos **1.25 $f_y$** (<NormaRef s="C.21.12.4.3" pag="C-197" />).
+- **Refuerzo transversal** de C.21.6.4.2 en (a) la parte superior, por al menos **5 veces** la dimensión transversal y no menos de **1.8 m** bajo el cabezal; (b) en suelos sin soporte lateral, en aire o agua, a lo largo de todo el tramo sin soporte más la longitud de (a) (<NormaRef s="C.21.12.4.4" pag="C-197" />). En pilotes prefabricados hincados, la longitud reforzada cubre las variaciones de profundidad de la punta (<NormaRef s="C.21.12.4.5" pag="C-197" />).
+- Pilotes, pilas o cajones de **una o dos plantas con muros de carga de aporticamiento ligero** están exentos de ese refuerzo transversal (<NormaRef s="C.21.12.4.6" pag="C-197" />).
+- Cabezales con **pilotes inclinados** resisten la totalidad de la resistencia a compresión de éstos como columnas cortas, considerando la esbeltez en la parte sin soporte lateral (<NormaRef s="C.21.12.4.7" pag="C-197" />).
+
+## C.21.13 — Elementos no designados como parte del sistema sísmico
+
+<Callout tipo="atencion" titulo="Solo para rehabilitaciones">
+Los requisitos de C.21.13 **no pueden emplearse en el diseño de edificaciones nuevas**; solo sirven para rehabilitaciones sísmicas de estructuras cuyo diseño original usó el «subterfugio» de elementos de pórtico no designados como parte del sistema sísmico en estructuras DES (<NormaRef s="C.21.13.1" pag="C-197" />).
+</Callout>
+
+Cuando existan, esos elementos se detallan según la magnitud de los momentos y cortantes que les imponga el **desplazamiento de diseño $\delta_u$** (<NormaRef s="C.21.13.2" pag="C-198" />):
+
+<TablaNorma numero="C.21.13.3 y C.21.13.4" titulo="Detallado de elementos no designados según la demanda de δu" pag="C-198" nota="Organización de la tabla: del autor, a partir de los numerales citados.">
+
+| Caso | Requisitos | Numeral |
+|---|---|---|
+| Efectos de $\delta_u$ + gravedad **no exceden** $\phi M_n$ ni $\phi V_n$; $P_u$ gravitacional $\le A_g f'_c/10$ | C.21.5.2.1; estribos a menos de $d/2$ en toda la longitud | C.21.13.3.1 |
+| Igual, pero $P_u > A_g f'_c/10$ | C.21.6.3.1, C.21.6.4.2 y C.21.6.5; estribos cerrados con separación $s_o$ en toda la longitud, $s_o \le$ menor de 6 $d_b$ y 150 mm | C.21.13.3.2 |
+| Igual, pero $P_u > 0.35P_o$ | Además C.21.6.4.7; refuerzo transversal **la mitad** del requerido por C.21.6.4.4, sin exceder $s_o$ en toda la altura | C.21.13.3.3 |
+| $\delta_u$ **excede** $\phi M_n$ o $\phi V_n$, o no se calcularon los momentos: materiales | C.21.1.4.2, C.21.1.4.3, C.21.1.5.2, C.21.1.5.4, C.21.1.5.5; empalmes C.21.1.6 y C.21.1.7.1 | C.21.13.4.1 |
+| ídem, $P_u < A_g f'_c/10$ | C.21.5.2.1 y C.21.5.4; estribos a $\le d/2$ | C.21.13.4.2 |
+| ídem, $P_u > A_g f'_c/10$ | C.21.6.3, C.21.6.4, C.21.6.5 y C.21.7.3.1 | C.21.13.4.3 |
+
+</TablaNorma>
+
+Para la comparación con gravedad se usa la más crítica entre $1.2D + 1.0L$ y $0.9D$; $L$ puede reducirse a 0.5 salvo garajes, lugares de reunión pública y áreas con $L > 4.8$ kN/m² (<NormaRef s="C.21.13.3" pag="C-198" />).
+
+- **Prefabricados** que se suponen sin aporte lateral, y sus conexiones: estribos de C.21.13.3.2 en toda la longitud de la columna **incluida la altura de las vigas**; refuerzo de **integridad estructural** (C.16.5); y longitud de apoyo de las vigas al menos **50 mm mayor** que la calculada con los valores de aplastamiento de C.10.14 (<NormaRef s="C.21.13.5" pag="C-198" />).
+- **Losas en dos direcciones sin vigas:** el refuerzo de cortante de la losa que cumple C.11.12.3 y da $V_s \ge 0.29\sqrt{f'_c}\,b_o d$ se extiende al menos **4 veces el espesor** de la losa desde la cara del apoyo, salvo que se cumpla (a) C.11.11.7 con el cortante de diseño y el momento inducido al desplazamiento de diseño, o (b) la deriva de piso de diseño no exceda el mayor entre **0.005** y $[0.35 - 0.05(V_{ug}/\phi V_c)]$ (<NormaRef s="C.21.13.6" pag="C-198" />). $V_{ug}$ es el cortante mayorado en la sección crítica de la losa calculado con $1.2D + 1.0L + 0.2S$ (con $L$ reducible a 0.5 salvo estacionamientos, reunión pública y $L > 4.8$ kN/m²).
+
+## Erratas y anomalías del PDF (verificadas contra la imagen)
+
+<Detalle titulo="Lista de erratas y referencias cruzadas dudosas detectadas en el Capítulo C.21">
+
+- **C.21.5.2.2 (C-182):** dice que el momento en cualquier sección «debe ser menor a un cuarto» del máximo; por el equivalente de DMO se entiende «**no debe ser menor**».
+- **C.21.9.4.1 (C-190):** dice « $V_u$ de muros estructurales no debe exceder: $V_n = \dots$ ». Debe leerse que $\phi V_n \ge V_u$ (el cortante de diseño se compara con la resistencia reducida).
+- **C.21.8.2(b) (C-189):** remite a «C.21.2.6», numeral que no existe en C.21.2 (que solo llega a C.21.2.4); por contexto se refiere a C.21.1.6 (empalmes mecánicos).
+- **C.21.9.6.4(d) (C-192):** remite a $\ell_d$ «de acuerdo con C.21.9.2.3», pero ese numeral trata las dos capas de refuerzo; el desarrollo de barras se define en C.21.9.2.4 y C.21.7.5.
+- **C.21.9.6.4(c) (C-192):** dice que el límite de separación de C.21.6.4.3(a) «debe ser de al menos un tercio de la dimensión menor del elemento de borde»; en esta guía se toma como $s \le$ un tercio de esa dimensión (es un tope, no un mínimo).
+- **C.21.13.6(b) (C-199):** la desigualdad usa $V_u/\phi V_c$ pero el texto define $V_{ug}$; se interpreta que ambos son el cortante mayorado de la losa.
+- **C.21.1.5.2 (C-176):** los literales (a) y (b) (fluencia real y relación de tracción) no van precedidos de una condición («siempre que…») que diga a qué acero se aplican; véase la nota en la primera parte.
+- **Referencias sin prefijo «C.»:** C.21.3.6.2 y C.21.6.2.2 citan «8.12»; C.21.6.4.4 cita «21.6.5»; C.21.9.2.1 cita «14.3»; C.21.9.7.1 cita «21.5». Corresponden a C.8.12, C.21.6.5, C.14.3 y C.21.5.
+- **Símbolos:** en el texto extraído, $\ell_d$ y $\ell_o$ aparecen como «Ad» y «Ao»; en la imagen se leen correctamente como $\ell_d$ y $\ell_o$.
+- **Numeración de ecuaciones:** difiere de otras ediciones (p. ej., Ec. C.21-4 = columna fuerte–viga débil; Ecs. C.21-7 y C.21-8 = Ash de DES). Se respetó la del PDF.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Fallas frecuentes en nudos, muros y diafragmas">
+- **Suponer que cualquier viga confina el nudo.** Una cara se considera confinada solo si el elemento la cubre al menos en **3/4**; vigas angostas dejan el nudo en «otros casos» ($1.0\sqrt{f'_c}A_j$).
+- **Ignorar la regla 20 $d_b$ de la columna.** Con barras No. 8 en la viga, una columna de 500 mm ya no cumple (508 mm).
+- **Usar la profundidad del eje neutro de un análisis elástico** en la Ec. C.21-11. Debe corresponder a la resistencia nominal congruente con el **desplazamiento de diseño** $\delta_u$.
+- **Tomar $\delta_u/h_w$ menor que 0.007** (0.0035 en DMO): la norma fija ese piso aunque el análisis dé menos.
+- **Olvidar $h_w/\ell_w$ del segmento** en la Ec. C.21-10: se toma el mayor entre el muro completo y el segmento.
+- **Dejar un solo plano de refuerzo** en un muro con $V_u > 0.17A_{cv}\lambda\sqrt{f'_c}$.
+- **Aplicar C.21.13** en un edificio nuevo, o **omitir los $\phi$** de C.9.3.4 (0.60 de cortante, 0.85 en nudos y vigas de acople).
+- **No indicar en planos que la losa sobre el terreno es diafragma** cuando recibe fuerzas sísmicas (C.21.12.3.4).
+</Callout>
+
+## Resumen en una línea
+
+Nudos que resisten $V_n \le 1.7\sqrt{f'_c}A_j$ con barras ancladas a 1.25 $f_y$, muros cuyo cortante sale de $A_{cv}(\alpha_c\lambda\sqrt{f'_c} + \rho_t f_y)$ y cuyos bordes se confinan cuando $c \ge \ell_w/[600(\delta_u/h_w)]$, diafragmas y cimentaciones con trayectoria continua de fuerzas, y C.21.13 solo para rehabilitaciones.

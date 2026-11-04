@@ -1,0 +1,322 @@
+---
+codigo: 'C.4'
+tipo: capitulo
+titulo: 'Requisitos de durabilidad'
+resumen: 'Cómo el diseñador asigna clases de exposición (congelamiento, sulfatos, baja permeabilidad, corrosión del refuerzo) y qué relación agua-material cementante máxima, f′c mínimo, aire incorporado, tipo de cemento y límite de cloruros exige la norma para cada clase.'
+objetivos:
+  - 'Asignar las clases de exposición F, S, P y C a un elemento según su ambiente'
+  - 'Leer la Tabla C.4.3.1 y combinar clases tomando el requisito más restrictivo'
+  - 'Obtener la relación a/mc máxima, el f′c mínimo y los tipos de cemento para sulfatos'
+  - 'Fijar el aire incorporado y los límites de puzolanas para congelamiento y deshielo'
+  - 'Calcular y comparar el contenido de cloruros con los límites de C0, C1 y C2'
+paginasNorma: 'C-35 a C-38'
+paginaPdf: 337
+orden: 4
+calculadoras: ['recubrimiento-durabilidad']
+nivel: 'intermedio'
+---
+
+import { claseSulfato, requisitosExposicion, fcDeDiseno, verificarMezcla, contenidoAire, verificarLimitesF3, cumpleExpansionSulfatos } from '../../lib/nsr10/durabilidad';
+
+export const ej1 = (() => {
+  const so4 = 0.35; // % en peso, suelo
+  const claseS = claseSulfato(so4);
+  const req = requisitosExposicion([claseS, 'C1']);
+  const fcEst = 28;
+  const d = fcDeDiseno(fcEst, req.fcMin);
+  const malo = verificarMezcla(req, 0.48, 30);
+  const bueno = verificarMezcla(req, 0.44, d.fc);
+  return { so4, claseS, req, fcEst, d, malo, bueno };
+})();
+
+export const ej2 = (() => {
+  const req = requisitosExposicion(['C2', 'S1']);
+  const fcEst = 28;
+  const d = fcDeDiseno(fcEst, req.fcMin);
+  const ok = verificarMezcla(req, 0.4, d.fc);
+  const no = verificarMezcla(req, 0.42, d.fc);
+  return { req, fcEst, d, ok, no };
+})();
+
+export const ej3 = (() => {
+  const aireF2 = contenidoAire(19, 'F2');
+  const aireF2alto = contenidoAire(19, 'F2', 40, true);
+  const f3 = verificarLimitesF3({ cemento: 300, ceniza: 80, escoria: 100 });
+  const f3malo = verificarLimitesF3({ cemento: 300, ceniza: 120, escoria: 80, humoSilice: 20 });
+  return { aireF2, aireF2alto, f3, f3malo };
+})();
+
+export const exp1 = cumpleExpansionSulfatos('S2', { seis: 0.07, doce: 0.09 });
+
+## Idea central del capítulo
+
+Un concreto puede tener resistencia más que suficiente a los 28 días y aun así **deteriorarse** en 15 años: por sulfatos del suelo, por cloruros del mar o de sales descongelantes que corroen el acero, por ciclos de congelamiento y deshielo o por ser demasiado permeable. El Capítulo C.4 traduce el **ambiente** del elemento en **exigencias para la mezcla**:
+
+1. El diseñador **asigna una clase de exposición** por cada categoría (F, S, P, C) según la severidad esperada (<NormaRef s="C.4.2.1" pag="C-35" />).
+2. Cada clase impone, en la Tabla C.4.3.1, una **relación agua-material cementante (a/mc) máxima**, un **$f'_c$ mínimo** y requisitos adicionales (aire, tipo de cemento, cloruros).
+3. Cuando un elemento tiene **varias clases**, se cumple el **requisito más restrictivo** de cada columna (<NormaRef s="C.4.3.1" pag="C-36" />).
+4. El $f'_c$ de diseño es **el mayor** entre el estructural, el de durabilidad y el mínimo general de 17 MPa (<NormaRef s="C.4.1.1" pag="C-35" />).
+
+<Callout tipo="importante" titulo="La durabilidad puede mandar sobre la resistencia">
+Un elemento enterrado en un suelo con sulfatos severos (S2) necesita $f'_c \ge$ **31 MPa** y a/mc ≤ **0.45** aunque el cálculo estructural pida 21 MPa. La a/mc se controla en la dosificación; no se verifica en obra con cilindros, así que **documenta la dosificación**.
+</Callout>
+
+## C.4.1 — Generalidades
+
+### C.4.1.1 — $f'_c$ y relación a/mc
+
+El valor de $f'_c$ debe ser **el mayor** de los requeridos (a) por C.1.1.1, (b) por durabilidad en C.4, y (c) por resistencia estructural; y es el que se usa en la dosificación (C.5.3) y en la evaluación y aceptación del concreto (C.5.6). Las mezclas se dosifican para cumplir la **a/mc máxima** y los demás requisitos de la clase de exposición. **Todos los materiales cementantes** de C.3.2.1 (cemento, ceniza, escoria, humo de sílice, etc.) y sus combinaciones **entran en el cálculo de a/mc** (<NormaRef s="C.4.1.1" pag="C-35" />).
+
+### C.4.1.2 — Concreto liviano
+
+Los límites máximos de a/mc de C.4 **no se aplican al concreto de peso liviano** (<NormaRef s="C.4.1.2" pag="C-35" />). Sí se le aplican el $f'_c$ mínimo y los demás requisitos (aire, cloruros, etc.).
+
+## C.4.2 — Categorías y clases de exposición
+
+El profesional facultado para diseñar **asigna** las clases según la severidad de la exposición anticipada de cada elemento y de cada categoría (<NormaRef s="C.4.2.1" pag="C-35" />). Hay **cuatro categorías**: **F** (congelamiento y deshielo), **S** (sulfatos), **P** (requiere baja permeabilidad) y **C** (protección del refuerzo contra la corrosión). Un mismo elemento puede tener una clase de cada categoría.
+
+<TablaNorma numero="Tabla C.4.2.1" titulo="Categorías y clases de exposición" pag="C-35" nota="Transcrita de la imagen de la página. En el PDF la columna de sulfatos está cortada en el borde de la celda (S1 y S2): los límites 0.20 % y 2.00 % se completan a partir de la secuencia de la tabla (ver erratas al final de la sección C.4.3).">
+
+| Clase | Categoría | Severidad | Condición |
+|---|---|---|---|
+| F0 | F — Congelamiento y deshielo | No es aplicable | Concreto no expuesto a ciclos de congelamiento y deshielo |
+| F1 | F — Congelamiento y deshielo | Moderada | Concreto expuesto a ciclos de congelamiento y deshielo y exposición ocasional a la humedad |
+| F2 | F — Congelamiento y deshielo | Severa | Concreto expuesto a ciclos de congelamiento y deshielo y en contacto continuo con la humedad |
+| F3 | F — Congelamiento y deshielo | Muy severa | Concreto expuesto a ciclos de congelamiento y deshielo que estará en contacto continuo con la humedad y expuesto a productos químicos descongelantes |
+| S0 | S — Sulfato | No es aplicable | SO₄ soluble en agua en el suelo &lt; 0.10 % en peso; SO₄ disuelto en agua &lt; 150 ppm |
+| S1 | S — Sulfato | Moderada | Suelo: 0.10 % ≤ SO₄ &lt; 0.20 %; agua: 150 ≤ SO₄ &lt; 1500 ppm (la norma anota «agua marina») |
+| S2 | S — Sulfato | Severa | Suelo: 0.20 % ≤ SO₄ ≤ 2.00 %; agua: 1500 ≤ SO₄ ≤ 10 000 ppm |
+| S3 | S — Sulfato | Muy severa | Suelo: SO₄ > 2.00 %; agua: SO₄ > 10 000 ppm |
+| P0 | P — Requiere baja permeabilidad | No es aplicable | En contacto con el agua donde no se requiere baja permeabilidad |
+| P1 | P — Requiere baja permeabilidad | Requerida | En contacto con el agua donde se requiera baja permeabilidad |
+| C0 | C — Protección del refuerzo para la corrosión | No es aplicable | Concreto seco o protegido contra la humedad |
+| C1 | C — Protección del refuerzo para la corrosión | Moderada | Concreto expuesto a la humedad, pero no a una fuente externa de cloruros |
+| C2 | C — Protección del refuerzo para la corrosión | Severa | Concreto expuesto a la humedad y a una fuente externa de cloruros provenientes de productos químicos descongelantes, sal, agua salobre, agua de mar o salpicaduras del mismo origen |
+
+</TablaNorma>
+
+<Detalle titulo="Ver la tabla original (imagen de la norma)">
+
+<Figura src="/img/titulo-c/tabla-c4-2-1-clases-exposicion.png" alt="Tabla C.4.2.1 de la NSR-10: categorías y clases de exposición F, S, P y C" numero="Tabla C.4.2.1" pie="Recorte de la página del PDF. Obsérvese que las celdas de sulfato en el suelo (S1, S2) aparecen truncadas en el original." pag="C-35" />
+
+</Detalle>
+
+<Callout tipo="practica" titulo="Cómo escoger la clase (criterio del autor)">
+- **F:** en Colombia solo importa en zonas de alta montaña, páramo y nevados con ciclos de congelamiento; en la mayor parte del país es **F0**.
+- **S:** pide un ensayo de sulfatos del suelo o del agua freática (estudio geotécnico). Con el resultado, la clase sale de los rangos de la tabla.
+- **P:** tanques, cisternas, piscinas, muros en contacto permanente con agua cuando la estanqueidad es un requisito de servicio.
+- **C:** **C0** interiores secos; **C1** exteriores o interiores húmedos sin cloruros; **C2** ambientes marinos, salpicaduras de mar o sales (puentes, muelles, parqueaderos con sales). En costa suele ser C2 en elementos expuestos a salpicaduras y C1 en el resto.
+</Callout>
+
+## C.4.3 — Requisitos para mezclas de concreto
+
+Con las clases asignadas, la mezcla debe cumplir los **requisitos más restrictivos** de la Tabla C.4.3.1 (<NormaRef s="C.4.3.1" pag="C-36" />). La tabla original es una sola, de 13 filas y varias columnas distintas según la categoría; aquí se presenta **por categorías** sin omitir ninguna fila.
+
+<TablaNorma numero="Tabla C.4.3.1 (categoría F)" titulo="Congelamiento y deshielo: a/mc, f′c mínimo, aire y límites de cementantes" pag="C-36" nota="N/A = no aplica. «Tabla C.4.4.1» y «Tabla C.4.4.2» son las que aparecen más abajo en este capítulo.">
+
+| Clase | a/mc máx. | f′c mín. (MPa) | Contenido de aire | Límites en los cementantes |
+|---|---|---:|---|---|
+| F0 | N/A | 17 | N/A | N/A |
+| F1 | 0.45 | 31 | Tabla C.4.4.1 | N/A |
+| F2 | 0.45 | 31 | Tabla C.4.4.1 | N/A |
+| F3 | 0.45 | 31 | Tabla C.4.4.1 | Tabla C.4.4.2 |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla C.4.3.1 (categoría S)" titulo="Sulfatos: a/mc, f′c mínimo, tipos de material cementante y cloruro de calcio" pag="C-36" nota="Marcadores †, ‡ y § remiten a las notas al pie de la tabla (más abajo). Los tipos de cemento son los de ASTM C150, ASTM C595 y ASTM C1157; IP, IS, MS y HS son designaciones de esas normas.">
+
+| Clase | a/mc máx. | f′c mín. (MPa) | Cemento ASTM C150 | Cementos ASTM C595 | Cementos ASTM C1157 | Aditivo cloruro de calcio |
+|---|---|---:|---|---|---|---|
+| S0 | N/A | 17 | Sin restricción en el tipo | Sin restricción en el tipo | Sin restricción en el tipo | Sin restricción |
+| S1 | 0.50 | 28 | II †‡ | IP(MS), IS(&lt;70)(MS) | MS | Sin restricción |
+| S2 | 0.45 | 31 | V ‡ | IP(HS), IS(&lt;70)(HS) | HS | No se permite |
+| S3 | 0.45 | 31 | V + puzolanas o escoria § | IP(HS) + puzolanas o escoria §, o IS(&lt;70)(HS) + puzolanas o escoria § | HS + puzolanas o escoria § | No se permite |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla C.4.3.1 (categoría P)" titulo="Baja permeabilidad: a/mc y f′c mínimo" pag="C-36" nota="Requisitos mínimos adicionales: «Ninguna».">
+
+| Clase | a/mc máx. | f′c mín. (MPa) | Requisitos adicionales |
+|---|---|---:|---|
+| P0 | N/A | 17 | Ninguna |
+| P1 | 0.50 | 28 | Ninguna |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla C.4.3.1 (categoría C)" titulo="Protección del refuerzo: a/mc, f′c mínimo y cloruros solubles en agua" pag="C-36" nota="Contenido máximo de ion cloruro (Cl⁻) soluble en agua en el concreto, en porcentaje por peso de cemento (nota ‼). #: se deben cumplir los requisitos de C.7.7.5; véase C.18.16 para tendones de preesfuerzo no adheridos.">
+
+| Clase | a/mc máx. | f′c mín. (MPa) | Cl⁻ concreto reforzado (%) | Cl⁻ concreto preesforzado (%) | Requisitos relacionados |
+|---|---|---:|---:|---:|---|
+| C0 | N/A | 17 | 1.00 | 0.06 | Ninguno |
+| C1 | 0.50 | 17 | 0.30 | 0.06 | Ninguno |
+| C2 | 0.40 | 35 | 0.15 | 0.06 | 7.7.6, 18.16 # |
+
+</TablaNorma>
+
+<Detalle titulo="Notas al pie de la Tabla C.4.3.1">
+
+- **\* Combinaciones alternativas:** se pueden permitir combinaciones de materiales cementantes distintas de las de la tabla si se ensayan para comprobar la resistencia a los sulfatos y cumplen los criterios de C.4.5.1.
+- **† Agua marina:** se permiten otros tipos de cemento pórtland con contenidos de hasta **10 % de aluminato tricálcico (C₃A)** si la relación a/mc no excede **0.40**.
+- **‡ Cementos tipo III o tipo I:** se permiten en exposiciones S1 o S2 si el contenido de C₃A es menor de **8 % o 5 %**, respectivamente.
+- **§ Puzolana o escoria:** la cantidad de la fuente específica no debe ser inferior a la determinada por experiencia como mejora de la resistencia a sulfatos en concretos con cemento tipo V; alternativamente, no menor que la ensayada según NTC 3330 (ASTM C1012) cumpliendo C.4.5.1.
+- **‼ Cloruros:** el contenido de iones cloruro solubles en agua proveniente de **todos los ingredientes** (agua, agregados, materiales cementantes y aditivos) se determina según NTC 4049 (ASTM C1218M), a edades de **28 a 42 días**.
+- **\# Requisitos relacionados:** se deben cumplir los requisitos de C.7.7.5; véase C.18.16 para tendones no adheridos.
+- **± Concreto liviano:** véase C.4.1.2 (no aplican los límites de a/mc).
+
+</Detalle>
+
+<Detalle titulo="Ver la Tabla C.4.3.1 completa en su formato original">
+
+<Figura src="/img/titulo-c/tabla-c4-3-1-requisitos-exposicion.png" alt="Tabla C.4.3.1 de la NSR-10: requisitos para el concreto según la clase de exposición" numero="Tabla C.4.3.1" pie="Recorte de la página del PDF, para verificar la transcripción." pag="C-36" />
+
+</Detalle>
+
+<Callout tipo="atencion" titulo="Cómo combinar varias clases">
+La norma dice que se cumplen «los requisitos **más restrictivos**». En la práctica (interpretación del autor, coherente con la tabla): tomar la **menor** a/mc máxima, el **mayor** $f'_c$ mínimo, el **menor** límite de cloruros, la **más severa** clase de sulfatos para el tipo de cemento, y exigir aire si hay F1, F2 o F3. La calculadora de abajo hace exactamente eso con las funciones del repositorio (`requisitosExposicion`).
+</Callout>
+
+<Ejemplo numero={1} titulo="Zapata en suelo con sulfatos">
+
+Un estudio geotécnico encuentra **0.35 % de SO₄ soluble en agua** en el suelo de fundación de una zapata en concreto reforzado. El suelo está húmedo pero sin fuente externa de cloruros. El cálculo estructural pide $f'_c$ = {ej1.fcEst} MPa. ¿Qué exige C.4? (Datos hipotéticos del autor.)
+
+<Paso titulo="Clase de sulfato" ref="Tabla C.4.2.1">
+0.20 % ≤ 0.35 % ≤ 2.00 % → clase **{ej1.claseS}** (severidad severa).
+</Paso>
+<Paso titulo="Clase de protección del refuerzo" ref="Tabla C.4.2.1">
+Humedad sin cloruros externos → **C1**. Las demás categorías son F0 y P0 (no aplican).
+</Paso>
+<Paso titulo="Requisitos combinados" ref="Tabla C.4.3.1">
+a/mc máxima: **{ej1.req.aMcMax.toFixed(2)}** (gobierna {ej1.req.claseAMc}); $f'_c$ mínimo por durabilidad: **{ej1.req.fcMin} MPa**. Cemento: ASTM C150 tipo **V**, o ASTM C595 IP(HS) / IS(&lt;70)(HS), o ASTM C1157 **HS**. **No se permite cloruro de calcio**. Cloruros solubles máximos: {ej1.req.cloruroMaxReforzado} % del cemento (reforzado).
+</Paso>
+<Paso titulo="f′c de diseño" ref="C.4.1.1">
+Mayor entre estructural ({ej1.fcEst} MPa), durabilidad ({ej1.req.fcMin} MPa) y 17 MPa → **{ej1.d.fc} MPa** (gobierna {ej1.d.gobierna}).
+</Paso>
+<Paso titulo="Verificar dos mezclas candidatas" ref="C.4.3.1">
+Mezcla A: a/mc = 0.48 y $f'_c$ = 30 MPa → a/mc {ej1.malo.aMcOk ? 'cumple' : 'NO cumple'}, $f'_c$ {ej1.malo.fcOk ? 'cumple' : 'NO cumple'}. Mezcla B: a/mc = 0.44 y $f'_c$ = {ej1.d.fc} MPa → a/mc {ej1.bueno.aMcOk ? 'cumple' : 'NO cumple'}, $f'_c$ {ej1.bueno.fcOk ? 'cumple' : 'NO cumple'}.
+</Paso>
+<Resultado>
+Zapata clase S2 + C1: **$f'_c$ ≥ {ej1.d.fc} MPa, a/mc ≤ {ej1.req.aMcMax.toFixed(2)}, cemento tipo V (o HS / IP(HS)), sin CaCl₂**. La durabilidad sube el $f'_c$ de {ej1.fcEst} a {ej1.d.fc} MPa.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Pila en zona de salpicadura marina">
+
+Una pila de un muelle de concreto reforzado queda en la zona de salpicadura del mar (cloruros externos y agua marina). Diseño estructural con $f'_c$ = {ej2.fcEst} MPa. (Datos hipotéticos del autor.)
+
+<Paso titulo="Clases" ref="Tabla C.4.2.1">
+Humedad y fuente externa de cloruros del mar → **C2**. Agua marina → la Tabla C.4.2.1 la ubica en **S1** (150 ≤ SO₄ &lt; 1500 ppm, con la anotación «agua marina»). F0 (sin congelamiento) y P0 o P1 según el servicio.
+</Paso>
+<Paso titulo="Combinar" ref="Tabla C.4.3.1">
+a/mc máxima = **{ej2.req.aMcMax.toFixed(2)}** (C2); $f'_c$ mínimo = **{ej2.req.fcMin} MPa** (C2); cloruros máximos {ej2.req.cloruroMaxReforzado} % si es reforzado y {ej2.req.cloruroMaxPreesforzado} % si es preesforzado. Cemento para S1: tipo **II**, IP(MS), IS(&lt;70)(MS) o MS. La nota † permite otros pórtland con C₃A ≤ 10 % porque a/mc ≤ 0.40.
+</Paso>
+<Paso titulo="f′c de diseño" ref="C.4.1.1">
+Mayor entre {ej2.fcEst} y {ej2.req.fcMin} → **{ej2.d.fc} MPa**.
+</Paso>
+<Paso titulo="Verificar" ref="C.4.3.1">
+Una mezcla con a/mc = 0.40 {ej2.ok.aMcOk ? 'cumple' : 'NO cumple'}; con a/mc = 0.42 {ej2.no.aMcOk ? 'cumple' : 'NO cumple'}.
+</Paso>
+<Resultado>
+Pila C2 + S1: $f'_c$ ≥ {ej2.d.fc} MPa, a/mc ≤ {ej2.req.aMcMax.toFixed(2)}, Cl⁻ ≤ {ej2.req.cloruroMaxReforzado} %. Los recubrimientos del refuerzo se tratan en el Capítulo C.7 (C.7.7) y no los fija C.4.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="recubrimiento-durabilidad" />
+
+## C.4.4 — Requisitos adicionales para exposición a congelamiento y deshielo
+
+### C.4.4.1 — Aire incorporado
+
+El concreto de peso normal **y liviano** expuesto a F1, F2 o F3 debe tener **aire incorporado** con el contenido de la Tabla C.4.4.1. La **tolerancia es ±1.5 %**. Para $f'_c$ **mayor de 35 MPa** se puede reducir el aire de la tabla en **1 punto porcentual** (<NormaRef s="C.4.4.1" pag="C-37" />).
+
+<TablaNorma numero="Tabla C.4.4.1" titulo="Contenido total de aire para concreto expuesto a ciclos de congelamiento y deshielo" pag="C-37" nota="Tamaño máximo nominal del agregado (ver NTC 174 / ASTM C33). Los valores 50 y 75 mm llevan la marca +: estos contenidos de aire se aplican a la mezcla total; al ensayar se tamizan las partículas mayores de 40 mm y el aire se determina en la fracción tamizada (la tolerancia se aplica a ese valor), calculando el de la mezcla total según NTC 1032 (ASTM C231).">
+
+| Tamaño máx. nominal (mm) | Aire clase F1 (%) | Aire clases F2 y F3 (%) |
+|---:|---:|---:|
+| 9.5 | 6 | 7.5 |
+| 12.5 | 5.5 | 7 |
+| 19.0 | 5 | 6 |
+| 25.0 | 4.5 | 6 |
+| 37.5 | 4.5 | 5.5 |
+| 50+ | 4 | 5 |
+| 75+ | 3.5 | 4.5 |
+
+</TablaNorma>
+
+### C.4.4.2 — Límites de puzolanas y escoria en F3
+
+La cantidad de puzolanas (ceniza volante, humo de sílice) y escoria en concreto F3 no debe exceder la Tabla C.4.4.2 (<NormaRef s="C.4.4.2" pag="C-37" />).
+
+<TablaNorma numero="Tabla C.4.4.2" titulo="Requisitos para concreto sometido a clase de exposición F3" pag="C-37" nota="Porcentajes máximos sobre el total de materiales cementantes en peso. El total de materiales cementantes incluye también los cementos ASTM C150, ASTM C595, NTC 4578 (ASTM C845) y ASTM C1157; los porcentajes incluyen: (a) ceniza o puzolana presente en cementos adicionados tipo IP; (b) escoria de los cementos tipo IS; (c) humo de sílice presente en cementos adicionados. †: las cenizas volantes u otras puzolanas y el humo de sílice no deben constituir más de 25 % y 10 %, respectivamente, del peso total de materiales cementantes.">
+
+| Materiales cementantes | Porcentaje máximo |
+|---|---:|
+| Cenizas volantes u otras puzolanas que cumplen NTC 3493 (ASTM C618) | 25 |
+| Escoria que cumple NTC 4018 (ASTM C989) | 50 |
+| Humo de sílice que cumple NTC 4637 (ASTM C1240) | 10 |
+| Total de cenizas volantes u otras puzolanas, escoria y humo de sílice | 50 † |
+| Total de cenizas volantes u otras puzolanas y humo de sílice | 35 † |
+
+</TablaNorma>
+
+<Ejemplo numero={3} titulo="Aire incorporado y cementantes en concreto F2/F3">
+
+Un muro de contención en un páramo queda en contacto continuo con humedad y expuesto a ciclos de congelamiento (F2). Agregado de 19 mm. Además, se evalúa una mezcla para clase F3. (Datos hipotéticos del autor.)
+
+<Paso titulo="Aire para F2 con 19 mm" ref="Tabla C.4.4.1">
+Tabla: **{ej3.aireF2.tabla} %**, tolerancia ±1.5 → entre **{ej3.aireF2.minimo} %** y **{ej3.aireF2.maximo} %**.
+</Paso>
+<Paso titulo="Si f′c = 40 MPa (mayor de 35)" ref="C.4.4.1">
+Se puede reducir 1 punto: objetivo **{ej3.aireF2alto.objetivo} %**, entre {ej3.aireF2alto.minimo} % y {ej3.aireF2alto.maximo} %.
+</Paso>
+<Paso titulo="Mezcla A (F3): 300 kg cemento + 80 kg ceniza + 100 kg escoria" ref="Tabla C.4.4.2">
+Ceniza {ej3.f3.filas[0].pct.toFixed(1)} % (límite 25), escoria {ej3.f3.filas[1].pct.toFixed(1)} % (límite 50), total {ej3.f3.filas[3].pct.toFixed(1)} % (límite 50): **{ej3.f3.cumple ? 'cumple' : 'no cumple'}**.
+</Paso>
+<Paso titulo="Mezcla B (F3): 300 cemento + 120 ceniza + 80 escoria + 20 humo de sílice" ref="Tabla C.4.4.2">
+Ceniza {ej3.f3malo.filas[0].pct.toFixed(1)} % (límite 25), humo de sílice {ej3.f3malo.filas[2].pct.toFixed(1)} % (límite 10), total {ej3.f3malo.filas[3].pct.toFixed(1)} % (límite 50): **{ej3.f3malo.cumple ? 'cumple' : 'no cumple'}**. Falla por exceso de ceniza y del total de ceniza + humo de sílice ({ej3.f3malo.filas[4].pct.toFixed(1)} % frente a 35 %).
+</Paso>
+<Resultado>
+Aire objetivo F2 con 19 mm: {ej3.aireF2.tabla} % ± 1.5 (o {ej3.aireF2alto.objetivo} % ± 1.5 si $f'_c$ &gt; 35 MPa y se aplica la reducción). La mezcla A cumple F3; la B no.
+</Resultado>
+</Ejemplo>
+
+## C.4.5 — Materiales cementantes alternativos para exposición a sulfatos
+
+Se pueden usar **combinaciones de materiales cementantes distintas** de las de la Tabla C.4.3.1 si se hacen **ensayos de resistencia a los sulfatos** (NTC 3330 / ASTM C1012) y se cumplen los criterios de la Tabla C.4.5.1 (<NormaRef s="C.4.5.1" pag="C-37" />).
+
+<TablaNorma numero="Tabla C.4.5.1" titulo="Requisitos para establecer la conveniencia de las combinaciones de materiales cementantes expuestos a sulfatos solubles en agua" pag="C-38" nota="Expansión máxima al ser ensayada usando NTC 3330 (ASTM C1012). *: el límite de expansión a los 12 meses solo se aplica cuando el límite a los 6 meses no es alcanzado. Las celdas vacías significan que no hay límite en esa edad.">
+
+| Clase de exposición | A 6 meses | A 12 meses | A 18 meses |
+|---|---|---|---|
+| S1 | 0.10 por ciento | — | — |
+| S2 | 0.05 por ciento | 0.10 por ciento * | — |
+| S3 | — | — | 0.10 por ciento |
+
+</TablaNorma>
+
+Ejemplo rápido (del autor): una combinación para S2 que da 0.07 % a los 6 meses y 0.09 % a los 12 meses **{exp1.cumple ? 'cumple' : 'no cumple'}** ({exp1.criterio}); si diera 0.11 % a los 12 meses no cumpliría.
+
+<Callout tipo="nota" titulo="Erratas y observaciones del PDF (verificadas contra la imagen)">
+- **Tabla C.4.2.1, sulfatos:** las celdas de S1 y S2 están **cortadas** en el borde de la columna del PDF (se lee «0.10 ≤ SO₄ &lt; 0», «150 ≤ SO₄ &lt; 1500» y «0.20 ≤ SO₄ ≤ 2»). Se completaron S1 «&lt; 0.20 %» y S2 «≤ 2.00 %» porque S2 comienza en 0.20 % y S3 es «&gt; 2.00 %»; la capa de texto del PDF también está cortada.
+- La Tabla C.4.2.1 asigna el **agua marina a S1**, aunque el agua de mar suele tener más de 1500 ppm de SO₄ (lo que numéricamente sería S2). El texto la trata así; ver la nota † de la Tabla C.4.3.1. Es una observación del autor.
+- **Tabla C.4.3.1, clase C2:** «Requisitos relacionados» cita «7.7.6, 18.16» (sin «C.»), mientras que la nota # remite a «C.7.7.5». Se transcribieron ambas tal cual.
+- El **encabezado** de la columna de cloruros dice «por peso de cemento», pero la nota ‼ habla de todos los ingredientes, incluidos los materiales cementantes. En los ejemplos se usa la masa de cemento (materiales cementantes) como base.
+- **C.4.5.1 (Tabla), nota \*:** «cuando el límite a los 6 meses no es alcanzado» es ambiguo; se interpreta como «cuando se supera» (así lo entiende el texto original ACI 318).
+- Tabla C.4.4.1: los tamaños 50 y 75 mm llevan un signo + que remite a la nota sobre tamizado de partículas mayores de 40 mm.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Diseñar solo por resistencia**: un $f'_c$ de 21 MPa no sirve en sulfatos S2 (31 MPa) ni en C2 (35 MPa).
+- **Olvidar combinar clases**: el requisito es el más restrictivo de **todas** las clases del elemento, no el de una sola.
+- **Usar cloruro de calcio** (acelerante) en sulfatos S2 y S3 o en concreto preesforzado: está prohibido o limitado.
+- **No sumar las fuentes de cloruro** (agua, agregados, cemento y aditivos): el límite es del conjunto de la mezcla (nota ‼), no solo del agua.
+- **Aplicar el límite de a/mc a concreto liviano**: C.4.1.2 lo excluye.
+- **Medir la a/mc con solo el cemento**: deben contarse todos los materiales cementantes, también la ceniza, la escoria y el humo de sílice (C.4.1.1).
+- **Olvidar el aire incorporado** en F1 a F3 (y su tolerancia de ±1.5 %), o sobrepasar el 25 % de ceniza y el 10 % de humo de sílice en F3.
+- **Confundir los recubrimientos con la durabilidad**: C.4 fija la mezcla; los recubrimientos mínimos están en C.7.7.
+</Callout>
+
+## Resumen en una línea
+
+**El ambiente fija la mezcla: se asigna una clase F, S, P y C a cada elemento, se toma el requisito más restrictivo de la Tabla C.4.3.1 (a/mc máxima 0.40 a 0.50, $f'_c$ mínimo 17 a 35 MPa, tipo de cemento, aire y cloruros) y el $f'_c$ de diseño es el mayor entre el estructural, el de durabilidad y 17 MPa.**

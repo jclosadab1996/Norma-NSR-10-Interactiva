@@ -1,0 +1,421 @@
+---
+codigo: 'C-F'
+tipo: apendice
+titulo: 'Equivalencia SI, mks e inglés de las ecuaciones no homogéneas'
+resumen: 'Tabla de las ecuaciones del Título C cuyos coeficientes cambian según el sistema de unidades (SI en MPa, mks en kgf/cm², inglés en psi), con la conversión de esfuerzos, ejemplos de uso y una verificación numérica de que las tres columnas son equivalentes salvo redondeo.'
+objetivos:
+  - 'Explicar por qué una ecuación «no homogénea» como 0.17λ√f′c·bw·d cambia de coeficiente al cambiar de unidades'
+  - 'Convertir esfuerzos entre MPa, kgf/cm² y psi con las equivalencias de la norma'
+  - 'Localizar en las ocho tablas la versión mks o inglesa de una ecuación del Título C'
+  - 'Comprobar que un resultado en un sistema coincide con el de otro, y reconocer las diferencias de redondeo'
+paginasNorma: 'C-251 a C-258'
+paginaPdf: 553
+orden: 29
+calculadoras: []
+nivel: 'basico'
+---
+
+import {
+  COEFICIENTES_C_F,
+  ESFUERZOS_REFERENCIA,
+  coeficienteEsperado,
+  desdeMpa,
+  desviacionRelativa,
+  nbEnSistema,
+  vcSimpleEnSistema,
+} from '../../lib/nsr10/equivalenciasC';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const fc = 28, bw = 300, d = 500;
+  return {
+    fc, bw, d,
+    fcMks: desdeMpa(fc, 'mks'),
+    fcIng: desdeMpa(fc, 'ing'),
+    si: vcSimpleEnSistema('si', fc, bw, d),
+    mks: vcSimpleEnSistema('mks', fc, bw, d),
+    ing: vcSimpleEnSistema('ing', fc, bw, d),
+  };
+})();
+
+export const ej2 = (() => {
+  const c = COEFICIENTES_C_F.find((x) => x.ref === 'C.11-3');
+  return {
+    esperadoMks: coeficienteEsperado(c, 'mks'),
+    esperadoIng: coeficienteEsperado(c, 'ing'),
+    dMks: desviacionRelativa(c, 'mks'),
+    dIng: desviacionRelativa(c, 'ing'),
+  };
+})();
+
+export const ej3 = (() => {
+  const fc = 28, hef = 200;
+  return {
+    si: nbEnSistema('si', fc, hef),
+    mks: nbEnSistema('mks', fc, hef),
+    ing: nbEnSistema('ing', fc, hef),
+  };
+})();
+
+export const resumenTabla = (() => {
+  const todas = COEFICIENTES_C_F.flatMap((c) => [Math.abs(desviacionRelativa(c, 'mks')), Math.abs(desviacionRelativa(c, 'ing'))]);
+  const ord = [...todas].sort((a, b) => a - b);
+  return { n: COEFICIENTES_C_F.length, max: ord[ord.length - 1], mediana: ord[Math.floor(ord.length / 2)] };
+})();
+
+## Idea central del apéndice
+
+La mayoría de las ecuaciones de resistencia del Título C **no son homogéneas**: llevan coeficientes numéricos con unidades escondidas. En $V_c = 0.17\lambda\sqrt{f'_c}\,b_w d$ el 0.17 solo da fuerzas correctas si $f'_c$ está en **MPa**. Si se trabaja con $f'_c$ en kgf/cm² (sistema **mks**) o en psi (sistema **inglés**), el coeficiente cambia: **0.53** y **2**, respectivamente. El Apéndice C-F reúne esas ecuaciones en ocho páginas de tablas de tres columnas para que quien trabaje en otro sistema use el coeficiente correcto.
+
+<Callout tipo="importante" titulo="Es solo una tabla de equivalencias">
+No agrega requisitos nuevos: cada fila remite a una ecuación o numeral de los capítulos del Título C. Lo único «nuevo» es el coeficiente en cada sistema. Los valores en mks e inglés están **redondeados**, por eso un resultado puede diferir hasta unos puntos porcentuales del calculado en SI (ver el ejemplo 1).
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este apéndice (autoría del proyecto)">
+Las tablas transcriben lo impreso en los PDF (C-251 a C-257); la página C-258 es una hoja de «Notas» en blanco. Todo lo marcado como **«autoría del proyecto»** (la verificación numérica de equivalencia, los ejemplos y las observaciones sobre redondeo) no es texto de la norma. Las celdas que el PDF recorta en el borde derecho de la tabla se completan con las columnas vecinas, se marcan con ‡ y se señalan en las erratas. El proyecto trabaja en SI; este apéndice es la única parte del sitio donde aparecen kgf/cm² y psi.
+</Callout>
+
+## C-F.1 — Conversión de esfuerzos y valores de referencia
+
+La primera tabla (<NormaRef s="Apéndice C-F" pag="C-251" />) fija la equivalencia que usa la norma y los esfuerzos de referencia más frecuentes:
+
+- **1 MPa = 10 kgf/cm² = 142.2 psi** (valores impresos; la conversión exacta sería 10.197 kgf/cm² y 145.04 psi — dato del proyecto).
+
+<TablaNorma numero="Tabla C-F (parte 1)" titulo="Esfuerzos de referencia en los tres sistemas" pag="C-251" nota="Transcrita de la imagen del PDF. La fila f′c = 40 MPa es incoherente con las demás (ver erratas).">
+
+| Símbolo | Sistema SI (MPa) | Sistema mks (kgf/cm²) | Sistema inglés (psi) |
+|---|---:|---:|---:|
+| 1 MPa | 1 MPa | 10 kgf/cm² | 142.2 psi |
+| $f'_c$ | 21 MPa | 210 kgf/cm² | 3,000 psi |
+| $f'_c$ | 28 MPa | 280 kgf/cm² | 4,000 psi |
+| $f'_c$ | 35 MPa | 350 kgf/cm² | 5,000 psi |
+| $f'_c$ | 40 MPa | 420 kgf/cm² | 6,000 psi |
+| $f_y$ | 280 MPa | 2 800 kgf/cm² | 40,000 psi |
+| $f_y$ | 420 MPa | 4 200 kgf/cm² | 60,000 psi |
+| $f_{pu}$ | 1 725 MPa | 17 600 kgf/cm² | 250,000 psi |
+| $f_{pu}$ | 1 860 MPa | 19 000 kgf/cm² | 270,000 psi |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla C-F (parte 2)" titulo="Expresiones con √f′c equivalentes" pag="C-251" nota="La columna de la izquierda es el valor de esfuerzo en MPa; las otras dos son el mismo esfuerzo en kgf/cm² y psi.">
+
+| SI (MPa) | mks (kgf/cm²) | Inglés (psi) |
+|---|---|---|
+| $\sqrt{f'_c}$ | $3.18\sqrt{f'_c}$ | $12\sqrt{f'_c}$ |
+| $0.313\sqrt{f'_c}$ | $\sqrt{f'_c}$ | $3.77\sqrt{f'_c}$ |
+| $0.083\sqrt{f'_c}$ | $0.27\sqrt{f'_c}$ | $\sqrt{f'_c}$ |
+| $0.17\sqrt{f'_c}$ | $0.53\sqrt{f'_c}$ | $2\sqrt{f'_c}$ |
+
+</TablaNorma>
+
+Estas cuatro filas son la «clave de lectura» de todo el apéndice: un coeficiente de $\sqrt{f'_c}$ se multiplica por **≈ 3.18** para pasar de MPa a kgf/cm², y por **12** para pasar de MPa a psi. Por ejemplo, 0.083 × 3.18 = 0.264 ≈ **0.27** y 0.083 × 12 = 0.996 ≈ **1**.
+
+## C-F.2 — Ecuaciones, página C-251 (resistencias, módulos y espesores)
+
+<TablaNorma numero="Tabla C-F (C-251)" titulo="Resistencia promedio, acero mínimo, módulos, λ, fr y espesores de losas y vigas" pag="C-251">
+
+| Ref. | Sistema SI (MPa) | Sistema mks (kgf/cm²) | Sistema inglés (psi) |
+|---|---|---|---|
+| (C.5-2) | $f'_{cr} = f'_c + 2.33s_s - 3.5$ | $f'_{cr} = f'_c + 2.33s_s - 35$ | $f'_{cr} = f'_c + 2.33s_s - 500$ |
+| Tabla C.5.3.2.2 | $f'_{cr} = f'_c + 7.0$ | $f'_{cr} = f'_c + 70$ | $f'_{cr} = f'_c + 1000$ |
+| Tabla C.5.3.2.2 | $f'_{cr} = f'_c + 8.3$ | $f'_{cr} = f'_c + 84$ | $f'_{cr} = f'_c + 1200$ |
+| Tabla C.5.3.2.2 | $f'_{cr} = 1.10f'_c + 5.0$ | $f'_{cr} = 1.10f'_c + 50$ | $f'_{cr} = 1.10f'_c + 700$ |
+| C.7.12.2.1(c) | $\dfrac{0.0018\times 420}{f_y}$ | $\dfrac{0.0018\times 4200}{f_y}$ | $\dfrac{0.0018\times 60{,}000}{f_y}$ |
+| C.8.5.1 | $E_c = w_c^{1.5}\,0.043\sqrt{f'_c}$ | $E_c = w_c^{1.5}\,0.14\sqrt{f'_c}$ | $E_c = w_c^{1.5}\,33\sqrt{f'_c}$ |
+| C.8.5.1 | $E_c = 4700\sqrt{f'_c}$ | $E_c = 15100\sqrt{f'_c}$ | $E_c = 57{,}000\sqrt{f'_c}$ |
+| C.8.6.1 | $\lambda = f_{ct}/(0.56\sqrt{f_c}) \le 1.0$ | $\lambda = f_{ct}/(1.78\sqrt{f_c}) \le 1.0$ | $\lambda = f_{ct}/(6.7\sqrt{f_c}) \le 1.0$ |
+| Tabla C.9.5(a) | $(1.65 - 0.0003w_c) \ge 1.09$ | $(1.65 - 0.0003w_c) \ge 1.09$ | $(1.65 - 0.005w_c) \ge 1.09$ |
+| Tabla C.9.5(a) | $\left(0.4 + \dfrac{f_y}{700}\right)$ | $\left(0.4 + \dfrac{f_y}{7000}\right)$ | $\left(0.4 + \dfrac{f_y}{100{,}000}\right)$ |
+| (C.9-10) | $f_r = 0.62\lambda\sqrt{f'_c}$ | $f_r = 2\lambda\sqrt{f'_c}$ | $f_r = 7.5\lambda\sqrt{f'_c}$ |
+| (C.9-12) | $h = \dfrac{\ell_n\left(0.8 + \frac{f_y}{1400}\right)}{36 + 5\beta(\alpha_{fm} - 0.2)} \ge 125\ \text{mm}$ | $h = \dfrac{\ell_n\left(0.8 + \frac{f_y}{14000}\right)}{36 + 5\beta(\alpha_{fm} - 0.2)} \ge 12.5\ \text{cm}$ | $h = \dfrac{\ell_n\left(0.8 + \frac{f_y}{200{,}000}\right)}{36 + 5\beta(\alpha_{fm} - 0.2)} \ge 5\ \text{in.}$ |
+| (C.9-13) | $h = \dfrac{\ell_n\left(0.8 + \frac{f_y}{1400}\right)}{36 + 9\beta} \ge 90\ \text{mm}$ | $h = \dfrac{\ell_n\left(0.8 + \frac{f_y}{14000}\right)}{36 + 9\beta} \ge 9\ \text{cm}$ | $h = \dfrac{\ell_n\left(0.8 + \frac{f_y}{200{,}000}\right)}{36 + 9\beta} \ge 3.5\ \text{in.}$ |
+
+</TablaNorma>
+
+Aquí $w_c$ está en kg/m³ en las columnas SI y mks y en lb/ft³ en la inglesa (de ahí el 0.005 frente a 0.0003 en la Tabla C.9.5(a)); las longitudes pasan de mm a cm y a pulgadas en las ecuaciones de espesor mínimo.
+
+## C-F.3 — Ecuaciones, página C-252 (flexión, cortante en vigas y preesforzado)
+
+<TablaNorma numero="Tabla C-F (C-252)" titulo="Acero mínimo de flexión, separación, M2,mín y cortante del concreto" pag="C-252">
+
+| Ref. | Sistema SI (MPa) | Sistema mks (kgf/cm²) | Sistema inglés (psi) |
+|---|---|---|---|
+| (C.10-3) | $A_{s,min} = \dfrac{0.25\sqrt{f'_c}}{f_y}b_wd \ge \dfrac{1.4}{f_y}b_wd$ | $A_{s,min} = \dfrac{0.8\sqrt{f'_c}}{f_y}b_wd \ge \dfrac{14}{f_y}b_wd$ | $A_{s,min} = \dfrac{3\sqrt{f'_c}}{f_y}b_wd \ge \dfrac{200}{f_y}b_wd$ |
+| (C.10-4) | $s = 380\left(\dfrac{280}{f_s}\right) - 2.5c_c \le 300\left(\dfrac{280}{f_s}\right)$ | $s = 38\left(\dfrac{2800}{f_s}\right) - 2.5c_c \le 30\left(\dfrac{2800}{f_s}\right)$ | $s = 15\left(\dfrac{40{,}000}{f_s}\right) - 2.5c_c \le 12\left(\dfrac{40{,}000}{f_s}\right)$ |
+| (C.10-17) | $M_{2,min} = P_u(15 + 0.03h)$ | $M_{2,min} = P_u(1.5 + 0.03h)$ | $M_{2,min} = P_u(0.6 + 0.03h)$ |
+| C.11.1.2 | $\sqrt{f'_c} \le 8.3\ \text{MPa}$ | $\sqrt{f'_c} \le 27\ \text{kgf/cm}^2$ | $\sqrt{f'_c} \le 100\ \text{psi}$ |
+| (C.11-3) | $V_c = 0.17\lambda\sqrt{f'_c}\,b_wd$ | $V_c = 0.53\lambda\sqrt{f'_c}\,b_wd$ | $V_c = 2\lambda\sqrt{f'_c}\,b_wd$ |
+| (C.11-4) | $V_c = 0.17\left(1 + \dfrac{N_u}{14A_g}\right)\lambda\sqrt{f'_c}\,b_wd$ | $V_c = 0.53\left(1 + \dfrac{N_u}{140A_g}\right)\lambda\sqrt{f'_c}\,b_wd$ | $V_c = 2\left(1 + \dfrac{N_u}{2000A_g}\right)\lambda\sqrt{f'_c}\,b_wd$ |
+| (C.11-5) | $V_c = \left(0.16\lambda\sqrt{f'_c} + 17\rho_w\dfrac{V_ud}{M_u}\right)b_wd \le 0.29\lambda\sqrt{f'_c}\,b_wd$ | $V_c = \left(0.5\lambda\sqrt{f'_c} + 176\rho_w\dfrac{V_ud}{M_u}\right)b_wd \le 0.93\lambda\sqrt{f'_c}\,b_wd$ | $V_c = \left(1.9\lambda\sqrt{f'_c} + 2500\rho_w\dfrac{V_ud}{M_u}\right)b_wd \le 3.5\lambda\sqrt{f'_c}\,b_wd$ |
+| (C.11-7) | $V_c = 0.29\lambda\sqrt{f'_c}\,b_wd\sqrt{1 + \dfrac{0.29N_u}{A_g}}$ | $V_c = 0.93\lambda\sqrt{f'_c}\,b_wd\sqrt{1 + \dfrac{N_u}{35A_g}}$ | $V_c = 3.5\lambda\sqrt{f'_c}\,b_wd\sqrt{1 + \dfrac{N_u}{500A_g}}$ |
+| (C.11-8) | $V_c = 0.17\left(1 + \dfrac{0.29N_u}{A_g}\right)\lambda\sqrt{f'_c}\,b_wd \ge 0$ | $V_c = 0.53\left(1 + \dfrac{N_u}{35A_g}\right)\lambda\sqrt{f'_c}\,b_wd \ge 0$ | $V_c = 2\left(1 + \dfrac{N_u}{500A_g}\right)\lambda\sqrt{f'_c}\,b_wd \ge 0$ |
+| (C.11-9) | $V_c = \left(0.05\lambda\sqrt{f'_c} + 4.8\dfrac{V_ud_p}{M_u}\right)b_wd$ | $V_c = \left(0.16\lambda\sqrt{f'_c} + 49\dfrac{V_ud_p}{M_u}\right)b_wd$ | $V_c = \left(0.6\lambda\sqrt{f'_c} + 700\dfrac{V_ud_p}{M_u}\right)b_wd$ |
+| (C.11-9), límites | $0.17\lambda\sqrt{f'_c}\,b_wd \le V_c \le 0.42\lambda\sqrt{f'_c}\,b_wd$ | $0.53\lambda\sqrt{f'_c}\,b_wd \le V_c \le 1.33\lambda\sqrt{f'_c}\,b_wd$ | $2\lambda\sqrt{f'_c}\,b_wd \le V_c \le 5\lambda\sqrt{f'_c}\,b_wd$ |
+| (C.11-10) | $V_{ci} = 0.05\lambda\sqrt{f'_c}\,b_wd_p + V_d + \dfrac{V_iM_{cre}}{M_{max}}$ | $V_{ci} = 0.16\lambda\sqrt{f'_c}\,b_wd_p + V_d + \dfrac{V_iM_{cre}}{M_{max}}$ | $V_{ci} = 0.6\lambda\sqrt{f'_c}\,b_wd_p + V_d + \dfrac{V_iM_{cre}}{M_{max}}$ |
+| (C.11-10), mínimo | $\ge 0.14\lambda\sqrt{f'_c}\,b_wd$ | $\ge 0.45\lambda\sqrt{f'_c}\,b_wd$ | $\ge 1.7\lambda\sqrt{f'_c}\,b_wd$ |
+| (C.11-11) | $M_{cre} = \left(\dfrac{I}{y_t}\right)\left(0.5\lambda\sqrt{f'_c} + f_{pe} - f_d\right)$ | $M_{cre} = \left(\dfrac{I}{y_t}\right)\left(1.6\lambda\sqrt{f'_c} + f_{pe} - f_d\right)$ | $M_{cre} = \left(\dfrac{I}{y_t}\right)\left(6\lambda\sqrt{f'_c} + f_{pe} - f_d\right)$ |
+| (C.11-12) | $V_{cw} = \left(0.29\lambda\sqrt{f'_c} + 0.3f_{pc}\right)b_wd_p + V_p$ | $V_{cw} = \left(0.93\lambda\sqrt{f'_c} + 0.3f_{pc}\right)b_wd_p + V_p$ | $V_{cw} = \left(3.5\lambda\sqrt{f'_c} + 0.3f_{pc}\right)b_wd_p + V_p$ |
+| (C.11-12), esfuerzo principal | $0.33\lambda\sqrt{f'_c}$ | $1.1\lambda\sqrt{f'_c}$ | $4\lambda\sqrt{f'_c}$ |
+| C.11.4.5.3 | $0.33\sqrt{f'_c}\,b_wd$ | $1.1\sqrt{f'_c}\,b_wd$ | $4\sqrt{f'_c}\,b_wd$ |
+| C.11.4.6.1(f) | $\phi\,0.17\sqrt{f'_c}\,b_wd$ | $\phi\,0.53\sqrt{f'_c}\,b_wd$ | $\phi\,2\sqrt{f'_c}\,b_wd$ |
+
+</TablaNorma>
+
+## C-F.4 — Ecuaciones, página C-253 (estribos, cortante y torsión)
+
+<TablaNorma numero="Tabla C-F (C-253)" titulo="Refuerzo mínimo de cortante, Vs, torsión y combinación cortante-torsión" pag="C-253" nota="‡ Celdas que el PDF recorta en el borde derecho de la tabla: se completan con el término que muestran las otras dos columnas.">
+
+| Ref. | Sistema SI (MPa) | Sistema mks (kgf/cm²) | Sistema inglés (psi) |
+|---|---|---|---|
+| (C.11-13) | $A_{v,min} = 0.062\sqrt{f'_c}\dfrac{b_ws}{f_{yt}}$ | $A_{v,min} = 0.2\sqrt{f'_c}\dfrac{b_ws}{f_{yt}}$ | $A_{v,min} = 0.75\sqrt{f'_c}\dfrac{b_ws}{f_{yt}}$ |
+| (C.11-13), mínimo | $\ge 0.35\dfrac{b_ws}{f_{yt}}$ | $\ge 3.5\dfrac{b_ws}{f_{yt}}$ | $\ge \dfrac{50b_ws}{f_{yt}}$ |
+| (C.11-17) | $V_s = A_vf_y\,\text{sen}\,\alpha \le 0.25\sqrt{f'_c}\,b_wd$ | $V_s = A_vf_y\,\text{sen}\,\alpha \le 0.8\sqrt{f'_c}\,b_wd$ | $V_s = A_vf_y\sin\alpha \le 3\sqrt{f'_c}\,b_wd$ |
+| C.11.4.7.9 | $0.66\sqrt{f'_c}\,b_wd$ | $2.2\sqrt{f'_c}\,b_wd$ | $8\sqrt{f'_c}\,b_wd$ |
+| C.11.5.1(a) | $T_u < \phi\,0.083\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)$ | $T_u < \phi\,0.27\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)$ | $T_u < \phi\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)$ |
+| C.11.5.1(b) | $T_u < \phi\,0.083\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{f_{pc}}{0.33\lambda\sqrt{f'_c}}}$ ‡ | $T_u < \phi\lambda\,0.27\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{f_{pc}}{\lambda\sqrt{f'_c}}}$ | $T_u < \phi\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{f_{pc}}{4\lambda\sqrt{f'_c}}}$ |
+| C.11.5.1(c) | $T_u < \phi\,0.083\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{N_u}{0.33A_g\lambda\sqrt{f'_c}}}$ ‡ | $T_u < \phi\,0.27\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{N_u}{A_g\lambda\sqrt{f'_c}}}$ ‡ | $T_u < \phi\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{N_u}{4A_g\lambda\sqrt{f'_c}}}$ |
+| C.11.5.2.2(a) | $T_u = \phi\,0.33\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)$ | $T_u = \phi\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)$ | $T_u = \phi\,4\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)$ |
+| C.11.5.2.2(b) | $T_u = \phi\,0.33\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{f_{pc}}{0.33\lambda\sqrt{f'_c}}}$ ‡ | $T_u = \phi\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{f_{pc}}{\lambda\sqrt{f'_c}}}$ | $T_u = \phi\,4\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{f_{pc}}{4\lambda\sqrt{f'_c}}}$ |
+| C.11.5.2.2(c) | $T_u = \phi\,0.33\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{N_u}{0.33A_g\lambda\sqrt{f'_c}}}$ ‡ | $T_u = \phi\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{N_u}{A_g\lambda\sqrt{f'_c}}}$ | $T_u = \phi\,4\lambda\sqrt{f'_c}\left(\dfrac{A_{cp}^2}{p_{cp}}\right)\sqrt{1 + \dfrac{N_u}{4A_g\lambda\sqrt{f'_c}}}$ |
+| (C.11-18) | $\sqrt{\left(\dfrac{V_u}{b_wd}\right)^2 + \left(\dfrac{T_up_h}{1.7A_{0h}^2}\right)^2} \le \phi\left(\dfrac{V_c}{b_wd} + 0.66\sqrt{f'_c}\right)$ | $\ldots \le \phi\left(\dfrac{V_c}{b_wd} + 2\sqrt{f'_c}\right)$ | $\ldots \le \phi\left(\dfrac{V_c}{b_wd} + 8\sqrt{f'_c}\right)$ |
+| (C.11-19) | $\dfrac{V_u}{b_wd} + \dfrac{T_up_h}{1.7A_{0h}^2} \le \phi\left(\dfrac{V_c}{b_wd} + 0.66\sqrt{f'_c}\right)$ | $\ldots \le \phi\left(\dfrac{V_c}{b_wd} + 2\sqrt{f'_c}\right)$ | $\ldots \le \phi\left(\dfrac{V_c}{b_wd} + 8\sqrt{f'_c}\right)$ |
+| (C.11-23) | $(A_v + 2A_t) = 0.062\sqrt{f'_c}\dfrac{b_ws}{f_{yt}}$ | $(A_v + 2A_t) = 0.2\sqrt{f'_c}\dfrac{b_ws}{f_{yt}}$ | $(A_v + 2A_t) = 0.75\sqrt{f'_c}\dfrac{b_ws}{f_{yt}}$ |
+| (C.11-23), mínimo | $\ge \dfrac{0.35b_ws}{f_{yt}}$ | $\ge \dfrac{3.5b_ws}{f_{yt}}$ | $\ge \dfrac{50b_ws}{f_{yt}}$ |
+
+</TablaNorma>
+
+En (C.11-18) y (C.11-19) las columnas mks e inglesa repiten el miembro izquierdo de la columna SI (idéntico, es homogéneo) y solo cambia el término $\sqrt{f'_c}$; por eso aquí se abrevia con «…».
+
+## C-F.5 — Ecuaciones, página C-254 (torsión longitudinal, cortante en muros, vigas, ménsulas y losas)
+
+<TablaNorma numero="Tabla C-F (C-254)" titulo="Aℓ,mín, cortante en secciones especiales, muros y losas en dos direcciones" pag="C-254" nota="‡ Celda recortada en el PDF en el borde derecho; ver erratas.">
+
+| Ref. | Sistema SI (MPa) | Sistema mks (kgf/cm²) | Sistema inglés (psi) |
+|---|---|---|---|
+| (C.11-24) | $A_{\ell,min} = \dfrac{0.42\sqrt{f'_c}A_{cp}}{f_y} - \left(\dfrac{A_t}{s}\right)p_h\dfrac{f_{yt}}{f_y}$ | $A_{\ell,min} = \dfrac{1.33\sqrt{f'_c}A_{cp}}{f_y} - \left(\dfrac{A_t}{s}\right)p_h\dfrac{f_{yt}}{f_y}$ | $A_{\ell,min} = \dfrac{5\sqrt{f'_c}A_{cp}}{f_y} - \left(\dfrac{A_t}{s}\right)p_h\dfrac{f_{yt}}{f_y}$ |
+| (C.11-24), mínimo | $\dfrac{A_t}{s} \ge \dfrac{0.175b_w}{f_{yt}}$ | $\dfrac{A_t}{s} \ge \dfrac{1.75b_w}{f_{yt}}$ | $\dfrac{A_t}{s} \ge \dfrac{25b_w}{f_{yt}}$ |
+| C.11.6.5 | $(3.3 + 0.08f'_c)A_c$; $11A_c$; $5.5A_c$ | $(34 + 0.08f'_c)A_c$; $110A_c$; $55A_c$ | $(480 + 0.08f'_c)A_c$; $1600A_c$; $800A_c$ |
+| C.11.7.3 | $0.83\sqrt{f'_c}\,b_wd$ | $2.65\sqrt{f'_c}\,b_wd$ | $10\sqrt{f'_c}\,b_wd$ |
+| C.11.8.3.2.1 | $(3.3 + 0.08f'_c)b_wd$; $11b_wd$ | $(34 + 0.08f'_c)b_wd$; $110b_wd$ | $(480 + 0.08f'_c)b_wd$; $1600b_wd$ |
+| C.11.8.3.2.2 | $\left(5.5 - 1.9\dfrac{a_v}{d}\right)b_wd$ | $\left(55 - 20\dfrac{a_v}{d}\right)b_wd$ | $\left(800 - 280\dfrac{a_v}{d}\right)b_wd$ |
+| C.11.9.3 | $0.83\sqrt{f'_c}\,hd$ | $2.65\sqrt{f'_c}\,hd$ | $10\sqrt{f'_c}\,hd$ |
+| C.11.9.5 | $0.17\lambda\sqrt{f'_c}\,hd$ | $0.53\lambda\sqrt{f'_c}\,hd$ | $2\lambda\sqrt{f'_c}\,hd$ |
+| (C.11-27) | $V_c = 0.27\lambda\sqrt{f'_c}\,hd + \dfrac{N_ud}{4\ell_w}$ | $v_c = 0.88\lambda\sqrt{f'_c}\,hd + \dfrac{N_ud}{4\ell_w}$ | $V_c = 3.3\lambda\sqrt{f'_c}\,hd + \dfrac{N_ud}{4\ell_w}$ |
+| (C.11-28) | $V_c = \left[0.05\lambda\sqrt{f'_c} + \dfrac{\ell_w\left(0.1\lambda\sqrt{f'_c} + 0.2\frac{N_u}{\ell_wh}\right)}{\frac{M_u}{V_u} - \frac{\ell_w}{2}}\right]hd$ ‡ | $V_c = \left[0.16\lambda\sqrt{f'_c} + \dfrac{\ell_w\left(0.33\lambda\sqrt{f'_c} + 0.2\frac{N_u}{\ell_wh}\right)}{\frac{M_u}{V_u} - \frac{\ell_w}{2}}\right]hd$ ‡ | $V_c = \left[0.6\lambda\sqrt{f'_c} + \dfrac{\ell_w\left(1.25\lambda\sqrt{f'_c} + 0.2\frac{N_u}{\ell_wh}\right)}{\frac{M_u}{V_u} - \frac{\ell_w}{2}}\right]hd$ ‡ |
+| (C.11-31) | $V_c = 0.17\left(1 + \dfrac{2}{\beta}\right)\lambda\sqrt{f'_c}\,b_od$ | $V_c = 0.53\left(1 + \dfrac{2}{\beta}\right)\lambda\sqrt{f'_c}\,b_od$ | $V_c = \left(2 + \dfrac{4}{\beta}\right)\lambda\sqrt{f'_c}\,b_od$ |
+| (C.11-32) | $V_c = 0.083\left(\dfrac{\alpha_sd}{b_0} + 2\right)\lambda\sqrt{f'_c}\,b_od$ | $V_c = 0.27\left(\dfrac{\alpha_sd}{b_0} + 2\right)\lambda\sqrt{f'_c}\,b_od$ | $V_c = \left(\dfrac{\alpha_sd}{b_0} + 2\right)\lambda\sqrt{f'_c}\,b_od$ |
+| (C.11-33) | $V_c = 0.33\lambda\sqrt{f'_c}\,b_od$ | $V_c = \lambda\sqrt{f'_c}\,b_od$ | $V_c = 4\lambda\sqrt{f'_c}\,b_od$ |
+| (C.11-34) | $V_c = \left(\beta_p\lambda\sqrt{f'_c} + 0.3f_{pc}\right)b_0d + V_p$ (nota: $\beta_p$ tiene unidades) | $V_c = \left(3.16\beta_p\lambda\sqrt{f'_c} + 0.3f_{pc}\right)b_0d + V_p$ (nota: $\beta_p$ tiene las mismas unidades que la versión SI) | $V_c = \left(\beta_p\lambda\sqrt{f'_c} + 0.3f_{pc}\right)b_0d + V_p$ (nota: $\beta_p$ tiene unidades) |
+| C.11.11.2.2 | $\sqrt{f'_c} \le 0.5\ \text{MPa}$ | $\sqrt{f'_c} \le 5\ \text{kgf/cm}^2$ | $\sqrt{f'_c} \le 70\ \text{psi}$ |
+| C.11.11.3.1 | $0.17\lambda\sqrt{f'_c}\,b_od$ | $0.53\lambda\sqrt{f'_c}\,b_od$ | $2\lambda\sqrt{f'_c}\,b_od$ |
+| C.11.11.3.2 | $0.5\sqrt{f'_c}\,b_od$ | $1.6\sqrt{f'_c}\,b_od$ | $6\sqrt{f'_c}\,b_od$ |
+| C.11.11.4.8 | $0.33\sqrt{f'_c}\,b_od$; $0.58\sqrt{f'_c}\,b_od$ | $1.1\sqrt{f'_c}\,b_od$; $1.9\sqrt{f'_c}\,b_od$ | $4\sqrt{f'_c}\,b_od$; $7\sqrt{f'_c}\,b_od$ |
+
+</TablaNorma>
+
+## C-F.6 — Ecuaciones, página C-255 (punzonamiento, longitudes de desarrollo)
+
+<TablaNorma numero="Tabla C-F (C-255)" titulo="Cortante en losas, límites de √f′c y longitudes de desarrollo" pag="C-255">
+
+| Ref. | Sistema SI (MPa) | Sistema mks (kgf/cm²) | Sistema inglés (psi) |
+|---|---|---|---|
+| C.11.11.5.1 | $0.25\lambda\sqrt{f'_c}\,b_od$; $0.66\sqrt{f'_c}\,b_od$; $0.17\sqrt{f'_c}$ | $0.8\lambda\sqrt{f'_c}\,b_od$; $2.1\sqrt{f'_c}\,b_od$; $0.53\sqrt{f'_c}$ | $3\lambda\sqrt{f'_c}\,b_od$; $8\sqrt{f'_c}\,b_od$; $2\sqrt{f'_c}$ |
+| C.11.11.5.2 | $0.5\phi\sqrt{f'_c}$ | $1.6\phi\sqrt{f'_c}$ | $6\phi\sqrt{f'_c}$ |
+| C.11.11.5.4 | $0.17\phi\lambda\sqrt{f'_c}$ | $0.53\phi\lambda\sqrt{f'_c}$ | $2\phi\lambda\sqrt{f'_c}$ |
+| C.11.11.7.2 | $0.17\phi\lambda\sqrt{f'_c}$ | $0.53\phi\lambda\sqrt{f'_c}$ | $2\phi\lambda\sqrt{f'_c}$ |
+| C.11.11.7.3 | $0.33\phi\lambda\sqrt{f'_c}$ | $1.1\phi\lambda\sqrt{f'_c}$ | $4\phi\lambda\sqrt{f'_c}$ |
+| C.12.1.2 | $\sqrt{f'_c} \le 8.3\ \text{MPa}$ | $\sqrt{f'_c} \le 26.5\ \text{kgf/cm}^2$ | $\sqrt{f'_c} \le 100\ \text{psi}$ |
+| C.12.2.2 | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{2.1\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{6.6\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{25\lambda\sqrt{f'_c}}\right)d_b$ |
+| C.12.2.2 | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{1.7\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{5.3\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{20\lambda\sqrt{f'_c}}\right)d_b$ |
+| C.12.2.2 | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{1.4\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{4.4\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_d = \left(\dfrac{3f_y\psi_t\psi_e}{50\lambda\sqrt{f'_c}}\right)d_b$ |
+| C.12.2.2 | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{1.1\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_d = \left(\dfrac{f_y\psi_t\psi_e}{3.5\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_d = \left(\dfrac{3f_y\psi_t\psi_e}{40\lambda\sqrt{f'_c}}\right)d_b$ |
+| (C.12-1) | $\ell_d = \dfrac{f_y}{1.1\lambda\sqrt{f'_c}}\dfrac{\psi_t\psi_e\psi_s}{\left(\frac{c_b + K_{tr}}{d_b}\right)}d_b$ | $\ell_d = \dfrac{f_y}{3.5\lambda\sqrt{f'_c}}\dfrac{\psi_t\psi_e\psi_s}{\left(\frac{c_b + K_{tr}}{d_b}\right)}d_b$ | $\ell_d = \dfrac{3f_y}{40\lambda\sqrt{f'_c}}\dfrac{\psi_t\psi_e\psi_s}{\left(\frac{c_b + K_{tr}}{d_b}\right)}d_b$ |
+| C.12.3.2 | $\left(\dfrac{0.24f_y}{\lambda\sqrt{f'_c}}\right)d_b \ge (0.043f_y)d_b$ | $\left(\dfrac{0.075f_y}{\lambda\sqrt{f'_c}}\right)d_b \ge (0.0044f_y)d_b$ | $\left(\dfrac{0.02f_y}{\lambda\sqrt{f'_c}}\right)d_b \ge (0.0003f_y)d_b$ |
+| C.12.5.2 | $\ell_{dh} = \left(\dfrac{0.24\psi_ef_y}{\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_{dh} = \left(\dfrac{0.075\psi_ef_y}{\lambda\sqrt{f'_c}}\right)d_b$ | $\ell_{dh} = \left(\dfrac{0.02\psi_ef_y}{\lambda\sqrt{f'_c}}\right)d_b$ |
+| C.12.6.2 | $\ell_{dh} = \left(\dfrac{0.19\psi_ef_y}{\sqrt{f'_c}}\right)d_b$ | $\ell_{dh} = \left(\dfrac{0.06\psi_ef_y}{\sqrt{f'_c}}\right)d_b$ | $\ell_{dh} = \left(\dfrac{0.016\psi_ef_y}{\sqrt{f'_c}}\right)d_b$ |
+| C.12.7.2 | $\left(\dfrac{f_y - 240}{f_y}\right)$ | $\left(\dfrac{f_y - 2460}{f_y}\right)$ | $\left(\dfrac{f_y - 35{,}000}{f_y}\right)$ |
+| (C-12-3) | $\ell_d = 3.3\left(\dfrac{A_b}{s}\right)\left(\dfrac{f_y}{\lambda\sqrt{f'_c}}\right)$ | $\ell_d = \left(\dfrac{A_b}{s}\right)\left(\dfrac{f_y}{\lambda\sqrt{f'_c}}\right)$ | $\ell_d = 0.27\left(\dfrac{A_b}{s}\right)\left(\dfrac{f_y}{\lambda\sqrt{f'_c}}\right)$ |
+| (C-12-4) | $\ell_d = \left(\dfrac{f_{se}}{21}\right)d_b + \left(\dfrac{f_{ps} - f_{se}}{7}\right)d_b$ | $\ell_d = \left(\dfrac{f_{se}}{210}\right)d_b + \left(\dfrac{f_{ps} - f_{se}}{70}\right)d_b$ | $\ell_d = \left(\dfrac{f_{se}}{3000}\right)d_b + \left(\dfrac{f_{ps} - f_{se}}{1000}\right)d_b$ |
+| C.12.10.5.2 | $0.41\dfrac{b_ws}{f_{yt}}$ | $4.2\dfrac{b_ws}{f_{yt}}$ | $60\dfrac{b_ws}{f_{yt}}$ |
+
+</TablaNorma>
+
+## C-F.7 — Ecuaciones, página C-256 (empalmes, compuestos, preesforzado, sismo)
+
+<TablaNorma numero="Tabla C-F (C-256)" titulo="Empalmes, concreto compuesto, preesforzado y requisitos sísmicos" pag="C-256" nota="En la fila (C.21-2) el PDF imprime el término sin el signo «+» (ver erratas).">
+
+| Ref. | Sistema SI (MPa) | Sistema mks (kgf/cm²) | Sistema inglés (psi) |
+|---|---|---|---|
+| C.12.13.2.2 | $0.17\dfrac{d_bf_{yt}}{\lambda\sqrt{f'_c}}$ | $0.053\dfrac{d_bf_{yt}}{\lambda\sqrt{f'_c}}$ | $0.014\dfrac{d_bf_{yt}}{\lambda\sqrt{f'_c}}$ |
+| C.12.16.1 | $0.071f_yd_b$; $(0.13f_y - 24)d_b$ | $0.0073f_yd_b$; $(0.013f_y - 24)d_b$ | $0.0005f_yd_b$; $(0.0009f_y - 24)d_b$ |
+| C.17.5.3.1 y C.17.5.3.2 | $0.55b_vd$ | $5.6b_vd$ | $80b_vd$ |
+| C.17.5.3.3 | $(1.8 + 0.6\rho_vf_y)\lambda b_vd \le 3.5b_vd$ | $(18 + 0.6\rho_vf_y)\lambda b_vd \le 35b_vd$ | $(260 + 0.6\rho_vf_y)\lambda b_vd \le 500b_vd$ |
+| C.18.3.3 | (a) Clase U: $f_t \le 0.62\sqrt{f'_c}$; (b) Clase T: $0.62\sqrt{f'_c} < f_t \le 1.0\sqrt{f'_c}$; (c) Clase C: $f_t > 1.0\sqrt{f'_c}$; $f_t \le 0.50\sqrt{f'_{ci}}$ | (a) $f_t \le 2\sqrt{f'_c}$; (b) $2\sqrt{f'_c} < f_t \le 3.2\sqrt{f'_c}$; (c) $f_t > 3.2\sqrt{f'_c}$; $f_t \le 1.6\sqrt{f'_{ci}}$ | (a) $f_t \le 7.5\sqrt{f'_c}$; (b) $7.5\sqrt{f'_c} < f_t \le 12\sqrt{f'_c}$; (c) $f_t > 12\sqrt{f'_c}$; $f_t \le 6\sqrt{f'_{ci}}$ |
+| C.18.4.1(c) | $0.50\sqrt{f'_{ci}}$; $0.25\sqrt{f'_{ci}}$ | $1.6\sqrt{f'_{ci}}$; $0.8\sqrt{f'_{ci}}$ | $6\sqrt{f'_{ci}}$; $3\sqrt{f'_{ci}}$ |
+| (C.18-4) | $f_{ps} = f_{se} + 70 + \dfrac{f'_c}{100\rho_p}$ | $f_{ps} = f_{se} + 700 + \dfrac{f'_c}{100\rho_p}$ | $f_{ps} = f_{se} + 10{,}000 + \dfrac{f'_c}{100\rho_p}$ |
+| (C.18-5) | $f_{ps} = f_{se} + 70 + \dfrac{f'_c}{300\rho_p}$ | $f_{ps} = f_{se} + 700 + \dfrac{f'_c}{300\rho_p}$ | $f_{ps} = f_{se} + 10{,}000 + \dfrac{f'_c}{300\rho_p}$ |
+| C.18.9.3.1 y C.18.9.3.2 | $0.17\sqrt{f'_c}$ | $0.53\sqrt{f'_c}$ | $2\sqrt{f'_c}$ |
+| C.18.12.7 | $\dfrac{2.1b_wd}{f_y}$ | $\dfrac{21b_wd}{f_y}$ | $\dfrac{300b_wd}{f_y}$ |
+| C.18.13.4.1 | $f_{ps} = f_{se} + 70$ | $f_{ps} = f_{se} + 700$ | $f_{ps} = f_{se} + 10{,}000$ |
+| C.19.4.10 | $0.33\phi\lambda\sqrt{f'_c}$ | $1.1\phi\lambda\sqrt{f'_c}$ | $4\phi\lambda\sqrt{f'_c}$ |
+| C.21.5.2.1 | $\dfrac{1.4b_wd}{f_y}$ | $\dfrac{14b_wd}{f_y}$ | $\dfrac{200b_wd}{f_y}$ |
+| (C.21-2) | $s_o = 100\left(\dfrac{350 - h_x}{3}\right)$; $100\ \text{mm} \le s_o \le 150\ \text{mm}$ | $s_o = 10\left(\dfrac{35 - h_x}{3}\right)$; $10\ \text{cm} \le s_o \le 15\ \text{cm}$ | $s_o = 4\left(\dfrac{14 - h_x}{3}\right)$; $4\ \text{in.} \le s_o \le 6\ \text{in.}$ |
+| C.21.7.4.1 | $1.7\sqrt{f'_c}A_j$; $1.2\sqrt{f'_c}A_j$; $1.0\sqrt{f'_c}A_j$ | $5.3\sqrt{f'_c}A_j$; $4\sqrt{f'_c}A_j$; $3.2\sqrt{f'_c}A_j$ | $20\sqrt{f'_c}A_j$; $15\sqrt{f'_c}A_j$; $12\sqrt{f'_c}A_j$ |
+| (C.21-6) | $\ell_{dh} = \dfrac{f_yd_b}{5.4\sqrt{f'_c}}$ | $\ell_{dh} = \dfrac{f_yd_b}{17.2\sqrt{f'_c}}$ | $\ell_{dh} = \dfrac{f_yd_b}{65\sqrt{f'_c}}$ |
+| C.21.9.2.1 | $0.083A_{cv}\lambda\sqrt{f'_c}$ | $0.27A_{cv}\lambda\sqrt{f'_c}$ | $A_{cv}\lambda\sqrt{f'_c}$ |
+| C.21.9.2.2 | $0.17A_{cv}\lambda\sqrt{f'_c}$ | $0.53A_{cv}\lambda\sqrt{f'_c}$ | $2A_{cv}\lambda\sqrt{f'_c}$ |
+
+</TablaNorma>
+
+## C-F.8 — Ecuaciones, página C-257 (muros, concreto simple, balance, anclajes)
+
+<TablaNorma numero="Tabla C-F (C-257)" titulo="Muros estructurales, concreto estructural simple, ρb y anclajes (C-D)" pag="C-257" nota="‡ Celda recortada en el PDF en el borde derecho; ver erratas.">
+
+| Ref. | Sistema SI (MPa) | Sistema mks (kgf/cm²) | Sistema inglés (psi) |
+|---|---|---|---|
+| (C.21-7) | $V_n = A_{cv}\left(\alpha_c\lambda\sqrt{f'_c} + \rho_tf_y\right)$ | $V_n = A_{cv}\left(\alpha_c\lambda\sqrt{f'_c} + \rho_tf_y\right)$ | $V_n = A_{cv}\left(\alpha_c\lambda\sqrt{f'_c} + \rho_tf_y\right)$ |
+| (C.21-7), $\alpha_c$ con $h_w/\ell_w \le 1.5$ | $\alpha_c = 0.25$ | $\alpha_c = 0.80$ | $\alpha_c = 3.0$ |
+| (C.21-7), $\alpha_c$ con $h_w/\ell_w \ge 2.0$ | $\alpha_c = 0.17$ | $\alpha_c = 0.53$ | $\alpha_c = 2.0$ |
+| C.21.9.4.4 | $0.66A_{cv}\sqrt{f'_c}$; $0.83A_{cw}\sqrt{f'_c}$ | $2.12A_{cv}\sqrt{f'_c}$; $2.65A_{cw}\sqrt{f'_c}$ | $8A_{cv}\sqrt{f'_c}$; $10A_{cw}\sqrt{f'_c}$ |
+| C.21.9.4.5 | $0.83A_{cw}\sqrt{f'_c}$ | $2.65A_{cw}\sqrt{f'_c}$ | $10A_{cw}\sqrt{f'_c}$ |
+| C.21.9.6.5(a) | $2.8/f_y$ | $28/f_y$ | $400/f_y$ |
+| C.21.9.6.5(b) | $0.083A_{cv}\lambda\sqrt{f'_c}$ | $0.27A_{cv}\lambda\sqrt{f'_c}$ | $A_{cv}\lambda\sqrt{f'_c}$ |
+| C.21.9.7.2 | $0.33\lambda\sqrt{f'_c}A_{cw}$ | $\lambda\sqrt{f'_c}A_{cw}$ | $4\lambda\sqrt{f'_c}A_{cw}$ |
+| (C.21-9) | $V_n = 2A_{vd}f_y\,\text{sen}\,\alpha \le 0.83\sqrt{f'_c}A_{cw}$ | $V_n = 2A_{vd}f_y\,\text{sen}\,\alpha \le 2.65\sqrt{f'_c}A_{cw}$ | $V_n = 2A_{vd}f_y\sin\alpha \le 10\sqrt{f'_c}A_{cw}$ |
+| (C.21-10) | $V_n = A_{cv}\left(0.17\lambda\sqrt{f'_c} + \rho_tf_y\right)$ | $V_n = A_{cv}\left(0.53\lambda\sqrt{f'_c} + \rho_tf_y\right)$ | $V_n = A_{cv}\left(2\lambda\sqrt{f'_c} + \rho_tf_y\right)$ |
+| C.21.11.9.2 | $0.66A_{cv}\sqrt{f'_c}$ | $2.12A_{cv}\sqrt{f'_c}$ | $8A_{cv}\sqrt{f'_c}$ |
+| C.21.13.6 | $0.29\sqrt{f'_c}\,b_od$ | $0.93\sqrt{f'_c}\,b_od$ | $3.5\sqrt{f'_c}\,b_od$ |
+| (C.22-2) | $M_n = 0.42\lambda\sqrt{f'_c}S_m$ | $M_n = 1.33\lambda\sqrt{f'_c}S_m$ | $M_n = 5\lambda\sqrt{f'_c}S_m$ |
+| (C.22-7) | $\dfrac{M_u}{S_m} - \dfrac{P_u}{A_g} \le \phi\,0.42\lambda\sqrt{f'_c}$ | $\ldots \le \phi\,1.33\lambda\sqrt{f'_c}$ | $\ldots \le \phi\,5\lambda\sqrt{f'_c}$ |
+| (C.22-9) | $V_n = 0.11\lambda\sqrt{f'_c}\,b_wh$ | $V_n = 0.35\lambda\sqrt{f'_c}\,b_wh$ | $V_n = \dfrac{4\lambda\sqrt{f'_c}}{3}b_wh$ |
+| (C.22-10) | $V_n = 0.11\left[1 + \dfrac{2}{\beta}\right]\lambda\sqrt{f'_c}\,b_0h \le 0.22\lambda\sqrt{f'_c}\,b_0h$ ‡ | $V_n = 0.35\left[1 + \dfrac{2}{\beta}\right]\lambda\sqrt{f'_c}\,b_0h \le 0.71\lambda\sqrt{f'_c}\,b_0h$ ‡ | $V_n = \left[\dfrac{4}{3} + \dfrac{8}{3\beta}\right]\lambda\sqrt{f'_c}\,b_0h \le 2.66\lambda\sqrt{f'_c}\,b_0h$ |
+| (C-B-1) | $\rho_b = \dfrac{0.85\beta_1f'_c}{f_y}\left(\dfrac{600}{600 + f_y}\right)$ | $\rho_b = \dfrac{0.85\beta_1f'_c}{f_y}\left(\dfrac{6120}{6120 + f_y}\right)$ | $\rho_b = \dfrac{0.85\beta_1f'_c}{f_y}\left(\dfrac{87{,}000}{87{,}000 + f_y}\right)$ |
+| (C-D-7) | $N_b = k_c\lambda\sqrt{f'_c}\,h_{ef}^{1.5}$; $k_c = 10$ ó $7$ | $N_b = k_c\lambda\sqrt{f'_c}\,h_{ef}^{1.5}$; $k_c = 10$ ó $7$ | $N_b = k_c\lambda\sqrt{f'_c}\,h_{ef}^{1.5}$; $k_c = 24$ ó $17$ |
+| (C-D-8) | $N_b = 3.9\lambda\sqrt{f'_c}\,h_{ef}^{5/3}$ | $N_b = 5.8\lambda\sqrt{f'_c}\,h_{ef}^{5/3}$ | $N_b = 16\lambda\sqrt{f'_c}\,h_{ef}^{5/3}$ |
+| (C-D-17) | $N_{sb} = 13c_{a1}\sqrt{A_{brg}}\,\lambda\sqrt{f'_c}$ | $N_{sb} = 42.5c_{a1}\sqrt{A_{brg}}\,\lambda\sqrt{f'_c}$ | $N_{sb} = 160c_{a1}\sqrt{A_{brg}}\,\lambda\sqrt{f'_c}$ |
+| (C-D-24) | $V_b = 0.6\left(\dfrac{\ell_e}{d_a}\right)^{0.2}\sqrt{d_a}\,\lambda\sqrt{f'_c}\,(c_{a1})^{1.5}$ | $V_b = 1.9\left(\dfrac{\ell_e}{d_a}\right)^{0.2}\sqrt{d_a}\,\lambda\sqrt{f'_c}\,(c_{a1})^{1.5}$ | $V_b = 7\left(\dfrac{\ell_e}{d_a}\right)^{0.2}\sqrt{d_a}\,\lambda\sqrt{f'_c}\,(c_{a1})^{1.5}$ |
+| (C-D-25) | $V_b = 0.66\left(\dfrac{\ell_e}{d_a}\right)^{0.2}\sqrt{d_a}\,\lambda\sqrt{f'_c}\,(c_{a1})^{1.5}$ | $V_b = 2.1\left(\dfrac{\ell_e}{d_a}\right)^{0.2}\sqrt{d_a}\,\lambda\sqrt{f'_c}\,(c_{a1})^{1.5}$ | $V_b = 8\left(\dfrac{\ell_e}{d_a}\right)^{0.2}\sqrt{d_a}\,\lambda\sqrt{f'_c}\,(c_{a1})^{1.5}$ |
+
+</TablaNorma>
+
+## C-F.9 — Página C-258
+
+La última página del apéndice (C-258) es una hoja de «Notas» en blanco.
+
+## Verificación numérica de las tres columnas (autoría del proyecto)
+
+Para comprobar la transcripción y el redondeo, el proyecto convierte cada coeficiente de SI a mks e inglés con $c_{sistema} = c_{SI}\times k^{p}$, donde $k$ es el factor de esfuerzo (10.197 para kgf/cm², 145.04 para psi) y $p$ la potencia del esfuerzo que tiene la dimensión del coeficiente: $p = \tfrac12$ para un coeficiente de $\sqrt{f'_c}$ (0.17 → ×3.19 → 0.54; ×12.04 → 2.05), $p = 1$ para uno con dimensión de esfuerzo (1.4 → 14.3 → 203), $p = -\tfrac12$ y $-1$ para coeficientes inversos. Con {resumenTabla.n} coeficientes registrados (`COEFICIENTES_C_F` en `src/lib/nsr10/equivalenciasC.ts`):
+
+- la desviación **mediana** entre el valor impreso y el convertido es de {f(resumenTabla.mediana * 100, 1)} %;
+- la **máxima** es de {f(resumenTabla.max * 100, 1)} %, y corresponde a coeficientes que la norma redondea hacia un valor «bonito» (p. ej. 0.66√f′c = 2.12 kgf/cm² aparece como 2.2, 2.1 o 2.12 según la fila; 0.33√f′c = 1.05 aparece como 1.1).
+
+<Callout tipo="practica" titulo="Qué significa en la práctica">
+Para diseñar, usa **una sola columna de un solo sistema** de principio a fin y no mezcles coeficientes de columnas distintas. Las diferencias de 1 % a 5 % entre sistemas son de redondeo de los coeficientes y de la conversión aproximada 1 MPa = 10 kgf/cm², no de criterio de diseño.
+</Callout>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="El mismo Vc de C.11-3 en los tres sistemas">
+Viga con $b_w$ = {ej1.bw} mm, $d$ = {ej1.d} mm y $f'_c$ = {ej1.fc} MPa, concreto de peso normal (λ = 1). Calcular $V_c$ con la ecuación (C.11-3) en SI, en mks y en inglés.
+
+<Paso titulo="Sistema SI" ref="C.11-3">
+
+$$
+V_c = 0.17\lambda\sqrt{f'_c}\,b_wd = 0.17\,(1)\sqrt{28}\,(300)(500)
+$$
+
+Resultado: $V_c$ = **{f(ej1.si, 1)} kN**.
+
+</Paso>
+<Paso titulo="Sistema mks" ref="C-F, C-252">
+
+Se convierten los datos: $f'_c$ = {f(ej1.fcMks, 1)} kgf/cm² (con 1 MPa = 10.197 kgf/cm²), $b_w$ = 30 cm, $d$ = 50 cm.
+
+$$
+V_c = 0.53\lambda\sqrt{f'_c}\,b_wd = 0.53\,(1)\sqrt{285.5}\,(30)(50)
+$$
+
+Resultado: $V_c$ = **{f(ej1.mks, 1)} kN** (el resultado en kgf se multiplica por 9.80665 N/kgf).
+
+</Paso>
+<Paso titulo="Sistema inglés" ref="C-F, C-252">
+
+$f'_c$ = {f(ej1.fcIng, 0)} psi, $b_w$ = 11.81 in, $d$ = 19.69 in.
+
+$$
+V_c = 2\lambda\sqrt{f'_c}\,b_wd = 2\,(1)\sqrt{4061}\,(11.81)(19.69)
+$$
+
+Resultado: $V_c$ = **{f(ej1.ing, 1)} kN** (el resultado en lbf se multiplica por 4.4482 N/lbf).
+
+</Paso>
+<Resultado>
+SI {f(ej1.si, 1)} kN; mks {f(ej1.mks, 1)} kN ({f((ej1.mks / ej1.si - 1) * 100, 1)} %); inglés {f(ej1.ing, 1)} kN ({f((ej1.ing / ej1.si - 1) * 100, 1)} %). Las tres cifras coinciden en menos de 5 %; la diferencia viene de que 0.53 y 2 son los coeficientes redondeados de 0.543 y 2.05 que resultarían de convertir el 0.17 exactamente (cálculo del proyecto).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Cómo se obtiene el coeficiente de otro sistema">
+Una hoja de cálculo antigua usa $V_c = 0.53\lambda\sqrt{f'_c}\,b_wd$ con $f'_c$ en kgf/cm². ¿Qué coeficiente corresponde en MPa, y cuánto difiere del 0.17 de la norma?
+
+<Paso titulo="Plantear la conversión" ref="C-F, C-251">
+
+El esfuerzo $0.53\sqrt{f'_c}$ (kgf/cm²) debe convertirse en MPa **y** el $f'_c$ interno también. Con $k$ = 10.197 kgf/cm² por MPa:
+
+$$
+\text{esfuerzo}_{MPa} = \frac{0.53\sqrt{f'_c\,[\text{kgf/cm}^2]}}{k} = \frac{0.53\sqrt{k\,f'_c\,[\text{MPa}]}}{k} = \frac{0.53}{\sqrt{k}}\sqrt{f'_c\,[\text{MPa}]}
+$$
+
+</Paso>
+<Paso titulo="Evaluar" ref="C-F, C-252">
+$0.53/\sqrt{10.197}$ = **{f(0.53 / Math.sqrt(10.19716), 4)}**. Es ≈ 0.17 (diferencia de {f((0.53 / Math.sqrt(10.19716) / 0.17 - 1) * 100, 1)} %): el 0.17 de la norma es el 0.166 que resulta de 2 psi, redondeado. Inversamente, el coeficiente mks esperado a partir de 0.17 es {f(ej2.esperadoMks, 3)} y el impreso es 0.53 ({f(ej2.dMks * 100, 1)} %); en inglés se esperaría {f(ej2.esperadoIng, 3)} y está impreso 2 ({f(ej2.dIng * 100, 1)} %).
+</Paso>
+<Resultado>
+El coeficiente equivalente en MPa es **0.166 ≈ 0.17**. La regla general: un coeficiente de $\sqrt{f'_c}$ cambia por $\sqrt{k}$; uno con dimensión de esfuerzo, por $k$.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Un anclaje (C-D-7) en los tres sistemas">
+Resistencia básica al arrancamiento $N_b = k_c\lambda\sqrt{f'_c}\,h_{ef}^{1.5}$ de un anclaje preinstalado ($h_{ef}$ = 200 mm, $f'_c$ = 28 MPa). La tabla C-257 da $k_c$ = 10 (SI y mks) y $k_c$ = 24 (inglés).
+
+<Paso titulo="SI" ref="C-D-7">
+$N_b = 10\sqrt{28}\,(200)^{1.5}$ → **{f(ej3.si, 1)} kN** (con $f'_c$ en MPa y $h_{ef}$ en mm el resultado sale en N).
+</Paso>
+<Paso titulo="mks" ref="C-F, C-257">
+Con $f'_c$ = 285.5 kgf/cm² y $h_{ef}$ = 20 cm: $N_b = 10\sqrt{285.5}\,(20)^{1.5}$ kgf → **{f(ej3.mks, 1)} kN**. Observa que $k_c$ **no cambia** (10) aunque el sistema sí: la conversión implícita es $10^{1.5}/(\sqrt{10.197}\times 9.80665) = 1.01$ (longitud en cm, esfuerzo en kgf/cm² y fuerza en kgf), prácticamente 1 (cálculo del proyecto).
+</Paso>
+<Paso titulo="Inglés" ref="C-F, C-257">
+Con $f'_c$ = 4061 psi y $h_{ef}$ = 7.874 in: $N_b = 24\sqrt{4061}\,(7.874)^{1.5}$ lbf → **{f(ej3.ing, 1)} kN**.
+</Paso>
+<Resultado>
+{f(ej3.si, 1)} kN (SI), {f(ej3.mks, 1)} kN (mks), {f(ej3.ing, 1)} kN (inglés): coinciden en menos de 1 %. Por eso un mismo anclaje se puede verificar en cualquiera de los tres sistemas sin cambiar el resultado; solo hay que cambiar $k_c$ al pasar al sistema inglés (de 10/7 a 24/17).
+</Resultado>
+</Ejemplo>
+
+## Erratas y observaciones del PDF
+
+- **Fila $f'_c$ = 40 MPa (C-251):** el PDF la pone igual a 420 kgf/cm² y 6 000 psi. Con la propia conversión de la norma, 420 kgf/cm² son **42 MPa**, y 6 000 psi son **41.4 MPa**; no 40 MPa. Las filas de 21, 28 y 35 MPa son coherentes.
+- **Valores de $\sqrt{f'_c}$ incoherentes entre filas:** $\sqrt{f'_c} \le 8.3$ MPa aparece como **27** kgf/cm² en C.11.1.2 y como **26.5** en C.12.1.2 (el mismo 100 psi). El coeficiente $0.66\sqrt{f'_c}$ (8 psi) se convierte a **2.2** (C.11.4.7.9), **2.1** (C.11.11.5.1), **2** (C.11-18, C.11-19) y **2.12** (C.21.9.4.4, C.21.11.9.2) kgf/cm²; el valor convertido es 2.12.
+- **C.11.11.2.2 (C-254):** la fila se rotula $\sqrt{f'_c}$ pero sus valores (0.5 MPa; 5 kgf/cm²; 70 psi) son una conversión de un **esfuerzo** (70 psi = 0.48 MPa = 4.9 kgf/cm²). El texto de C.11.11.2.2(b) (PDF p.404) dice «f′c … no debe tomarse mayor que 0.5 MPa», coherente con esta tabla. Parece que el límite del ACI 318 (70 psi aplicado a √f′c, equivalente a ≈ 5.8 en MPa^½) se convirtió como si fuera un esfuerzo: lectura del proyecto; **verifica ese límite con el ACI 318** antes de usarlo.
+- **(C.21-2) (C-256):** el PDF imprime $s_o = 100\,(350 - h_x)/3$ sin el **signo «+»** tras el 100 (igual en las tres columnas). La ecuación del capítulo C.21 (impresa como **C.21-5** en PDF p.487) es $s_o = 100 + (350 - h_x)/3$. El código «C.21-2» también difiere de la numeración del capítulo.
+- **Celdas recortadas por el borde de la tabla** (en el PDF original el texto se corta al final de la columna): C.11.5.1(b) y (c) (SI y mks), C.11.5.2.2(b) y (c) (SI), (C.11-28) (las tres columnas, se completó con la Ec. C.11-28 impresa en PDF p.402) y (C.22-10) (SI y mks, completadas con el texto impreso en PDF p.505). Las marcadas con ‡ se completaron con la forma visible en las columnas vecinas.
+- **(C.11-34):** el coeficiente 3.16 de la columna mks aparece junto a la nota «$\beta_p$ tiene las mismas unidades que la versión SI»: es $\sqrt{10}$ aplicado al término $\sqrt{f'_c}$ cuando $\beta_p$ conserva sus unidades SI.
+- **(C.11-27):** en la columna mks el símbolo es $v_c$ (minúscula) en lugar de $V_c$.
+- **(C.11-7) y (C.11-8):** en la columna SI figura «0.29 $N_u/A_g$», con 0.29 = 1/3.45 (equivale a $N_u/(3.45A_g)$ en MPa); en mks e inglés aparece directamente $N_u/(35A_g)$ y $N_u/(500A_g)$.
+- **C-D-7 en mks:** $k_c$ se imprime igual (10 ó 7) que en SI porque mks usa kgf, cm y kgf/cm², y esa combinación deja el coeficiente prácticamente igual (ver ejemplo 3).
+- **Página C-258:** hoja de «Notas» sin contenido.
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Mezclar columnas:** usar $0.53\sqrt{f'_c}$ con $f'_c$ en MPa (subestima el esfuerzo ~3×) o $0.17\sqrt{f'_c}$ con $f'_c$ en kgf/cm² (sale 3.2 veces menor de lo que debería).
+- **Convertir solo el coeficiente y no los datos:** hay que convertir **todas** las magnitudes (esfuerzos, longitudes y resultado) al sistema de la columna que se usa.
+- **Creer que $\sqrt{f'_c}$ se convierte como un esfuerzo:** $\sqrt{f'_c}$ se convierte con $\sqrt{k}$ (3.18 o 12), no con $k$ (10 o 142.2).
+- **Usar la columna inglesa con $w_c$ en kg/m³:** en la Tabla C.9.5(a) y C.8.5.1 el coeficiente depende de que $w_c$ esté en kg/m³ (SI, mks) o lb/ft³ (inglés).
+- **Tomar los límites en MPa para esfuerzos en kgf/cm²:** p. ej. el tope $\sqrt{f'_c} \le 8.3$ MPa vale 26.5–27 kgf/cm² y 100 psi.
+- **Esperar coincidencia exacta entre sistemas:** los coeficientes están redondeados; diferencias de 1–5 % son normales.
+</Callout>
+
+## Resumen en una línea
+
+**Las ecuaciones no homogéneas del Título C cambian de coeficiente con las unidades: un coeficiente de √f′c se multiplica por ≈ 3.18 (MPa → kgf/cm²) o 12 (MPa → psi) y uno con dimensión de esfuerzo por 10 o 142.2; el Apéndice C-F da las tres columnas y la regla es usar una sola, completa, de principio a fin.**

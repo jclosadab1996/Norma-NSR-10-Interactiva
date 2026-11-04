@@ -1,0 +1,153 @@
+---
+codigo: 'C.19'
+tipo: capitulo
+titulo: 'Cáscaras y losas plegadas'
+resumen: 'Definiciones y requisitos para cáscaras delgadas, losas plegadas y cáscaras nervadas de concreto: análisis elástico, inelástico y experimental, resistencia mínima de materiales, refuerzo de membrana, flexión y bordes, separaciones máximas, desarrollo, empalmes y construcción.'
+objetivos:
+  - 'Distinguir cáscara delgada, losa plegada, cáscara nervada y elemento auxiliar'
+  - 'Saber qué tipos de análisis acepta la norma y qué verificaciones son obligatorias (equilibrio, estabilidad)'
+  - 'Aplicar los límites de f′c, fy, cuantías mínimas, separaciones, desarrollo y empalmes del refuerzo de cáscara'
+  - 'Recorrer paso a paso las decisiones de diseño y construcción de una cubierta de cáscara'
+paginasNorma: 'C-167 a C-169'
+paginaPdf: 469
+orden: 19
+calculadoras: []
+nivel: 'avanzado'
+---
+
+import { cuantiaRetraccion, areaRetraccion } from '../../lib/nsr10/refuerzoDetalles';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const cas = (() => {
+  const h = 80, fc = 28, fy = 420;
+  const sNormal = Math.min(450, 5 * h);
+  const sAlta = 3 * h;
+  const phi = 0.75, lambda = 1;
+  const umbral = 0.33 * phi * lambda * Math.sqrt(fc);
+  const ret = cuantiaRetraccion(fy);
+  const asRet = areaRetraccion(ret.cuantia, h);
+  const asConc = 0.0035 * h * 1000;
+  const ld = 480;
+  return { h, fc, fy, sNormal, sAlta, phi, umbral, ret, asRet, asConc, ld, ld12: Math.max(1.2 * ld, 450), emp: Math.max(1.2 * 560, 450), sepEmpalmes: ld };
+})();
+
+## Idea central del capítulo
+
+Una **cáscara delgada** cubre grandes luces con espesores muy pequeños porque trabaja sobre todo por **fuerzas de membrana** (compresión y tracción en el plano de la superficie) y no por flexión. A cambio, su comportamiento es **tridimensional** y depende de la geometría, de los apoyos y de la carga, y puede perder estabilidad por **pandeo** aunque los esfuerzos sean bajos. El Capítulo C.19 fija el marco: define los tipos de estructuras, permite análisis elásticos, inelásticos o experimentales **siempre que den una base segura**, exige **verificar el equilibrio y la estabilidad**, y establece cómo se arma el refuerzo (<NormaRef s="C.19.1.1" pag="C-167" />).
+
+<Callout tipo="importante" titulo="Lo que no se puede omitir">
+Dos verificaciones son **obligatorias** en toda cáscara: el **equilibrio** entre resistencias internas y cargas externas, para confirmar la consistencia del análisis (<NormaRef s="C.19.2.3" pag="C-167" />), y la **estabilidad**, que debe investigarse y mostrar que **está evitada** (<NormaRef s="C.19.2.8" pag="C-168" />). Además, el área de refuerzo por tracción se limita para que **fluya antes** de que el concreto se aplaste o la cáscara se pandee (<NormaRef s="C.19.4.5" pag="C-168" />).
+</Callout>
+
+## C.19.1 — Alcance y definiciones
+
+- **C.19.1.1.** El capítulo aplica a **cáscaras delgadas y losas plegadas** de concreto, incluyendo **nervaduras y elementos de borde**.
+- **C.19.1.2.** Todas las disposiciones del Título C que no se excluyan ni contradigan C.19 aplican a las cáscaras delgadas (<NormaRef s="C.19.1.2" pag="C-167" />).
+- **Definiciones** (C.19.1.3 a C.19.1.9):
+
+| Término | Definición (resumen del PDF) |
+|---|---|
+| **Cáscaras delgadas** (C.19.1.3) | Estructuras espaciales tridimensionales hechas de una o más losas curvas o plegadas, de espesor pequeño frente a sus otras dimensiones; su comportamiento 3D lo determina la geometría, los apoyos y la carga |
+| **Losas plegadas** (C.19.1.4) | Clase especial de cáscaras formadas por **losas planas y delgadas unidas por sus bordes** en estructuras espaciales |
+| **Cáscaras nervadas** (C.19.1.5) | Material colocado principalmente a lo largo de **líneas nervadas** preferidas; el área entre nervaduras se cubre con losas delgadas o queda abierta |
+| **Elementos auxiliares** (C.19.1.6) | Nervaduras o **vigas de borde** que rigidizan, refuerzan y apoyan la cáscara; por lo general actúan conjuntamente con ella |
+| **Análisis elástico** (C.19.1.7) | Basado en equilibrio, compatibilidad y comportamiento elástico; representa con aproximación adecuada la acción 3D de la cáscara con sus elementos auxiliares |
+| **Análisis inelástico** (C.19.1.8) | Basado en equilibrio, relaciones esfuerzo-deformación **no lineales**, fisuración, efectos dependientes del tiempo y compatibilidad |
+| **Análisis experimental** (C.19.1.9) | Basado en la **medición de deformaciones** de la estructura o de su modelo, en comportamiento elástico o inelástico |
+
+## C.19.2 — Análisis y diseño
+
+- **C.19.2.1.** El **comportamiento elástico** es base aceptada para hallar fuerzas internas y desplazamientos. Se establece con cálculos sobre la estructura **no fisurada**, con material linealmente elástico, homogéneo e isotrópico; se puede suponer el **coeficiente de Poisson igual a cero** (<NormaRef s="C.19.2.1" pag="C-167" />).
+- **C.19.2.2.** Se permiten **análisis inelásticos** si se demuestra que dan una base segura.
+- **C.19.2.3.** Se hacen **verificaciones de equilibrio** de resistencias internas y cargas externas.
+- **C.19.2.4.** Se permiten **procedimientos experimentales o análisis numéricos** si se demuestra que dan una base segura.
+- **C.19.2.5.** Se permiten **métodos aproximados** si se demuestra que dan una base segura (<NormaRef s="C.19.2.5" pag="C-167" />).
+- **C.19.2.6 — Cáscaras preesforzadas.** El análisis incluye el comportamiento bajo las **cargas inducidas durante el preesforzado**, bajo la **carga de fisuración** y bajo **cargas mayoradas**. Si los tendones cambian de dirección y no están en un mismo plano, se tienen en cuenta las **componentes de fuerza** resultantes (<NormaRef s="C.19.2.6" pag="C-168" />).
+- **C.19.2.7.** El espesor y el refuerzo se diseñan para la resistencia y el funcionamiento requeridos, con el **método de resistencia (C.8.1.1)** o el **método alternativo (C.8.1.2)**.
+- **C.19.2.8.** Debe investigarse la **inestabilidad** y mostrarse en el diseño que ha sido evitada.
+- **C.19.2.9 — Elementos auxiliares.** Se diseñan con las disposiciones del Título C. Se puede suponer que una porción de la cáscara igual al **ancho del ala de C.8.12** actúa con el elemento auxiliar; en esa porción el refuerzo **perpendicular** al elemento auxiliar es al menos el de **C.8.12.5** para el ala de una viga T.
+- **C.19.2.10.** El diseño por resistencia de las losas de la cáscara para **esfuerzos de membrana y flexión** se basa en la distribución de esfuerzos y deformaciones de un análisis elástico o inelástico.
+- **C.19.2.11.** Donde se **prevé fisuración de la membrana**, la resistencia nominal a compresión **paralela a las fisuras** se toma como **$0.4 f'_c$** (<NormaRef s="C.19.2.11" pag="C-168" />).
+
+## C.19.3 — Resistencia de diseño de los materiales
+
+- **C.19.3.1.** $f'_c$ a 28 días **no menor de 21 MPa**.
+- **C.19.3.2.** $f_y$ del refuerzo no preesforzado **no excede 420 MPa** (<NormaRef s="C.19.3" pag="C-168" />).
+
+## C.19.4 — Refuerzo de la cáscara
+
+### Funciones y disposición general
+
+- **C.19.4.1.** El refuerzo se proporciona para resistir **tracciones por fuerzas de membrana**, **tracciones por flexión y torsión**, **controlar fisuración por retracción y temperatura** y actuar como **refuerzo especial** en bordes, puntos de carga y aberturas (<NormaRef s="C.19.4.1" pag="C-168" />).
+- **C.19.4.2.** El refuerzo de tracción se dispone en **dos o más direcciones**, de modo que su resistencia en cualquier dirección **iguale o exceda** la componente de esfuerzos internos en esa dirección. Alternativamente, el refuerzo de membrana puede calcularse para resistir la tracción axial **más** la tracción por **cortante por fricción** necesaria para transferir cortante a través de cualquier sección; el coeficiente $\mu$ no excede lo de **C.11.6.4.3**.
+- **C.19.4.3.** El área de refuerzo en cualquier sección, medida en **dos direcciones ortogonales**, no es menor que el refuerzo de **retracción y temperatura** de **C.7.12**.
+- **C.19.4.4.** El refuerzo por cortante y momento flector alrededor de **ejes en el plano** de la losa se calcula con los Capítulos **C.10, C.11 y C.13**.
+- **C.19.4.5.** El área de refuerzo por tracción se **limita** para que fluya **antes** del aplastamiento del concreto comprimido o del pandeo de la cáscara.
+- **C.19.4.6.** En regiones de gran tracción, el refuerzo se coloca, si es práctico, **en las direcciones de las tracciones principales de membrana**; si no, en dos o más direcciones para las componentes.
+- **C.19.4.7.** Si la dirección del refuerzo se desvía **más de 10°** de la tracción principal de membrana, se **revisa la fisuración** a carga de servicio (<NormaRef s="C.19.4.7" pag="C-169" />).
+
+### Concentración, flexión y separaciones
+
+- **C.19.4.8.** Cuando la tracción principal de membrana varía significativamente en la superficie, el refuerzo puede **concentrarse** en las regiones de mayor tracción si se demuestra una base segura; la **cuantía** de refuerzo de la cáscara en cualquier porción de la zona de tracción **no es menor de 0.0035**, basada en el **espesor total** de la cáscara (<NormaRef s="C.19.4.8" pag="C-169" />).
+- **C.19.4.9.** El refuerzo para **momentos de flexión** se diseña considerando la **acción simultánea de las fuerzas axiales de membrana**. Si solo se requiere refuerzo en una cara, se colocan **cantidades iguales** cerca de **ambas** superficies, aunque el análisis no indique reversión de momentos.
+- **C.19.4.10 — Separación máxima.** El refuerzo en cualquier dirección **no se separa más de 450 mm ni más de 5 veces el espesor** de la cáscara. Cuando el esfuerzo principal de tracción de membrana sobre el área total de concreto, por cargas mayoradas, **excede $0.33\,\phi\lambda\sqrt{f'_c}$**, la separación **no excede 3 veces el espesor**.
+
+### Desarrollo y empalmes
+
+- **C.19.4.11.** En la unión con los **elementos de apoyo o de borde**, el refuerzo se ancla o se extiende según C.12, **excepto** que la longitud de desarrollo mínima es **$1.2\,\ell_d$** y **no menor de 450 mm**.
+- **C.19.4.12.** Los empalmes siguen C.12, **excepto** que el traslapo mínimo de barras en tracción es **1.2 veces** el de C.12 y **no menor de 450 mm**. Los empalmes en el refuerzo principal de tracción se mantienen en un **mínimo práctico**; donde sean necesarios, se **escalonan al menos $\ell_d$**, con **no más de un tercio** del refuerzo empalmado en cualquier sección (<NormaRef s="C.19.4.12" pag="C-169" />).
+
+## C.19.5 — Construcción
+
+- **C.19.5.1.** Cuando el **descimbrado** se base en un valor específico del módulo de elasticidad $E_c$ (por estabilidad o deformación), $E_c$ se determina con **ensayos de flexión de viguetas curadas en obra**; el profesional facultado especifica el número de probetas, sus dimensiones y los procedimientos de ensayo.
+- **C.19.5.2.** Los documentos contractuales especifican las **tolerancias de forma** de la cáscara. Si la construcción excede las tolerancias, se **analiza el efecto** de las desviaciones y se toman las medidas correctivas para asegurar un comportamiento seguro (<NormaRef s="C.19.5" pag="C-169" />).
+
+## Caso práctico — Cubierta de cáscara de 80 mm de espesor
+
+El capítulo es cualitativo, así que en lugar de un cálculo único se recorre un caso con los números que sí da la norma (los datos del caso son supuestos del autor: espesor, $f'_c$, $\ell_d$).
+
+<Ejemplo numero={1} titulo="Decisiones y verificaciones para una cáscara delgada de concreto">
+Cáscara de cubierta de espesor $h$ = {cas.h} mm con $f'_c$ = {cas.fc} MPa y refuerzo $f_y$ = {cas.fy} MPa. Se deben fijar los límites de refuerzo.
+
+<Paso titulo="Materiales" ref="C.19.3.1, C.19.3.2">
+$f'_c$ = {cas.fc} MPa ≥ 21 MPa: **cumple**. $f_y$ = {cas.fy} MPa ≤ 420 MPa: **cumple**. Un acero de 500 MPa no se aceptaría para el refuerzo no preesforzado de la cáscara.
+</Paso>
+<Paso titulo="Análisis" ref="C.19.2">
+Se modela la cáscara con elementos finitos elásticos de material **no fisurado** ($\nu$ = 0 permitido) con sus vigas de borde como elementos auxiliares (C.19.2.1, C.19.2.9). Se verifica el **equilibrio** entre fuerzas internas integradas y cargas (C.19.2.3) y se **estudia el pandeo** (C.19.2.8); si el diseño por resistencia usa cargas mayoradas con los $\phi$ de C.9.3, se diseña con C.8.1.1 (C.19.2.7).
+</Paso>
+<Paso titulo="Cuantía mínima de la zona traccionada" ref="C.19.4.3, C.19.4.8">
+Retracción y temperatura (C.7.12) con $f_y$ = {cas.fy}: $\rho$ = {cas.ret.cuantia.toFixed(4)} → $A_s$ = {cas.ret.cuantia.toFixed(4)}·1000·{cas.h} = **{f(cas.asRet, 0)} mm²/m** en cada dirección. Si se **concentra** el refuerzo en la zona de mayor tracción, la cuantía local no baja de 0.0035: 0.0035·1000·{cas.h} = **{f(cas.asConc, 0)} mm²/m**.
+</Paso>
+<Paso titulo="Separación máxima" ref="C.19.4.10">
+Normal: menor entre 450 mm y 5h = {5 * cas.h} mm = **{cas.sNormal} mm**. Si la tracción principal de membrana mayorada excede 0.33$\phi\lambda\sqrt{f'_c}$ (con $\phi$ = 0.75 y $\lambda$ = 1.0, **suposición del autor**: el texto no precisa qué $\phi$ usar) = **{f(cas.umbral, 2)} MPa**, la separación baja a 3h = **{cas.sAlta} mm**.
+</Paso>
+<Paso titulo="Desarrollo y empalmes en el borde" ref="C.19.4.11, C.19.4.12">
+Si C.12 da $\ell_d$ = {cas.ld} mm, en la unión con la viga de borde se exige **1.2 $\ell_d$** = {1.2 * cas.ld} mm (≥ 450): **{f(cas.ld12, 0)} mm**. Un traslapo que en C.12 resulta de 560 mm pasa a 1.2 × 560 = **{f(cas.emp, 0)} mm**; se escalonan al menos $\ell_d$ = {cas.sepEmpalmes} mm y no más de **un tercio** del refuerzo se empalma en una sección.
+</Paso>
+<Paso titulo="Dirección del refuerzo" ref="C.19.4.6, C.19.4.7">
+Cuando sea práctico el refuerzo sigue las tracciones principales; si en alguna zona se desvía más de **10°**, se verifica la **fisuración** en servicio.
+</Paso>
+<Paso titulo="Construcción" ref="C.19.5">
+Antes de **descimbrar**, si el cálculo supuso un $E_c$ determinado, se prueban **viguetas curadas en obra** (C.19.5.1). Las **tolerancias de forma** van en los documentos de contrato y toda desviación mayor se analiza (C.19.5.2).
+</Paso>
+<Resultado>
+Para h = {cas.h} mm: separación ≤ **{cas.sNormal} mm** ({cas.sAlta} mm si la tracción de membrana supera {f(cas.umbral, 2)} MPa), refuerzo mínimo en las dos direcciones de **{f(cas.asRet, 0)} mm²/m** y desarrollo mínimo de bordes de **{f(cas.ld12, 0)} mm** para $\ell_d$ = {cas.ld} mm, además de verificación explícita de equilibrio y estabilidad.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores frecuentes en cáscaras">
+- **No verificar el pandeo.** Una cáscara con esfuerzos bajos puede ser inestable: C.19.2.8 exige demostrar que se evitó.
+- **Usar $f_y$ > 420 MPa** en el refuerzo no preesforzado o $f'_c$ < 21 MPa.
+- **Olvidar el 1.2 en desarrollo y empalmes** del refuerzo de la cáscara y la longitud mínima de 450 mm.
+- **Armar solo una cara a flexión** sin colocar la misma cantidad en la otra (C.19.4.9).
+- **Separaciones sin respetar 5 veces el espesor** (o 3 veces si la tracción de membrana es alta).
+- **Concentrar el refuerzo** por debajo de la cuantía de 0.0035 en la zona traccionada (C.19.4.8).
+- **Ignorar el preesforzado fuera de plano:** si los tendones no están en un mismo plano, las componentes de fuerza resultantes se incluyen en el diseño (C.19.2.6).
+</Callout>
+
+## Resumen en una línea
+
+Una cáscara se analiza con comportamiento elástico (o inelástico/experimental justificado), se verifica su **equilibrio y estabilidad**, usa $f'_c \ge 21$ MPa y $f_y \le 420$ MPa y se arma con refuerzo en dos o más direcciones (cuantía de tracción ≥ 0.0035 si se concentra, separación ≤ 450 mm y 5 veces el espesor, desarrollo y empalmes ×1.2 y ≥ 450 mm).

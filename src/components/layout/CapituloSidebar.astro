@@ -1,4 +1,6 @@
 ---
+import type { LetraTitulo } from '../../data/titulos';
+
 interface Item {
   id: string;
   codigo: string;
@@ -8,8 +10,8 @@ interface Item {
 interface Props {
   items: Item[];
   actual?: string;
-  /** Letra del Título en minúscula: 'a' | 'b'. */
-  titulo?: 'a' | 'b';
+  /** Letra del Título en minúscula: 'a' | 'b' | 'c'. */
+  titulo?: LetraTitulo;
 }
 const { items, actual, titulo = 'a' } = Astro.props;
 const base = `/titulo-${titulo}`;
@@ -67,6 +69,6 @@ const apendices = items.filter((i) => i.tipo === 'apendice');
   <ul class="space-y-0.5">
     <li><a href={`${base}/calculadoras`} class="block rounded-md px-2 py-1.5 hover:bg-accent">Calculadoras</a></li>
     {titulo === 'a' && <li><a href="/titulo-a/municipios" class="block rounded-md px-2 py-1.5 hover:bg-accent">Buscador de municipios</a></li>}
-    <li><a href={`${base}/glosario`} class="block rounded-md px-2 py-1.5 hover:bg-accent">{titulo === 'a' ? 'Glosario (A.13)' : 'Glosario del Título B'}</a></li>
+    <li><a href={`${base}/glosario`} class="block rounded-md px-2 py-1.5 hover:bg-accent">{titulo === 'a' ? 'Glosario (A.13)' : `Glosario del Título ${letra}`}</a></li>
   </ul>
 </nav>

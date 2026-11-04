@@ -1,6 +1,9 @@
 /** Los once Títulos del Reglamento NSR-10 (Decreto 926 de 2010 y modificaciones). */
 export type EstadoTitulo = 'disponible' | 'proximamente';
 
+/** Letras de los Títulos con contenido desarrollado (minúscula: rutas y colecciones `titulo-<letra>`). */
+export type LetraTitulo = 'a' | 'b' | 'c';
+
 export type Titulo = {
   /** Letra del Título (A…K). */
   letra: string;
@@ -39,9 +42,9 @@ export const TITULOS: readonly Titulo[] = [
     letra: 'C',
     slug: 'titulo-c',
     nombre: 'Concreto estructural',
-    resumen: 'Diseño y construcción de estructuras de concreto reforzado, preesforzado y simple.',
+    resumen: 'Diseño y construcción de estructuras de concreto reforzado, preesforzado, prefabricado y simple; requisitos sismo resistentes.',
     paginasNorma: 'C-1',
-    estado: 'proximamente',
+    estado: 'disponible',
     acento: 'text-chart-3',
   },
   {

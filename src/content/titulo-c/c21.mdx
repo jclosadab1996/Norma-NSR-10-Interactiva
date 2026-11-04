@@ -1,0 +1,607 @@
+---
+codigo: 'C.21'
+tipo: capitulo
+titulo: 'Requisitos de diseño sismo resistente (1/2): generales, pórticos DMI, DMO y DES'
+resumen: 'Qué debe cumplir el concreto reforzado según la capacidad de disipación de energía (DMI, DMO, DES): materiales, empalmes, vigas y columnas de pórticos intermedios y especiales, momentos probables, cortante de diseño, columna fuerte–viga débil y refuerzo de confinamiento.'
+objetivos:
+  - 'Relacionar el grado DMI, DMO o DES del Título A con los numerales del C.21 que se deben cumplir'
+  - 'Calcular el momento probable Mpr y el cortante de diseño Ve de una viga de pórtico especial'
+  - 'Verificar la relación columna fuerte–viga débil (ΣMnc ≥ 1.2 ΣMnb)'
+  - 'Dimensionar el refuerzo de confinamiento de una columna: Ash, separación s y longitud ℓo'
+  - 'Distinguir los requisitos de DMO de los de DES lado a lado'
+paginasNorma: 'C-175 a C-187'
+paginaPdf: 477
+orden: 21
+calculadoras: ['confinamiento-columna']
+nivel: 'avanzado'
+---
+
+import { buscarBarra } from '../../data/refuerzoDetalles';
+import { armaduraPerimetral, curvaInteraccion, phiMnParaCarga } from '../../lib/nsr10/columnaInteraccion';
+import { asMinimo } from '../../lib/nsr10/flexionConcreto';
+import {
+  momentoProbable,
+  cortanteDisenoViga,
+  vcEsCeroViga,
+  avSobreS,
+  separacionEstribosViga,
+  longitudConfinamientoViga,
+  relacionColumnaViga,
+  ashRequerido,
+  separacionMaximaColumna,
+  separacionSoDES,
+  separacionPorAshProvisto,
+  longitudLoColumna,
+  separacionFueraDeLo,
+  geometriaNucleo,
+} from '../../lib/nsr10/sismoConcreto';
+
+export const ej1 = (() => {
+  const b = 350, h = 600, d = 540, dp = 60, fc = 28, fy = 420, ln = 5.6, wu = 45;
+  const n8 = buscarBarra('No.8');
+  const n4 = buscarBarra('No.4');
+  const AsSup = 4 * n8.area;
+  const AsInf = 3 * n8.area;
+  const neg = { b, d, fc, fy, As: AsSup, Aprime: AsInf, dPrime: dp };
+  const pos = { b, d, fc, fy, As: AsInf, Aprime: AsSup, dPrime: dp };
+  const mprN = momentoProbable(neg);
+  const mprP = momentoProbable(pos);
+  const mnN = momentoProbable({ ...neg, alfa: 1 });
+  const mnP = momentoProbable({ ...pos, alfa: 1 });
+  const ve = cortanteDisenoViga({ mprNegIzq: mprN.Mpr, mprPosIzq: mprP.Mpr, mprNegDer: mprN.Mpr, mprPosDer: mprP.Mpr, luzLibre: ln, wu });
+  const vcCero = vcEsCeroViga(ve.vsismo, ve.ve, 0, b * h, fc);
+  const phi = 0.75;
+  const avs = avSobreS(ve.ve, phi, 0, fy, d);
+  const sep = separacionEstribosViga('DES', d, n8.db, n4.db);
+  const avsProv = (2 * n4.area) / sep.s;
+  return {
+    b, h, d, dp, fc, fy, ln, wu, n8, n4, AsSup, AsInf, mprN, mprP, mnN, mnP, ve, vcCero, phi, avs, sep, avsProv,
+    rhoSup: AsSup / (b * d),
+    asMin: asMinimo(fc, fy, b, d),
+    relMomentos: mnP.Mpr / mnN.Mpr,
+    zona: longitudConfinamientoViga(h),
+    ratioMpr: mprN.Mpr / mnN.Mpr,
+  };
+})();
+
+export const ej2 = (() => {
+  const fc = 28, fy = 420;
+  const sumMnb = ej1.mnN.Mpr + ej1.mnP.Mpr;
+  const caso = (bc, area) => {
+    const ar = armaduraPerimetral(bc, 60, 3, 3, area);
+    const curva = curvaInteraccion({ b: bc, h: bc, fc, fy, capas: ar.capas });
+    const PuMin = 1100, PuMax = 2000;
+    const m1 = phiMnParaCarga(curva.puntos, PuMin, false);
+    const m2 = phiMnParaCarga(curva.puntos, PuMax, false);
+    const Mnc = Math.min(m1, m2);
+    const sumMnc = 2 * Mnc;
+    return { bc, area, Ast: ar.Ast, rho: ar.Ast / (bc * bc), PuMin, PuMax, m1, m2, Mnc, sumMnc, r: relacionColumnaViga(sumMnc, sumMnb) };
+  };
+  return { sumMnb, fuerte: caso(500, buscarBarra('No.8').area), debil: caso(400, buscarBarra('No.7').area) };
+})();
+
+export const ej3 = (() => {
+  const b = 500, h = 500, rec = 40, fc = 28, fyt = 420, lu = 2800;
+  const lon = buscarBarra('No.8');
+  const est = buscarBarra('No.4');
+  const g = geometriaNucleo(b, h, rec, est.db);
+  const Ag = b * h;
+  const base = { fc, fyt, Ag, Ach: g.Ach, bc: g.bcB };
+  const dise = (nRamas) => {
+    const hx = g.ejeB / (nRamas - 1);
+    const sGeo = separacionMaximaColumna('DES', { dimensionMenor: b, dbLongMenor: lon.db, hx });
+    const prov = nRamas * est.area;
+    const sAsh = separacionPorAshProvisto('DES', prov, { fc, fyt, Ag, Ach: g.Ach, bc: g.bcB });
+    const sUsada = Math.floor(Math.min(sGeo.s, sAsh) / 5) * 5;
+    const req = ashRequerido('DES', { ...base, s: sUsada });
+    const reqEnGeo = ashRequerido('DES', { ...base, s: sGeo.s });
+    return { nRamas, hx, so: separacionSoDES(hx), sGeo, prov, sAsh, sUsada, req, reqEnGeo };
+  };
+  const a = dise(3);
+  const c = dise(4);
+  const dmo = ashRequerido('DMO', { ...base, s: 100 });
+  const des100 = ashRequerido('DES', { ...base, s: 100 });
+  const lo = longitudLoColumna('DES', b, lu);
+  return { b, h, rec, fc, fyt, lu, lon, est, g, Ag, a, c, dmo, des100, lo, sFuera: separacionFueraDeLo('DES', lon.db, a.sUsada), relAgAch: Ag / g.Ach };
+})();
+
+## Idea central del capítulo
+
+Los Capítulos C.1 a C.19 enseñan a dimensionar el concreto para cargas que se resisten **elásticamente**. El Capítulo C.21 parte de otra premisa: las fuerzas sísmicas de diseño del Título A ya fueron **reducidas** por el coeficiente $R$ porque se espera que la estructura **incursione en el rango no lineal** y disipe energía (<NormaRef s="C.21.1.1.1" pag="C-175" />). Para que esa reducción sea honesta, el detallado del refuerzo debe garantizar **ductilidad**: que las articulaciones se formen donde se quiere (en las vigas), que el cortante nunca anticipe a la flexión y que el concreto de los extremos de columnas y muros quede **confinado**.
+
+Cuatro ideas ordenan todo el capítulo:
+
+1. **El grado de disipación manda.** El Título A asigna a cada sistema un grado: mínima (**DMI**), moderada (**DMO**) o especial (**DES**) (<NormaRef s="C.21.1.1.2" pag="C-175" />). Cada grado activa un conjunto de numerales; a mayor $R_0$, más detallado.
+2. **Diseño por capacidad.** El cortante de vigas y columnas especiales no sale del análisis sino de las **resistencias probables a flexión** $M_{pr}$ de los extremos: así el elemento falla dúctilmente por flexión, no frágilmente por cortante.
+3. **Columna fuerte – viga débil.** Las columnas de un nudo deben ser, en conjunto, al menos 1.2 veces más resistentes que las vigas, para que la articulación plástica aparezca en las vigas (Ec. <NormaRef s="C.21-4" pag="C-181" />).
+4. **Confinamiento.** Estribos cerrados y ganchos suplementarios, cerca de los nudos, mantienen el núcleo de concreto íntegro y sostienen las barras contra el pandeo (Ecs. C.21-2/3 y C.21-7/8).
+
+<Callout tipo="importante" titulo="Numeración de este capítulo (no es la del ACI 318)">
+En la NSR-10, DMO se trata en **C.21.3** (pórticos) y **C.21.4** (muros), y DES en **C.21.5** a **C.21.10**. Las ecuaciones tampoco coinciden con otras ediciones: la relación columna fuerte–viga débil es **C.21-4**; los coeficientes de Ash de DMO son los de C.21-2 y C.21-3, y los de DES los de **C.21-7 y C.21-8**. En este capítulo se usa siempre la numeración **del PDF de la NSR-10**.
+</Callout>
+
+El capítulo es largo y se presenta en dos partes. Esta primera parte cubre **C.21.1 a C.21.6** (requisitos generales, pórticos DMI, DMO y DES: vigas y columnas). La [segunda parte](/titulo-c/c21b) cubre **C.21.7 a C.21.13** (nudos, prefabricados, muros especiales y vigas de acople, diafragmas, cimentaciones y elementos no designados).
+
+## C.21.1 — Requisitos generales
+
+### C.21.1.1 — Alcance y relación con el Título A
+
+El C.21 se aplica a elementos de concreto reforzado de estructuras cuyas fuerzas sísmicas se determinaron contando con disipación de energía no lineal. Todos los elementos cumplen primero los Capítulos C.1 a C.19 y C.22, y **además** los numerales del C.21 que correspondan a su capacidad de disipación (<NormaRef s="C.21.1.1.3" pag="C-175" />).
+
+<TablaNorma numero="C.21.1.1.4 a C.21.1.1.7" titulo="Numerales que debe cumplir cada grado de disipación de energía" pag="C-175" nota="Organización de la tabla: del autor, a partir de C.21.1.1.4 a C.21.1.1.7. Los pórticos y muros se tratan en los numerales de la columna correspondiente.">
+
+| Grado (Título A) | Requisitos generales | Pórticos resistentes a momento | Muros estructurales |
+|---|---|---|---|
+| **DMI** (mínima) | C.21.1.2 | Pórtico ordinario: **C.21.2** | Muro ordinario: ningún requisito del C.21 |
+| **DMO** (moderada) | C.21.1.2 a C.21.1.8 | Pórtico intermedio: **C.21.3** | Muro intermedio (prefabricado o en sitio): **C.21.4** |
+| **DES** (especial) | C.21.1.2 a C.21.1.8, y C.21.11 a C.21.13 | Pórtico especial: **C.21.5 a C.21.8** | Muro especial: **C.21.9** (prefabricado: **C.21.10**) |
+
+</TablaNorma>
+
+Los sistemas designados como parte del sistema de resistencia sísmica deben limitarse a los que permite el Título A (<NormaRef s="C.21.1.1.7" pag="C-175" />; véase el capítulo [A.3](/titulo-a/a3)). Los pórticos y muros **especiales** deben cumplir además C.21.1.3 a C.21.1.7.
+
+<Callout tipo="nota" titulo="Sistemas que no cumplen el capítulo (C.21.1.1.8)">
+Un sistema que no cumpla este capítulo puede aceptarse si se demuestra, con **evidencia experimental y análisis**, que tiene rigidez y tenacidad iguales o mayores que las de una estructura monolítica comparable que sí lo cumpla. Hace falta una **autorización especial** de la Comisión Asesora Permanente del Régimen de Construcciones Sismo Resistentes (Ley 400 de 1997) (<NormaRef s="C.21.1.1.8" pag="C-175" />).
+</Callout>
+
+### C.21.1.2 — Análisis y diseño de elementos estructurales
+
+- El análisis debe considerar la interacción de **todos** los elementos, estructurales y no estructurales, que afecten la respuesta lineal y no lineal (<NormaRef s="C.21.1.2.1" pag="C-176" />).
+- Se permiten elementos rígidos que no forman parte del sistema sísmico, siempre que se tenga en cuenta su efecto en la respuesta y las consecuencias de su falla (<NormaRef s="C.21.1.2.2" pag="C-176" />).
+- Los elementos **bajo la base** que transmiten las fuerzas sísmicas a la cimentación también cumplen el C.21 que sea congruente con el sistema que está encima (<NormaRef s="C.21.1.2.3" pag="C-176" />).
+
+### C.21.1.3 — Factores de reducción de resistencia
+
+Se usan los de <NormaRef s="C.9.3.4" pag="C-69" />, que **modifica** los φ de C.9.3.2 para DMO y DES (<NormaRef s="C.21.1.3" pag="C-176" />): φ de cortante = **0.60** en elementos cuya resistencia nominal a cortante sea menor que el cortante correspondiente a su resistencia nominal a flexión; en diafragmas no excede el φ de cortante de los elementos verticales; y en **nudos y vigas de acople con refuerzo diagonal φ = 0.85**.
+
+### C.21.1.4 — Concreto en DMO y DES
+
+Aplica a pórticos especiales, muros especiales y vigas de acople (<NormaRef s="C.21.1.4.1" pag="C-176" />):
+
+- $f'_c \ge 21$ MPa. Se exceptúan las estructuras de hasta tres pisos con muros de carga (<NormaRef s="C.21.1.4.2" pag="C-176" />).
+- Concreto **liviano**: $f'_c \le 35$ MPa, salvo evidencia experimental de que los elementos igualan en resistencia y tenacidad a los de peso normal (<NormaRef s="C.21.1.4.3" pag="C-176" />). El factor $\lambda$ sigue C.8.6.1.
+
+### C.21.1.5 — Refuerzo en DMO y DES
+
+<TablaNorma numero="C.21.1.5" titulo="Requisitos del refuerzo para elementos que resisten sismo" pag="C-176" nota="Organización de la tabla: del autor, a partir de C.21.1.5.2 a C.21.1.5.5.">
+
+| Aspecto | Requisito | Numeral |
+|---|---|---|
+| Barras corrugadas que resisten flexión y fuerza axial sísmicas | Cumplir **NTC 2289 (ASTM A706M)** | C.21.1.5.2 |
+| Fluencia real (ensayos de fábrica) | No mayor que $f_y$ en más de **125 MPa** | C.21.1.5.2(a) |
+| Resistencia real de tracción / fluencia real | No menor de **1.25** | C.21.1.5.2(b) |
+| Acero de preesfuerzo (pórticos y muros prefabricados) | NTC 2010 (ASTM A416M) o NTC 2142 (ASTM A722M) | C.21.1.5.3 |
+| $f_{yt}$ para la cuantía de confinamiento | No mayor que **700 MPa** | C.21.1.5.4 |
+| $f_y$ o $f_{yt}$ en refuerzo de cortante | Cumplir C.11.4.2 | C.21.1.5.5 |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Redacción dudosa en C.21.1.5.2">
+El numeral dice que el refuerzo «debe cumplir con las disposiciones de NTC 2289 (ASTM A706M)» y a continuación lista (a) y (b) como límites de las **propiedades reales** del acero, sin una condición («siempre que…») que explique a qué acero se aplican. Aquí se transcriben tal como están, sin interpretar más allá del texto (<NormaRef s="C.21.1.5.2" pag="C-176" />).
+</Callout>
+
+### C.21.1.6 y C.21.1.7 — Empalmes mecánicos y soldados (DMO y DES)
+
+- Empalmes mecánicos **Tipo 1**: cumplen C.12.14.3.2. **Tipo 2**: además desarrollan la resistencia a tracción especificada de la barra (<NormaRef s="C.21.1.6.1" pag="C-177" />).
+- Los Tipo 1 **no** se usan a menos de **2 veces la altura del elemento** desde la cara de la viga o columna (pórticos especiales), ni donde se espere fluencia por desplazamientos laterales inelásticos. Los Tipo 2 se pueden usar en cualquier sitio (<NormaRef s="C.21.1.6.2" pag="C-177" />).
+- Los empalmes **soldados** cumplen C.12.14.3.4 y tampoco se usan a menos de 2 h de la cara ni donde se espere fluencia (<NormaRef s="C.21.1.7.1" pag="C-177" />). **No se sueldan** estribos, insertos ni elementos similares al refuerzo longitudinal requerido (<NormaRef s="C.21.1.7.2" pag="C-177" />).
+
+### C.21.1.8 — Anclaje al concreto
+
+Los anclajes que resistan fuerzas sísmicas en DMO y DES cumplen los requisitos adicionales de **C-D.3.3** (<NormaRef s="C.21.1.8" pag="C-177" />); véase el Apéndice C-D.
+
+## C.21.2 — Pórticos ordinarios con capacidad mínima de disipación (DMI)
+
+El grado más sencillo exige muy poco (<NormaRef s="C.21.2.1" pag="C-177" />):
+
+- **Vigas:** al menos **dos barras continuas** arriba y abajo, desarrolladas en la cara de apoyo (<NormaRef s="C.21.2.2" pag="C-177" />).
+- **Columnas cortas:** si la altura libre es $\le 5\,c_1$, se diseñan para cortante como en C.21.3.3 (<NormaRef s="C.21.2.3" pag="C-177" />).
+- **Losas en dos direcciones sin vigas** que formen parte del pórtico sísmico DMI (<NormaRef s="C.21.2.4" pag="C-177" />):
+
+<TablaNorma numero="C.21.2.4" titulo="Refuerzo de losas sin vigas con capacidad mínima de disipación (DMI)" pag="C-177 a C-178" nota="Organización de la tabla: del autor, a partir de C.21.2.4.1 a C.21.2.4.8.">
+
+| Requisito | Numeral |
+|---|---|
+| Momento mayorado de la losa en el apoyo debido a $E$ con las combinaciones (C.9-5) y (C.9-7); el refuerzo para resistir $M_{slab}$ va en la franja de columna (C.13.2.1) | C.21.2.4.1 |
+| El refuerzo dentro del ancho efectivo (C.13.5.3.2) resiste $\gamma_f M_{slab}$; en conexiones exteriores y de esquina el ancho no pasa de $c_t$ más allá de la cara de la columna | C.21.2.4.2 |
+| No menos de **1/2** del refuerzo de la franja de columna en el apoyo, dentro del ancho efectivo | C.21.2.4.3 |
+| No menos de **1/4** del refuerzo superior de la franja de columna en el apoyo, continuo en la luz | C.21.2.4.4 |
+| Refuerzo inferior continuo de la franja de columna **≥ 1/3** del superior en el apoyo | C.21.2.4.5 |
+| No menos de **1/2** del refuerzo inferior a media luz, continuo y desarrollando $f_y$ en la cara del apoyo (C.13.6.2.5) | C.21.2.4.6 |
+| En bordes discontinuos, todo el refuerzo superior e inferior se desarrolla en la cara del apoyo | C.21.2.4.7 |
+| Cortante en dos direcciones por cargas gravitacionales mayoradas en la sección crítica **≤ 0.4 φVc** (se puede obviar si se cumple C.21.13.6) | C.21.2.4.8 |
+
+</TablaNorma>
+
+## C.21.3 — Pórticos intermedios con capacidad moderada de disipación (DMO)
+
+### C.21.3.1 a C.21.3.3 — Alcance y cortante de diseño
+
+Los detalles de un elemento del pórtico siguen **C.21.3.4** (vigas) cuando $P_u \le A_g f'_c/10$ y **C.21.3.5** (columnas) cuando $P_u$ es mayor (<NormaRef s="C.21.3.2" pag="C-178" />).
+
+Además, $\phi V_n$ de las vigas y columnas que resisten $E$ no debe ser menor que el **menor** entre (<NormaRef s="C.21.3.3" pag="C-178" />):
+
+- (a) el cortante asociado al desarrollo de los momentos **nominales** en los extremos restringidos de la luz libre, más el cortante de cargas gravitacionales mayoradas; y
+- (b) el cortante máximo de las combinaciones que incluyan $E$ tomando $E$ como **el doble** del prescrito por el Título A.
+
+### C.21.3.4 — Vigas DMO
+
+<TablaNorma numero="C.21.3.4" titulo="Vigas de pórticos con capacidad moderada de disipación (DMO)" pag="C-178 a C-179" nota="Organización de la tabla: del autor, a partir de C.21.3.4.1 a C.21.3.4.8.">
+
+| Requisito | Valor | Numeral |
+|---|---|---|
+| Ancho $b_w$ | $\ge$ 200 mm | C.21.3.4.1 |
+| Excentricidad respecto a la columna de apoyo | $\le$ 25 % del ancho del apoyo | C.21.3.4.2 |
+| Cuantía de refuerzo superior e inferior | $\rho \ge$ Ec. C.10-3 y $\rho \le$ **0.025**; al menos 2 barras continuas $\ge$ No. 4 (12M) arriba y abajo | C.21.3.4.3 |
+| Momento positivo en la cara del nudo | $\ge$ **1/3** del momento negativo en esa cara | C.21.3.4.4 |
+| Momento (+ o −) en cualquier sección | $\ge$ **1/5** del máximo en la cara de cualquiera de los nudos | C.21.3.4.4 |
+| Empalmes por traslapo | No se permiten dentro de los nudos | C.21.3.4.5 |
+| Estribos cerrados de confinamiento | No. 3 (10M) como mínimo, en **2h** desde la cara de apoyo; primero a **≤ 50 mm** | C.21.3.4.6 |
+| Separación de los estribos de confinamiento | Menor de **d/4**, **8 db** (barra longitudinal confinada más pequeña), **24 dbe** y **300 mm** | C.21.3.4.6 |
+| Soporte lateral de las barras del perímetro | Conforme a C.7.10.5.3 donde se requieran estribos de confinamiento | C.21.3.4.7 |
+| Estribos con ganchos sísmicos en toda la longitud | Separación $\le$ **d/2** | C.21.3.4.8 |
+
+</TablaNorma>
+
+### C.21.3.5 — Columnas DMO
+
+<TablaNorma numero="C.21.3.5" titulo="Columnas de pórticos con capacidad moderada de disipación (DMO)" pag="C-179 a C-181" nota="Organización de la tabla: del autor, a partir de C.21.3.5.1 a C.21.3.5.13. Los coeficientes de las ecuaciones se muestran más abajo.">
+
+| Requisito | Valor | Numeral |
+|---|---|---|
+| Dimensión menor de la sección | $\ge$ **250 mm** (columnas T, C o I: dimensión mínima 0.20 m y área $\ge$ 0.0625 m²) | C.21.3.5.1 |
+| Refuerzo longitudinal | $0.01 A_g \le A_{st} \le 0.04 A_g$ | C.21.3.5.2 |
+| Empalmes | Mecánicos: C.21.1.6; soldados: C.21.1.7; por traslapo **solo en la mitad central**, como empalmes de tracción | C.21.3.5.3 |
+| Zona $\ell_o$ desde la cara del nudo | $\ell_o \ge$ mayor de **luz libre/6**, **mayor dimensión** de la sección y **500 mm** | C.21.3.5.6 |
+| Separación $s_o$ en $\ell_o$ | Menor de **8 db** (barra longitudinal confinada menor), **16 dbe**, **menor dimensión/3** y **150 mm** | C.21.3.5.6 |
+| Estribos | Rectilíneos, mínimo No. 3 (10M), con o sin ganchos suplementarios; ramas o ganchos con $h_x \le$ **350 mm** | C.21.3.5.8 |
+| Primer estribo | A **≤ s_o/2** de la cara del nudo | C.21.3.5.10 |
+| Fuera de $\ell_o$ | Misma disposición y $f_{yt}$, con separación **≤ 2 s_o** | C.21.3.5.11 |
+| Refuerzo transversal del nudo | Cumplir C.11.10 | C.21.3.5.12 |
+| Columnas bajo elementos rígidos discontinuos (muros) | Refuerzo con separación $s_o$ en toda la altura bajo la discontinuidad si la compresión axial sísmica excede $A_g f'_c/10$ ($A_g f'_c/4$ si se amplificó por sobrerresistencia); se extiende según C.21.6.4.6(b) | C.21.3.5.13 |
+
+</TablaNorma>
+
+<Ecuacion num="C.21-1" titulo="Cuantía volumétrica de espiral o estribos circulares (DMO)">
+
+$$
+\rho_s = 0.08\,\frac{f'_c}{f_{yt}}
+$$
+
+y no debe ser menor que la requerida por la Ec. C.10-5 (<NormaRef s="C.21.3.5.5" pag="C-179" />).
+
+</Ecuacion>
+
+<Ecuacion num="C.21-2" titulo="Área de estribos rectangulares con relación Ag/Ach (DMO)">
+
+$$
+A_{sh} = 0.2\,\frac{s\,b_c\,f'_c}{f_{yt}}\left[\left(\frac{A_g}{A_{ch}}\right) - 1\right]
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.21-3" titulo="Área mínima de estribos rectangulares (DMO)">
+
+$$
+A_{sh} = 0.06\,\frac{s\,b_c\,f'_c}{f_{yt}}
+$$
+
+Ambas ecuaciones aplican a $A_{sh}$ colocado en la longitud $\ell_o$ y **rige la mayor** (<NormaRef s="C.21.3.5.7" pag="C-180" />). $b_c$ es la dimensión del núcleo medida entre los bordes externos del refuerzo transversal, $A_g$ el área bruta y $A_{ch}$ el área del núcleo medida a los bordes externos del refuerzo transversal.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Alternativa de C.21.3.5.9 (DMO)">
+En columnas con $f'_c \le 35$ MPa se pueden colocar estribos No. 3 (10M) con $f_{yt}$ = 420 MPa a **s = 100 mm**. Si la distancia horizontal entre dos ramas paralelas es mayor que la mitad de la menor dimensión de la sección o 200 mm, se agregan los estribos suplementarios No. 3 (10M) necesarios para que esa separación no exceda la mitad de la dimensión menor o 200 mm (<NormaRef s="C.21.3.5.9" pag="C-180" />).
+</Callout>
+
+### C.21.3.6 — Resistencia mínima a flexión de las columnas (DMO)
+
+Las columnas satisfacen una de dos opciones (<NormaRef s="C.21.3.6.1" pag="C-181" />):
+
+- **C.21.3.6.2:** la Ec. C.21-4, $\sum M_{nc} \ge 1.2 \sum M_{nb}$ (se explica en C.21.6.2, más abajo); o
+- **C.21.3.6.3:** si no se cumple en un nudo, la rigidez y resistencia lateral de las columnas de ese nudo se **ignoran** en el modelo, y esas columnas llevan el confinamiento de C.21.3.5.5, o C.21.3.5.7 a C.21.3.5.9, en toda su altura hasta la cimentación. Esto solo se tolera en **hasta el 10 %** de las columnas de un mismo piso; si se excede, se rediseñan columnas y vigas.
+
+## C.21.4 — Muros intermedios con capacidad moderada de disipación (DMO)
+
+Aplica a muros prefabricados o vaciados en sitio (<NormaRef s="C.21.4.1" pag="C-181" />):
+
+- **Prefabricados:** en las conexiones entre paneles o con la cimentación la fluencia se restringe a elementos de acero o al refuerzo (<NormaRef s="C.21.4.2" pag="C-181" />), y los elementos de conexión que no fluyen resisten al menos **1.5 $S_y$** (<NormaRef s="C.21.4.3" pag="C-181" />).
+- **Vaciados en sitio:** cumplen **todo C.21.9** (muros especiales) con estas modificaciones (<NormaRef s="C.21.4.4" pag="C-181" />):
+  - en la Ec. C.21-11, $\delta_u/h_w$ no menor que **0.0035** (en lugar de 0.007) (<NormaRef s="C.21.4.4.1" pag="C-181" />);
+  - elementos de borde cuando la compresión extrema bajo cargas mayoradas con $E$ pase de **0.3 $f'_c$**; se descontinúan donde sea menor que **0.22 $f'_c$** (<NormaRef s="C.21.4.4.2" pag="C-182" />);
+  - refuerzo transversal de los bordes según C.21.3.5.6(a) a (d), C.21.3.5.7 y C.21.3.5.8, sin exigir la Ec. C.21-2, y con el límite de separación de C.21.3.5.6(c) no menor que la mitad de la menor dimensión del borde ni de 150 mm (<NormaRef s="C.21.4.4.3" pag="C-182" />);
+  - no se exige C.21.9.9 (columnas bajo muros discontinuos) (<NormaRef s="C.21.4.4.4" pag="C-182" />).
+
+## C.21.5 — Vigas de pórticos especiales (DES)
+
+### C.21.5.1 — Alcance y límites geométricos
+
+Aplica a elementos de pórticos especiales diseñados principalmente para flexión, que además cumplan (<NormaRef s="C.21.5.1" pag="C-182" />):
+
+<TablaNorma numero="C.21.5.1" titulo="Condiciones geométricas de las vigas de pórticos especiales (DES)" pag="C-182">
+
+| Condición | Valor | Numeral |
+|---|---|---|
+| Carga axial mayorada de compresión | $P_u \le A_g f'_c / 10$ | C.21.5.1.1 |
+| Luz libre | $\ell_n \ge 4\,d$ | C.21.5.1.2 |
+| Ancho del elemento | $b_w \ge$ menor de $0.3\,h$ y 250 mm | C.21.5.1.3 |
+| Ancho máximo respecto al apoyo | $b_w \le c_2 +$ (a cada lado) el menor de $c_2$ y $0.75\,c_1$ | C.21.5.1.4 |
+
+</TablaNorma>
+
+### C.21.5.2 — Refuerzo longitudinal
+
+- En cualquier sección, el refuerzo superior e inferior no es menor que el de la Ec. C.10-3 ni que $1.4\,b_w d/f_y$, y la cuantía **no excede 0.025**. Al menos **dos barras continuas** arriba y abajo (<NormaRef s="C.21.5.2.1" pag="C-182" />).
+- El momento **positivo** en la cara del nudo no es menor que **la mitad** del momento negativo en esa cara. El momento (+ o −) en cualquier sección no es menor que **un cuarto** del máximo en la cara de cualquier nudo (<NormaRef s="C.21.5.2.2" pag="C-182" />; véase la nota de erratas más abajo).
+- **Traslapos** solo con estribos cerrados o espirales en toda la longitud del empalme, con separación $\le$ menor de $d/4$ y **100 mm**. **No** se usan: (a) dentro de nudos, (b) a menos de 2 veces la altura de la cara del nudo y (c) donde el análisis indique fluencia por desplazamientos inelásticos (<NormaRef s="C.21.5.2.3" pag="C-183" />).
+- Empalmes mecánicos y soldados: C.21.1.6 y C.21.1.7 (<NormaRef s="C.21.5.2.4" pag="C-183" />).
+- **Preesforzado** (salvo lo permitido en C.21.8.3): $f_{pc}$ promedio $\le$ menor de 3.5 MPa y $f'_c/10$; acero **no adherido** en las rótulas plásticas y con deformación $<$ 1 % al desplazamiento de diseño; contribuye $\le$ un cuarto de la resistencia a flexión; anclajes de postensado que resistan 50 ciclos entre 40 % y 85 % de la resistencia a tracción especificada (<NormaRef s="C.21.5.2.5" pag="C-183" />).
+
+<Callout tipo="atencion" titulo="Errata en C.21.5.2.2">
+El PDF dice que el momento en cualquier sección «debe ser menor a un cuarto» del máximo. El sentido evidente (y el del equivalente DMO, C.21.3.4.4, «no debe ser menor de un quinto») es que **no debe ser menor** que un cuarto. Aquí se interpreta así (<NormaRef s="C.21.5.2.2" pag="C-182" />).
+</Callout>
+
+### C.21.5.3 — Refuerzo transversal
+
+- **Estribos cerrados de confinamiento** (a) en una longitud de **2 h** desde la cara del apoyo, en ambos extremos, y (b) a ambos lados de cualquier sección donde pueda haber fluencia por flexión debida a desplazamientos laterales inelásticos (<NormaRef s="C.21.5.3.1" pag="C-183" />).
+- El primero a **≤ 50 mm** de la cara. La separación no excede el menor de **d/4**, **8 db** (barras longitudinales más pequeñas), **24 dbe** y **300 mm** (<NormaRef s="C.21.5.3.2" pag="C-183" />).
+- Las barras longitudinales del perímetro tienen soporte lateral según C.7.10.5.3 (<NormaRef s="C.21.5.3.3" pag="C-183" />).
+- Donde no se requieren estribos de confinamiento, estribos con **ganchos sísmicos** en ambos extremos a **≤ d/2** (<NormaRef s="C.21.5.3.4" pag="C-183" />).
+- Los estribos requeridos para cortante son estribos cerrados de confinamiento en las zonas de C.21.5.3.1 (<NormaRef s="C.21.5.3.5" pag="C-183" />). Pueden hacerse con **dos piezas**: un estribo con gancho sísmico en cada extremo cerrado por un gancho suplementario; los ganchos suplementarios consecutivos que enlazan la misma barra alternan sus ganchos de 90° en lados opuestos (<NormaRef s="C.21.5.3.6" pag="C-184" />).
+
+<Figura src="/img/titulo-c/c21-zonas-confinamiento.svg" alt="Esquema de un nudo viga–columna con las zonas de confinamiento en la viga (2h) y en la columna (ℓo)" numero="Esquema del autor" pie="Zonas de confinamiento en un pórtico especial: 2h en la viga (C.21.5.3) y ℓo en la columna (C.21.6.4). No es una figura de la norma; las separaciones del dibujo no están a escala." />
+
+### C.21.5.4 — Resistencia a cortante: Mpr y Ve
+
+La fuerza cortante de diseño $V_e$ se obtiene por **estática** en el tramo entre las caras de los nudos: en cada extremo actúan momentos de signo opuesto correspondientes a la **resistencia probable** $M_{pr}$, y el elemento lleva además las cargas gravitacionales mayoradas aferentes (<NormaRef s="C.21.5.4.1" pag="C-184" />).
+
+La Notación del Título C define $M_{pr}$ como la resistencia probable a flexión «con o sin carga axial, determinada usando las propiedades de los elementos en las caras de los nudos suponiendo un esfuerzo en tracción para las barras longitudinales de al menos **1.25 $f_y$** y un factor de reducción de la resistencia $\phi$ de **1.0**» (PDF p.313, C-11). Para una viga simplemente armada:
+
+<Ecuacion num="Mpr (viga simple)" titulo="Momento de resistencia probable (forma cerrada, del autor)">
+
+$$
+a = \frac{1.25\,f_y\,A_s}{0.85\,f'_c\,b}, \qquad M_{pr} = 1.25\,f_y\,A_s\left(d - \frac{a}{2}\right)
+$$
+
+Esta es la expresión de equilibrio de la sección con el esfuerzo de 1.25 $f_y$; la norma solo define $M_{pr}$ y describe el procedimiento, no escribe la fórmula.
+
+</Ecuacion>
+
+<Ecuacion num="Ve (viga)" titulo="Cortante de diseño por capacidad (estática, del autor)">
+
+$$
+V_e = \frac{M_{pr,1} + M_{pr,2}}{\ell_n} + \frac{w_u\,\ell_n}{2}
+$$
+
+$M_{pr,1}$ y $M_{pr,2}$ son los momentos probables en los extremos (negativo en uno, positivo en el otro, para un sentido del sismo), $\ell_n$ la luz libre y $w_u$ la carga gravitacional mayorada uniforme. Se evalúan los dos sentidos del sismo y se toma el mayor.
+
+</Ecuacion>
+
+**Refuerzo transversal con $V_c = 0$.** En las zonas de C.21.5.3.1 el refuerzo se diseña suponiendo $V_c = 0$ cuando se cumplan **a la vez** (<NormaRef s="C.21.5.4.2" pag="C-184" />):
+
+- (a) el cortante inducido por el sismo (el de $M_{pr}$) es la **mitad o más** de la resistencia máxima a cortante requerida en esa zona; y
+- (b) la compresión axial mayorada, incluido el sismo, es menor que $A_g f'_c/20$.
+
+<Ejemplo numero={1} titulo="Mpr y Ve de una viga de pórtico especial (DES)">
+
+Viga de pórtico especial con $b$ = {ej1.b} mm, $h$ = {ej1.h} mm, $d$ = {ej1.d} mm y $d'$ = {ej1.dp} mm, $f'_c$ = {ej1.fc} MPa, $f_y$ = {ej1.fy} MPa. En los apoyos lleva **4 No. 8** arriba ($A_s$ = {ej1.AsSup} mm²) y **3 No. 8** abajo ({ej1.AsInf} mm²). Luz libre $\ell_n$ = {ej1.ln} m, $w_u$ = {ej1.wu} kN/m para $1.2D + 1.0L$ y estribos cerrados No. 4. (Datos hipotéticos del autor; $M_{pr}$ por equilibrio de la sección con refuerzo de compresión en compatibilidad de deformaciones, función `momentoProbable`.)
+
+<Paso titulo="Verificar los límites geométricos y de refuerzo" ref="C.21.5.1 y C.21.5.2.1">
+$\ell_n$ = {ej1.ln*1000} mm $\ge$ $4d$ = {4*ej1.d} mm ✓. $b_w$ = {ej1.b} mm $\ge$ $\min(0.3h,\,250)$ = {Math.min(0.3*ej1.h, 250)} mm ✓. Cuantía superior $\rho$ = {ej1.rhoSup.toFixed(4)} $\le$ 0.025 ✓ y $A_s \ge$ {ej1.asMin.toFixed(0)} mm² (Ec. C.10-3 y 1.4 $b_w d/f_y$) ✓.
+</Paso>
+<Paso titulo="Momento probable negativo (apoyo, refuerzo superior en tracción)" ref="Notación Mpr, C.21.5.4.1">
+Con 1.25 $f_y$ = {1.25*ej1.fy} MPa: $a$ = {ej1.mprN.a.toFixed(1)} mm y **$M_{pr}^-$ = {ej1.mprN.Mpr.toFixed(1)} kN·m** (el refuerzo inferior trabaja en compresión).
+</Paso>
+<Paso titulo="Momento probable positivo (refuerzo inferior en tracción)" ref="Notación Mpr">
+$a$ = {ej1.mprP.a.toFixed(1)} mm y **$M_{pr}^+$ = {ej1.mprP.Mpr.toFixed(1)} kN·m**. Para comparar con C.21.5.2.2, los momentos nominales son $M_n^-$ ≈ {ej1.mnN.Mpr.toFixed(1)} y $M_n^+$ ≈ {ej1.mnP.Mpr.toFixed(1)} kN·m: $M_n^+/M_n^-$ = {ej1.relMomentos.toFixed(2)} $\ge$ 0.5 ✓.
+</Paso>
+<Paso titulo="Cortante de diseño" ref="C.21.5.4.1">
+Parte sísmica: $(M_{pr}^- + M_{pr}^+)/\ell_n$ = ({ej1.mprN.Mpr.toFixed(1)} + {ej1.mprP.Mpr.toFixed(1)}) / {ej1.ln} = {ej1.ve.vsismo.toFixed(1)} kN. Parte gravitacional: $w_u\ell_n/2$ = {ej1.ve.vgravedad.toFixed(1)} kN. **$V_e$ = {ej1.ve.ve.toFixed(1)} kN.**
+</Paso>
+<Paso titulo="¿Se puede tomar Vc = 0?" ref="C.21.5.4.2">
+El cortante sísmico es {(ej1.ve.fraccionSismica*100).toFixed(0)} % de $V_e$ (≥ 50 %) y $P_u$ ≈ 0 $<$ $A_g f'_c/20$: **{ej1.vcCero ? 'sí, V_c = 0' : 'no, se conserva V_c'}**.
+</Paso>
+<Paso titulo="Estribos cerrados en las zonas de 2h" ref="C.21.5.3.2, C.11.4.7.2">
+Zona de confinamiento: $2h$ = {ej1.zona} mm desde cada cara, primer estribo a ≤ 50 mm. Separación máxima: d/4 = {(ej1.d/4).toFixed(0)} mm; 8 db = {(8*ej1.n8.db).toFixed(0)} mm; 24 dbe = {(24*ej1.n4.db).toFixed(0)} mm; 300 mm → **s ≤ {ej1.sep.s.toFixed(0)} mm** (gobierna {ej1.sep.gobierna}). Con $\phi$ = {ej1.phi} y $V_c$ = 0: $V_s = V_e/\phi$ = {(ej1.ve.ve/ej1.phi).toFixed(0)} kN, que exige $A_v/s$ = {ej1.avs.toFixed(2)} mm²/mm. Un estribo No. 4 de dos ramas con $s$ = {ej1.sep.s.toFixed(0)} mm da {ej1.avsProv.toFixed(2)} mm²/mm ✓.
+</Paso>
+<Resultado>
+$M_{pr}^-$ = {ej1.mprN.Mpr.toFixed(0)} kN·m, $M_{pr}^+$ = {ej1.mprP.Mpr.toFixed(0)} kN·m, $V_e$ = {ej1.ve.ve.toFixed(0)} kN con $V_c$ = 0, estribos No. 4 de dos ramas cada {Math.floor(ej1.sep.s/5)*5} mm en {ej1.zona} mm junto a cada nudo. Nota del autor: $M_{pr}$ resultó {ej1.ratioMpr.toFixed(2)} veces $M_n$ (no 1.25) porque el brazo interno cambia al aumentar el bloque de compresión.
+</Resultado>
+</Ejemplo>
+
+## C.21.6 — Columnas de pórticos especiales (DES)
+
+### C.21.6.1 — Alcance y dimensiones
+
+Aplica a elementos de pórticos especiales que resisten sismo y cuya compresión axial mayorada $P_u$, en cualquier combinación, **excede $A_g f'_c/10$** (<NormaRef s="C.21.6.1" pag="C-184" />). Además:
+
+- La dimensión menor de la sección, medida en una recta que pasa por el centroide, no es menor de **300 mm**. Columnas T, C o I: dimensión mínima 0.25 m y área $\ge$ 0.09 m² (<NormaRef s="C.21.6.1.1" pag="C-184" />).
+- La relación entre la dimensión menor y la perpendicular no es menor que **0.4** (<NormaRef s="C.21.6.1.2" pag="C-184" />).
+
+### C.21.6.2 — Resistencia mínima a flexión: columna fuerte – viga débil
+
+<Ecuacion num="C.21-4" titulo="Relación de resistencias columna–viga">
+
+$$
+\sum M_{nc} \ge 1.2 \sum M_{nb}
+$$
+
+- $\sum M_{nc}$: suma de los momentos **nominales** de flexión de las columnas que llegan al nudo, evaluados en las caras del nudo. Se calcula para la fuerza axial mayorada, congruente con la dirección de las fuerzas laterales, que conduzca a la **resistencia a flexión más baja**.
+- $\sum M_{nb}$: suma de los momentos resistentes nominales de las vigas que llegan al nudo, en la cara del nudo. En vigas T con la losa en tracción, el refuerzo de la losa dentro del ancho efectivo (C.8.12) se supone que contribuye si está desarrollado en la sección crítica.
+
+Las resistencias se suman de modo que los momentos de la columna **se opongan** a los de la viga, y la ecuación se satisface para momentos de viga que actúen en **ambas direcciones** en el plano del pórtico (<NormaRef s="C.21.6.2.2" pag="C-184" />).
+
+</Ecuacion>
+
+Si no se cumple en un nudo, la rigidez y resistencia lateral de las columnas que soportan ese nudo **se ignoran** y esas columnas deben satisfacer **C.21.13** (<NormaRef s="C.21.6.2.3" pag="C-185" />). Como C.21.13 **no puede usarse en edificaciones nuevas** (<NormaRef s="C.21.13.1" pag="C-197" />), en una edificación nueva la salida práctica es **rediseñar** columnas o vigas hasta cumplir la Ec. C.21-4.
+
+<Ejemplo numero={2} titulo="Verificación columna fuerte – viga débil en un nudo interior">
+
+En un nudo interior concurren las vigas del Ejemplo 1 (una trabaja con momento negativo y la otra con positivo bajo el sismo) y una columna arriba y otra abajo. El análisis da para cada columna una carga axial mayorada entre {ej2.fuerte.PuMin} y {ej2.fuerte.PuMax} kN según el sentido del sismo. Se estudian dos columnas con $f'_c$ = 28 MPa y 8 barras (3 por cara): **A** 500 × 500 con 8 No. 8, y **B** 400 × 400 con 8 No. 7. (Datos hipotéticos del autor; $M_n$ de las columnas del diagrama de interacción de la calculadora de [C.10](/titulo-c/c10), a Pn = Pu.)
+
+<Paso titulo="Resistencia de las vigas" ref="C.21.6.2.2">
+$\sum M_{nb} = M_n^- + M_n^+$ = {ej1.mnN.Mpr.toFixed(1)} + {ej1.mnP.Mpr.toFixed(1)} = **{ej2.sumMnb.toFixed(1)} kN·m**, de modo que $1.2\sum M_{nb}$ = {(1.2*ej2.sumMnb).toFixed(1)} kN·m.
+</Paso>
+<Paso titulo="Columna A: 500 × 500, 8 No. 8" ref="C.21.6.2.2, C.21.6.3.1">
+Cuantía {(ej2.fuerte.rho*100).toFixed(2)} % (entre 1 % y 4 % ✓). $M_n$ a {ej2.fuerte.PuMin} kN = {ej2.fuerte.m1.toFixed(0)} kN·m y a {ej2.fuerte.PuMax} kN = {ej2.fuerte.m2.toFixed(0)} kN·m; se usa el menor, **{ej2.fuerte.Mnc.toFixed(0)} kN·m**. $\sum M_{nc}$ = 2 × {ej2.fuerte.Mnc.toFixed(0)} = {ej2.fuerte.sumMnc.toFixed(0)} kN·m. Relación $\sum M_{nc}/\sum M_{nb}$ = **{ej2.fuerte.r.relacion.toFixed(2)}** {ej2.fuerte.r.cumple ? '≥ 1.2: cumple.' : '< 1.2: no cumple.'}
+</Paso>
+<Paso titulo="Columna B: 400 × 400, 8 No. 7" ref="C.21.6.2.2, C.21.6.2.3">
+Cuantía {(ej2.debil.rho*100).toFixed(2)} %. $M_n$ a {ej2.debil.PuMin} kN = {ej2.debil.m1.toFixed(0)} kN·m; $\sum M_{nc}$ = {ej2.debil.sumMnc.toFixed(0)} kN·m y la relación es **{ej2.debil.r.relacion.toFixed(2)}** {ej2.debil.r.cumple ? '≥ 1.2: cumple.' : '< 1.2: no cumple.'} Se necesitarían $\sum M_{nc}$ ≥ {ej2.debil.r.sumMncMinimo.toFixed(0)} kN·m.
+</Paso>
+<Resultado>
+La columna A cumple (relación {ej2.fuerte.r.relacion.toFixed(2)}); la B no ({ej2.debil.r.relacion.toFixed(2)}). En un edificio nuevo la columna B se **rediseña** (más sección o más refuerzo) o se reduce la resistencia de las vigas: no se puede «ignorar» la columna, porque C.21.13 no se permite en obra nueva.
+</Resultado>
+</Ejemplo>
+
+### C.21.6.3 — Refuerzo longitudinal
+
+- $0.01 A_g \le A_{st} \le 0.04 A_g$ (<NormaRef s="C.21.6.3.1" pag="C-185" />).
+- Empalmes mecánicos: C.21.1.6; soldados: C.21.1.7. Los empalmes por **traslapo** solo en la **mitad central** de la longitud, diseñados como empalmes de tracción y **confinados** con el refuerzo de C.21.6.4.2 y C.21.6.4.3 (<NormaRef s="C.21.6.3.2" pag="C-185" />).
+
+### C.21.6.4 — Refuerzo transversal de confinamiento
+
+**Longitud $\ell_o$.** El refuerzo transversal se suministra en una longitud $\ell_o$ desde cada cara del nudo y a ambos lados de cualquier sección donde pueda haber fluencia por flexión. $\ell_o$ no es menor que el **mayor** de: (a) la altura del elemento en la cara del nudo, (b) un sexto de la luz libre y (c) **450 mm** (<NormaRef s="C.21.6.4.1" pag="C-185" />).
+
+**Disposición.** Espirales sencillas o traslapadas (C.7.10.4), estribos cerrados circulares, o estribos cerrados rectilíneos con o sin ganchos suplementarios (del mismo diámetro o menor y con el mismo espaciamiento). Cada extremo de un gancho suplementario enlaza una barra perimetral y los extremos consecutivos se alternan. La separación $h_x$ entre ganchos suplementarios o ramas dentro de la sección no excede **350 mm** centro a centro (<NormaRef s="C.21.6.4.2" pag="C-185" />).
+
+**Separación $s$ a lo largo del eje.** No excede el menor de (<NormaRef s="C.21.6.4.3" pag="C-185" />): (a) **un cuarto** de la dimensión mínima del elemento, (b) **seis veces** el diámetro de la barra longitudinal menor y (c) $s_o$:
+
+<Ecuacion num="C.21-5" titulo="Separación so del refuerzo transversal">
+
+$$
+s_o = 100 + \left(\frac{350 - h_x}{3}\right)
+$$
+
+$s_o$ no debe ser mayor de 150 mm y no es necesario tomarlo menor de 100 mm.
+
+</Ecuacion>
+
+**Cantidad de refuerzo** (a menos que C.21.6.5 exija más) (<NormaRef s="C.21.6.4.4" pag="C-186" />):
+
+<Ecuacion num="C.21-6" titulo="Cuantía volumétrica de espiral o estribos circulares (DES)">
+
+$$
+\rho_s = 0.12\,\frac{f'_c}{f_{yt}}
+$$
+
+y no menor que la requerida por la Ec. C.10-5.
+
+</Ecuacion>
+
+<Ecuacion num="C.21-7" titulo="Área de estribos rectangulares con relación Ag/Ach (DES)">
+
+$$
+A_{sh} = 0.3\,\frac{s\,b_c\,f'_c}{f_{yt}}\left[\left(\frac{A_g}{A_{ch}}\right) - 1\right]
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.21-8" titulo="Área mínima de estribos rectangulares (DES)">
+
+$$
+A_{sh} = 0.09\,\frac{s\,b_c\,f'_c}{f_{yt}}
+$$
+
+$A_{sh}$ debe cumplir **ambas** (C.21-7 y C.21-8): rige la mayor. El valor de $f_{yt}$ no se toma mayor que **700 MPa** (<NormaRef s="C.21.1.5.4" pag="C-176" />).
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Qué miden bc, Ach y Ash">
+Según la Notación del Título C: $b_c$ es la dimensión transversal del núcleo medida entre los **bordes externos** del refuerzo transversal; $A_{ch}$ es el área del núcleo medida también a esos bordes; $A_{sh}$ es el área total de refuerzo transversal (incluidos los ganchos suplementarios) dentro de la separación $s$ y **perpendicular a la dimensión $b_c$** (PDF p.308). Por eso se verifica en las dos direcciones de una columna rectangular, con su $b_c$ respectivo.
+</Callout>
+
+**Fuera de $\ell_o$** el resto de la columna lleva espiral o estribo cerrado (C.7.10) con $s$ no mayor que el menor de **6 veces** el diámetro de las barras longitudinales y **150 mm**, salvo que C.21.6.3.2 o C.21.6.5 exijan más (<NormaRef s="C.21.6.4.5" pag="C-186" />).
+
+**Columnas bajo elementos rígidos discontinuos** (muros): el refuerzo de C.21.6.4.2 a C.21.6.4.4 va en **toda la altura**, en todos los niveles bajo la discontinuidad, si la compresión axial sísmica excede $A_g f'_c/10$ ($A_g f'_c/4$ cuando las fuerzas se amplificaron por sobrerresistencia). Debe penetrar al menos $\ell_d$ (de la barra longitudinal mayor, según C.21.7.5) dentro del elemento discontinuo; si la columna termina en una zapata o losa de cimentación, al menos **300 mm** (<NormaRef s="C.21.6.4.6" pag="C-186" />).
+
+**Recubrimiento grueso.** Si el recubrimiento fuera del refuerzo de confinamiento excede **100 mm**, se coloca refuerzo transversal adicional con recubrimiento no mayor de 100 mm y separación no mayor de **300 mm** (<NormaRef s="C.21.6.4.7" pag="C-186" />).
+
+<Ejemplo numero={3} titulo="Ash, separación y longitud ℓo de una columna de 500 × 500">
+
+Columna de pórtico especial de {ej3.b} × {ej3.h} mm, $f'_c$ = {ej3.fc} MPa, estribos No. 4 con $f_{yt}$ = {ej3.fyt} MPa, barras longitudinales más pequeñas No. 8 ($d_b$ = {ej3.lon.db} mm), recubrimiento libre al estribo de {ej3.rec} mm y luz libre de {ej3.lu/1000} m. (Datos hipotéticos del autor; mismas funciones de la calculadora de abajo.)
+
+<Paso titulo="Geometría del núcleo" ref="Notación C.2: bc, Ach">
+Medido a los bordes externos del estribo: $b_c$ = {ej3.b} − 2 × {ej3.rec} = **{ej3.g.bcB} mm**; $A_{ch}$ = {ej3.g.bcB} × {ej3.g.bcH} = {ej3.g.Ach.toLocaleString('en-US')} mm²; $A_g$ = {ej3.Ag.toLocaleString('en-US')} mm². Entonces $A_g/A_{ch}$ = {ej3.relAgAch.toFixed(3)} y $(A_g/A_{ch}) - 1$ = {(ej3.relAgAch-1).toFixed(3)}.
+</Paso>
+<Paso titulo="Longitud de la zona de confinamiento" ref="C.21.6.4.1">
+$\ell_o \ge$ mayor de h = {ej3.b} mm, luz libre/6 = {(ej3.lu/6).toFixed(0)} mm y 450 mm → **$\ell_o$ = {ej3.lo.lo.toFixed(0)} mm** desde cada cara del nudo.
+</Paso>
+<Paso titulo="Estribo con 3 ramas por dirección (perímetro + 1 gancho suplementario)" ref="C.21.6.4.2, C.21.6.4.3">
+Separación entre ramas $h_x$ ≈ {ej3.a.hx.toFixed(0)} mm (≤ 350 mm ✓). $s_o$ = 100 + (350 − {ej3.a.hx.toFixed(0)})/3 = {ej3.a.so.toFixed(0)} mm. Límites de $s$: dimensión mínima/4 = {(ej3.b/4).toFixed(0)} mm; 6 db = {(6*ej3.lon.db).toFixed(1)} mm; $s_o$ = {ej3.a.so.toFixed(0)} mm → **$s \le$ {ej3.a.sGeo.s.toFixed(0)} mm** (gobierna {ej3.a.sGeo.gobierna}).
+</Paso>
+<Paso titulo="Ash requerida a esa separación" ref="C.21-7, C.21-8">
+Con $s$ = {ej3.a.sGeo.s.toFixed(0)} mm: C.21-7 da {ej3.a.reqEnGeo.ashConAg.toFixed(0)} mm² y C.21-8 da {ej3.a.reqEnGeo.ashMinimo.toFixed(0)} mm², así que **$A_{sh}$ = {ej3.a.reqEnGeo.ash.toFixed(0)} mm²** (rige {ej3.a.reqEnGeo.gobierna === 'Ag/Ach' ? 'C.21-7' : 'C.21-8'}). Tres ramas No. 4 aportan {ej3.a.prov} mm² (3 × {ej3.est.area}): **insuficiente**.
+</Paso>
+<Paso titulo="Dos soluciones" ref="C.21.6.4.4">
+(a) Mantener 3 ramas y bajar la separación: $A_{sh}/s$ es lineal en $s$, y {ej3.a.prov} mm² alcanzan hasta $s$ = {ej3.a.sAsh.toFixed(1)} mm → **estribos No. 4 cada {ej3.a.sUsada} mm** ($A_{sh}$ requerida {ej3.a.req.ash.toFixed(0)} mm² ≤ {ej3.a.prov}). (b) Subir a 4 ramas por dirección: $h_x$ ≈ {ej3.c.hx.toFixed(0)} mm, aportan {ej3.c.prov} mm², y la separación vuelve a regirla la geometría: **cada {ej3.c.sUsada} mm**.
+</Paso>
+<Paso titulo="Fuera de ℓo" ref="C.21.6.4.5">
+$s \le$ menor de 6 db = {(6*ej3.lon.db).toFixed(1)} mm y 150 mm → **{ej3.sFuera.toFixed(0)} mm**.
+</Paso>
+<Paso titulo="Comparación con el grado DMO" ref="C.21-2, C.21-3">
+Con la misma sección y $s$ = 100 mm, DES exige {ej3.des100.ash.toFixed(0)} mm² (C.21-7) mientras DMO pediría {ej3.dmo.ash.toFixed(0)} mm² (C.21-2): el factor es 0.3/0.2 = 1.5 en la ecuación con $A_g/A_{ch}$ y 0.09/0.06 = 1.5 en el mínimo.
+</Paso>
+<Resultado>
+Zona $\ell_o$ = {ej3.lo.lo.toFixed(0)} mm junto a cada nudo, con estribo No. 4 y gancho suplementario (3 ramas por dirección) **cada {ej3.a.sUsada} mm**, o con 4 ramas por dirección cada {ej3.c.sUsada} mm; fuera de $\ell_o$, cada {ej3.sFuera.toFixed(0)} mm como máximo.
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="El primer estribo en columnas DES">
+Para columnas DMO la norma exige el primer estribo a no más de $s_o/2$ de la cara del nudo (<NormaRef s="C.21.3.5.10" pag="C-180" />). Para columnas DES el texto del PDF **no repite** esa condición en C.21.6.4: usa $\ell_o$ «medida desde cada cara del nudo». En obra es práctica común empezar a media separación, pero eso es criterio del autor, no texto de C.21.6.
+</Callout>
+
+Calcula tu columna con la herramienta siguiente (rectangular, DES o DMO):
+
+<CalculadoraEmbed id="confinamiento-columna" />
+
+### C.21.6.5 — Resistencia a cortante
+
+- **Fuerzas de diseño.** $V_e$ se determina con las **máximas fuerzas** que se generen en las caras de los nudos, usando las resistencias máximas probables $M_{pr}$ en cada extremo, para el rango de cargas axiales mayoradas $P_u$ que actúan. No necesita exceder el cortante que resulte de la resistencia de los nudos, basada en $M_{pr}$ de los elementos transversales que llegan al nudo. En ningún caso $V_e$ es menor que el cortante mayorado del análisis (<NormaRef s="C.21.6.5.1" pag="C-186" />).
+- **Refuerzo transversal.** En la longitud $\ell_o$ se diseña suponiendo $V_c = 0$ cuando (a) el cortante inducido por el sismo representa la mitad o más de la resistencia máxima a cortante requerida en $\ell_o$ y (b) $P_u$, incluido el sismo, es menor que $A_g f'_c/20$ (<NormaRef s="C.21.6.5.2" pag="C-187" />).
+
+<Detalle titulo="Estática de Ve en una columna (del autor)">
+
+Para una columna de luz libre $\ell_u$ con momentos probables $M_{pr,sup}$ y $M_{pr,inf}$ en sus extremos (evaluados con la $P_u$ que dé el mayor $M_{pr}$), la misma estática de la viga da $V_e = (M_{pr,sup} + M_{pr,inf})/\ell_u$. El tope superior de C.21.6.5.1 es el que resulta de los $M_{pr}$ de las **vigas** que llegan al nudo repartidos entre las columnas de arriba y abajo. La norma describe el procedimiento; la fórmula es consecuencia directa del equilibrio.
+
+</Detalle>
+
+## Comparación DMO – DES en un vistazo
+
+Resumen del autor para comparar los grados (los valores y referencias se transcriben de los numerales anteriores):
+
+<TablaNorma numero="Resumen del autor" titulo="Requisitos de vigas y columnas: DMO frente a DES" pag="C-178 a C-187" nota="Elaboración propia a partir de C.21.3 y C.21.5/C.21.6; no es una tabla de la norma.">
+
+| Concepto | DMO | DES |
+|---|---|---|
+| Ancho mínimo de la viga | $b_w \ge$ 200 mm (C.21.3.4.1) | $b_w \ge$ menor de $0.3h$ y 250 mm (C.21.5.1.3) |
+| Cuantía máxima de viga | $\rho \le$ 0.025 | $\rho \le$ 0.025 |
+| $M^+$ en la cara del nudo | $\ge$ 1/3 de $M^-$ | $\ge$ 1/2 de $M^-$ |
+| Momento en cualquier sección | $\ge$ 1/5 del máximo en la cara | $\ge$ 1/4 del máximo en la cara |
+| Lado menor de la columna | $\ge$ 250 mm | $\ge$ 300 mm |
+| Relación entre lados | sin límite | $\ge$ 0.4 |
+| Columna fuerte–viga débil | $\sum M_{nc} \ge 1.2\sum M_{nb}$ (C.21-4) | $\sum M_{nc} \ge 1.2\sum M_{nb}$ (C.21-4) |
+| $\rho_s$ (espiral) | $0.08 f'_c/f_{yt}$ (C.21-1) | $0.12 f'_c/f_{yt}$ (C.21-6) |
+| $A_{sh}$ con $A_g/A_{ch}$ | $0.2 \frac{s b_c f'_c}{f_{yt}}[(A_g/A_{ch}) - 1]$ (C.21-2) | $0.3 \frac{s b_c f'_c}{f_{yt}}[(A_g/A_{ch}) - 1]$ (C.21-7) |
+| $A_{sh}$ mínimo | $0.06\, s b_c f'_c/f_{yt}$ (C.21-3) | $0.09\, s b_c f'_c/f_{yt}$ (C.21-8) |
+| Separación en $\ell_o$ | $s_o \le$ 8 db, 16 dbe, lado menor/3, 150 mm | $s \le$ lado menor/4, 6 db, $s_o$ (100 a 150 mm) |
+| Longitud $\ell_o$ | $\ge$ luz libre/6, mayor dimensión, 500 mm | $\ge$ altura, luz libre/6, 450 mm |
+| Fuera de $\ell_o$ | $s \le 2 s_o$ | $s \le$ menor de 6 db y 150 mm |
+
+</TablaNorma>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Fallas frecuentes al aplicar C.21 a pórticos">
+- **Usar numeración de otra norma.** La Ec. C.21-4 es la columna fuerte–viga débil; C.21-1 a C.21-3 son de DMO. No mezclar con los coeficientes de DES (C.21-6 a C.21-8).
+- **Calcular Ve con las cargas del análisis** en vez de con los $M_{pr}$ (1.25 $f_y$, φ = 1.0). El cortante de pórticos especiales es de **capacidad**, no de demanda.
+- **Medir bc y Ach al eje del estribo.** La norma los mide a los **bordes externos** del refuerzo transversal.
+- **Verificar Ash en una sola dirección.** En una columna rectangular hay dos $b_c$ y dos $A_{sh}$ (un número de ramas distinto en cada dirección).
+- **Sumar ΣMnc con la carga axial equivocada.** Debe tomarse la $P_u$ que dé la **menor** resistencia a flexión, no la mayor.
+- **Dejar traslapos de columna en la zona $\ell_o$** (solo se permiten en la mitad central), o traslapar barras de viga a menos de 2h de la cara.
+- **Confiar en C.21.13 para «arreglar» un nudo.** Ese numeral no se permite en obra nueva (C.21.13.1).
+- **Olvidar el 700 MPa:** $f_{yt}$ mayor no reduce el refuerzo de confinamiento; el cálculo usa 700 MPa como máximo.
+</Callout>
+
+## Resumen en una línea
+
+El C.21 convierte la reducción por $R$ en ductilidad real: vigas y columnas con confinamiento (**2h**, **$\ell_o$**, **Ash** de C.21-7/8), cortante por capacidad con **$M_{pr}$ = 1.25 $f_y$**, columnas que superan a las vigas en **1.2** (C.21-4) y detalles que se endurecen de **DMI** a **DMO** a **DES**; la segunda parte continúa con nudos, muros, diafragmas y cimentaciones.

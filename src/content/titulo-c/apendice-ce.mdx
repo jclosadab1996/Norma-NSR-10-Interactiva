@@ -1,0 +1,238 @@
+---
+codigo: 'C-E'
+tipo: apendice
+titulo: 'Información acerca del acero de refuerzo'
+resumen: 'Tablas de ayuda con diámetro, área, perímetro y masa de las barras corrugadas (en mm y en octavos de pulgada), de los tendones de preesforzado estándar ASTM y del alambre de refuerzo MW/MD con su área por metro, más un caso práctico de selección de refuerzo.'
+objetivos:
+  - 'Distinguir las dos series de barras (designación en mm con M y número en octavos de pulgada) y leer su área, perímetro y masa'
+  - 'Escoger torones, alambres y barras de preesforzado con su área nominal'
+  - 'Leer el área por metro del alambre MW/MD según el espaciamiento y comprobarla con el cálculo directo'
+  - 'Seleccionar barras o malla para un área de acero requerida y comparar opciones por masa'
+paginasNorma: 'C-249 y C-250'
+paginaPdf: 551
+orden: 28
+calculadoras: []
+nivel: 'basico'
+---
+
+import {
+  ALAMBRES_REFUERZO,
+  TENDONES,
+  areaNBarras,
+  asPorMetroMalla,
+  asPorMetroTabla,
+  barrasNecesarias,
+  buscarBarra,
+} from '../../data/apendicesC';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej = (() => {
+  const asViga = 3180;
+  const n8 = barrasNecesarias(asViga, 'No. 8');
+  const n25 = barrasNecesarias(asViga, '25M');
+  const b8 = buscarBarra('No. 8');
+  const b25 = buscarBarra('25M');
+  const asLosa = 650;
+  const s4 = (buscarBarra('No. 4').area * 1000) / asLosa;
+  const s10 = (buscarBarra('10M').area * 1000) / asLosa;
+  const apsReq = 2000;
+  const t186 = TENDONES.find((t) => t.tipo === 'toron-1860' && t.diametro === 15.24);
+  const t127 = TENDONES.find((t) => t.tipo === 'toron-1860' && t.diametro === 12.7);
+  const t127b = TENDONES.find((t) => t.tipo === 'toron-1725' && t.diametro === 12.7);
+  return {
+    asViga, n8, n25, b8, b25, as8: areaNBarras(n8, 'No. 8'), as25: areaNBarras(n25, '25M'),
+    m8: n8 * b8.masa, m25: n25 * b25.masa,
+    asLosa, s4, s10, malla: asPorMetroTabla('MW 130', 200), mallaExacta: asPorMetroMalla(130, 200),
+    apsReq, t186, t127, t127b, n186: Math.ceil(apsReq / t186.area), n127: Math.ceil(apsReq / t127.area),
+    diffToron: (t127.area / t127b.area - 1) * 100,
+  };
+})();
+
+## Idea central del apéndice
+
+El Apéndice C-E no es un requisito: es una **ayuda de consulta**. Como dice su introducción, «como una ayuda para los usuarios de la norma NSR-10 y del Reglamento del ACI, a continuación se presenta información acerca de los **diámetros, áreas y masa** de los diferentes aceros de refuerzo» (<NormaRef s="C-E" pag="C-249" />). Reúne en dos páginas las tablas que se consultan a diario para convertir un **área de acero requerida** en un **número de barras**, una **malla** o un **tendón**.
+
+<Callout tipo="nota" titulo="Qué contiene y qué no">
+Cinco tablas, sin ecuaciones numeradas ni figuras: barras en mm (Tabla C.3.5.3-1), barras en octavos de pulgada (Tabla C.3.5.3-2), tendones de preesfuerzo estándar de la ASTM, y alambre de refuerzo estándar de la ASTM (MW y MD) con su área por metro. Las dos primeras son las **mismas** del Capítulo C.3 (<NormaRef s="C.3.5.3" pag="C-27" />; véase [C.3](/titulo-c/c3)) y conservan allí su numeración «C.3.5.3-1» y «C.3.5.3-2». Los datos son nominales: la fluencia de las barras se determina con ensayos de tamaño completo y el **área nominal** de estas tablas.
+</Callout>
+
+## Barras de refuerzo: dos series de designaciones
+
+Las barras corrugadas se designan de dos maneras equivalentes en función de su origen:
+
+- **Serie en milímetros** (6M a 55M): el número es el **diámetro nominal en mm**, y la «M» lo indica.
+- **Serie en octavos de pulgada** (No. 2 a No. 18): el número es la cantidad de **octavos de pulgada** del diámetro de referencia (No. 4 = 4/8″ = 1/2″, 12.7 mm).
+
+Ambas tablas dan además el perímetro y la masa por metro. Los valores son nominales.
+
+### Tabla C.3.5.3-1 — Barras con diámetro en milímetros
+
+<TablaNorma numero="Tabla C.3.5.3-1" titulo="Dimensiones nominales de las barras de refuerzo (diámetros basados en milímetros)" pag="C-249" nota="La M indica que son diámetros nominales en mm. Verificada contra la imagen de la página; coincide con la del Capítulo C.3 (C-27).">
+
+| Designación de la barra | Diámetro (mm) | Área (mm²) | Perímetro (mm) | Masa (kg/m) |
+|---|---:|---:|---:|---:|
+| 6M | 6.0 | 28.3 | 18.85 | 0.222 |
+| 8M | 8.0 | 50.3 | 25.14 | 0.394 |
+| 10M | 10.0 | 78.5 | 31.42 | 0.616 |
+| 12M | 12.0 | 113.1 | 37.70 | 0.887 |
+| 16M | 16.0 | 201.1 | 50.27 | 1.577 |
+| 18M | 18.0 | 254.5 | 56.55 | 1.996 |
+| 20M | 20.0 | 314.2 | 62.83 | 2.465 |
+| 22M | 22.0 | 380.1 | 69.12 | 2.982 |
+| 25M | 25.0 | 490.9 | 78.54 | 3.851 |
+| 30M | 30.0 | 706.9 | 94.25 | 5.544 |
+| 32M | 32.0 | 804.2 | 100.53 | 6.309 |
+| 36M | 36.0 | 1017.9 | 113.10 | 7.985 |
+| 45M | 45.0 | 1590.4 | 141.37 | 12.477 |
+| 55M | 55.0 | 2375.8 | 172.79 | 18.638 |
+
+</TablaNorma>
+
+### Tabla C.3.5.3-2 — Barras con diámetro en octavos de pulgada
+
+<TablaNorma numero="Tabla C.3.5.3-2" titulo="Dimensiones nominales de las barras de refuerzo (diámetros basados en octavos de pulgada)" pag="C-249" nota="El No. de la barra indica el número de octavos de pulgada del diámetro de referencia. Verificada contra la imagen de la página.">
+
+| Designación de la barra | Diámetro de referencia (pulg.) | Diámetro (mm) | Área (mm²) | Perímetro (mm) | Masa (kg/m) |
+|---|---|---:|---:|---:|---:|
+| No. 2 | 1/4” | 6.4 | 32 | 20.0 | 0.250 |
+| No. 3 | 3/8” | 9.5 | 71 | 30.0 | 0.560 |
+| No. 4 | 1/2” | 12.7 | 129 | 40.0 | 0.994 |
+| No. 5 | 5/8” | 15.9 | 199 | 50.0 | 1.552 |
+| No. 6 | 3/4” | 19.1 | 284 | 60.0 | 2.235 |
+| No. 7 | 7/8” | 22.2 | 387 | 70.0 | 3.042 |
+| No. 8 | 1” | 25.4 | 510 | 80.0 | 3.973 |
+| No. 9 | 1-1/8” | 28.7 | 645 | 90.0 | 5.060 |
+| No. 10 | 1-1/4” | 32.3 | 819 | 101.3 | 6.404 |
+| No. 11 | 1-3/8” | 35.8 | 1006 | 112.5 | 7.907 |
+| No. 14 | 1-3/4” | 43.0 | 1452 | 135.1 | 11.380 |
+| No. 18 | 2-1/4” | 57.3 | 2581 | 180.1 | 20.240 |
+
+</TablaNorma>
+
+**Relación entre áreas** (comprobación del autor): el área tabulada coincide con $\pi d^2/4$ en la serie métrica (diferencias menores de 0.1 %) y, en la serie en pulgadas, con un diámetro redondeado a una cifra decimal (diferencias hasta 2 %: la No. 4 de 12.7 mm tiene $\pi d^2/4$ = 126.7 mm² y la tabla da 129 mm²). Por eso **se usa el área de la tabla**, no $\pi d^2/4$.
+
+## Tendones de preesfuerzo estándar de la ASTM
+
+<TablaNorma numero="Tendones de preesfuerzo estándar de la ASTM" titulo="Torones, alambres y barras de preesfuerzo" pag="C-250" nota="* La disponibilidad de algunos tamaños debe ser investigada con anterioridad (nota de la tabla del PDF). El asterisco en el área del alambre de 6.35 y 7.01 mm indica que el PDF imprime «31 7» y «38 6» (falta el punto decimal): se leen 31.7 y 38.6 mm², coherentes con πd²/4 = 31.67 y 38.59 mm². Verificada contra la imagen de la página.">
+
+| Tipo | Diámetro nominal (mm) | Área nominal (mm²) | Masa nominal (kg/m) |
+|---|---:|---:|---:|
+| Torón de siete alambres (Grado 1725) | 6.4 | 23.2 | 0.182 |
+|  | 7.9 | 37.4 | 0.294 |
+|  | 9.5 | 51.6 | 0.405 |
+|  | 11.1 | 69.7 | 0.548 |
+|  | 12.7 | 92.9 | 0.730 |
+|  | 15.2 | 139.4 | 1.094 |
+| Torón de siete alambres (Grado 1860) | 9.53 | 54.8 | 0.432 |
+|  | 11.1 | 74.2 | 0.582 |
+|  | 12.70 | 98.7 | 0.775 |
+|  | 15.24 | 140.0 | 1.102 |
+| Alambre de preesforzado | 4.88 | 18.7 | 0.146 |
+|  | 4.98 | 19.5 | 0.149 |
+|  | 6.35 | 31.7\* | 0.253 |
+|  | 7.01 | 38.6\* | 0.298 |
+| Barras de preesforzado (lisas) | 19 | 284 | 2.23 |
+|  | 22 | 387 | 3.04 |
+|  | 25 | 503 | 3.97 |
+|  | 29 | 639 | 5.03 |
+|  | 32 | 794 | 6.21 |
+|  | 35 | 955 | 7.52 |
+| Barras de preesforzado (corrugadas) | 15 | 181 | 1.46 |
+|  | 20 | 271 | 2.22 |
+|  | 26 | 548 | 4.48 |
+|  | 32 | 806 | 6.54 |
+|  | 36 | 1019 | 8.28 |
+
+</TablaNorma>
+
+Observaciones del autor:
+
+- El **número del grado** de los torones (1725 y 1860) es la resistencia a tracción mínima en MPa del acero según la ASTM (dato del autor, no de la tabla). A igual diámetro nominal, el torón Grado 1860 tiene **más área** que el Grado 1725 (12.7 mm: 98.7 contra 92.9 mm², {f(ej.diffToron, 1)} % más), así que no se intercambian sin recalcular.
+- El área de un torón **no es $\pi d^2/4$**: es la suma de los siete alambres (el torón de 15.24 mm tiene 140.0 mm², mientras que $\pi d^2/4$ daría 182.4 mm²). Se usa el área nominal de la tabla.
+- Para las propiedades de diseño del preesfuerzo (esfuerzos permitidos, pérdidas, longitudes de transferencia y desarrollo) se consulta el [Capítulo C.18](/titulo-c/c18) y el [Capítulo C.12](/titulo-c/c12).
+
+## Alambre de refuerzo estándar de la ASTM (MW y MD)
+
+El tamaño del alambre **es su área en mm²**: MW 130 tiene 130 mm². «MW» es alambre **liso** y «MD» alambre **corrugado**. La tabla da, además del diámetro y la masa, el **área de acero por metro de ancho** (mm²/m) para los espaciamientos centro a centro de 50 a 300 mm: As/m = área × 1000 / espaciamiento, redondeada en la tabla a dos o tres cifras significativas.
+
+<TablaNorma numero="Alambre de refuerzo estándar de la ASTM" titulo="Tamaños MW (liso) y MD (corrugado), masa y área por metro según el espaciamiento" pag="C-250" nota="Las columnas 50 a 300 son el espaciamiento centro a centro en mm; los valores son As en mm² por metro. MW 20, MW 15, MW 10 y MW 5 no tienen versión corrugada. Verificada contra la imagen de la página; los valores están redondeados como en el PDF.">
+
+| Liso | Corrugado | Diámetro nominal (mm) | Masa nominal (kg/m) | 50 | 75 | 100 | 150 | 200 | 250 | 300 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| MW 290 | MD 290 | 19.22 | 2.27 | 5800 | 3900 | 2900 | 1900 | 1450 | 1160 | 970 |
+| MW 200 | MD 200 | 15.95 | 1.5700 | 4000 | 2700 | 2000 | 1300 | 1000 | 800 | 670 |
+| MW 130 | MD 130 | 12.90 | 1.0204 | 2600 | 1700 | 1300 | 870 | 650 | 520 | 430 |
+| MW 120 | MD 120 | 12.40 | 0.9419 | 2400 | 1600 | 1200 | 800 | 600 | 480 | 400 |
+| MW 100 | MD 100 | 11.30 | 0.7849 | 2000 | 1300 | 1000 | 670 | 500 | 400 | 330 |
+| MW 90 | MD 90 | 10.70 | 0.7064 | 1800 | 1200 | 900 | 600 | 450 | 360 | 300 |
+| MW 80 | MD 80 | 10.10 | 0.6279 | 1600 | 1100 | 800 | 530 | 400 | 320 | 270 |
+| MW 70 | MD 70 | 9.40 | 0.5494 | 1400 | 930 | 700 | 470 | 350 | 280 | 230 |
+| MW 65 | MD 65 | 9.10 | 0.5102 | 1300 | 870 | 650 | 430 | 325 | 260 | 220 |
+| MW 60 | MD 60 | 8.70 | 0.4709 | 1200 | 800 | 600 | 400 | 300 | 240 | 200 |
+| MW 55 | MD 55 | 8.40 | 0.4317 | 1100 | 730 | 550 | 370 | 275 | 220 | 180 |
+| MW 50 | MD 50 | 8.00 | 0.3925 | 1000 | 670 | 500 | 330 | 250 | 200 | 170 |
+| MW 45 | MD 45 | 7.60 | 0.3532 | 900 | 600 | 450 | 300 | 225 | 180 | 150 |
+| MW 40 | MD 40 | 7.10 | 0.3140 | 800 | 530 | 400 | 270 | 200 | 160 | 130 |
+| MW 35 | MD 35 | 6.70 | 0.2747 | 700 | 470 | 350 | 230 | 175 | 140 | 120 |
+| MW 30 | MD 30 | 6.20 | 0.2355 | 600 | 400 | 300 | 200 | 150 | 120 | 100 |
+| MW 25 | MD 25 | 5.60 | 0.1962 | 500 | 330 | 250 | 170 | 125 | 100 | 83 |
+| MW 20 |  | 5.00 | 0.1570 | 400 | 270 | 200 | 130 | 100 | 80 | 67 |
+| MW 15 |  | 4.40 | 0.1177 | 300 | 200 | 150 | 100 | 75 | 60 | 50 |
+| MW 10 |  | 3.60 | 0.0785 | 200 | 130 | 100 | 70 | 50 | 40 | 33 |
+| MW 5 |  | 2.50 | 0.0392 | 100 | 67 | 50 | 33 | 25 | 20 | 17 |
+
+</TablaNorma>
+
+<Callout tipo="practica" titulo="Cómo leer la tabla de malla">
+Para $A_s$ = 650 mm²/m con alambre MW 130 a 200 mm, la tabla da {ej.malla} mm²/m; el cálculo directo da 130 × 1000 / 200 = {ej.mallaExacta.toFixed(1)} mm²/m. Los valores de las columnas de 75 y 150 mm están redondeados (130 × 1000 / 150 = 866.7 se imprime como 870), así que en cálculos finos se calcula con la fórmula.
+</Callout>
+
+## Caso práctico: escoger el refuerzo para un área requerida
+
+<Ejemplo numero={1} titulo="De mm² requeridos a barras, malla y tendones">
+Tres elementos de un proyecto (los números son supuestos del autor): una viga con $A_s$ requerida = {ej.asViga} mm², una losa con {ej.asLosa} mm²/m y un tendón de postensado con $A_{ps}$ requerida = {ej.apsReq} mm². Escoger refuerzo con las tablas de este apéndice.
+
+<Paso titulo="Viga: barras de la serie en pulgadas o de la serie métrica" ref="Tablas C.3.5.3-1 y C.3.5.3-2">
+No. 8 (510 mm²): {ej.asViga}/510 = {(ej.asViga / 510).toFixed(2)} → **{ej.n8} barras**, {ej.as8} mm² ({f(ej.m8, 2)} kg/m). 25M (490.9 mm²): {ej.asViga}/490.9 = {(ej.asViga / 490.9).toFixed(2)} → **{ej.n25} barras**, {f(ej.as25, 1)} mm² ({f(ej.m25, 2)} kg/m). Las dos series dan {ej.n8} barras; la 25M aporta {f(Math.abs(ej.as8 - ej.as25), 1)} mm² {ej.as25 < ej.as8 ? 'menos' : 'más'} que la No. 8 y pesa {f(Math.abs(ej.m8 - ej.m25), 2)} kg/m {ej.m25 < ej.m8 ? 'menos' : 'más'}.
+</Paso>
+<Paso titulo="Losa: separación de barras o malla" ref="Tablas C.3.5.3-2, C.3.5.3-1 y alambre MW">
+Barras No. 4 (129 mm²): separación máxima = 129 × 1000 / {ej.asLosa} = {f(ej.s4, 0)} mm → se adopta {Math.floor(ej.s4 / 10) * 10} mm; barras 10M (78.5 mm²): separación máxima = 78.5 × 1000 / {ej.asLosa} = {f(ej.s10, 0)} mm → {Math.floor(ej.s10 / 10) * 10} mm. Con malla electrosoldada: MW 130 a 200 mm da {ej.malla} mm²/m ≥ {ej.asLosa} (justo), según la tabla.
+</Paso>
+<Paso titulo="Tendón de postensado" ref="Tendones ASTM">
+Con torones de {ej.t186.diametro} mm Grado 1860 ({ej.t186.area} mm² cada uno): {ej.apsReq}/{ej.t186.area} = {(ej.apsReq / ej.t186.area).toFixed(2)} → **{ej.n186} torones**. Con torones de {ej.t127.diametro} mm Grado 1860 ({ej.t127.area} mm²): {(ej.apsReq / ej.t127.area).toFixed(2)} → **{ej.n127} torones**. Con Grado 1725 del mismo diámetro (92.9 mm²) no son intercambiables: harían falta {Math.ceil(ej.apsReq / ej.t127b.area)}.
+</Paso>
+<Paso titulo="Verificaciones antes de adoptar" ref="C.7.6, C.7.7">
+El número de barras debe caber en el ancho de la viga con la separación mínima (C.7.6) y el recubrimiento (C.7.7); las separaciones del refuerzo de la losa no deben pasar de los máximos del Título C; y los torones deben cumplir la disponibilidad indicada en la tabla (nota del PDF). Estas comprobaciones son del cuerpo del Título C ([Capítulo C.7](/titulo-c/c7)).
+</Paso>
+<Resultado>
+Viga: {ej.n8} No. 8 o {ej.n25} 25M. Losa: No. 4 a {Math.floor(ej.s4 / 10) * 10} mm, 10M a {Math.floor(ej.s10 / 10) * 10} mm o malla MW 130 a 200 mm. Tendón: {ej.n186} torones de 15.24 mm Grado 1860 ({ej.n186 * ej.t186.area} mm²). Las áreas salen de las tablas de este apéndice, no de $\pi d^2/4$.
+</Resultado>
+</Ejemplo>
+
+<Detalle titulo="Erratas y rarezas del PDF en este apéndice">
+
+- **Falta el punto decimal** en las áreas del alambre de preesforzado de 6.35 mm («31 7») y 7.01 mm («38 6»). Se leen 31.7 y 38.6 mm² (comprobado con $\pi d^2/4$ = 31.67 y 38.59).
+- **Cifras decimales distintas** en la masa: MW 200 se imprime «1.5700» y MW 290 «2.27»; las demás del alambre llevan cuatro decimales; los torones y alambres de preesforzado tres, y las barras de preesforzado dos. No son errores: es la forma impresa.
+- **Redondeo irregular de As/m:** algunas entradas están redondeadas a 10 (por ejemplo, MW 10 a 150 mm: 66.7 se imprime como 70; MW 80 a 75 mm: 1066.7 como 1100). Para valores precisos se calcula área × 1000/espaciamiento.
+- **Tablas del Capítulo C.3:** las tablas de barras llevan el rótulo «Tabla C.3.5.3-1» y «C.3.5.3-2» también en este apéndice. Son las mismas que las de C-27.
+- **Alambre corrugado:** MD 20, MD 15, MD 10 y MD 5 no existen (la columna «Corrugado» queda en blanco en esas filas). La cabecera «Corrugad o» del PDF está partida por el ancho de la columna.
+- **Texto extraído:** el texto automático de la página C-250 pierde la alineación de las filas de las barras lisas y del alambre; las tablas de esta página se transcribieron de la imagen.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Confundir las dos series**: la 10M (10.0 mm, 78.5 mm²) no es la No. 3 (9.5 mm, 71 mm²); la 25M (490.9 mm²) no es la No. 8 (510 mm²).
+- **Calcular el área con $\pi d^2/4$** en vez de usar la nominal de la tabla; en barras de pulgada la diferencia llega al 2 %, y en los torones el área tabulada es más de 20 % menor que $\pi d^2/4$.
+- **Intercambiar torones Grado 1725 y 1860** del mismo diámetro: sus áreas son distintas.
+- **Tomar el número del tamaño del alambre como diámetro**: MW 130 es 130 **mm²**, de 12.90 mm de diámetro.
+- **Leer el As/m de la malla en la columna equivocada**: las columnas son el espaciamiento en mm, no el diámetro.
+- **Olvidar que algunos tamaños no se consiguen**: la tabla de tendones advierte que la disponibilidad debe investigarse antes de especificar.
+- **Usar los valores de este apéndice como requisitos**: son información; los requisitos del acero (fluencia, normas NTC) están en el Capítulo C.3.
+</Callout>
+
+## Resumen en una línea
+
+**El Apéndice C-E reúne las áreas, perímetros y masas nominales de las barras (en mm y en octavos de pulgada), de los tendones ASTM y del alambre MW/MD (con As por metro) para convertir un área de acero requerida en barras, malla o torones, siempre con el área de la tabla.**

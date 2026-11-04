@@ -1,0 +1,585 @@
+---
+codigo: 'C.7'
+tipo: capitulo
+titulo: 'Detalles del refuerzo'
+resumen: 'Ganchos estándar y diámetros de doblado, tolerancias de colocación, separación entre barras, recubrimientos mínimos, estribos y espirales de columnas, refuerzo de retracción y temperatura e integridad estructural.'
+objetivos:
+  - 'Calcular las dimensiones de un gancho estándar y el diámetro mínimo de doblado de una barra'
+  - 'Verificar la distancia libre entre barras de una capa y el recubrimiento de una viga'
+  - 'Escoger el recubrimiento mínimo según exposición, tipo de elemento y tamaño de barra (C.7.7)'
+  - 'Detallar estribos y espirales de columnas con los límites de C.7.10'
+  - 'Determinar la cuantía y la separación del refuerzo de retracción y temperatura de una losa'
+paginasNorma: 'C-51 a C-60'
+paginaPdf: 353
+orden: 7
+calculadoras: ['detalles-refuerzo']
+nivel: 'intermedio'
+---
+
+import { buscarBarra } from '../../data/refuerzoDetalles';
+import {
+  alturaUtilAproximada,
+  cuantiaRetraccion,
+  diametroEquivalentePaquete,
+  estriboMinimoColumna,
+  ganchoEstandar,
+  longitudTraslapoEspiral,
+  recubrimientoMinimo,
+  recubrimientoPaquete,
+  refuerzoIntegridadPerimetro,
+  separacionMaximaEstribos,
+  separacionRetraccion,
+  toleranciaColocacion,
+  verificarCapa,
+} from '../../lib/nsr10/refuerzoDetalles';
+
+export const N6 = buscarBarra('No.6');
+export const N3 = buscarBarra('No.3');
+export const N4 = buscarBarra('No.4');
+export const N8 = buscarBarra('No.8');
+
+export const e1 = (() => {
+  const g90 = ganchoEstandar('estandar-90', N6);
+  const g180 = ganchoEstandar('estandar-180', N6);
+  const g4_180 = ganchoEstandar('estandar-180', N4);
+  const est135 = ganchoEstandar('estribo-135', N3);
+  const sis = ganchoEstandar('sismico-135', N3);
+  const est90 = ganchoEstandar('estribo-90', N3);
+  return { g90, g180, g4_180, est135, sis, est90 };
+})();
+
+export const e2 = (() => {
+  const rec = recubrimientoMinimo('interior', 'viga-columna', N6);
+  const b = 300;
+  const h = 500;
+  const cap = verificarCapa({ b, recubrimiento: rec.mm, dEstribo: N3.db, n: 4, db: N6.db, tamanoAgregado: 19 });
+  const d = alturaUtilAproximada(h, rec.mm, N3.db, N6.db);
+  const tol = toleranciaColocacion(d, rec.mm);
+  const rec8 = recubrimientoMinimo('interior', 'viga-columna', N8);
+  const b2 = 250;
+  const cap2 = verificarCapa({ b: b2, recubrimiento: rec8.mm, dEstribo: N3.db, n: 4, db: N8.db });
+  const nMax2 = cap2.nMax;
+  const bMinimo3 = verificarCapa({ b: b2, recubrimiento: rec8.mm, dEstribo: N3.db, n: 3, db: N8.db });
+  return { rec, b, h, cap, d, tol, rec8, b2, cap2, nMax2, bMinimo3 };
+})();
+
+export const e3 = (() => {
+  const h = 120;
+  const r = cuantiaRetraccion(420);
+  const s = separacionRetraccion(N3.area, h, r.cuantia);
+  const r280 = cuantiaRetraccion(280);
+  const s280 = separacionRetraccion(N3.area, h, r280.cuantia);
+  const r520 = cuantiaRetraccion(520);
+  return { h, r, s, r280, s280, r520 };
+})();
+
+export const e4 = (() => {
+  const lado = 400;
+  const dbL = N8.db;
+  const est = estriboMinimoColumna(N8);
+  const sMax = separacionMaximaEstribos(dbL, N3.db, lado);
+  const sMaxN4 = separacionMaximaEstribos(dbL, N4.db, lado);
+  const rec = recubrimientoMinimo('interior', 'viga-columna', N8);
+  return { lado, dbL, est, sMax, sMaxN4, rec };
+})();
+
+export const e5 = (() => {
+  const de = diametroEquivalentePaquete(N8.db, 2);
+  const recB = recubrimientoPaquete(N8.db, 2);
+  const de4 = diametroEquivalentePaquete(N8.db, 4);
+  const recB4 = recubrimientoPaquete(N8.db, 4);
+  return { de, recB, de4, recB4 };
+})();
+
+export const e6 = (() => {
+  const i = refuerzoIntegridadPerimetro(1800, 1200);
+  const tras1 = longitudTraslapoEspiral('1', 10);
+  const tras2 = longitudTraslapoEspiral('2', 10);
+  return { i, tras1, tras2 };
+})();
+
+## Idea central del capítulo
+
+Un diseño perfecto en el cálculo falla si el acero no cabe, no se puede doblar, queda sin recubrimiento o los estribos no confinan. El Capítulo C.7 es el **catálogo de detalles** que convierte áreas de acero en un despiece construible:
+
+- **Ganchos estándar y diámetros de doblado** (C.7.1 a C.7.3): cuánto debe medir el gancho y qué tan cerrada puede ser la curva.
+- **Colocación y tolerancias** (C.7.4, C.7.5): limpieza del acero y cuánto se puede desviar el refuerzo de su posición.
+- **Separación entre barras** (C.7.6): la distancia libre mínima que deja pasar el concreto y la máxima en losas y muros.
+- **Recubrimientos** (C.7.7): protección contra corrosión y fuego, con tres tablas según el tipo de concreto.
+- **Columnas, vigas y losas** (C.7.8 a C.7.12): barras con cambio de sección, estribos y espirales, refuerzo de retracción y temperatura.
+- **Integridad estructural** (C.7.13): refuerzo continuo que evita el colapso progresivo.
+
+<Callout tipo="importante" titulo="Convenciones del capítulo">
+$d_b$ es el diámetro nominal de la barra (Tablas C.3.5.3-1 y C.3.5.3-2). «No. n» es la barra de n octavos de pulgada y «nM» la de n mm; el capítulo las empareja así: No. 3 = 10M, No. 4 = 12M, No. 5 = 16M, No. 6 = 20M, No. 7 = 22M, No. 8 = 25M, No. 9 = 30M, No. 10 = 32M, No. 11 = 36M, No. 14 = 45M, No. 18 = 55M. Las barras 8M y 18M no tienen pareja directa en C.7 (véase «Errata y vacíos»).
+</Callout>
+
+<Detalle titulo="Dimensiones nominales de las barras (Tablas C.3.5.3-1 y C.3.5.3-2, PDF p.329, C-27)">
+
+Se reproducen porque todos los ejemplos del capítulo las usan ($d_b$ en mm, área en mm², masa en kg/m).
+
+| Barra | Diámetro (mm) | Área (mm²) | Masa (kg/m) | Barra | Diámetro (mm) | Área (mm²) | Masa (kg/m) |
+|---|---:|---:|---:|---|---:|---:|---:|
+| No. 2 (1/4") | 6.4 | 32 | 0.250 | 6M | 6.0 | 28.3 | 0.222 |
+| No. 3 (3/8") | 9.5 | 71 | 0.560 | 8M | 8.0 | 50.3 | 0.394 |
+| No. 4 (1/2") | 12.7 | 129 | 0.994 | 10M | 10.0 | 78.5 | 0.616 |
+| No. 5 (5/8") | 15.9 | 199 | 1.552 | 12M | 12.0 | 113.1 | 0.887 |
+| No. 6 (3/4") | 19.1 | 284 | 2.235 | 16M | 16.0 | 201.1 | 1.577 |
+| No. 7 (7/8") | 22.2 | 387 | 3.042 | 18M | 18.0 | 254.5 | 1.996 |
+| No. 8 (1") | 25.4 | 510 | 3.973 | 20M | 20.0 | 314.2 | 2.465 |
+| No. 9 (1-1/8") | 28.7 | 645 | 5.060 | 22M | 22.0 | 380.1 | 2.982 |
+| No. 10 (1-1/4") | 32.3 | 819 | 6.404 | 25M | 25.0 | 490.9 | 3.851 |
+| No. 11 (1-3/8") | 35.8 | 1006 | 7.907 | 30M | 30.0 | 706.9 | 5.544 |
+| No. 14 (1-3/4") | 43.0 | 1452 | 11.380 | 32M | 32.0 | 804.2 | 6.309 |
+| No. 18 (2-1/4") | 57.3 | 2581 | 20.240 | 36M | 36.0 | 1017.9 | 7.985 |
+| | | | | 45M | 45.0 | 1590.4 | 12.477 |
+| | | | | 55M | 55.0 | 2375.8 | 18.638 |
+
+</Detalle>
+
+## C.7.1 — Ganchos estándar
+
+El «gancho estándar» tiene, en el Título C, uno de estos significados (<NormaRef s="C.7.1" pag="C-51" />):
+
+| Numeral | Aplicación | Doblez | Extensión en el extremo libre |
+|---|---|---|---|
+| C.7.1.1 | Barras | 180° | $4d_b$, pero no menor de **65 mm** |
+| C.7.1.2 | Barras | 90° | $12d_b$ |
+| C.7.1.3 (a) | Estribos y ganchos de estribo, No. 5 (16M) y menores | 90° | $6d_b$ |
+| C.7.1.3 (b) | Estribos y ganchos de estribo, No. 6 (20M), No. 7 (22M) y No. 8 (25M) | 90° | $12d_b$ |
+| C.7.1.3 (c) | Estribos y ganchos de estribo, No. 8 (25M) y menores | 135° | $6d_b$ |
+| C.7.1.4 | Estribos de confinamiento DMO y DES (ganchos sísmicos, C.2.2) | 135° o más | $6d_b$, pero no menor de **75 mm** |
+
+### C.7.1.4 — Ganchos sísmicos
+
+En los estribos de confinamiento exigidos por el Capítulo C.21 para capacidad de disipación de energía **moderada (DMO)** y **especial (DES)**, deben usarse **ganchos sísmicos**: doblez de 135° o más con extensión de $6d_b$ (no menor de 75 mm) que **abraza el refuerzo longitudinal** y se proyecta hacia el **interior** de la sección. En los **ganchos suplementarios** los dos extremos llevan gancho sísmico de 135° o más, pero **en uno de los extremos** se permite un gancho de 90° o más con extensión de $6d_b$ (<NormaRef s="C.7.1.4" pag="C-51" />).
+
+<Callout tipo="practica">
+El gancho de 135° es el que mantiene el estribo cerrado cuando el recubrimiento se desprende en un sismo; el de 90° puede abrirse. Por eso en zonas de disipación de energía el gancho de 90° solo se tolera en **un** extremo de los ganchos suplementarios, y los extremos de 90° de dos suplementarios sucesivos deben alternarse (definición «Gancho suplementario», C.2).
+</Callout>
+
+## C.7.2 — Diámetros mínimos de doblado
+
+El diámetro de doblado se mide en la **cara interior** de la barra. Para barras y para estribos mayores que No. 5 (16M) se usa la Tabla C.7.2 (<NormaRef s="C.7.2.1" pag="C-51" />); los estribos No. 3 (10M) a No. 5 (16M) tienen regla propia (<NormaRef s="C.7.2.2" pag="C-51" />).
+
+<TablaNorma numero="Tabla C.7.2" titulo="Diámetros mínimos de doblado" pag="C-51" nota="Transcrita de la imagen de la página. El diámetro es el interior del doblez; db es el diámetro nominal de la barra.">
+
+| Diámetro de las barras | Diámetro mínimo de doblado |
+|---|---:|
+| No. 3 (3/8") ó 10M (10 mm) a No. 8 (1") ó 25M (25 mm) | $6\,d_b$ |
+| No. 9 (1-1/8") ó 30M (30 mm), No. 10 (1-1/4") ó 32M (32 mm) y No. 11 (1-3/8") ó 36M (36 mm) | $8\,d_b$ |
+| No. 14 (1-3/4") ó 45M (45 mm) y No. 18 (2-1/4") ó 55M (55 mm) | $10\,d_b$ |
+
+</TablaNorma>
+
+- **Estribos** No. 5 (16M) y menores: diámetro interior de doblado no menor que **$4d_b$** (<NormaRef s="C.7.2.2" pag="C-51" />). Para estribos mayores, la Tabla C.7.2.
+- **Estribos de refuerzo electrosoldado de alambre** (corrugado o liso): no menor que **$4d_b$** para alambre corrugado mayor que MD40 (7.1 mm de diámetro) y **$2d_b$** para los demás. Ningún doblez con diámetro interior menor que $8d_b$ debe estar a menos de $4d_b$ de la intersección soldada más cercana (<NormaRef s="C.7.2.3" pag="C-51" />).
+
+<Ejemplo numero={1} titulo="Dimensiones de ganchos estándar y diámetro de doblado">
+Una barra longitudinal No. 6 (3/4", $d_b$ = {N6.db} mm) termina en gancho; los estribos son No. 3 (3/8", $d_b$ = {N3.db} mm). Determinar la extensión y el diámetro de doblado de cada gancho, y la longitud de barra que consume.
+
+<Paso titulo="Gancho de 90° en la barra No. 6" ref="C.7.1.2, Tabla C.7.2">
+Extensión $12d_b$ = 12 × {N6.db} = **{e1.g90.extensionMm.toFixed(1)} mm**. Diámetro de doblado: No. 6 está entre No. 3 y No. 8 → $6d_b$ = 6 × {N6.db} = **{e1.g90.diametroDobladoMm.toFixed(1)} mm** (radio interior {e1.g90.radioInteriorMm.toFixed(1)} mm).
+</Paso>
+<Paso titulo="Gancho de 180° en la barra No. 6" ref="C.7.1.1">
+Extensión $4d_b$ = 4 × {N6.db} = {(4*N6.db).toFixed(1)} mm, mayor que el mínimo de 65 mm: **{e1.g180.extensionMm.toFixed(1)} mm**. Mismo diámetro de doblado, {e1.g180.diametroDobladoMm.toFixed(1)} mm. Con una barra No. 4 ($d_b$ = {N4.db} mm) $4d_b$ = {(4*N4.db).toFixed(1)} mm &lt; 65 mm y **gobierna el mínimo de {e1.g4_180.extensionMm} mm**.
+</Paso>
+<Paso titulo="Estribo No. 3: gancho de 135° y de 90°" ref="C.7.1.3, C.7.2.2">
+Diámetro de doblado de estribo No. 3: $4d_b$ = 4 × {N3.db} = **{e1.est135.diametroDobladoMm.toFixed(1)} mm**. Gancho de 135°: extensión $6d_b$ = **{e1.est135.extensionMm.toFixed(1)} mm**. Gancho de 90° (No. 5 y menores): también $6d_b$ = {e1.est90.extensionMm.toFixed(1)} mm.
+</Paso>
+<Paso titulo="Estribo sísmico (DMO o DES)" ref="C.7.1.4">
+$6d_b$ = {(6*N3.db).toFixed(1)} mm &lt; 75 mm → la extensión del gancho sísmico es **{e1.sis.extensionMm.toFixed(0)} mm** (gobierna el mínimo).
+</Paso>
+<Paso titulo="Longitud de barra consumida (criterio propio, geometría)" ref="Geometría propia">
+
+Medida sobre el eje de la barra, el arco de un doblez de $\theta$ grados consume $\dfrac{\pi (D + d_b)}{2}\dfrac{\theta}{180}$ más la extensión. Para el gancho de 90° de la barra No. 6: **{e1.g90.longitudDesarrolladaMm.toFixed(0)} mm**; para el de 180°: **{e1.g180.longitudDesarrolladaMm.toFixed(0)} mm**. Esta expresión es geometría elemental del autor, no una ecuación de la norma; sirve para despieces.
+
+</Paso>
+<Resultado>
+Barra No. 6: gancho 90° = {e1.g90.extensionMm.toFixed(0)} mm de extensión con doblado ≥ {e1.g90.diametroDobladoMm.toFixed(0)} mm; gancho 180° = {e1.g180.extensionMm.toFixed(0)} mm. Estribo No. 3: doblado ≥ {e1.est135.diametroDobladoMm.toFixed(0)} mm, gancho de 135° con {e1.est135.extensionMm.toFixed(0)} mm (o {e1.sis.extensionMm.toFixed(0)} mm si es sísmico). Pruébalo en la calculadora al final del capítulo.
+</Resultado>
+</Ejemplo>
+
+## C.7.3 — Doblado
+
+- **C.7.3.1.** Todo refuerzo se dobla **en frío**, salvo que el profesional facultado para diseñar permita otra cosa.
+- **C.7.3.2.** Ningún refuerzo **parcialmente embebido** en el concreto puede doblarse en obra, salvo que los planos lo indiquen o el profesional lo permita (<NormaRef s="C.7.3" pag="C-52" />).
+
+## C.7.4 — Condiciones de la superficie del refuerzo
+
+- **C.7.4.1.** Al colocar el concreto el refuerzo debe estar libre de **barro, aceite u otros recubrimientos no metálicos** que reduzcan la adherencia. Se permiten recubrimientos epóxicos que cumplan las normas citadas en C.3.5.3.8 y C.3.5.3.9.
+- **C.7.4.2.** El refuerzo (excepto el preesforzado) con óxido, escamas o ambos se considera **satisfactorio** si las dimensiones mínimas (incluida la altura de los resaltes) y el peso de una muestra **limpiada con cepillo de alambre de acero** cumplen las especificaciones NTC (o ASTM) de C.3.5.
+- **C.7.4.3.** El acero de preesforzado debe estar limpio y libre de óxido excesivo, aceite, mugre, escamas y picaduras; es admisible una **oxidación ligera** (<NormaRef s="C.7.4" pag="C-52" />).
+
+## C.7.5 — Colocación del refuerzo
+
+El refuerzo, incluidos tendones y ductos de preesforzado, debe colocarse con precisión y quedar **asegurado antes de vaciar** para que no se desplace fuera de las tolerancias (<NormaRef s="C.7.5.1" pag="C-52" />). Salvo otra especificación del profesional facultado, rigen las tolerancias de C.7.5.2:
+
+<TablaNorma numero="C.7.5.2.1" titulo="Tolerancias para d y para el recubrimiento (flexión, muros y compresión)" pag="C-52" nota="Tabla sin número en la norma, incluida en el texto de C.7.5.2.1. Los signos de la columna del recubrimiento son de la tabla.">
+
+| Altura útil | Tolerancia en d | Tolerancia en el recubrimiento especificado |
+|---|---:|---:|
+| d ≤ 200 mm | ± 10 mm | −10 mm |
+| d > 200 mm | ± 13 mm | −13 mm |
+
+</TablaNorma>
+
+Además: la tolerancia para la **distancia libre al fondo de las cimbras** es de **menos 6 mm**, y la tolerancia del recubrimiento **tampoco debe exceder menos 1/3** del recubrimiento especificado en los planos (<NormaRef s="C.7.5.2.1" pag="C-52" />).
+
+- **C.7.5.2.2.** Ubicación longitudinal de dobleces y extremos: **±50 mm**; en extremos discontinuos de ménsulas o cartelas **±13 mm**; en extremos discontinuos de otros elementos **±25 mm**. La tolerancia de recubrimiento de C.7.5.2.1 también rige en los extremos discontinuos.
+- **C.7.5.3.** El refuerzo **electrosoldado** de alambre (alambre no mayor que MW30 o MD30, 6.2 mm) en losas con vanos menores de 3 m puede doblarse desde cerca de la cara superior sobre el apoyo hasta cerca de la cara inferior en el centro del vano, si es continuo sobre el apoyo o está debidamente anclado.
+- **C.7.5.4.** **No se permite soldar** barras que se intersecan para sujetarlas, salvo autorización del profesional facultado (<NormaRef s="C.7.5.4" pag="C-52" />).
+
+## C.7.6 — Límites del espaciamiento del refuerzo
+
+### C.7.6.1 a C.7.6.4 — Distancias libres mínimas
+
+| Numeral | Caso | Distancia libre mínima |
+|---|---|---|
+| C.7.6.1 | Barras paralelas en una capa | $d_b$, pero no menor de **25 mm** |
+| C.7.6.2 | Dos o más capas | Las barras de las capas superiores van **exactamente sobre** las inferiores, con distancia libre entre capas no menor de **25 mm** |
+| C.7.6.3 | Elementos a compresión con espirales o estribos | $1.5\,d_b$, ni menor de **40 mm** |
+| C.7.6.4 | Empalmes por traslapo | El mismo límite se aplica entre un empalme y los empalmes o barras adyacentes |
+
+Todas remiten además a **C.3.3.2**: el tamaño máximo nominal del agregado grueso no debe superar 1/5 de la menor separación entre los lados del encofrado, 1/3 de la altura de la losa ni **3/4 del espaciamiento mínimo libre entre barras** o paquetes (<NormaRef s="C.3.3.2" pag="C-26" />). Estas limitaciones pueden omitirse si, a juicio del profesional facultado, la trabajabilidad y el método de compactación permiten colocar el concreto sin hormigueros ni segregación.
+
+<Ecuacion num="C.7.6.1 (aplicada)" titulo="Distancia libre entre barras de una capa (derivación propia)">
+
+$$
+s_{libre} = \frac{b - 2\,r - 2\,d_e - n\,d_b}{n - 1} \;\ge\; \max(d_b,\; 25\ \text{mm})
+$$
+
+- $b$: ancho del elemento (mm).
+- $r$: recubrimiento especificado, medido hasta la cara exterior del estribo (definición de «recubrimiento especificado», C.2).
+- $d_e$: diámetro del estribo; $n$: número de barras de la capa; $d_b$: diámetro de la barra.
+- En compresión el límite es $\max(1.5\,d_b,\,40\ \text{mm})$.
+
+</Ecuacion>
+
+La fórmula es **geometría del autor**; los límites de la derecha son los de la norma. El número máximo de barras de una capa sale de despejar $n$ cuando $s_{libre}$ iguala el mínimo.
+
+### C.7.6.5 — Separación máxima en muros y losas
+
+En muros y losas (excepto nervadas), la separación del refuerzo principal por flexión no debe ser mayor de **3 veces el espesor** del muro o losa, ni de **450 mm**; en secciones críticas de losas en dos direcciones, **2 veces el espesor** (Capítulo C.13). Para refuerzo de **temperatura**, 5 veces el espesor y 450 mm (<NormaRef s="C.7.6.5" pag="C-53" />).
+
+### C.7.6.6 — Paquetes de barras
+
+- **C.7.6.6.1.** Máximo **4 barras** por paquete.
+- **C.7.6.6.2.** Los paquetes van dentro de estribos.
+- **C.7.6.6.3.** En vigas, **no se agrupan** barras mayores que No. 11 (36M).
+- **C.7.6.6.4.** En flexión, cada barra de un paquete que termina dentro del vano termina en lugares diferentes, separados al menos **$40d_b$**.
+- **C.7.6.6.5.** Cuando las limitaciones de espaciamiento y recubrimiento dependen de $d_b$, el paquete se trata como **una sola barra de diámetro equivalente** al que resulte del área total del paquete (<NormaRef s="C.7.6.6" pag="C-53" />).
+
+El diámetro equivalente sale de igualar áreas: $n\,\dfrac{\pi d_b^2}{4} = \dfrac{\pi d_{eq}^2}{4}$, es decir $d_{eq} = d_b\sqrt{n}$ (derivación propia). Con dos barras No. 8: $d_{eq}$ = {e5.de.toFixed(1)} mm; con cuatro: {e5.de4.toFixed(1)} mm.
+
+### C.7.6.7 — Tendones y ductos
+
+- **C.7.6.7.1.** Espaciamiento entre el extremo y el centro de los tendones de pretensado a cada lado del elemento: no menor que **$4d_b$** para torones o **$5d_b$** para alambres; si $f'_{ci}$ ≥ 28 MPa, el espaciamiento mínimo centro a centro de los torones es **45 mm** para torones de 12.7 mm o menos y **50 mm** para torones de 15.2 mm. Se permite un espaciamiento más cercano o agrupar tendones en el sector central del vano.
+- **C.7.6.7.2.** Se permite agrupar ductos de postensado si se demuestra que el concreto puede colocarse satisfactoriamente y se evita que el acero rompa la separación entre ductos al tensionarlo (<NormaRef s="C.7.6.7" pag="C-53" />).
+
+## C.7.7 — Protección de concreto para el refuerzo
+
+El recubrimiento especificado es la distancia entre la superficie externa del refuerzo embebido y la superficie externa más cercana del concreto (<NormaRef s="C.2" pag="C-22" />, definición). Las tres tablas siguientes se aplican **a menos que C.7.7.6 o C.7.7.8 exijan más**.
+
+### C.7.7.1 — Concreto construido en sitio (no preesforzado)
+
+<TablaNorma numero="C.7.7.1" titulo="Recubrimiento mínimo de concreto, concreto construido en sitio no preesforzado" pag="C-54" nota="Los literales (a), (b), (c) son los de la norma; la tabla del PDF usa líneas de puntos con la columna «Recubrimiento de concreto, mm».">
+
+| Literal | Condición | Refuerzo | Recubrimiento (mm) |
+|---|---|---|---:|
+| (a) | Concreto colocado contra el suelo y expuesto permanentemente a él | Todo | 75 |
+| (b) | Concreto expuesto a suelo o a la intemperie | Barras No. 6 (20M) a No. 18 (55M) | 50 |
+| (b) | Concreto expuesto a suelo o a la intemperie | Barras No. 5 (16M), alambre MW200 o MD200 (16 mm) y menores | 40 |
+| (c) | No expuesto a la intemperie ni en contacto con el suelo: losas, muros, viguetas | Barras No. 14 (45M) y No. 18 (55M) | 40 |
+| (c) | No expuesto: losas, muros, viguetas | Barras No. 11 (36M) y menores | 20 |
+| (c) | No expuesto: vigas, columnas | Armadura principal, estribos, espirales | 40 |
+| (c) | No expuesto: cáscaras y placas plegadas | Barra No. 6 (20M) y mayores | 20 |
+| (c) | No expuesto: cáscaras y placas plegadas | Barras No. 5 (16M), alambres MW200 o MD200 (16 mm) y menores | 13 |
+
+</TablaNorma>
+
+### C.7.7.2 — Concreto construido en sitio (preesforzado)
+
+El recubrimiento de refuerzo preesforzado y no preesforzado, ductos y accesorios de los extremos no debe ser menor que:
+
+<TablaNorma numero="C.7.7.2" titulo="Recubrimiento mínimo de concreto, concreto construido en sitio preesforzado" pag="C-54" nota="Transcrita de la imagen de la página.">
+
+| Literal | Condición | Elemento o refuerzo | Recubrimiento (mm) |
+|---|---|---|---:|
+| (a) | Colocado contra el suelo y expuesto permanentemente a él | Todo | 75 |
+| (b) | Expuesto a suelo o a la intemperie | Paneles de muros, losas, viguetas | 25 |
+| (b) | Expuesto a suelo o a la intemperie | Otros elementos | 40 |
+| (c) | No expuesto a la intemperie ni en contacto con el suelo | Losas, muros, viguetas | 20 |
+| (c) | No expuesto: vigas, columnas | Refuerzo principal | 40 |
+| (c) | No expuesto: vigas, columnas | Estribos y espirales | 25 |
+| (c) | No expuesto: cáscaras y losas plegadas | Barra No. 5 (16M), alambre MW200 o MD200 (16 mm) y menores | 10 |
+| (c) | No expuesto: cáscaras y losas plegadas | Otros refuerzos | $d_b$, pero no menos de 20 |
+
+</TablaNorma>
+
+### C.7.7.3 — Concreto prefabricado (control de planta)
+
+<TablaNorma numero="C.7.7.3" titulo="Recubrimiento mínimo de concreto, concreto prefabricado (fabricado bajo condiciones de control de planta)" pag="C-54" nota="Continúa en C-55. El PDF imprime «.10» para estribos y espirales en vigas y columnas interiores: es una errata tipográfica del punto, el valor es 10 mm (véase «Errata y vacíos»).">
+
+| Literal | Condición | Elemento y refuerzo | Recubrimiento (mm) |
+|---|---|---|---:|
+| (a) | Expuesto al suelo o a la intemperie | Paneles de muros: barras No. 14 (45M) y No. 18 (55M), tendones de preesforzado mayores de 40 mm de diámetro | 40 |
+| (a) | Expuesto al suelo o a la intemperie | Paneles de muros: barras No. 11 (36M) y menores, tendones de 40 mm de diámetro y menores, alambres MW200 o MD200 (16 mm) y menores | 20 |
+| (a) | Expuesto al suelo o a la intemperie | Otros elementos: barras No. 14 (45M) y No. 18 (55M), tendones mayores de 40 mm de diámetro | 50 |
+| (a) | Expuesto al suelo o a la intemperie | Otros elementos: barras No. 6 (20M) a No. 11 (36M), tendones mayores de 16 mm hasta 40 mm de diámetro | 40 |
+| (a) | Expuesto al suelo o a la intemperie | Otros elementos: barras No. 5 (16M) y menores, tendones de 16 mm de diámetro y menores, alambre MW200 o MD200 (16 mm) y menores | 30 |
+| (b) | No expuesto a la intemperie ni al suelo | Losas, muros, viguetas: barras No. 14 (45M) y No. 18 (55M), tendones mayores a 40 mm de diámetro | 30 |
+| (b) | No expuesto | Losas, muros, viguetas: tendones de 40 mm de diámetro y menores | 20 |
+| (b) | No expuesto | Losas, muros, viguetas: barras No. 11 (36M) y menores, alambre MW200 o MD200 (16 mm) y menores | 16 |
+| (b) | No expuesto | Vigas, columnas: refuerzo principal | $d_b$, pero no menor de 16 ni mayor de 40 |
+| (b) | No expuesto | Vigas, columnas: estribos, espirales | 10 |
+| (b) | No expuesto | Cáscaras y losas plegadas: tendones de preesforzado | 20 |
+| (b) | No expuesto | Cáscaras y losas plegadas: barras No. 6 (20M) y mayores | 16 |
+| (b) | No expuesto | Cáscaras y losas plegadas: barras No. 5 (16M) y menores, alambre MW200 o MD200 (16 mm) y menores | 10 |
+
+</TablaNorma>
+
+### C.7.7.4 a C.7.7.8 — Casos especiales
+
+- **C.7.7.4 — Paquetes.** Recubrimiento no menor que el **diámetro equivalente** del paquete, sin necesidad de exceder **50 mm**; contra el suelo y permanentemente expuesto, **75 mm** (<NormaRef s="C.7.7.4" pag="C-55" />).
+- **C.7.7.5 — Pernos con cabeza para cortante.** El recubrimiento de cabezas y base común no es menor que el requerido para el refuerzo del elemento donde se coloca el perno.
+- **C.7.7.6 — Ambientes corrosivos.** Aumentar adecuadamente el recubrimiento y cumplir los requisitos del concreto según las categorías de exposición del Capítulo C.4, o disponer otra protección. **C.7.7.6.1:** en elementos preesforzados Clase T o C (C.18.3.3) en medios corrosivos, recubrimiento no menor de **1.5 veces** el de C.7.7.2 o C.7.7.3, requisito que puede obviarse si la zona precomprimida de tracción no está en tracción bajo cargas permanentes.
+- **C.7.7.7 — Ampliaciones futuras.** El refuerzo expuesto, insertos y platinas destinados a ampliaciones deben protegerse contra la corrosión.
+- **C.7.7.8 — Protección contra el fuego.** Si el Título J exige un recubrimiento mayor (véase J.3.5.2), debe especificarse ese espesor (<NormaRef s="C.7.7.8" pag="C-56" />).
+
+<Ejemplo numero={2} titulo="Viga de 300 mm: recubrimiento, distancia libre y número de barras">
+Una viga interior (no expuesta a intemperie ni suelo) de {e2.b} × {e2.h} mm lleva una capa de **4 barras No. 6** y estribos **No. 3**. Verificar el recubrimiento mínimo, la distancia libre entre barras y cuántas barras caben; luego repetir con 4 barras No. 8 en una viga de {e2.b2} mm.
+
+<Paso titulo="Recubrimiento mínimo" ref="C.7.7.1(c)">
+Vigas y columnas no expuestas: armadura principal, estribos y espirales → **{e2.rec.mm} mm**, medidos hasta la cara exterior del estribo.
+</Paso>
+<Paso titulo="Ancho interior disponible" ref="C.7.6">
+$b - 2r - 2d_e$ = {e2.b} − 2 × {e2.rec.mm} − 2 × {N3.db} = **{e2.cap.anchoInterior.toFixed(1)} mm**.
+</Paso>
+<Paso titulo="Distancia libre entre barras" ref="C.7.6.1">
+
+$$
+s_{libre} = \frac{201.0 - 4 \times 19.1}{3}
+$$
+
+Resultado: **{e2.cap.libre.toFixed(1)} mm**. Mínimo exigido: máx($d_b$ = {N6.db}; 25) = **{e2.cap.minima} mm**. Cumple, con holgura de {(e2.cap.libre - e2.cap.minima).toFixed(1)} mm.
+
+</Paso>
+<Paso titulo="Número máximo de barras en la capa" ref="C.7.6.1">
+Caben hasta **{e2.cap.nMax}** barras No. 6 en una capa de esa viga (ancho mínimo para 4 barras: {e2.cap.anchoMinimo.toFixed(0)} mm).
+</Paso>
+<Paso titulo="Agregado grueso" ref="C.3.3.2(c)">
+Con agregado de tamaño máximo nominal 19 mm, el límite 3/4 de la distancia libre es {e2.cap.agregadoMaximoPermitido.toFixed(1)} mm: {e2.cap.agregadoCumple ? 'cumple' : 'no cumple'}.
+</Paso>
+<Paso titulo="Tolerancias de obra" ref="C.7.5.2.1">
+$d \approx h - r - d_e - d_b/2$ = {e2.h} − {e2.rec.mm} − {N3.db} − {(N6.db/2).toFixed(2)} = {e2.d.toFixed(0)} mm (estimación propia, una capa) → d &gt; 200 mm, tolerancia en d de ±{e2.tol.tolD} mm. El recubrimiento puede quedar hasta {e2.tol.tolRecubrimiento.toFixed(1)} mm menor (el menor entre 13 mm y 1/3 de {e2.rec.mm} mm): mínimo aceptable en obra {e2.tol.recubrimientoMinimoObra.toFixed(1)} mm.
+</Paso>
+<Paso titulo="Segundo caso: 4 barras No. 8 en 250 mm" ref="C.7.6.1, C.7.7.1(c)">
+$d_b$ = {N8.db} mm, mínimo = máx({N8.db}; 25) = {e2.cap2.minima.toFixed(1)} mm; recubrimiento {e2.rec8.mm} mm. Ancho interior = {e2.cap2.anchoInterior.toFixed(1)} mm; $s_{libre}$ = ({e2.cap2.anchoInterior.toFixed(1)} − 4 × {N8.db}) / 3 = **{e2.cap2.libre.toFixed(1)} mm** &lt; {e2.cap2.minima.toFixed(1)} mm: **no cumple**. Solo caben {e2.nMax2} barras No. 8 en una capa; el ancho mínimo para 4 es {e2.cap2.anchoMinimo.toFixed(0)} mm. Con 3 barras ($s_{libre}$ = {e2.bMinimo3.libre.toFixed(1)} mm) sí cumple.
+</Paso>
+<Resultado>
+Viga de {e2.b} mm con 4 No. 6: recubrimiento {e2.rec.mm} mm, distancia libre {e2.cap.libre.toFixed(1)} mm ≥ {e2.cap.minima} mm: **cumple**. Con 4 No. 8 en {e2.b2} mm: {e2.cap2.libre.toFixed(1)} mm &lt; {e2.cap2.minima.toFixed(1)} mm: **no cumple**; hay que ensanchar la viga a ≥ {e2.cap2.anchoMinimo.toFixed(0)} mm, bajar a 3 barras o usar dos capas (separadas ≥ 25 mm, C.7.6.2).
+</Resultado>
+</Ejemplo>
+
+## C.7.8 — Detalles especiales del refuerzo para columnas
+
+### C.7.8.1 — Barras dobladas por cambio de sección
+
+- **C.7.8.1.1.** La pendiente de la parte inclinada no debe exceder de **1 a 6** respecto al eje de la columna.
+- **C.7.8.1.2.** Las partes arriba y abajo del doblez deben ser **paralelas** al eje de la columna.
+- **C.7.8.1.3.** Debe haber soporte horizontal (estribos transversales, espirales o porciones del entrepiso) diseñado para resistir **1.5 veces la componente horizontal** de la fuerza calculada en la porción inclinada; los estribos o espirales se colocan a no más de **150 mm** de los puntos de doblado.
+- **C.7.8.1.4.** Estas barras se doblan **antes** de colocarse en el encofrado (C.7.3).
+- **C.7.8.1.5.** Si la cara de la columna está desalineada **75 mm o más**, las barras longitudinales **no se doblan**: se colocan espigos (*dowels*) empalmados por traslapo con las barras adyacentes a las caras desalineadas, según C.12.17 (<NormaRef s="C.7.8.1" pag="C-56" />).
+
+### C.7.8.2 — Núcleos de acero
+
+En elementos compuestos a compresión con núcleo de acero estructural: los extremos del núcleo se terminan con precisión para entrar en contacto de apoyo y alinearse concéntricamente (C.7.8.2.1); la transferencia por apoyo en los empalmes de extremo se considera como máximo **50 %** del esfuerzo total de compresión del núcleo (C.7.8.2.2); la transmisión entre columna y zapata sigue C.15.8 (C.7.8.2.3); y la base del núcleo debe transmitir la carga total a la zapata, o solo la del núcleo si hay amplia sección de concreto que transfiera el resto por compresión y refuerzo (C.7.8.2.4) (<NormaRef s="C.7.8.2" pag="C-56" />).
+
+## C.7.9 — Conexiones
+
+En las conexiones de los elementos principales de pórticos (vigas y columnas) debe haber **confinamiento** para los empalmes del refuerzo que continúa y para el anclaje del refuerzo que termina allí (<NormaRef s="C.7.9.1" pag="C-56" />). El confinamiento consiste en **concreto exterior** o en **estribos cerrados o espirales interiores** (<NormaRef s="C.7.9.2" pag="C-57" />).
+
+## C.7.10 — Refuerzo transversal para elementos a compresión
+
+El refuerzo transversal debe cumplir C.7.10.4 (espirales) y C.7.10.5 (estribos); cuando se requiere refuerzo por cortante o torsión, además el Capítulo C.11. Para elementos compuestos rige C.10.13 y para tendones C.18.11. Todos estos requisitos pueden omitirse cuando **ensayos y análisis estructural** demuestren resistencia y factibilidad constructiva adecuadas (<NormaRef s="C.7.10" pag="C-57" />).
+
+### C.7.10.4 — Espirales
+
+La espiral cumple además C.10.9.3 (<NormaRef s="C.7.10.4" pag="C-57" />):
+
+| Numeral | Requisito |
+|---|---|
+| C.7.10.4.1 | Barras o alambres **continuos, espaciados uniformemente**, de tamaño y disposición que permitan manejarlos sin distorsionar las dimensiones |
+| C.7.10.4.2 | En obra, diámetro de barra **no menor de 10 mm** |
+| C.7.10.4.3 | Espaciamiento libre entre hélices **no mayor de 75 mm ni menor de 25 mm** (véase C.3.3.2) |
+| C.7.10.4.4 | Anclaje: **1.5 vueltas adicionales** en cada extremo |
+| C.7.10.4.5 | Empalmes: por traslapo (tabla siguiente) o mecánico/soldado completo (C.12.14.3) |
+| C.7.10.4.6 | Se extiende desde la parte superior de la zapata o losa hasta la altura del refuerzo horizontal más bajo del elemento soportado |
+| C.7.10.4.7 | Si no hay vigas o ménsulas en todos los lados, se colocan **estribos** sobre el fin de la espiral hasta la parte inferior de la losa, ábaco o descolgado |
+| C.7.10.4.8 | En columnas con capitel, se extiende hasta donde el diámetro o ancho del capitel sea **dos veces** el de la columna |
+| C.7.10.4.9 | Firmemente colocadas y bien alineadas |
+
+<TablaNorma numero="C.7.10.4.5(a)" titulo="Longitud mínima de empalme por traslapo de espirales (no menor que 300 mm)" pag="C-57" nota="Longitud = factor × db, y nunca menos de 300 mm. Los numerales (1) a (5) son los de la norma.">
+
+| Numeral | Caso | Longitud mínima |
+|---|---|---:|
+| (1) | Barra o alambre corrugado sin recubrimiento | $48\,d_b$ |
+| (2) | Barra o alambre liso sin recubrimiento | $72\,d_b$ |
+| (3) | Barras o alambres corrugados recubiertos con epóxico | $72\,d_b$ |
+| (4) | Barras o alambres lisos sin recubrimiento con gancho estándar de estribo (C.7.1.3) en sus extremos traslapados, embebidos en el núcleo confinado por la espiral | $48\,d_b$ |
+| (5) | Barras o alambres corrugados recubiertos con epóxico con gancho estándar de estribo (C.7.1.3) en los extremos traslapados, embebidos en el núcleo confinado | $48\,d_b$ |
+
+</TablaNorma>
+
+Con una espiral de 10 mm: corrugada sin recubrimiento, 48 × 10 = {e6.tras1} mm; lisa, 72 × 10 = {e6.tras2} mm; con espiral de 6 mm el mínimo absoluto de 300 mm gobierna (48 × 6 = 288 mm).
+
+### C.7.10.5 — Estribos
+
+| Numeral | Requisito |
+|---|---|
+| C.7.10.5.1 | Todas las barras no preesforzadas se confinan con estribos de al menos **No. 3 (10M)** si las barras longitudinales son **No. 10 (32M) o menores**, y al menos **No. 4 (12M)** para No. 11 (36M), No. 14, No. 18 y **paquetes**. En DMI se permiten estribos **No. 2 (6M)** cuando las columnas soportan solo uno o dos pisos |
+| C.7.10.5.2 | Separación vertical no mayor que **16 $d_b$** de la barra longitudinal, **48 diámetros** de la barra o alambre del estribo, ni la **menor dimensión** del elemento |
+| C.7.10.5.3 | Cada barra de esquina y barra alterna con **apoyo lateral** en la esquina de un estribo con ángulo interior **no mayor de 135°**; ninguna barra a más de **150 mm libres** de una barra apoyada lateralmente. Con barras en un círculo se permite estribo circular completo |
+| C.7.10.5.4 | Distancia vertical entre el primer estribo y la zapata, losa, ábaco o descolgado: **menor que la mitad** de la separación entre estribos |
+| C.7.10.5.5 | Si llegan vigas o ménsulas por **cuatro lados**, el último estribo puede quedar a no más de **75 mm** bajo el refuerzo más bajo de la viga o ménsula de menor altura |
+| C.7.10.5.6 | Pernos de anclaje en extremos de columnas o pedestales: rodeados por refuerzo lateral que abrace al menos **cuatro** barras verticales, distribuido dentro de **125 mm** del extremo y de al menos dos barras No. 4 (12M) o tres No. 3 (10M) |
+
+(<NormaRef s="C.7.10.5" pag="C-58" />)
+
+<Ejemplo numero={3} titulo="Estribos de una columna de 400 × 400 mm con barras No. 8">
+Una columna de {e4.lado} × {e4.lado} mm interior lleva barras longitudinales No. 8 ($d_b$ = {N8.db} mm). Definir el estribo mínimo, la separación vertical máxima y el recubrimiento.
+
+<Paso titulo="Estribo mínimo" ref="C.7.10.5.1">
+Barras longitudinales No. 8 (≤ No. 10) → estribo de al menos **No. {e4.est.eqMinimo} (10M)**.
+</Paso>
+<Paso titulo="Separación vertical máxima" ref="C.7.10.5.2">
+16 $d_b$ = 16 × {N8.db} = {(16*N8.db).toFixed(1)} mm; 48 $d_e$ = 48 × {N3.db} = {(48*N3.db).toFixed(1)} mm; menor dimensión = {e4.lado} mm. Gobierna **{e4.sMax.s.toFixed(0)} mm** ({e4.sMax.gobierna === 'dimension' ? 'la menor dimensión' : e4.sMax.gobierna === 'longitudinal' ? '16 db' : '48 de'}). Si el estribo fuera No. 4 ($d_e$ = {N4.db} mm), 48 × {N4.db} = {(48*N4.db).toFixed(1)} mm y gobierna igualmente {e4.sMaxN4.s.toFixed(0)} mm.
+</Paso>
+<Paso titulo="Recubrimiento" ref="C.7.7.1(c)">
+Columna no expuesta: armadura principal, estribos y espirales → **{e4.rec.mm} mm** hasta el estribo.
+</Paso>
+<Paso titulo="Apoyo lateral" ref="C.7.10.5.3">
+Con 3 barras No. 8 por cara, la distancia libre entre barras es ({e4.lado} − 2 × {e4.rec.mm} − 2 × {N3.db} − 3 × {N8.db}) / 2 = {((e4.lado - 2*e4.rec.mm - 2*N3.db - 3*N8.db)/2).toFixed(1)} mm, menor de 150 mm: las barras de esquina llevan apoyo en la esquina del estribo (ángulo interior ≤ 135°) y la barra central queda a menos de 150 mm libres de una barra apoyada, por lo que no necesita gancho suplementario propio.
+</Paso>
+<Resultado>
+Estribo No. 3 (10M) o mayor, separación vertical máxima de {e4.sMax.s.toFixed(0)} mm (en zona DMO o DES el Capítulo C.21 impone separaciones menores), recubrimiento de {e4.rec.mm} mm y apoyo lateral a toda barra de esquina y alterna. Los datos geométricos son supuestos propios; los límites son de la norma.
+</Resultado>
+</Ejemplo>
+
+## C.7.11 — Refuerzo transversal para elementos a flexión
+
+- **C.7.11.1.** El refuerzo a **compresión** en vigas se confina con estribos que cumplan los tamaños y espaciamientos de C.7.10.5 (o refuerzo electrosoldado de área equivalente), a lo largo de toda la distancia donde se requiera refuerzo a compresión.
+- **C.7.11.2.** En elementos de pórticos sometidos a esfuerzos reversibles de flexión o torsión en los apoyos, el refuerzo transversal son **estribos cerrados o espirales** alrededor del refuerzo de flexión.
+- **C.7.11.3.** Los estribos cerrados se forman de **una sola pieza** con ganchos extremos superpuestos abrazando la misma barra longitudinal, o de una o dos piezas unidas con **empalme por traslapo Clase B** (longitud de traslapo de $1.3\,\ell_d$) o anclándolas según C.12.13 (<NormaRef s="C.7.11" pag="C-58" />).
+
+## C.7.12 — Refuerzo de retracción y temperatura
+
+En **losas estructurales** donde el refuerzo de flexión va en **una sola dirección**, se coloca refuerzo **normal** a él para resistir retracción y temperatura, según C.7.12.2 (corrugado) o C.7.12.3 (preesforzado). Si los movimientos están restringidos de manera significativa, deben considerarse también C.8.2.4 y C.9.2.3 (<NormaRef s="C.7.12.1" pag="C-58" />).
+
+### C.7.12.2 — Refuerzo corrugado
+
+<TablaNorma numero="C.7.12.2.1" titulo="Cuantía mínima de refuerzo de retracción y temperatura" pag="C-59" nota="Siempre no menos de 0.0014. La cuantía se calcula sobre el área bruta de concreto de la losa (ρ = As / (b·h)); la norma habla de «cuantía» sin repetir la definición, esta es la lectura habitual (criterio propio).">
+
+| Literal | Caso | Cuantía |
+|---|---|---:|
+| (a) | Losas con barras corrugadas Grado 280 o 350 | 0.0020 |
+| (b) | Losas con barras corrugadas Grado 420 o refuerzo electrosoldado de alambre | 0.0018 |
+| (c) | Losas con refuerzo de resistencia a la fluencia mayor que 420 MPa, medida a una deformación unitaria de 0.35 % | $0.0018 	imes 420 / f_y$ |
+
+</TablaNorma>
+
+<Ecuacion num="C.7.12.2.1(c)" titulo="Cuantía mínima con acero de fy mayor que 420 MPa">
+
+$$
+\rho_{min} = \frac{0.0018 \times 420}{f_y} \;\ge\; 0.0014
+$$
+
+- $f_y$: resistencia a la fluencia (MPa), medida al 0.35 % de deformación unitaria.
+- Con $f_y$ = 600 MPa el cociente da 0.00126, menor que 0.0014: gobierna **0.0014**.
+
+</Ecuacion>
+
+- **C.7.12.2.2.** Separación máxima: **5 veces el espesor de la losa** ni **450 mm**.
+- **C.7.12.2.3.** En todas las secciones donde se requiera, el refuerzo debe poder **desarrollar $f_y$ en tracción** según el Capítulo C.12 (<NormaRef s="C.7.12.2" pag="C-59" />).
+
+### C.7.12.3 — Acero de preesforzado como refuerzo de retracción y temperatura
+
+- **C.7.12.3.1.** Tendones que produzcan una compresión promedio mínima de **0.7 MPa** en el área bruta, con el preesforzado efectivo después de pérdidas (C.18.6).
+- **C.7.12.3.2.** Espaciamiento entre tendones no mayor de **1.8 m**.
+- **C.7.12.3.3.** Si el espaciamiento excede **1.4 m**, se coloca refuerzo adherido adicional de retracción y temperatura (C.7.12.2) entre los tendones en los bordes de la losa, en una zona que se extiende desde el borde una distancia igual al espaciamiento entre tendones (<NormaRef s="C.7.12.3" pag="C-59" />).
+
+<Ejemplo numero={4} titulo="Refuerzo de retracción y temperatura de una losa en una dirección">
+Una losa maciza armada en una dirección tiene h = {e3.h} mm. Determinar el refuerzo normal al de flexión con barras No. 3 (área {N3.area} mm²) si $f_y$ = 420 MPa, y comparar con acero Grado 280 y con $f_y$ = 520 MPa.
+
+<Paso titulo="Cuantía con Grado 420" ref="C.7.12.2.1(b)">
+$\rho$ = **{e3.r.cuantia}** (≥ 0.0014). Área por metro: $A_s$ = 0.0018 × 1000 × {e3.h} = **{e3.s.areaPorMetro.toFixed(0)} mm²/m**.
+</Paso>
+<Paso titulo="Separación con barras No. 3" ref="C.7.12.2.2">
+s = {N3.area} × 1000 / {e3.s.areaPorMetro.toFixed(0)} = {e3.s.calculada.toFixed(0)} mm. Máximo: mín(5 × {e3.h}; 450) = **{e3.s.maxima} mm**. Se especifica **No. 3 @ {e3.s.propuesta} mm**.
+</Paso>
+<Paso titulo="Con Grado 280" ref="C.7.12.2.1(a)">
+$\rho$ = {e3.r280.cuantia}: $A_s$ = {(e3.r280.cuantia*1000*e3.h).toFixed(0)} mm²/m y s = {e3.s280.calculada.toFixed(0)} mm → No. 3 @ {e3.s280.propuesta} mm.
+</Paso>
+<Paso titulo="Con fy = 520 MPa" ref="C.7.12.2.1(c)">
+$\rho$ = 0.0018 × 420 / 520 = {e3.r520.cuantia.toFixed(5)} (≥ 0.0014, cumple el mínimo absoluto), menor que con Grado 420.
+</Paso>
+<Resultado>
+Losa de {e3.h} mm con acero de 420 MPa: **No. 3 @ {e3.s.propuesta} mm** en el sentido de retracción y temperatura ({e3.s.areaPorMetro.toFixed(0)} mm²/m). Con Grado 280 la cuantía sube a 0.0020 y la barra a {e3.s280.propuesta} mm.
+</Resultado>
+</Ejemplo>
+
+## C.7.13 — Requisitos para la integridad estructural
+
+La norma exige que el detallado del refuerzo y de las conexiones una eficazmente los elementos para garantizar la **integridad de toda la estructura** (<NormaRef s="C.7.13.1" pag="C-59" />). Para estructuras construidas en obra, los mínimos exigibles son (<NormaRef s="C.7.13.2" pag="C-59" />):
+
+| Numeral | Requisito |
+|---|---|
+| C.7.13.2.1 | **Viguetas:** al menos una barra inferior continua o empalmada por traslapo Clase B (o mecánico/soldado, C.12.14.3); en apoyos no continuos, anclada para desarrollar $f_y$ en la cara del apoyo con gancho estándar (C.12.5) o barra con cabeza (C.12.6) |
+| C.7.13.2.2 | **Vigas del perímetro:** refuerzo continuo en toda su longitud, que pase por la región circunscrita por el refuerzo longitudinal de la columna: (a) al menos **1/6** del refuerzo de tracción para momento negativo en el apoyo, no menos de dos barras; (b) al menos **1/4** del refuerzo para momento positivo a mitad del vano, no menos de dos barras. En apoyos no continuos, anclado para desarrollar $f_y$ |
+| C.7.13.2.3 | El refuerzo continuo se rodea con refuerzo transversal de C.11.5.4.1, anclado según C.11.5.4.2; no es necesario que atraviese la columna |
+| C.7.13.2.4 | Empalmes necesarios: el refuerzo **superior** se empalma cerca de o en la mitad del vano; el **inferior** cerca del apoyo o en él. Empalmes de tracción Clase B, mecánicos o soldados |
+| C.7.13.2.5 | Vigas **distintas a las del perímetro**: si llevan el refuerzo transversal de C.7.13.2.3 no hay requisitos adicionales; si no, al menos **1/4** del refuerzo para momento positivo a mitad del vano, no menos de dos barras, pasa por el apoyo a través de la región de la columna y es continuo o se empalma sobre el apoyo |
+| C.7.13.2.6 y C.7.13.2.7 | Losas en dos direcciones: C.13.3.8.5 (no preesforzadas), C.18.12.6 y C.18.12.7 (preesforzadas) |
+
+- **C.7.13.3.** En construcción **prefabricada** se proporcionan amarres de tracción en sentido transversal, longitudinal y vertical y alrededor del perímetro, según C.16.5.
+- **C.7.13.4.** Para losas izadas véase C.13.3.8.6 y C.18.12.6 (<NormaRef s="C.7.13" pag="C-60" />).
+
+Ejemplo numérico de C.7.13.2.2: si una viga del perímetro requiere $A_s^-$ = 1800 mm² sobre el apoyo y $A_s^+$ = 1200 mm² a mitad de vano, el refuerzo continuo debe ser al menos 1800/6 = {e6.i.asNegContinuo.toFixed(0)} mm² arriba y 1200/4 = {e6.i.asPosContinuo.toFixed(0)} mm² abajo, y en ambos casos no menos de {e6.i.barrasMinimas} barras. Dos barras No. 4 dan 258 mm² (2 × 129), que no alcanzan los 300 mm²: se necesitan 2 No. 5 (398 mm²) o 3 No. 4 (387 mm²). La verificación es siempre: área continua ≥ la fracción requerida **y** al menos dos barras.
+
+## Calculadora de detalles
+
+La calculadora reúne los tres cálculos más frecuentes del capítulo: recubrimiento mínimo y distancia libre de una capa (C.7.6, C.7.7.1) y dimensiones de ganchos con su diámetro de doblado (C.7.1, C.7.2).
+
+<CalculadoraEmbed id="detalles-refuerzo" />
+
+## Errata y vacíos del PDF
+
+<Callout tipo="nota" titulo="Observaciones sobre la transcripción (verificadas contra la imagen)">
+- **C.7.7.3(b), «Estribos, espirales … .10»:** el PDF imprime un punto delante del 10 (.10). Se lee como 10 mm (punto tipográfico), igual que en las otras tablas de «Estribos y espirales» del capítulo.
+- **C.7.5.2.1, «menos 6 mm» y «no debe exceder menos 1/3»:** la redacción es torpe; se interpreta como tolerancia de −6 mm para la distancia libre al fondo de cimbra y como un límite de −1/3 del recubrimiento especificado.
+- **C.7.11.3, «1.3Ad»:** el texto extraído lee mal el símbolo; la imagen muestra $1.3\,\ell_d$ (longitud de desarrollo).
+- **Barras 8M y 18M:** C.7 no las empareja con un número de barra. Para clasificarlas en este sitio se usó un valor intermedio por diámetro (8M entre No. 2 y No. 3; 18M entre No. 5 y No. 6), con el criterio más exigente en los casos ambiguos (criterio propio, señalado en la calculadora).
+- **Tabla C.7.2:** empieza en No. 3 (10M). La norma no da diámetro de doblado para barras menores como barra longitudinal.
+- **C.7.12.2.1:** solo nombra los grados 280, 350 y 420 y fy mayor que 420 MPa; no dice qué hacer para 350 &lt; fy &lt; 420 MPa ni por debajo de 280 MPa.
+- **C.7.6.5:** en secciones críticas de losas en dos direcciones la norma dice «no debe exceder 2 veces el espesor» sin repetir el tope de 450 mm.
+- **C.7.7.2 y C.7.7.3:** las tablas del PDF llevan las barras con designaciones «No. 5 ó 16M, alambre MW200 ó MD200 (16 mm)». La designación MW200/MD200 de 16 mm corresponde al alambre de refuerzo electrosoldado.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Medir el recubrimiento hasta la barra principal** y no hasta el estribo: el recubrimiento especificado es hasta la superficie del refuerzo **más externo**.
+- **Olvidar los estribos** al calcular cuántas barras caben: $b - 2r - 2d_e$ es el ancho disponible, no $b - 2r$.
+- **Usar $4d_b$ como diámetro de doblado de barras longitudinales:** solo los estribos No. 5 (16M) y menores tienen $4d_b$; las barras usan $6d_b$, $8d_b$ o $10d_b$.
+- **Gancho de 180° de 4$d_b$ menor de 65 mm** en barras delgadas: el mínimo de 65 mm gobierna hasta barras de 16.25 mm (No. 5 da 63.6 mm &lt; 65 mm).
+- **Gancho sísmico de 6$d_b$ menor de 75 mm:** en estribos pequeños el mínimo de 75 mm es el que cuenta.
+- **Usar 40 mm en todo:** el recubrimiento depende de la exposición (75, 50, 40, 20 mm …) y del tamaño de barra.
+- **Agrupar más de 4 barras** o barras mayores que No. 11 en vigas; o no desfasar $40d_b$ las terminaciones de las barras de un paquete.
+- **Colocar el refuerzo de retracción con la separación del refuerzo de flexión:** el límite es 5$h$ y 450 mm, y la cuantía depende del grado del acero.
+- **Estribos de columna con separación solo por 16$d_b$:** también deben verificarse 48 diámetros del estribo y la menor dimensión de la columna.
+- **Soldar barras que se cruzan para «amarrar» la parrilla** sin autorización (C.7.5.4).
+</Callout>
+
+## Resumen en una línea
+
+**Los ganchos tienen extensiones de 4, 6 o 12 $d_b$ (mínimos de 65 mm y 75 mm), se doblan con 4, 6, 8 o 10 $d_b$, las barras se separan al menos $d_b$ y 25 mm (1.5 $d_b$ y 40 mm en columnas), los recubrimientos van de 75 mm contra el suelo a 20 mm en losas interiores, los estribos de columna se espacian a menos de 16 $d_b$, 48 $d_e$ y la menor dimensión, y las losas llevan 0.0018 a 0.0020 de refuerzo de retracción y temperatura cada 5$h$ o 450 mm como máximo.**

@@ -5,7 +5,7 @@ import { buttonVariants } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { calculadorasDe } from '../../data/calculadoras';
 
-const todos = (await getCollection('titulo-a')).sort((a, b) => a.data.orden - b.data.orden);
+const todos = (await getCollection('titulo-a')).sort((a, b) => a.data.orden - b.data.orden || a.id.localeCompare(b.id));
 const capitulos = todos.filter((e) => e.data.tipo === 'capitulo');
 const apendices = todos.filter((e) => e.data.tipo === 'apendice');
 

@@ -1,0 +1,609 @@
+---
+codigo: 'C.18'
+tipo: capitulo
+titulo: 'Concreto preesforzado'
+resumen: 'Esfuerzos admisibles en el concreto (transferencia y servicio) y en los tendones, clases U/T/C, pérdidas por fricción, resistencia a flexión con fps (Ecs. C.18-3 a C.18-5), refuerzo adherido mínimo, losas, zonas de anclaje, ductos, mortero de inyección y postensado externo.'
+objetivos:
+  - 'Calcular los esfuerzos admisibles en el concreto y en los tendones y clasificar un elemento como Clase U, T o C'
+  - 'Verificar los esfuerzos de las fibras de una viga pretensada en transferencia y en servicio'
+  - 'Hallar la fuerza en un tendón postensado a lo largo de su trazado con las Ecs. C.18-1 y C.18-2'
+  - 'Estimar fps con las Ecs. C.18-3 a C.18-5 y obtener el momento de diseño φMn'
+  - 'Determinar el refuerzo adherido mínimo de elementos con tendones no adheridos y de losas en dos direcciones'
+  - 'Conocer los requisitos de zonas de anclaje, ductos, mortero de inyección y aplicación de la fuerza'
+paginasNorma: 'C-153 a C-166'
+paginaPdf: 455
+orden: 18
+calculadoras: ['preesforzo-esfuerzos']
+nivel: 'avanzado'
+---
+
+import {
+  esfuerzosPermisiblesConcreto,
+  esfuerzosPermisiblesAcero,
+  verificarSeccionPreesforzada,
+  esfuerzosFibras,
+  claseFlexion,
+  friccionPostensado,
+  alfaParabolaMitad,
+  gammaP,
+  fpsAdherido,
+  fpsNoAdherido,
+  flexionNominalPreesforzada,
+  momentoFisuracionPreesforzado,
+  relacionFisuracion,
+  asMinimoNoAdherido,
+  asLosaMomentoPositivo,
+  asLosaMomentoNegativo,
+  longitudesRefuerzoAdherido,
+} from '../../lib/nsr10/preesforzado';
+import { moduloRotura } from '../../lib/nsr10/concreto';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const fc = 35, fci = 28, fpy = 1675, fpu = 1860, aps = 987;
+  const perm = esfuerzosPermisiblesConcreto(fc, fci);
+  const acero = esfuerzosPermisiblesAcero(fpy, fpu);
+  const b = 400, h = 800;
+  const sec = { A: b * h, I: (b * h ** 3) / 12, yt: h / 2, yb: h / 2 };
+  const L = 14;
+  const wg = 24 * (b / 1000) * (h / 1000);
+  const wSD = 8, wLL = 10;
+  const mom = (w) => (w * L * L) / 8;
+  const Mg = mom(wg), Md = mom(wg + wSD), Mt = mom(wg + wSD + wLL);
+  const fpi = 1300, fse = 1100, fpj = 1400;
+  const Pi = (fpi * aps) / 1000, Pe = (fse * aps) / 1000;
+  const e = 250;
+  const ver = verificarSeccionPreesforzada({ fc, fci, seccion: sec, e, Pi, Pe, Mg, Md, Mt });
+  const extremo = verificarSeccionPreesforzada({ fc, fci, seccion: sec, e, Pi, Pe, Mg: 0, Md: 0, Mt: 0, extremoSimple: true });
+  const verC = verificarSeccionPreesforzada({ fc, fci, seccion: sec, e, Pi, Pe, Mg, Md, Mt: mom(wg + wSD + 12) });
+  return { fc, fci, fpy, fpu, aps, perm, acero, b, h, sec, L, wg, wSD, wLL, Mg, Md, Mt, fpi, fse, fpj, Pi, Pe, e, ver, extremo, verC, Mc: mom(wg + wSD + 12), raiz: Math.sqrt(fc) };
+})();
+
+export const ej2 = (() => {
+  const ppj = (1184.4 * 1400) / 1000;
+  const K = 0.005, mu = 0.2, L = 20, flecha = 0.5;
+  const pt = (x) => friccionPostensado({ ppj, K, mu, lpx: x, alpha: (8 * flecha * x) / (L * L) });
+  const medio = pt(10), fin = pt(20);
+  const alfaMitad = alfaParabolaMitad(flecha, L);
+  const grande = friccionPostensado({ ppj, K: 0.01, mu: 0.25, lpx: 60, alpha: 0.6 });
+  return { ppj, K, mu, L, flecha, medio, fin, alfaMitad, grande, p5: pt(5) };
+})();
+
+export const ej3 = (() => {
+  const fc = 35, fpu = 1860, fpy = 1675, aps = 987, b = 400, dp = 650, h = 800;
+  const rhoP = aps / (b * dp);
+  const fps = fpsAdherido({ fpu, fpy, fc, rhoP, dp });
+  const nom = flexionNominalPreesforzada({ b, dp, aps, fpu, fpy, fc });
+  const wu = 1.2 * (24 * 0.4 * 0.8 + 8) + 1.6 * 10;
+  const Mu = (wu * 14 * 14) / 8;
+  const fse = 1100;
+  const noAd = fpsNoAdherido({ fse, fc, rhoP, fpy, fpu, luzAltura: 14000 / h });
+  const noAdLarga = fpsNoAdherido({ fse, fc, rhoP, fpy, fpu, luzAltura: 40 });
+  const fr = moduloRotura(fc);
+  const S = (b * h * h) / 6;
+  const mcr = momentoFisuracionPreesforzado({ fr, P: (fse * aps) / 1000, excentricidad: 250, area: b * h, modulo: S });
+  const rel = relacionFisuracion(nom.phiMn, mcr);
+  const nomNoAd = flexionNominalPreesforzada({ b, dp, aps, fpu, fpy, fc });
+  const mnNoAd = (aps * noAd.fps * (dp - (aps * noAd.fps) / (0.85 * fc * b) / 2)) / 1e6;
+  const aNoAd = (aps * noAd.fps) / (0.85 * fc * b);
+  return { fc, fpu, fpy, aps, b, dp, h, rhoP, fps, nom, wu, Mu, fse, noAd, noAdLarga, fr, S, mcr, rel, mnNoAd, aNoAd, nomNoAd, cumpleResist: nom.phiMn >= Mu };
+})();
+
+export const ej4 = (() => {
+  const act = (400 * 800) / 2;
+  const as1 = asMinimoNoAdherido(act);
+  const nc = 300000;
+  const as2 = asLosaMomentoPositivo(nc, 420);
+  const as2b = asLosaMomentoPositivo(nc, 500);
+  const acf = 2400 * 200 + 0; // franja viga-losa de 2.4 m por 200 mm
+  const as3 = asLosaMomentoNegativo(acf);
+  const lon = longitudesRefuerzoAdherido(7200);
+  return { act, as1, nc, as2, as2b, acf, as3, lon };
+})();
+
+## Idea central del capítulo
+
+El **concreto preesforzado** introduce, antes de cargar la estructura, una fuerza de compresión que **contrarresta las tracciones** de las cargas. El Capítulo C.18 regula tres cosas a la vez: el **comportamiento en servicio** (esfuerzos admisibles en el concreto y en el acero, clases de elementos U, T y C, deflexiones), la **resistencia** (fps, $\phi M_n$, límites de refuerzo, refuerzo mínimo) y los **detalles** propios de la técnica (pérdidas, zonas de anclaje, ductos, inyección, medición de la fuerza). Se aplica a elementos preesforzados con alambre, torones o barras que cumplan C.3.5.5 (<NormaRef s="C.18.1.1" pag="C-153" />).
+
+<Callout tipo="importante" titulo="Se revisan todas las etapas, desde el primer tensado">
+El diseño debe basarse en **resistencia y comportamiento en servicio durante todas las etapas de carga** críticas, **desde el momento en que se aplica el preesforzado por primera vez** (<NormaRef s="C.18.2.2" pag="C-153" />). La etapa crítica de **transferencia** (viga solo con su peso propio y con $P_i$) suele gobernar el concreto en el extremo; la de **servicio** gobierna la tracción de la fibra inferior.
+</Callout>
+
+<Callout tipo="nota" titulo="Sobre las páginas citadas">
+Las páginas impresas citadas son las del PDF de la NSR-10 ($C\text{-}153$ a $C\text{-}166$). Los esfuerzos admisibles de C.18.4.1 y C.18.4.2 están en C-154; los del acero (C.18.5), en C-155.
+</Callout>
+
+## C.18.1 — Alcance
+
+- **C.18.1.1.** El capítulo aplica a elementos preesforzados con alambre, torones o barras que cumplan C.3.5.5 (<NormaRef s="C.18.1.1" pag="C-153" />).
+- **C.18.1.2.** Todas las disposiciones del Título C que no se excluyan y no contradigan C.18 aplican al concreto preesforzado.
+- **C.18.1.3.** **No se aplican** al concreto preesforzado, salvo que se indique específicamente: C.6.4.4, C.7.6.5, C.8.12.2, C.8.12.3, C.8.12.4, C.8.13, C.10.5, C.10.6, C.10.9.1 y C.10.9.2; el Capítulo C.13; y C.14.3, C.14.5 y C.14.6, aunque algunas partes de C.10.6 se aplican por C.18.4.4.
+
+## C.18.2 — Generalidades
+
+- **C.18.2.1.** Los elementos preesforzados deben cumplir los requisitos de **resistencia** del Título C.
+- **C.18.2.2.** El diseño se basa en resistencia y en comportamiento en servicio en todas las etapas críticas desde el primer preesforzado.
+- **C.18.2.3.** Deben considerarse las **concentraciones de esfuerzos** debidas al preesforzado.
+- **C.18.2.4.** Deben tomarse medidas respecto a los efectos del preesforzado sobre estructuras adyacentes: **deformaciones plásticas y elásticas, deflexiones, cambios de longitud y rotaciones**, además de temperatura y retracción.
+- **C.18.2.5.** Debe considerarse el **pandeo** de un elemento entre los puntos de contacto intermitente concreto–acero en un ducto de mayor tamaño del necesario, y el pandeo de **almas y alas delgadas**.
+- **C.18.2.6.** Al calcular las propiedades de la sección **antes de la adherencia** del acero, debe considerarse la pérdida de área por **ductos abiertos** (<NormaRef s="C.18.2" pag="C-153" />).
+
+## C.18.3 — Suposiciones de diseño
+
+- **C.18.3.1.** El diseño por resistencia para cargas axiales y de flexión se basa en las suposiciones de C.10.2, con la salvedad de que **C.10.2.4 solo aplica al refuerzo que cumpla C.3.5.3** (<NormaRef s="C.18.3.1" pag="C-153" />).
+- **C.18.3.2.** Para esfuerzos en **transferencia**, bajo **cargas de servicio** y en el estado de **cargas de fisuración**, se emplea la **teoría elástica** con dos suposiciones: las deformaciones unitarias varían **linealmente** con la altura en todas las etapas (C.18.3.2.1), y en las secciones fisuradas el concreto **no resiste tracción** (C.18.3.2.2).
+
+### C.18.3.3 — Clases U, T y C
+
+Los elementos a flexión se clasifican en función de $f_t$, el esfuerzo calculado en la **fibra extrema en tracción de la zona precomprimida en tracción**, bajo cargas de servicio (<NormaRef s="C.18.3.3" pag="C-153" />):
+
+<TablaNorma numero="C.18.3.3" titulo="Clases de elementos preesforzados a flexión" pag="C-154" nota="Transcrita del PDF (a), (b), (c). f_t se calcula con la sección bruta (C.18.3.4).">
+
+| Clase | Condición | Cálculo de esfuerzos de servicio |
+|---|---|---|
+| **U** | $f_t \le 0.62\sqrt{f'_c}$ | Sección **no fisurada** |
+| **T** | $0.62\sqrt{f'_c} < f_t \le 1.0\sqrt{f'_c}$ | Sección **no fisurada** |
+| **C** | $f_t > 1.0\sqrt{f'_c}$ | Sección **transformada fisurada** |
+
+</TablaNorma>
+
+Los **sistemas de losas preesforzadas en dos direcciones** se diseñan como **Clase U con $f_t \le 0.50\sqrt{f'_c}$** (<NormaRef s="C.18.3.3" pag="C-154" />).
+
+- **C.18.3.4.** Para Clase U y T se permite calcular esfuerzos de servicio con la sección **no fisurada**; para Clase C, con la **sección transformada fisurada** (<NormaRef s="C.18.3.4" pag="C-154" />).
+- **C.18.3.5.** Las deflexiones se calculan según **C.9.5.4** (<NormaRef s="C.18.3.5" pag="C-154" />).
+
+## C.18.4 — Requisitos de funcionamiento — Elementos a flexión
+
+### C.18.4.1 — Esfuerzos en el concreto inmediatamente después del preesforzado
+
+Antes de las pérdidas que dependen del tiempo (<NormaRef s="C.18.4.1" pag="C-154" />):
+
+<TablaNorma numero="C.18.4.1" titulo="Esfuerzos admisibles en el concreto inmediatamente después de la transferencia" pag="C-154" nota="f'_ci: resistencia a la compresión del concreto en el momento del preesforzado inicial. Los valores de (c) están escritos en el PDF con f'_c (no f'_ci).">
+
+| Numeral | Esfuerzo | Límite |
+|---|---|---|
+| (a) | Compresión en la fibra extrema, salvo lo permitido en (b) | $0.60\,f'_{ci}$ |
+| (b) | Compresión en la fibra extrema en los **extremos de elementos simplemente apoyados** | $0.70\,f'_{ci}$ |
+| (c) | Tracción $f_t$ que, si excede $0.5\sqrt{f'_c}$ en extremos de elementos simplemente apoyados, o $0.25\sqrt{f'_c}$ en otras ubicaciones, obliga a colocar **refuerzo adicional adherido** (no preesforzado o preesforzado) en la zona de tracción, para resistir la **fuerza total de tracción del concreto**, calculada con sección no fisurada | $0.5\sqrt{f'_c}$ (extremos) · $0.25\sqrt{f'_c}$ (otros) |
+
+</TablaNorma>
+
+### C.18.4.2 — Esfuerzos en servicio (Clase U y T)
+
+Bajo cargas de servicio, **después de todas las pérdidas** (<NormaRef s="C.18.4.2" pag="C-154" />):
+
+<TablaNorma numero="C.18.4.2" titulo="Esfuerzos admisibles en el concreto bajo cargas de servicio" pag="C-154" nota="Clases U y T. Compresión en la fibra extrema.">
+
+| Numeral | Esfuerzo | Límite |
+|---|---|---|
+| (a) | Compresión por **preesforzado y cargas permanentes** en el tiempo | $0.45\,f'_c$ |
+| (b) | Compresión por **preesforzado y todas las cargas** | $0.60\,f'_c$ |
+
+</TablaNorma>
+
+### C.18.4.3 y C.18.4.4 — Excepción y espaciamiento (Clase C)
+
+- **C.18.4.3.** Los admisibles de C.18.4.1 y C.18.4.2 **pueden excederse** si ensayos o análisis demuestran que el comportamiento no se perjudica (<NormaRef s="C.18.4.3" pag="C-154" />).
+- **C.18.4.4.** En Clase C **no sometidos a fatiga ni exposición agresiva**, el espaciamiento del refuerzo adherido más cercano al borde en tracción no excede el de **C.10.6.4**. Para estructuras con fatiga o medios corrosivos se requieren investigaciones y precauciones especiales (<NormaRef s="C.18.4.4" pag="C-154" />).
+  - **C.18.4.4.1.** El espaciamiento se cumple para el refuerzo no preesforzado y para los tendones adheridos. Los **tendones adheridos** no exceden **2/3** del espaciamiento máximo del refuerzo no preesforzado; entre una barra y un tendón, no más de **5/6** del permitido por C.10.6.4.
+  - **C.18.4.4.2.** Al aplicar la Ec. C.10-4 a los tendones, $\Delta f_{ps}$ sustituye a $f_s$: es el esfuerzo en el acero de preesforzado por cargas de servicio (sección fisurada) **menos el esfuerzo de descompresión $f_{dc}$**, que puede tomarse igual al esfuerzo efectivo $f_{se}$.
+  - **C.18.4.4.3.** $\Delta f_{ps}$ **no excede 250 MPa**; si $\Delta f_{ps} \le 140$ MPa, no aplican los requisitos de C.18.4.4.1 y C.18.4.4.2.
+  - **C.18.4.4.4.** Si $h$ de una viga excede **900 mm**, se coloca refuerzo longitudinal de superficie de refuerzo o tendones adheridos según **C.10.6.7** (<NormaRef s="C.18.4.4" pag="C-155" />).
+
+## C.18.5 — Esfuerzos admisibles en el acero de preesforzado
+
+<TablaNorma numero="C.18.5.1" titulo="Esfuerzos de tracción máximos en el acero de preesforzado" pag="C-155" nota="Transcrita del PDF. f_py: resistencia a la fluencia especificada; f_pu: resistencia a la tracción especificada.">
+
+| Numeral | Condición | Límite |
+|---|---|---|
+| (a) | Debido a la **fuerza del gato** | $0.94\,f_{py}$, pero no mayor que el **menor** entre $0.80\,f_{pu}$ y el máximo recomendado por el fabricante del acero o de los anclajes |
+| (b) | **Inmediatamente después de la transferencia** | $0.82\,f_{py}$, pero no mayor que $0.74\,f_{pu}$ |
+| (c) | Tendones de postensado, en **anclajes y acoples**, inmediatamente después de la transferencia | $0.70\,f_{pu}$ |
+
+</TablaNorma>
+
+<Ejemplo numero={1} titulo="Esfuerzos admisibles y verificación de una viga pretensada en transferencia y servicio">
+Viga simplemente apoyada de $\ell$ = {ej1.L} m, sección rectangular {ej1.b} × {ej1.h} mm ($A$ = {ej1.sec.A} mm², $I$ = {(ej1.sec.I / 1e10).toFixed(4)} × 10¹⁰ mm⁴, $y_t = y_b$ = 400 mm), $f'_c$ = {ej1.fc} MPa y $f'_{ci}$ = {ej1.fci} MPa. Torones de $f_{pu}$ = {ej1.fpu} MPa y $f_{py}$ = {ej1.fpy} MPa, $A_{ps}$ = {ej1.aps} mm² (10 torones de 98.7 mm²), excentricidad a mitad de luz $e$ = {ej1.e} mm bajo el centroide. Cargas: peso propio $w_g$ = {f(ej1.wg, 2)} kN/m (24 kN/m³), sobrecarga muerta de 8 kN/m y carga viva de 10 kN/m. Esfuerzos tras pérdidas instantáneas $f_{pi}$ = {ej1.fpi} MPa y efectivos $f_{se}$ = {ej1.fse} MPa; esfuerzo en el gato {ej1.fpj} MPa. **Los datos del ejemplo son supuestos**; los límites son los de la norma.
+
+<Paso titulo="Esfuerzos admisibles en el acero" ref="C.18.5.1">
+Gato: $0.94 f_{py}$ = {f(0.94 * ej1.fpy, 1)} MPa y $0.80 f_{pu}$ = {f(0.8 * ej1.fpu, 1)} MPa → rige **{f(ej1.acero.gato, 1)} MPa** ({ej1.acero.gatoControla}); el gato de {ej1.fpj} MPa **cumple**. Transferencia: $0.82 f_{py}$ = {f(0.82 * ej1.fpy, 1)} MPa y $0.74 f_{pu}$ = {f(0.74 * ej1.fpu, 1)} MPa → rige **{f(ej1.acero.transferencia, 1)} MPa**; $f_{pi}$ = {ej1.fpi} MPa **cumple**. En anclajes de postensado: 0.70$f_{pu}$ = {f(ej1.acero.anclajes, 1)} MPa.
+</Paso>
+<Paso titulo="Esfuerzos admisibles en el concreto" ref="C.18.4.1, C.18.4.2">
+Transferencia: compresión 0.60 × {ej1.fci} = **{f(ej1.perm.transferencia.compresion, 2)} MPa** (0.70 × {ej1.fci} = {f(ej1.perm.transferencia.compresionExtremos, 2)} MPa en extremos); tracción que exige refuerzo: 0.25$\sqrt{f'_c}$ = **{f(ej1.perm.transferencia.traccionRefuerzo, 3)} MPa** (0.5$\sqrt{f'_c}$ = {f(ej1.perm.transferencia.traccionRefuerzoExtremos, 3)} en extremos). Servicio: 0.45 × {ej1.fc} = **{f(ej1.perm.servicio.compresionSostenida, 2)} MPa** (permanentes) y 0.60 × {ej1.fc} = **{f(ej1.perm.servicio.compresionTotal, 2)} MPa** (todas las cargas). Clase U hasta $f_t$ = {f(ej1.perm.servicio.traccionClaseU, 3)} MPa; Clase T hasta {f(ej1.perm.servicio.traccionClaseT, 3)} MPa.
+</Paso>
+<Paso titulo="Momentos" ref="Auxiliar">
+$M_g$ = {f(ej1.wg, 2)}·{ej1.L}²/8 = **{f(ej1.Mg, 2)} kN·m**; $M_D$ (peso propio + 8 kN/m) = {f(ej1.Md, 2)} kN·m; $M_T$ (+ carga viva) = **{f(ej1.Mt, 2)} kN·m**. Fuerzas: $P_i$ = {f(ej1.Pi, 1)} kN y $P_e$ = {f(ej1.Pe, 1)} kN.
+</Paso>
+<Paso titulo="Transferencia a mitad de luz" ref="C.18.4.1(a)">
+Con compresión positiva, $\sigma = P/A \mp P e y/I \pm M y/I$ (estática elemental, auxiliar). Fibra superior = **{f(ej1.ver.transferencia.superior, 2)} MPa**; fibra inferior = **{f(ej1.ver.transferencia.inferior, 2)} MPa** ≤ {f(ej1.perm.transferencia.compresion, 2)} MPa: **cumple**.
+</Paso>
+<Paso titulo="Transferencia en el extremo con tendón recto" ref="C.18.4.1(b), (c)">
+En el apoyo ($M_g$ = 0) la fibra superior queda en **tracción de {f(-ej1.extremo.transferencia.superior, 2)} MPa**, mayor que 0.5$\sqrt{f'_c}$ = {f(ej1.perm.transferencia.traccionRefuerzoExtremos, 3)} MPa: {ej1.extremo.requiereRefuerzoTransferencia ? 'se requiere refuerzo adherido adicional en la zona de tracción (o desviar/desadherir los tendones)' : 'no se requiere refuerzo adicional'}. La compresión inferior es {f(ej1.extremo.transferencia.inferior, 2)} MPa ≤ 0.70$f'_{ci}$ = {f(ej1.perm.transferencia.compresionExtremos, 2)} MPa: cumple.
+</Paso>
+<Paso titulo="Servicio a mitad de luz" ref="C.18.4.2">
+Permanentes ($P_e$, $M_D$): superior **{f(ej1.ver.servicioSostenido.superior, 2)} MPa** ≤ {f(ej1.perm.servicio.compresionSostenida, 2)} MPa: **cumple**. Todas las cargas ($P_e$, $M_T$): superior **{f(ej1.ver.servicioTotal.superior, 2)} MPa** ≤ {f(ej1.perm.servicio.compresionTotal, 2)} MPa: **cumple**; inferior **{f(ej1.ver.servicioTotal.inferior, 2)} MPa** (tracción).
+</Paso>
+<Paso titulo="Clase del elemento" ref="C.18.3.3">
+$f_t$ = {f(ej1.ver.ft, 3)} MPa: entre {f(ej1.perm.servicio.traccionClaseU, 3)} y {f(ej1.perm.servicio.traccionClaseT, 3)} MPa → **Clase {ej1.ver.clase}**; se pueden calcular los esfuerzos con la sección no fisurada. Con una carga viva de 12 kN/m ($M_T$ = {f(ej1.Mc, 2)} kN·m) la tracción subiría a {f(ej1.verC.ft, 2)} MPa > {f(ej1.perm.servicio.traccionClaseT, 3)} MPa: **Clase {ej1.verC.clase}** (habría que calcular con sección fisurada y verificar C.18.4.4).
+</Paso>
+<Resultado>
+A mitad de luz **cumple** transferencia y servicio, y la viga es **Clase {ej1.ver.clase}**. El extremo con tendón recto **requiere refuerzo adherido adicional** (C.18.4.1(c)) porque la tracción de {f(-ej1.extremo.transferencia.superior, 2)} MPa supera el límite de {f(ej1.perm.transferencia.traccionRefuerzoExtremos, 3)} MPa.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="preesforzo-esfuerzos" />
+
+## C.18.6 — Pérdidas de preesfuerzo
+
+### C.18.6.1 — Fuentes de pérdida
+
+Para obtener el esfuerzo efectivo $f_{se}$ deben considerarse (<NormaRef s="C.18.6.1" pag="C-155" />): **(a)** asentamiento del acero durante la transferencia; **(b)** acortamiento elástico del concreto; **(c)** flujo plástico; **(d)** retracción; **(e)** relajación del acero; **(f)** fricción por curvatura intencional o accidental en postensado.
+
+<Callout tipo="nota" titulo="La norma solo da fórmula para la fricción">
+Para (a) a (e) el texto de C.18.6 **no da ecuaciones**: remite al análisis del diseñador. Solo la fricción tiene fórmulas (C.18-1 y C.18-2), y por eso es la única que se calcula en los ejemplos y en la calculadora.
+</Callout>
+
+### C.18.6.2 — Pérdidas por fricción en postensado
+
+**C.18.6.2.1.** La fuerza $P_{px}$ a una distancia $\ell_{px}$ del extremo del gato se calcula con (<NormaRef s="C.18.6.2.1" pag="C-156" />):
+
+<Ecuacion num="C.18-1" titulo="Fuerza en el tendón por fricción">
+
+$$
+P_{px}=P_{pj}\,e^{-\left(K\ell_{px}+\mu_p\alpha_{px}\right)}
+$$
+
+- $P_{pj}$: fuerza de preesforzado en el extremo del gato.
+- $\ell_{px}$: longitud del tendón desde el extremo del gato hasta el punto $x$ (m).
+- $K$: coeficiente de fricción por desviación accidental, por metro de tendón (1/m).
+- $\mu_p$: coeficiente de fricción por curvatura.
+- $\alpha_{px}$: suma de las variaciones angulares del tendón del gato a $x$ (rad).
+
+</Ecuacion>
+
+Cuando $\left(K\ell_{px}+\mu_p\alpha_{px}\right)$ **no es mayor que 0.3**, puede usarse:
+
+<Ecuacion num="C.18-2" titulo="Forma aproximada">
+
+$$
+P_{px}=P_{pj}\left(1+K\ell_{px}+\mu_p\alpha_{px}\right)^{-1}
+$$
+
+</Ecuacion>
+
+- **C.18.6.2.2.** $K$ y $\mu_p$ se determinan **experimentalmente** y se verifican durante el tensionamiento.
+- **C.18.6.2.3.** Los valores de $K$ y $\mu_p$ empleados se colocan en los **planos de diseño**.
+- **C.18.6.3.** Si hay pérdida de preesforzado por la unión del elemento con una estructura adyacente, debe tenerse en cuenta en el diseño (<NormaRef s="C.18.6.3" pag="C-156" />).
+
+<Ejemplo numero={2} titulo="Fuerza en un tendón postensado parabólico (fricción)">
+Tendón de {ej2.L} m con trazado parabólico simétrico de flecha {ej2.flecha} m, tensado desde un extremo con $A_{ps}$ = 1184.4 mm² (12 torones) a 1400 MPa: $P_{pj}$ = **{f(ej2.ppj, 1)} kN**. Se supone $K$ = {ej2.K} /m y $\mu_p$ = {ej2.mu}. **Estos coeficientes son supuestos del ejemplo**: la norma exige determinarlos experimentalmente (C.18.6.2.2).
+
+<Paso titulo="Variación angular" ref="Auxiliar">
+Para una parábola $y = 4e\,x(\ell-x)/\ell^2$, la pendiente en el apoyo es $4e/\ell$ y en el centro es cero, de modo que el ángulo acumulado vale $\alpha(x) = 8e\,x/\ell^2$ (rad). Hasta la mitad: $\alpha$ = 4·{ej2.flecha}/{ej2.L} = **{ej2.alfaMitad.toFixed(3)} rad**; hasta el extremo opuesto: **{(2 * ej2.alfaMitad).toFixed(3)} rad**.
+</Paso>
+<Paso titulo="A mitad de longitud (10 m)" ref="C.18-1">
+Exponente $K\ell_{px} + \mu_p\alpha_{px}$ = {ej2.K}·10 + {ej2.mu}·{ej2.alfaMitad.toFixed(3)} = **{ej2.medio.exponente.toFixed(4)}**. $P_{px}$ = {f(ej2.ppj, 1)}·e<sup>−{ej2.medio.exponente.toFixed(4)}</sup> = **{f(ej2.medio.ppxExacta, 1)} kN** (pérdida {f(ej2.medio.perdidaPct, 2)} %).
+</Paso>
+<Paso titulo="Extremo opuesto (20 m)" ref="C.18-1">
+Exponente = {ej2.K}·20 + {ej2.mu}·{(2 * ej2.alfaMitad).toFixed(3)} = **{ej2.fin.exponente.toFixed(4)}**. $P_{px}$ = **{f(ej2.fin.ppxExacta, 1)} kN** (pérdida {f(ej2.fin.perdidaPct, 2)} %).
+</Paso>
+<Paso titulo="Forma aproximada" ref="C.18-2">
+El exponente es ≤ 0.3, así que puede usarse C.18-2: $P_{px}$ = {f(ej2.ppj, 1)}/(1 + {ej2.fin.exponente.toFixed(4)}) = **{f(ej2.fin.ppxAproximada, 1)} kN** (diferencia con C.18-1: {f(100 * (ej2.fin.ppxAproximada - ej2.fin.ppxExacta) / ej2.fin.ppxExacta, 2)} %). Para un tendón de 60 m con $K$ = 0.01 y $\mu_p$ = 0.25 y α = 0.6 rad el exponente sería {ej2.grande.exponente.toFixed(2)} > 0.3 y **no** se podría usar C.18-2.
+</Paso>
+<Resultado>
+La fuerza baja de {f(ej2.ppj, 1)} kN en el gato a **{f(ej2.medio.ppxExacta, 1)} kN** a mitad del tendón y a **{f(ej2.fin.ppxExacta, 1)} kN** en el extremo muerto. La diferencia obliga a revisar el alargamiento teórico y, si es grande, a tensar desde ambos extremos.
+</Resultado>
+</Ejemplo>
+
+## C.18.7 — Resistencia a flexión
+
+- **C.18.7.1.** La resistencia a flexión de diseño se calcula con los métodos de resistencia del Título C; para el acero de preesforzado, **$f_{ps}$ sustituye a $f_y$** (<NormaRef s="C.18.7.1" pag="C-156" />).
+- **C.18.7.2.** Como alternativa a una determinación más precisa de $f_{ps}$ por **compatibilidad de deformaciones**, se pueden usar los valores aproximados siguientes, **siempre que $f_{se}$ no sea menor que $0.50 f_{pu}$** (<NormaRef s="C.18.7.2" pag="C-156" />).
+
+### (a) Tendones adheridos
+
+<Ecuacion num="C.18-3" titulo="fps para tendones adheridos">
+
+$$
+f_{ps}=f_{pu}\left(1-\frac{\gamma_p}{\beta_1}\left[\rho_p\frac{f_{pu}}{f'_c}+\frac{d}{d_p}\left(\omega-\omega'\right)\right]\right)
+$$
+
+- $\omega = \rho f_y/f'_c$ y $\omega' = \rho' f_y/f'_c$ (refuerzo no preesforzado en tracción y en compresión).
+- $\rho_p = A_{ps}/(b\,d_p)$; $d_p$: distancia de la fibra extrema en compresión al centroide del acero de preesforzado.
+- $\beta_1$: de C.10.2.7.3.
+- $\gamma_p$ según el tipo de acero (tabla siguiente).
+
+</Ecuacion>
+
+<TablaNorma numero="γp (C.18.7.2(a))" titulo="Factor γp según el tipo de acero de preesforzado" pag="C-156" nota="Valores del texto bajo la Ec. C.18-3.">
+
+| $f_{py}/f_{pu}$ no menor que | $\gamma_p$ |
+|---|---:|
+| 0.80 | 0.55 |
+| 0.85 | 0.40 |
+| 0.90 | 0.28 |
+
+</TablaNorma>
+
+Cuando se tiene en cuenta cualquier refuerzo de compresión en C.18-3, el término entre corchetes **no se toma menor de 0.17** y **$d'$ no debe ser mayor de $0.15 d_p$** (<NormaRef s="C.18.7.2" pag="C-156" />).
+
+### (b) y (c) Tendones no adheridos
+
+<Ecuacion num="C.18-4" titulo="fps, tendones no adheridos, luz/altura ≤ 35">
+
+$$
+f_{ps}=f_{se}+70+\frac{f'_c}{100\,\rho_p}
+$$
+
+con $f_{ps}$ no mayor que el menor entre $f_{py}$ y $\left(f_{se}+420\right)$.
+
+</Ecuacion>
+
+<Ecuacion num="C.18-5" titulo="fps, tendones no adheridos, luz/altura > 35">
+
+$$
+f_{ps}=f_{se}+70+\frac{f'_c}{300\,\rho_p}
+$$
+
+con $f_{ps}$ no mayor que el menor entre $f_{py}$ y $\left(f_{se}+210\right)$.
+
+</Ecuacion>
+
+- **C.18.7.3.** El refuerzo **no preesforzado** que cumpla C.3.5.3 y se use junto con el acero de preesforzado puede incluirse en el cálculo de resistencia con esfuerzo igual a $f_y$. Otros refuerzos no preesforzados solo se incluyen con análisis de compatibilidad de deformaciones (<NormaRef s="C.18.7.3" pag="C-157" />).
+
+<Ejemplo numero={3} titulo="fps, momento nominal y verificación de la carga de fisuración">
+La misma viga ({ej3.b} × {ej3.h} mm, $f'_c$ = {ej3.fc} MPa, $A_{ps}$ = {ej3.aps} mm², $d_p$ = {ej3.dp} mm, tendones adheridos, $f_{pu}$ = {ej3.fpu} y $f_{py}$ = {ej3.fpy} MPa, $f_{se}$ = {ej3.fse} MPa ≥ 0.50$f_{pu}$ = {0.5 * ej3.fpu} MPa). Cargas de servicio $w_D$ = 15.68 kN/m y $w_L$ = 10 kN/m.
+
+<Paso titulo="Parámetros" ref="C.18.7.2(a)">
+$\rho_p$ = {ej3.aps}/({ej3.b}·{ej3.dp}) = **{ej3.rhoP.toFixed(5)}**. $f_{py}/f_{pu}$ = {(ej3.fpy / ej3.fpu).toFixed(4)} ≥ 0.90 → $\gamma_p$ = **{ej3.fps.gammaP}**. $\beta_1$ = {ej3.fps.beta1.toFixed(2)} (35 MPa). El corchete vale $\rho_p f_{pu}/f'_c$ = {ej3.fps.corchete.toFixed(5)} (sin refuerzo no preesforzado).
+</Paso>
+<Paso titulo="fps adherido" ref="C.18-3">
+$f_{ps}$ = {ej3.fpu}·(1 − ({ej3.fps.gammaP}/{ej3.fps.beta1.toFixed(2)})·{ej3.fps.corchete.toFixed(5)}) = **{f(ej3.fps.fps, 1)} MPa**.
+</Paso>
+<Paso titulo="Bloque de compresión y momento nominal" ref="C.18.7.1, C.10.2.7">
+(Mecánica usual, auxiliar.) $a = A_{ps}f_{ps}/(0.85 f'_c b)$ = **{f(ej3.nom.a, 1)} mm** ($c = a/\beta_1$ = {f(ej3.nom.c, 1)} mm). $M_n = A_{ps}f_{ps}(d_p - a/2)$ = **{f(ej3.nom.mn, 1)} kN·m**.
+</Paso>
+<Paso titulo="φ" ref="C.9.3.2, C.10.3.4">
+$\varepsilon_t \approx 0.003(d_p-c)/c$ = {ej3.nom.epsilonT.toFixed(5)} ≥ 0.005 → sección **controlada por tracción**, $\phi$ = **{ej3.nom.phi.toFixed(2)}**. (Es una estimación: ignora la deformación efectiva del preesforzado, que solo aumenta $\varepsilon_t$.) $\phi M_n$ = **{f(ej3.nom.phiMn, 1)} kN·m**.
+</Paso>
+<Paso titulo="Resistencia requerida" ref="C.9-2">
+$w_u = 1.2\,w_D + 1.6\,w_L$ = {f(ej3.wu, 3)} kN/m; $M_u = w_u\ell^2/8$ = **{f(ej3.Mu, 1)} kN·m** → {ej3.cumpleResist ? 'cumple (φMn ≥ Mu)' : 'no cumple'}.
+</Paso>
+<Paso titulo="Carga de fisuración" ref="C.18.8.2">
+$f_r = 0.62\sqrt{f'_c}$ = {f(ej3.fr, 3)} MPa; $S = bh^2/6$ = {(ej3.S / 1e7).toFixed(3)} × 10⁷ mm³. $M_{cr} = f_r S + P_e(e + S/A)$ = **{f(ej3.mcr, 1)} kN·m** (momento total que lleva la fibra inferior a $f_r$; ecuación elemental, auxiliar). $1.2 M_{cr}$ = {f(ej3.rel.requerido, 1)} kN·m ≤ $\phi M_n$ = {f(ej3.nom.phiMn, 1)} kN·m → **{ej3.rel.cumple ? 'cumple' : 'no cumple'}** C.18.8.2.
+</Paso>
+<Paso titulo="Si los tendones fueran no adheridos" ref="C.18-4">
+Relación luz/altura = 14000/{ej3.h} = {(14000 / ej3.h).toFixed(1)} ≤ 35 → C.18-4: $f_{ps}$ = {ej3.fse} + 70 + {ej3.fc}/(100·{ej3.rhoP.toFixed(5)}) = {f(ej3.noAd.fpsSinTope, 1)} MPa ≤ mín($f_{py}$, $f_{se}$+420) = {f(ej3.noAd.tope, 0)} MPa → **{f(ej3.noAd.fps, 1)} MPa**, mucho menor que con adherencia ({f(ej3.fps.fps, 1)} MPa). Con luz/altura > 35 (C.18-5) y los mismos datos: {f(ej3.noAdLarga.fpsSinTope, 1)} MPa con tope {f(ej3.noAdLarga.tope, 0)} MPa.
+</Paso>
+<Resultado>
+$f_{ps}$ = **{f(ej3.fps.fps, 1)} MPa**, $M_n$ = **{f(ej3.nom.mn, 1)} kN·m**, $\phi M_n$ = **{f(ej3.nom.phiMn, 1)} kN·m** ≥ $M_u$ = {f(ej3.Mu, 1)} kN·m, y además $\phi M_n \ge 1.2 M_{cr}$ ({f(ej3.rel.requerido, 1)} kN·m). Con tendones no adheridos $f_{ps}$ baja a {f(ej3.noAd.fps, 1)} MPa.
+</Resultado>
+</Ejemplo>
+
+## C.18.8 — Límites del refuerzo en elementos a flexión
+
+- **C.18.8.1.** Las secciones se clasifican como **controladas por tracción, de transición o controladas por compresión**, según C.10.3.3 y C.10.3.4, con los $\phi$ de C.9.3.2 (<NormaRef s="C.18.8.1" pag="C-157" />).
+- **C.18.8.2 — Refuerzo mínimo.** La cantidad total de refuerzo preesforzado y no preesforzado en elementos con refuerzo preesforzado **adherido** debe bastar para desarrollar una carga mayorada **de por lo menos 1.2 veces la carga de fisuración**, calculada con el $f_r$ de C.9.5.2.3. Se permite omitir esta disposición en elementos a flexión con resistencia a cortante y flexión **de al menos el doble** de lo exigido por C.9.2 (<NormaRef s="C.18.8.2" pag="C-157" />).
+- **C.18.8.3.** Parte o todo el refuerzo adherido (barras o tendones) se coloca **lo más cerca posible de la cara en tracción**. En elementos con tendones **no adheridos**, el refuerzo adherido mínimo cumple C.18.9.
+
+## C.18.9 — Refuerzo mínimo adherido
+
+**C.18.9.1.** En todos los elementos a flexión con **tendones no adheridos** debe colocarse un área mínima de refuerzo adherido según C.18.9.2 y C.18.9.3 (<NormaRef s="C.18.9.1" pag="C-157" />).
+
+### C.18.9.2 — Vigas y losas en una dirección
+
+<Ecuacion num="C.18-6" titulo="Refuerzo adherido mínimo">
+
+$$
+A_s = 0.004\,A_{ct}
+$$
+
+- $A_{ct}$: área de la porción de la sección transversal entre la **cara de tracción en flexión** y el **centro de gravedad de la sección bruta**.
+
+</Ecuacion>
+
+El refuerzo se distribuye uniformemente sobre la zona de tracción precomprimida, lo más cerca posible de la fibra extrema en tracción (C.18.9.2.1), y se exige **independientemente de las condiciones de esfuerzo en servicio** (C.18.9.2.2) (<NormaRef s="C.18.9.2" pag="C-157" />).
+
+### C.18.9.3 — Losas planas en dos direcciones
+
+- **C.18.9.3.1.** No se requiere refuerzo adherido en zonas de **momento positivo** donde $f_t$ (tracción en la fibra extrema, **después de todas las pérdidas**) **no excede $0.17\sqrt{f'_c}$** (<NormaRef s="C.18.9.3.1" pag="C-157" />).
+- **C.18.9.3.2.** En zonas de momento positivo donde la tracción calculada excede $0.17\sqrt{f'_c}$:
+
+<Ecuacion num="C.18-7" titulo="Refuerzo adherido en momento positivo de losas">
+
+$$
+A_s=\frac{N_c}{0.5\,f_y}
+$$
+
+- $N_c$: fuerza de tracción en el concreto debida a la carga muerta más la carga viva **no mayoradas** (N).
+- $f_y$ usado **no excede 420 MPa**.
+
+</Ecuacion>
+
+El refuerzo se distribuye uniformemente sobre la zona de tracción precomprimida, lo más cerca posible de la fibra extrema en tracción (<NormaRef s="C.18.9.3.2" pag="C-158" />).
+
+- **C.18.9.3.3.** En zonas de **momento negativo sobre las columnas de apoyo**, el refuerzo adherido superior en cada dirección es:
+
+<Ecuacion num="C.18-8" titulo="Refuerzo adherido en momento negativo sobre columnas">
+
+$$
+A_s=0.00075\,A_{cf}
+$$
+
+- $A_{cf}$: la mayor área de la sección bruta de las franjas viga-losa de los dos pórticos equivalentes ortogonales que se intersectan en la columna.
+
+</Ecuacion>
+
+Se distribuye entre líneas a **$1.5h$** fuera de las caras opuestas de la columna; **al menos 4 barras o alambres** en cada dirección; separación **≤ 300 mm** (<NormaRef s="C.18.9.3.3" pag="C-158" />).
+
+### C.18.9.4 — Longitudes mínimas
+
+- **Momento positivo:** $\ell_n/3$, **centrada** en la zona de momento positivo (C.18.9.4.1).
+- **Momento negativo:** $\ell_n/6$ **a cada lado del apoyo** (C.18.9.4.2).
+- **C.18.9.4.3.** Si el refuerzo adherido contribuye a $\phi M_n$ (C.18.7.3) o a las condiciones de tracción de C.18.9.3.2, también debe cumplir el **Capítulo C.12** (<NormaRef s="C.18.9.4" pag="C-158" />).
+
+<Ejemplo numero={4} titulo="Refuerzo adherido mínimo (viga con tendones no adheridos y losa plana)">
+**(a) Viga** {ej1.b} × {ej1.h} mm con tendones no adheridos: $A_{ct}$ = (mitad de la sección) = {ej4.act} mm². **(b) Losa plana** postensada con tracción en momento positivo mayor que 0.17$\sqrt{f'_c}$ y $N_c$ = {ej4.nc / 1000} kN. **(c) Momento negativo** sobre una columna con $A_{cf}$ = {ej4.acf} mm² (franja de 2.4 m × 200 mm); luz libre $\ell_n$ = 7.2 m. (Datos supuestos.)
+
+<Paso titulo="Viga" ref="C.18-6">
+$A_s = 0.004 A_{ct}$ = 0.004 × {ej4.act} = **{f(ej4.as1, 0)} mm²**, distribuido uniformemente en la zona de tracción precomprimida y siempre exigido (C.18.9.2.2).
+</Paso>
+<Paso titulo="Losa, momento positivo" ref="C.18-7">
+Con $f_y$ = 420 MPa: $A_s = N_c/(0.5 f_y)$ = {ej4.nc}/(0.5·420) = **{f(ej4.as2, 0)} mm²**. Si el acero fuera de 500 MPa se usa igualmente 420 MPa: {f(ej4.as2b, 0)} mm². Longitud ≥ $\ell_n/3$ = **{f(ej4.lon.positivo, 0)} mm**, centrada.
+</Paso>
+<Paso titulo="Losa, momento negativo" ref="C.18-8">
+$A_s = 0.00075 A_{cf}$ = 0.00075 × {ej4.acf} = **{f(ej4.as3, 0)} mm²** en cada dirección, entre líneas a 1.5h de las caras de la columna, con al menos 4 barras y separación ≤ 300 mm. Prolongación ≥ $\ell_n/6$ = **{f(ej4.lon.negativoACadaLado, 0)} mm** a cada lado del apoyo.
+</Paso>
+<Resultado>
+Viga: **{f(ej4.as1, 0)} mm²**. Losa: **{f(ej4.as2, 0)} mm²** (positivo) y **{f(ej4.as3, 0)} mm²** (negativo, por dirección).
+</Resultado>
+</Ejemplo>
+
+## C.18.10 — Estructuras estáticamente indeterminadas
+
+- **C.18.10.1.** Los pórticos y elementos continuos preesforzados se diseñan para buen comportamiento en servicio y resistencia adecuada.
+- **C.18.10.2.** El comportamiento en servicio se determina con **análisis elástico**, considerando reacciones, momentos, cortantes y fuerzas axiales producidas por el **preesforzado, flujo plástico, retracción, temperatura, deformación axial, restricción de elementos adyacentes y asentamientos** de la cimentación.
+- **C.18.10.3.** Los momentos para la resistencia requerida son la **suma de los momentos de las reacciones inducidas por el preesforzado (con factor 1.0)** y los de las cargas mayoradas; se permite ajustar según C.18.10.4 (<NormaRef s="C.18.10.3" pag="C-158" />).
+- **C.18.10.4 — Redistribución.** Con refuerzo adherido en los apoyos según C.18.9, se permite disminuir los momentos negativos o positivos de la teoría elástica, según **C.8.4** (C.18.10.4.1). El momento reducido se usa para calcular los redistribuidos en las demás secciones, **manteniendo el equilibrio estático** en cada disposición de carga (C.18.10.4.2) (<NormaRef s="C.18.10.4" pag="C-158" />).
+
+## C.18.11 — Elementos a compresión (carga axial y flexión combinadas)
+
+- **C.18.11.1.** Se diseñan con los métodos de resistencia del Título C para elementos no preesforzados, incluyendo los efectos del preesforzado, retracción, flujo plástico y temperatura (<NormaRef s="C.18.11.1" pag="C-159" />).
+- **C.18.11.2.1.** Con esfuerzo promedio de compresión en el concreto **debido solo al preesforzado efectivo menor que 1.6 MPa**, se exige refuerzo mínimo de C.7.10, C.10.9.1 y C.10.9.2 (columnas) o C.14.3 (muros).
+- **C.18.11.2.2.** Excepto muros, con esfuerzo promedio **igual o superior a 1.6 MPa**, **todos los tendones** deben estar rodeados por **espirales o estribos laterales**: (a) espirales según C.7.10.4; (b) estribos al menos No. 10 (o electrosoldado equivalente), con separación vertical ≤ **48 diámetros** de la barra o alambre y ≤ la menor dimensión del elemento; (c) el primer estribo a no más de **la mitad** de la separación requerida sobre la zapata o la losa de piso, y hasta media separación bajo el refuerzo horizontal inferior de los elementos apoyados encima; (d) con vigas o ménsulas que enmarcan la columna por todos lados, los estribos pueden terminar a **no más de 75 mm** bajo el refuerzo inferior de ellas.
+- **C.18.11.2.3.** En **muros** con esfuerzo promedio ≥ 1.6 MPa, el refuerzo mínimo de C.14.3 puede obviarse si el análisis estructural demuestra resistencia y estabilidad adecuadas (<NormaRef s="C.18.11.2" pag="C-159" />).
+
+## C.18.12 — Sistemas de losas
+
+- **C.18.12.1.** Los momentos y cortantes mayorados en losas preesforzadas en más de una dirección se determinan según **C.13.7** (sin C.13.7.7.4 y C.13.7.7.5) o con procedimientos más elaborados.
+- **C.18.12.2.** $\phi M_n \ge M_u$ en cada sección (con C.9.2, C.18.10.3, C.18.10.4) y $\phi V_n \ge V_u$ junto a las columnas (con C.9.2, C.11.1, C.11.11.2 y C.11.11.6.2).
+- **C.18.12.3.** En servicio se cumplen todas las limitaciones de funcionamiento, incluidas las deflexiones, considerando los factores de C.18.10.2.
+- **C.18.12.4 — Tendones.** Con cargas uniformes, el espaciamiento de tendones en al menos una dirección **no excede el menor entre 8 veces el espesor y 1.5 m**; el preesforzado promedio efectivo mínimo es **0.9 MPa** sobre la sección de losa aferente al tendón o grupo (en secciones variables, en cada sección). Se consideran cargas concentradas y aberturas (<NormaRef s="C.18.12.4" pag="C-159" />).
+- **C.18.12.5.** En losas con tendones no adheridos se coloca refuerzo adherido según C.18.9.3 y C.18.9.4.
+- **C.18.12.6 — Integridad estructural.** En losas con tendones no adheridos: **mínimo 2 torones postensados de siete alambres de 12.7 mm** o más, en cada dirección en las columnas, pasando por la región circunscrita por el refuerzo longitudinal de la columna o anclados en ella; fuera de las caras de la columna pasan **bajo** cualquier tendón ortogonal de los vanos adyacentes; si se anclan en la región de la columna, el anclaje queda fuera del centroide y lejos del vano anclado (<NormaRef s="C.18.12.6" pag="C-160" />).
+- **C.18.12.7.** Se permiten losas "pretensionadas" que no cumplan C.18.12.6 (el texto del PDF dice así) si tienen **refuerzo inferior en cada dirección** que pase por la región de la columna y esté anclado en los apoyos exteriores según C.13.3.8.5, con área no menor que **1.5 veces** la de la Ec. C.10-3 y no menor que **$2.1\,b_w d/f_y$** ($b_w$: ancho de la cara de la columna), y extensión mínima ≥ longitud de desarrollo (C.12.2.1) (<NormaRef s="C.18.12.7" pag="C-160" />).
+- **C.18.12.8.** En losas izadas, el refuerzo inferior de anclaje se detalla según C.13.3.8.6.
+
+## C.18.13 — Zona de anclaje de tendones postensados
+
+### C.18.13.1 y C.18.13.2 — Zonas local y general
+
+La zona de anclaje tiene dos sectores: la **zona local** (prisma rectangular que circunda el dispositivo de anclaje y su refuerzo de confinamiento) y la **zona general** (la zona de anclaje definida en C.2.2, que **incluye la local**) (<NormaRef s="C.18.13.1" pag="C-160" />). El diseño de ambas se basa en la **fuerza mayorada de preesforzado $P_{pu}$** y en los requisitos de C.9.2.5 y C.9.3.2.5 (C.18.13.2.1 y C.18.13.3.1): **$\phi$ = 0.85** para zonas de anclaje (C.9.3.2.5) y factor **1.2** sobre la fuerza máxima del gato (en el capítulo C.9 aparece como C.9.2.4; ver erratas).
+
+- **C.18.13.2.2.** Refuerzo en la zona local donde se requiera para el buen funcionamiento del anclaje; se satisface con C.18.14.1 o C.18.15.1 y C.18.15.2 (C.18.13.2.3).
+- **C.18.13.3.2.** Refuerzo en la zona general para resistir **estallido, descascaramiento y tracciones longitudinales de borde**; considerar cambios abruptos de sección. Se satisface con C.18.13.4, C.18.13.5, C.18.13.6 y, según el caso, C.18.14.2, C.18.14.3 o C.18.15.3 (C.18.13.3.3).
+
+### C.18.13.4 — Resistencia nominal de los materiales
+
+- **C.18.13.4.1.** Tracción del refuerzo adherido a la resistencia nominal limitada a **$f_y$** (no preesforzado) y **$f_{py}$** (preesforzado); para refuerzo preesforzado **no adherido**, a **$f_{ps} = f_{se} + 70$**.
+- **C.18.13.4.2.** Salvo concreto confinado por espirales o estribos cerrados con confinamiento equivalente al de la Ec. C.10-5, la resistencia nominal a compresión del concreto en la zona general se limita a **$0.7\,\lambda f'_{ci}$**.
+- **C.18.13.4.3.** $f'_{ci}$ al postensar se especifica en planos. Salvo anclajes sobredimensionados o acero tensado a **no más del 50 %** de la fuerza final, el tendón no se tensa hasta que el concreto (ensayos con curado igual al del elemento) alcance **28 MPa** (torones de varios alambres) o **17 MPa** (tendones de un torón o barras) (<NormaRef s="C.18.13.4" pag="C-161" />).
+
+### C.18.13.5 — Métodos de diseño
+
+- **C.18.13.5.1.** Para zonas generales se permiten (a) **modelos puntal-tensor**, (b) **análisis lineal de esfuerzos** (incluye elementos finitos) o (c) **ecuaciones simplificadas** cuando apliquen, siempre que den resistencias sustancialmente concordantes con ensayos de amplio alcance.
+- **C.18.13.5.2.** **No** se usan ecuaciones simplificadas si la sección no es rectangular, si hay discontinuidades que desvíen la trayectoria de fuerzas, si la distancia mínima al borde es menor que **1.5 veces** la dimensión lateral del anclaje en esa dirección, o si hay anclajes múltiples que no formen un grupo compacto.
+- **C.18.13.5.3.** La **secuencia de tensionamiento** se especifica en planos y se considera en el diseño.
+- **C.18.13.5.4.** Se consideran los efectos **tridimensionales** (procedimientos 3D o suma de dos planos ortogonales). *(El PDF numera este requisito como "C,18.13.5.4": errata tipográfica.)*
+- **C.18.13.5.5.** Para anclajes **lejos del extremo del elemento**, refuerzo adherido para transferir **al menos $0.35 P_{pu}$** al concreto detrás del anclaje, simétrico alrededor de los anclajes y totalmente desarrollado por detrás y por delante.
+- **C.18.13.5.6.** Si los tendones se curvan en la zona general (excepto tendones de un alambre o si el análisis demuestra que no se requiere), refuerzo adherido para fuerzas **radiales y de hendimiento**.
+- **C.18.13.5.7.** Excepto tendones de un torón o si el análisis demuestra lo contrario, refuerzo mínimo ortogonal paralelo a la superficie posterior de toda zona de anclaje con resistencia nominal a tracción igual al **2 % de cada $P_{pu}$**, para evitar descascaramiento.
+- **C.18.13.5.8.** Se **obvia** la resistencia a tracción del concreto al calcular el refuerzo (<NormaRef s="C.18.13.5" pag="C-161" />).
+
+### C.18.13.6 — Detallado
+
+Los tamaños de refuerzo, espaciamientos, recubrimiento y demás detalles consideran las **tolerancias** de doblado, fabricación e instalación, el **tamaño del agregado** y la correcta colocación y consolidación del concreto (<NormaRef s="C.18.13.6" pag="C-162" />).
+
+## C.18.14 — Zonas de anclaje para tendones de un alambre o barras de 16 mm
+
+- **C.18.14.1 — Zona local.** Los anclajes de tendón único o barras de 16 mm o menos y el refuerzo de la zona local cumplen **ACI 423.7** o los requisitos de dispositivos especiales de C.18.15.2.
+- **C.18.14.2 — Zona general en losas** (torones de 13 mm o menores, losas de concreto de peso normal; salvo análisis según C.18.13.5):
+  - dos barras horizontales **no menores de No. 13** paralelas al borde de la losa, a no más de **$h/2$** delante de cada anclaje y que se extiendan **≥ 150 mm** a cada lado de los bordes exteriores del dispositivo (C.18.14.2.2);
+  - anclajes con separación **≤ 300 mm** centro a centro se consideran **agrupados**; por cada grupo de **seis o más** se colocan **$n+1$** horquillas o estribos cerrados **≥ No. 10** ($n$ = número de anclajes), una entre cada anclaje y una a cada lado del grupo, con la parte central perpendicular al plano de la losa desde **$3h/8$ hasta $h/2$** delante de los anclajes (C.18.14.2.3);
+  - para anclajes que no se ajusten a C.18.14.2.1 el refuerzo mínimo se basa en análisis detallado (C.18.14.2.4).
+- **C.18.14.3 — Vigas principales y secundarias.** La zona general de **grupos de tendones de un alambre** cumple C.18.13.3 a C.18.13.5 (<NormaRef s="C.18.14" pag="C-162" />).
+
+## C.18.15 — Zonas de anclaje para tendones de varios torones
+
+- **C.18.15.1 — Zona local.** Los dispositivos básicos y el refuerzo de la zona local cumplen los artículos **9.21.7.2.2 a 9.21.7.2.4 de la AASHTO** *Standard Specification for Highway Bridges*, División I (en el PDF citados con prefijo "C."); los **dispositivos especiales** cumplen los ensayos de AASHTO División I, art. 9.21.7.3, y División II, art. 10.3.2.3.
+- **C.18.15.2 — Dispositivos especiales.** Se agrega **refuerzo de superficie suplementario** en las regiones de las zonas de anclaje, además del confinamiento del dispositivo, igual en configuración y **al menos equivalente en cuantía volumétrica** al usado en los ensayos de calificación.
+- **C.18.15.3 — Zona general.** Cumple C.18.13.3 a C.18.13.5 (<NormaRef s="C.18.15" pag="C-163" />).
+
+## C.18.16 — Protección contra la corrosión de tendones no adheridos
+
+- **C.18.16.1.** Los aceros no adheridos se **encapsulan en un ducto de postensado**, completamente recubiertos, con el ducto lleno de un material que proteja contra la corrosión.
+- **C.18.16.2.** El ducto debe ser **impermeable y continuo** en toda la longitud no adherida.
+- **C.18.16.3.** En ambientes corrosivos, el ducto se conecta **de manera impermeable** a todos los anclajes (tensionamiento, intermedios o fijos).
+- **C.18.16.4.** Los tendones no adheridos de **un solo torón** se protegen según **ACI 423.7** (<NormaRef s="C.18.16" pag="C-163" />).
+
+## C.18.17 — Ductos para postensado
+
+- **C.18.17.1.** Los ductos de tendones inyectados deben ser **impermeables al mortero** y **no reactivos** con el concreto, el acero, el mortero de inyección y los inhibidores de corrosión.
+- **C.18.17.2.** Ductos de un solo alambre, torón o barra: diámetro interior **≥ 6 mm mayor** que el del acero.
+- **C.18.17.3.** Ductos de alambres, torones o barras múltiples: área transversal interior **≥ 2 veces** la del acero de preesforzado.
+- **C.18.17.4.** Los ductos se mantienen **libres de agua empozada** si los elementos, antes de inyectarse, se exponen a temperaturas bajo el punto de congelamiento (<NormaRef s="C.18.17" pag="C-163" />).
+
+## C.18.18 — Mortero de inyección para tendones adheridos
+
+- **C.18.18.1.** Cemento portland y agua, o cemento portland, arena y agua.
+- **C.18.18.2.** Cemento según C.3.2; agua según C.3.4; arena (si se usa) según **ASTM C144**, pudiendo modificarse la granulometría para lograr trabajabilidad; aditivos de C.3.6 sin efectos perjudiciales; **no se emplea cloruro de calcio**.
+- **C.18.18.3 — Dosificación.** Basada en (a) ensayos del mortero fresco y endurecido antes de iniciar la inyección o (b) experiencia documentada con materiales y equipo similares y condiciones comparables; el cemento de obra es el de la dosificación; el agua es el mínimo necesario para el bombeo y la **relación agua/cemento no excede 0.45** en peso; **no se añade agua** para recuperar fluidez perdida por demora.
+- **C.18.18.4 — Mezclado y bombeo.** Mezclado con agitación mecánica continua, tamizado y bombeo que llenen por completo los ductos; la temperatura de los elementos al inyectar debe estar **sobre 2 °C** y mantenerse así hasta que **cubos de 50 mm** curados en obra alcancen **5.5 MPa**; la temperatura del mortero **no supera 32 °C** durante mezclado y bombeo (<NormaRef s="C.18.18" pag="C-163" />; continúa en C-164).
+
+## C.18.19 — Protección del acero de preesforzado
+
+Las operaciones de **soldadura o calentamiento** cerca de los tendones se hacen de modo que el acero **no quede expuesto a temperaturas excesivas, chispas de soldadura o descargas eléctricas** (<NormaRef s="C.18.19" pag="C-164" />).
+
+## C.18.20 — Aplicación y medición de la fuerza de preesfuerzo
+
+- **C.18.20.1.** La fuerza se determina con **dos métodos**: (a) **elongación** del acero (según curvas carga–elongación promedio del acero usado) y (b) **fuerza del gato** en manómetro calibrado, celda de carga o dinamómetro calibrado. Debe investigarse y corregirse toda diferencia entre (a) y (b) que exceda **5 %** en pretensado o **7 %** en postensado.
+- **C.18.20.2.** Si la transferencia se hace cortando con soplete, los **puntos de corte y la secuencia** se predeterminan para evitar esfuerzos temporales indeseados.
+- **C.18.20.3.** Los tramos largos expuestos de torones pretensados se cortan **lo más cerca posible del elemento** para minimizar impactos.
+- **C.18.20.4.** La pérdida total por acero roto no reemplazado **no excede 2 %** del preesforzado total (<NormaRef s="C.18.20" pag="C-164" />; continúa en C-165).
+
+## C.18.21 — Anclajes y conectores para postensado
+
+- **C.18.21.1.** Anclajes y conectores de tendones adheridos y no adheridos desarrollan **al menos 95 % de $f_{pu}$** ensayados sin adherencia y sin exceder la deformación prevista; en tendones adheridos se colocan de modo que **$f_{pu}$ se desarrolle al 100 %** en las secciones críticas una vez adherido el acero.
+- **C.18.21.2.** Los conectores se ubican en zonas aprobadas por el profesional facultado y se alojan en cajas lo suficientemente largas para los movimientos.
+- **C.18.21.3.** En elementos no adheridos con cargas repetitivas se presta atención especial a la **fatiga** en anclajes y conectores.
+- **C.18.21.4.** Anclajes, conectores y dispositivos auxiliares se protegen **permanentemente** contra la corrosión (<NormaRef s="C.18.21" pag="C-165" />).
+
+## C.18.22 — Postensado externo
+
+- **C.18.22.1.** Los tendones pueden ser **externos** a cualquier sección; los efectos de sus fuerzas en la estructura de concreto se evalúan con los métodos de resistencia y servicio del Título C.
+- **C.18.22.2.** En el cálculo de flexión se consideran **no adheridos**, salvo que se adhieran efectivamente en toda su longitud.
+- **C.18.22.3.** Se acoplan al concreto manteniendo la **excentricidad** deseada entre tendones y centroide en todo el rango de deflexiones previstas.
+- **C.18.22.4.** Los tendones externos y las zonas de anclaje se protegen contra la corrosión, con el detalle del sistema en planos o especificaciones (<NormaRef s="C.18.22" pag="C-165" />).
+
+## Erratas y observaciones sobre el PDF
+
+<Detalle titulo="Puntos del texto del PDF que conviene conocer">
+
+- **C.18.4.1(c):** el PDF escribe los límites de tracción como $0.5\sqrt{f'_c}$ y $0.25\sqrt{f'_c}$ (con $f'_c$, no $f'_{ci}$). Se transcribió como aparece. *(Observación del autor, de memoria: en el ACI 318-08 estos límites se expresan con $f'_{ci}$; no verificado en este proyecto.)*
+- **C.18.13.2.1 y C.18.13.3.1** citan **C.9.2.5**; en el capítulo C.9 de este PDF el factor 1.2 de la zona de anclaje de postensado está en **C.9.2.4**. Es una discrepancia de referencia cruzada del propio PDF.
+- **C.18.12.7** habla de losas "pretensionadas"; por el contexto (anclajes en apoyos exteriores, tendones no adheridos) se trata de losas con tendones no adheridos postensados. Se transcribió literalmente.
+- **C.18.15.1** cita artículos de AASHTO como "C.9.21.7.2.2 al C.9.21.7.2.4"; el prefijo "C." parece un artefacto de numeración del PDF.
+- **C.18.13.5.4** aparece como "C,18.13.5.4" (coma en lugar de punto). **C.18.9.2.1** remite a la "ecuación (18-6)", que es C.18-6.
+- **C.18.11.2.2(b):** se cita "No. 10" para los estribos laterales, como en el PDF.
+- Los símbolos de la nomenclatura de C.2 salen desordenados al extraer el texto; $\Delta f_{ps}$ lleva una marca "~" en la imagen de C-155 que no cambia el sentido.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores típicos en preesforzado">
+- **Mezclar $f'_c$ y $f'_{ci}$.** La compresión en transferencia es $0.60 f'_{ci}$ (no $0.60 f'_c$); en servicio, $0.45 f'_c$ y $0.60 f'_c$.
+- **Usar la fuerza del gato en vez de la efectiva.** Los esfuerzos de servicio se calculan con $P_e$ (después de **todas** las pérdidas); los de transferencia, con $P_i$.
+- **Olvidar el extremo de la viga.** Con tendones rectos, el apoyo (sin momento de peso propio) puede traccionar la fibra superior más que $0.5\sqrt{f'_c}$ y exigir refuerzo adherido adicional (<NormaRef s="C.18.4.1" pag="C-154" />).
+- **Aplicar C.18-2 con exponente > 0.3.** La forma aproximada solo vale hasta $K\ell_{px}+\mu_p\alpha_{px} \le 0.3$ (<NormaRef s="C.18.6.2.1" pag="C-156" />).
+- **Usar C.18-3 con tendones no adheridos** (usar C.18-4 o C.18-5), o con $f_{se} < 0.50 f_{pu}$ (las ecuaciones aproximadas no valen).
+- **Pasar por alto $\phi M_n \ge 1.2 M_{cr}$** (C.18.8.2) en elementos con tendones adheridos.
+- **No colocar refuerzo adherido** en elementos con tendones no adheridos: C.18-6 se exige **sin importar los esfuerzos de servicio**.
+- **Tensar antes de tiempo:** 28 MPa para torones de varios alambres y 17 MPa para un torón o barras (<NormaRef s="C.18.13.4.3" pag="C-161" />).
+- **Aceptar los $K$ y $\mu_p$ de tablas sin verificar:** deben determinarse experimentalmente y figurar en los planos (<NormaRef s="C.18.6.2.2" pag="C-156" />).
+</Callout>
+
+## Resumen en una línea
+
+El preesforzado se verifica en **transferencia** ($0.60 f'_{ci}$) y en **servicio** ($0.45 f'_c$ y $0.60 f'_c$, clases U/T/C por $f_t$), con tendones limitados a $0.94 f_{py}$ / $0.80 f_{pu}$ en el gato y $0.82 f_{py}$ / $0.74 f_{pu}$ tras la transferencia, pérdidas por fricción $P_{px}=P_{pj}e^{-(K\ell+\mu\alpha)}$, resistencia con $f_{ps}$ (C.18-3 a C.18-5, $\phi M_n \ge 1.2 M_{cr}$) y refuerzo adherido mínimo cuando los tendones no son adheridos.

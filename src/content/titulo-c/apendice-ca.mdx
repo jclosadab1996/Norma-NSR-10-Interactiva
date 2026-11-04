@@ -1,0 +1,481 @@
+---
+codigo: 'C-A'
+tipo: apendice
+titulo: 'Modelos puntal-tensor'
+resumen: 'Cómo diseñar regiones de concreto con flujo de fuerzas no lineal (vigas de gran altura, ménsulas, cabezales, aberturas) con una cercha idealizada: resistencia de puntales (βs), tensores y zonas nodales (βn), refuerzo mínimo de los puntales en forma de botella y φ del modelo.'
+objetivos:
+  - 'Distinguir regiones B y regiones D y saber cuándo conviene un modelo puntal-tensor'
+  - 'Calcular la resistencia de un puntal con las Ecs. C-A-2 y C-A-3, incluidos los puntales en forma de botella y su refuerzo (C-A-4)'
+  - 'Calcular la resistencia de un tensor (C-A-6) y de una zona nodal (C-A-7 y C-A-8) y escoger βn según los elementos que llegan al nodo'
+  - 'Plantear la geometría de una cercha de viga de gran altura, verificar el ángulo mínimo de 25° y comprobar φFn ≥ Fu (C-A-1)'
+paginasNorma: 'C-223 a C-226'
+paginaPdf: 525
+orden: 24
+calculadoras: []
+nivel: 'avanzado'
+---
+
+import { areaNBarras, barrasNecesarias } from '../../data/apendicesC';
+import {
+  anchoPuntalEnNodo,
+  areaTensorRequerida,
+  cerchaVigaAltaCargaCentral,
+  phiPuntalTensor,
+  resistenciaPuntal,
+  resistenciaPuntalReforzado,
+  resistenciaTensor,
+  resistenciaZonaNodal,
+  sumatoriaRefuerzoPuntal,
+  verificarRefuerzoPuntal,
+  verificarResistencia,
+  fceEfectiva,
+  betaS,
+  betaN,
+} from '../../lib/nsr10/puntalTensor';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const fc = 28, b = 300, ws = 250, Acs = b * ws, Fu = 950;
+  const as4 = areaNBarras(2, 'No. 4'); // 2 ramas de No. 4 (129 mm² c/u, Tabla C.3.5.3-2)
+  const capas = [
+    { Asi: as4, si: 200, alfa: 60 },
+    { Asi: as4, si: 250, alfa: 30 },
+  ];
+  const chk = verificarRefuerzoPuntal(capas, b, fc);
+  const extremos = [
+    { Acs, nodo: 'puntales-apoyos' },
+    { Acs, nodo: 'un-tensor' },
+  ];
+  const con = resistenciaPuntal({ fc, tipo: 'botella-con-refuerzo', extremos });
+  const sin = resistenciaPuntal({ fc, tipo: 'botella-sin-refuerzo', extremos });
+  const phi = phiPuntalTensor();
+  const phiCC = phiPuntalTensor('apendiceCC');
+  return {
+    fc, b, ws, Acs, Fu, as4, capas, chk, con, sin, phi, phiCC,
+    t1: sumatoriaRefuerzoPuntal([capas[0]], b),
+    t2: sumatoriaRefuerzoPuntal([capas[1]], b),
+    vCon: verificarResistencia(phi, con.Fns, Fu),
+    vSin: verificarResistencia(phi, sin.Fns, Fu),
+    phiFnsCC: phiCC * con.Fns,
+    liviano: fceEfectiva(fc, betaS('botella-sin-refuerzo', 0.75)),
+  };
+})();
+
+export const ej2 = (() => {
+  const fc = 28, b = 300, lb = 200, theta = 45, R = 700;
+  const C = R / Math.sin((theta * Math.PI) / 180);
+  const T = R / Math.tan((theta * Math.PI) / 180);
+  const phi = phiPuntalTensor();
+  const caras = (wt, tipo) => {
+    const ws = anchoPuntalEnNodo(lb, wt, theta);
+    const filas = [
+      { nombre: 'Cara del apoyo (fuerza R)', A: b * lb, Fu: R },
+      { nombre: 'Cara del puntal (fuerza C)', A: b * ws, Fu: C },
+      { nombre: 'Cara del tensor (fuerza T)', A: b * wt, Fu: T },
+    ].map((x) => {
+      const n = resistenciaZonaNodal(fc, tipo, x.A);
+      return { ...x, ...n, v: verificarResistencia(phi, n.Fnn, x.Fu) };
+    });
+    return { wt, ws, filas, cumple: filas.every((x) => x.v.cumple) };
+  };
+  return { fc, b, lb, theta, R, C, T, phi, a150: caras(150, 'un-tensor'), a200: caras(200, 'un-tensor'), dos200: caras(200, 'dos-o-mas-tensores') };
+})();
+
+export const razonMax = (v) => Math.max(...Object.values(v).map((x) => x.razon));
+
+export const ej3 = (() => {
+  const fc = 28, fy = 420, b = 300, h = 1200, L = 2800, Pu = 1500, lbPlaca = 400;
+  const dTop = 100, dTie = 150, wt = 2 * dTie;
+  const z = h - dTop - dTie;
+  const c = cerchaVigaAltaCargaCentral(Pu, L, z);
+  const phi = phiPuntalTensor();
+  const asReq = areaTensorRequerida(c.tensor, phi, fy);
+  const n = barrasNecesarias(asReq, 'No. 8');
+  const Ats = areaNBarras(n, 'No. 8');
+  const tensor = resistenciaTensor({ Ats, fy });
+  const vTensor = verificarResistencia(phi, tensor.Fnt, c.tensor);
+  const wsPuntal = anchoPuntalEnNodo(lbPlaca, wt, c.theta);
+  const Acs = b * wsPuntal;
+  const sup = { Anz: b * lbPlaca };
+  const nodoTop = resistenciaZonaNodal(fc, 'puntales-apoyos', b * lbPlaca);
+  const nodoApoyo = resistenciaZonaNodal(fc, 'un-tensor', sup.Anz);
+  const nodoPuntalApoyo = resistenciaZonaNodal(fc, 'un-tensor', Acs);
+  const nodoTensor = resistenciaZonaNodal(fc, 'un-tensor', b * wt);
+  const as4 = areaNBarras(2, 'No. 4');
+  const th = c.theta;
+  const capas = [
+    { Asi: as4, si: 150, alfa: 90 - th },
+    { Asi: as4, si: 200, alfa: th },
+  ];
+  const chk = verificarRefuerzoPuntal(capas, b, fc);
+  const puntal = resistenciaPuntal({
+    fc,
+    tipo: 'botella-con-refuerzo',
+    extremos: [
+      { Acs, nodo: 'puntales-apoyos' },
+      { Acs, nodo: 'un-tensor' },
+    ],
+  });
+  return {
+    fc, fy, b, h, L, Pu, lbPlaca, wt, z, c, phi, asReq, n, Ats, tensor, vTensor, wsPuntal, Acs,
+    nodoTop, vTop: verificarResistencia(phi, nodoTop.Fnn, Pu),
+    nodoApoyo, vApoyo: verificarResistencia(phi, nodoApoyo.Fnn, c.reaccion),
+    nodoPuntalApoyo, vPuntalNodo: verificarResistencia(phi, nodoPuntalApoyo.Fnn, c.puntal),
+    nodoTensor, vTensorNodo: verificarResistencia(phi, nodoTensor.Fnn, c.tensor),
+    capas, chk, puntal, vPuntal: verificarResistencia(phi, puntal.Fns, c.puntal),
+  };
+})();
+
+## Idea central del apéndice
+
+La teoría de flexión del Capítulo C.10 supone que las **secciones planas siguen planas**. Esa hipótesis falla cerca de las cargas concentradas, de los apoyos, de los cambios bruscos de sección, de las aberturas y en las vigas de gran altura: allí el flujo de fuerzas es **no lineal** y los métodos de flexión y cortante del cuerpo del Título C no describen bien lo que ocurre. El Apéndice C-A ofrece una alternativa: **reemplazar la región por una cercha idealizada** de **puntales** (compresión en el concreto), **tensores** (tracción en el refuerzo) y **nodos** (las uniones), que equilibre las cargas mayoradas y llegue a los apoyos o a la zona de flexión «normal».
+
+El diseño es una **verificación de resistencia elemento por elemento**: cada puntal, cada tensor y cada cara de zona nodal debe cumplir $\phi F_n \ge F_u$ (<NormaRef s="C-A.2.6" pag="C-223" />). Lo que cambia entre elementos es cuánto vale la resistencia efectiva del concreto ($f_{ce}$) según la forma del puntal y según qué elementos llegan al nodo.
+
+<Callout tipo="importante" titulo="Apéndice normativo, no recomendado">
+La norma lo dice con «se permite»: el modelo puntal-tensor es una forma admitida de diseñar el concreto estructural, o regiones-D de él (<NormaRef s="C-A.2.1" pag="C-223" />, <NormaRef s="C.8.3" pag="C-61" />). Algunos numerales del cuerpo **remiten** a él: vigas de gran altura (C.10.7, C.11.7), ménsulas con $a_v/d < 2$ (C.11.8.1), muros de baja altura (C.11.9.1) y cabezales de pilotes (C.15.5.3). Véanse los capítulos [C.10](/titulo-c/c10), [C.11](/titulo-c/c11b) y [C.15](/titulo-c/c15).
+</Callout>
+
+<Callout tipo="nota" titulo="El apéndice no trae figuras ni ejemplos">
+Las cuatro páginas del Apéndice C-A en la NSR-10 son **solo texto y ecuaciones** (no incluyen las figuras ni los comentarios del reglamento ACI de origen). Los dos esquemas de esta página (puntal en forma de botella y cercha de viga de gran altura) son **dibujos del autor**, no figuras de la norma.
+</Callout>
+
+## C-A.1 — Definiciones
+
+La terminología del apéndice (<NormaRef s="C-A.1" pag="C-223" />):
+
+| Término | Qué significa |
+|---|---|
+| **Discontinuidad** | Cambio abrupto en la geometría o en la carga. |
+| **Región-B** | Parte del elemento donde valen las secciones planas de la teoría de flexión (C.10.2.2): zona «normal» de vigas y columnas. |
+| **Región-D** | Parte del elemento **dentro de una distancia $h$** de una discontinuidad de fuerza o geométrica. Es donde se usa el modelo puntal-tensor. |
+| **Modelo puntal-tensor** | Modelo de cercha de un elemento o de una región-D, de puntales y tensores unidos en nodos, capaz de llevar las cargas mayoradas a los apoyos o a las regiones-B vecinas. |
+| **Puntal** | Elemento a compresión del modelo: representa la resultante de un campo de compresión paralelo o **en abanico**. |
+| **Puntal en forma de botella** | Puntal más ancho en el centro que en sus extremos. |
+| **Tensor** | Elemento a tracción del modelo. |
+| **Nodo** | Punto donde se cortan los ejes de puntales, tensores y fuerzas concentradas. |
+| **Zona nodal** | Volumen de concreto alrededor de un nodo que se supone transmite las fuerzas de puntales y tensores a través del nodo. |
+| **Viga alta (de gran altura)** | Véanse C.10.7.1 y C.11.7.1 (luz libre no mayor que cuatro veces la altura, o cargas concentradas a menos de $2h$ del apoyo). |
+
+La regla de «una distancia $h$» (principio de Saint-Venant) dice dónde termina la influencia de la discontinuidad: fuera de la región-D el elemento se diseña con los métodos ordinarios.
+
+## C-A.2 — Procedimiento de diseño del modelo puntal-tensor
+
+La norma fija seis reglas (<NormaRef s="C-A.2" pag="C-223" />):
+
+1. **C-A.2.1** — Se permite diseñar el elemento o la región-D como cercha idealizada con puntales, tensores y nodos, capaz de transferir **todas** las cargas mayoradas a los apoyos o a regiones-B adyacentes.
+2. **C-A.2.2** — El modelo debe estar en **equilibrio** con las cargas y las reacciones.
+3. **C-A.2.3** — Para fijar la geometría hay que considerar las **dimensiones de puntales, tensores y zonas nodales** (no son líneas sin ancho).
+4. **C-A.2.4** — Los tensores pueden **atravesar** puntales; los puntales solo pueden **cruzarse o superponerse en los nodos**.
+5. **C-A.2.5** — El ángulo $\theta$ entre los ejes de cualquier puntal y cualquier tensor que lleguen a un mismo nodo **no debe ser menor de 25°**.
+6. **C-A.2.6** — El diseño de puntales, tensores y zonas nodales se basa en:
+
+<Ecuacion num="C-A-1" titulo="Condición de diseño">
+
+$$
+\phi F_n \ge F_u
+$$
+
+- $F_u$: fuerza mayorada en un puntal, un tensor o una cara de zona nodal.
+- $F_n$: resistencia nominal del puntal, tensor o zona nodal.
+- $\phi$: el de C.9.3.2.6, **0.75** con los factores del Capítulo C.9 (<NormaRef s="C.9.3.2.6" pag="C-69" />) y **0.85** si se usa el Apéndice C-C (<NormaRef s="C-C.9.3.2.6" pag="C-232" />). Véase [el Apéndice C-C](/titulo-c/apendice-cc).
+
+</Ecuacion>
+
+<Callout tipo="practica" titulo="Por qué 25°">
+Si un puntal y un tensor forman un ángulo muy pequeño, el puntal casi se alinea con el tensor y la compatibilidad de deformaciones no se cumple: el tensor se alarga y el puntal no puede llegar al nodo con el ángulo supuesto. Con $\theta < 25°$ el modelo deja de ser confiable (la norma solo da el límite, la explicación es del autor).
+</Callout>
+
+<Figura src="/img/titulo-c/ca-modelo-viga-alta.svg" alt="Esquema de una viga de gran altura con una carga central, dos puntales diagonales de compresión, un tensor inferior de tracción, tres nodos y el ángulo theta" numero="Esquema del autor" pie="Modelo puntal-tensor más simple de una viga de gran altura simplemente apoyada con carga central: dos puntales, un tensor y tres nodos (uno CCC arriba y dos CCT en los apoyos). z es el brazo entre el eje del nodo superior y el del tensor. No es una figura de la norma; no está a escala." />
+
+## C-A.3 — Resistencia de los puntales
+
+### C-A.3.1 y C-A.3.2 — Resistencia nominal y resistencia efectiva del concreto
+
+La resistencia nominal a compresión de un puntal **sin refuerzo longitudinal** es el menor valor, en sus dos extremos, de (<NormaRef s="C-A.3.1" pag="C-224" />):
+
+<Ecuacion num="C-A-2" titulo="Resistencia nominal de un puntal sin refuerzo longitudinal">
+
+$$
+F_{ns} = f_{ce}\,A_{cs}
+$$
+
+- $A_{cs}$: área de la sección transversal **en un extremo** del puntal (mm²; símbolo definido en C.2.1).
+- $f_{ce}$: el **menor** entre (a) la resistencia efectiva del concreto en el puntal, C-A.3.2, y (b) la resistencia efectiva del concreto en la zona nodal, C-A.5.2.
+
+</Ecuacion>
+
+La resistencia efectiva del concreto en el puntal es (<NormaRef s="C-A.3.2" pag="C-224" />):
+
+<Ecuacion num="C-A-3" titulo="Resistencia efectiva a compresión del concreto en un puntal">
+
+$$
+f_{ce} = 0.85\,\beta_s\,f'_c
+$$
+
+- $\beta_s$: factor que tiene en cuenta el efecto del refuerzo de confinamiento y la fisuración (tabla siguiente).
+- Con $\beta_s$ = 1.0 se recupera el bloque de $0.85f'_c$ de C.10.2.7.
+
+</Ecuacion>
+
+<TablaNorma numero="Valores de βs (C-A.3.2.1 a C-A.3.2.4)" titulo="Factor βs según la forma del puntal" pag="C-224" nota="λ es el factor de concreto liviano de C.8.6.1: 1.0 en concreto de densidad normal.">
+
+| Numeral | Tipo de puntal | $\beta_s$ |
+|---|---|---:|
+| C-A.3.2.1 | Sección transversal **uniforme** a lo largo de su longitud | 1.0 |
+| C-A.3.2.2(a) | **En forma de botella** (ancho medio mayor que el ancho en los nodos), **con** refuerzo que cumple C-A.3.3 | 0.75 |
+| C-A.3.2.2(b) | En forma de botella **sin** refuerzo que cumpla C-A.3.3 | 0.60 λ |
+| C-A.3.2.3 | Puntales en elementos sometidos a tracción, o alas en tracción | 0.40 |
+| C-A.3.2.4 | Todos los demás casos | 0.60 λ |
+
+</TablaNorma>
+
+Con $f'_c$ = 28 MPa estos factores producen $f_{ce}$ = {f(fceEfectiva(28, betaS('uniforme')), 2)}, {f(fceEfectiva(28, betaS('botella-con-refuerzo')), 2)}, {f(fceEfectiva(28, betaS('botella-sin-refuerzo')), 2)} y {f(fceEfectiva(28, betaS('traccion')), 2)} MPa para $\beta_s$ = 1.0, 0.75, 0.60 y 0.40.
+
+<Figura src="/img/titulo-c/ca-puntal-botella.svg" alt="Puntal en forma de botella entre dos zonas nodales, con líneas de tracción transversal que lo cruzan" numero="Esquema del autor" pie="Puntal en forma de botella: la compresión se abre en el centro, aparece tracción transversal y el concreto se fisura a lo largo del puntal. Por eso βs baja a 0.60λ, y sube a 0.75 si se coloca refuerzo que cruce el puntal (C-A.3.3). No es una figura de la norma." />
+
+### C-A.3.3 — Refuerzo de los puntales en forma de botella
+
+Para usar $\beta_s$ = 0.75 el **eje del puntal debe ser cruzado por refuerzo** diseñado para resistir la **tracción transversal** que produce la expansión de la compresión. Se permite suponer que la compresión se expande con una **pendiente de 2 en el sentido longitudinal por 1 en el transversal** al eje del puntal (<NormaRef s="C-A.3.3" pag="C-224" />).
+
+**Atajo para $f'_c \le$ 40 MPa** (C-A.3.3.1): se admite que se cumple C-A.3.3 si el eje del puntal es cruzado por filas de refuerzo que satisfacen (<NormaRef s="C-A.3.3.1" pag="C-224" />):
+
+<Ecuacion num="C-A-4" titulo="Refuerzo de superficie que cruza el puntal">
+
+$$
+\sum \frac{A_{si}}{b_s\,s_i}\,\operatorname{sen}\alpha_i \;\ge\; 0.003
+$$
+
+- $A_{si}$: área total del refuerzo de superficie con separación $s_i$ en la capa $i$, con barras a un ángulo $\alpha_i$ respecto del eje del puntal.
+- $b_s$: ancho del puntal (C.2.1). El texto de C-A.3.3.1 no repite su definición.
+- Solo es válida con $f'_c \le$ 40 MPa; con más resistencia hay que diseñar el refuerzo con el modelo de C-A.3.3.
+
+</Ecuacion>
+
+**Cómo se coloca** (C-A.3.3.2): en dos direcciones ortogonales con ángulos $\alpha_1$ y $\alpha_2$ respecto del eje del puntal, o en **una sola dirección** con un ángulo $\alpha$. En una sola dirección, **$\alpha$ no puede ser menor de 40°** (<NormaRef s="C-A.3.3.2" pag="C-224" />). Este refuerzo se ancla según C.12.13 (<NormaRef s="C-A.4.3.4" pag="C-225" />).
+
+### C-A.3.4 y C-A.3.5 — Confinamiento y refuerzo longitudinal
+
+- **C-A.3.4** — Si se documenta con **ensayos y análisis**, se permite usar una resistencia efectiva del puntal **mayor** gracias al refuerzo de confinamiento (<NormaRef s="C-A.3.4" pag="C-224" />).
+- **C-A.3.5** — Se permite usar **refuerzo de compresión** para aumentar la resistencia de un puntal: va dentro de él, paralelo a su eje, bien anclado y rodeado de estribos o espirales que cumplan C.7.10. La resistencia nominal es (<NormaRef s="C-A.3.5" pag="C-225" />):
+
+<Ecuacion num="C-A-5" titulo="Resistencia nominal de un puntal con refuerzo longitudinal">
+
+$$
+F_{ns} = f_{ce}\,A_{cs} + A'_s\,f'_s
+$$
+
+- $A'_s$: área del refuerzo a compresión (mm²); $f'_s$: esfuerzo en ese refuerzo bajo cargas mayoradas (MPa), definidos en C.2.1. El apéndice no fija un valor de $f'_s$.
+
+</Ecuacion>
+
+## C-A.4 — Resistencia de los tensores
+
+### C-A.4.1 — Resistencia nominal
+
+<Ecuacion num="C-A-6" titulo="Resistencia nominal de un tensor">
+
+$$
+F_{nt} = A_{ts}\,f_y + A_{tp}\,\left(f_{se}+\Delta f_p\right)
+$$
+
+- $A_{ts}$: área del refuerzo no preesforzado del tensor; $f_y$: su fluencia.
+- $A_{tp}$: área del acero de preesforzado del tensor, **igual a cero en elementos no preesforzados**.
+- $(f_{se}+\Delta f_p)$ **no debe exceder $f_{py}$** (fluencia del acero de preesforzado).
+
+</Ecuacion>
+
+En C-A-6 se permite tomar $\Delta f_p$ = **420 MPa** para refuerzo preesforzado **adherido** y **70 MPa** para **no adherido**; se permiten otros valores si se justifican con análisis (<NormaRef s="C-A.4.1" pag="C-225" />).
+
+### C-A.4.2 y C-A.4.3 — Eje y anclaje del tensor
+
+- **C-A.4.2** — El eje del refuerzo del tensor debe **coincidir con el eje del tensor** en el modelo.
+- **C-A.4.3** — El refuerzo del tensor se ancla con dispositivos mecánicos, anclajes de postensado, ganchos estándar o desarrollo de barras rectas, según C-A.4.3.1 a C-A.4.3.4:
+  - **C-A.4.3.1** — Las zonas nodales deben desarrollar la **diferencia** entre la fuerza del tensor a un lado del nodo y la del otro lado.
+  - **C-A.4.3.2** — Si la zona nodal ancla **un solo tensor**, la fuerza se desarrolla en el punto donde el **centroide del refuerzo sale de la zona nodal extendida** y entra en la luz del elemento.
+  - **C-A.4.3.3** — Si ancla **dos o más tensores**, la fuerza de cada dirección se desarrolla donde el centroide del refuerzo de ese tensor sale de la zona nodal extendida.
+  - **C-A.4.3.4** — El refuerzo transversal de C-A.3.3 se ancla según C.12.13 (<NormaRef s="C-A.4.3" pag="C-225" />).
+
+La «zona nodal extendida» (la zona nodal más el concreto que la rodea en la dirección del tensor) no está dibujada en la norma; su geometría la fija el diseñador. En la práctica es la razón por la que los apoyos de las vigas de gran altura necesitan **ganchos o placas de anclaje** y no solo barras rectas.
+
+## C-A.5 — Resistencia de las zonas nodales
+
+### C-A.5.1 — Resistencia nominal
+
+<Ecuacion num="C-A-7" titulo="Resistencia nominal a compresión de una zona nodal">
+
+$$
+F_{nn} = f_{ce}\,A_{nz}
+$$
+
+- $f_{ce}$: resistencia efectiva del concreto en la zona nodal, C-A.5.2.
+- $A_{nz}$: la **menor** entre (a) el área de la cara de la zona nodal donde actúa $F_u$, perpendicular a la línea de acción de $F_u$, y (b) el área de una sección a través de la zona nodal perpendicular a la línea de acción de la fuerza resultante en esa sección.
+
+</Ecuacion>
+
+Cada cara de la zona nodal se verifica con su propia fuerza ($F_u$ del apoyo, del puntal o del tensor que llega a ella). El PDF imprime esta ecuación como «(A-7)» sin el prefijo C; es la C-A-7.
+
+### C-A.5.2 — Resistencia efectiva del concreto en la zona nodal
+
+A menos que haya refuerzo de confinamiento dentro de la zona nodal cuyos efectos estén respaldados por ensayos y análisis, el esfuerzo de compresión efectivo calculado en cada cara no debe exceder (<NormaRef s="C-A.5.2" pag="C-225" />):
+
+<Ecuacion num="C-A-8" titulo="Resistencia efectiva en la zona nodal">
+
+$$
+f_{ce} = 0.85\,\beta_n\,f'_c
+$$
+
+</Ecuacion>
+
+<TablaNorma numero="Valores de βn (C-A.5.2.1 a C-A.5.2.3)" titulo="Factor βn según los elementos que llegan al nodo" pag="C-226" nota="La columna «Nombre usual» es del autor (nomenclatura de la literatura: C = compresión, T = tracción), no del PDF.">
+
+| Numeral | Zona nodal | $\beta_n$ | Nombre usual |
+|---|---|---:|---|
+| C-A.5.2.1 | Limitada por **puntales o áreas de apoyo**, o ambos | 1.0 | CCC |
+| C-A.5.2.2 | Que **ancla un tensor** | 0.80 | CCT |
+| C-A.5.2.3 | Que **ancla dos o más tensores** | 0.60 | CTT / TTT |
+
+</TablaNorma>
+
+Mientras más tensores se anclan en el nodo, **peor confinado y más fisurado** queda el concreto y menor es $\beta_n$: de 1.0 (solo compresión) a 0.60 (dos o más tensores).
+
+### C-A.5.3 — Modelos tridimensionales
+
+En un modelo puntal-tensor **tridimensional**, el área de cada cara de una zona nodal **no debe ser menor** que la de C-A.5.1, y la **forma** de cada cara debe ser **similar a la proyección del extremo de los puntales** sobre la cara correspondiente (<NormaRef s="C-A.5.3" pag="C-226" />). Es el caso de los cabezales de pilotes.
+
+## Ejemplos resueltos
+
+### Resistencia de un puntal en forma de botella
+
+<Ejemplo numero={1} titulo="Puntal de botella con y sin refuerzo de superficie">
+Un puntal de una viga de gran altura tiene $b$ = {ej1.b} mm de espesor y una sección de {ej1.ws} mm de ancho en cada extremo, es decir, $A_{cs}$ = {ej1.b} × {ej1.ws} = {ej1.Acs} mm². $f'_c$ = {ej1.fc} MPa, concreto de densidad normal ($\lambda$ = 1.0). Un extremo llega a una zona nodal limitada por puntales y apoyos (CCC) y el otro a una que ancla un tensor (CCT). La fuerza mayorada es $F_u$ = {ej1.Fu} kN. ¿Cumple el puntal con y sin refuerzo de superficie?
+
+<Paso titulo="Resistencia efectiva en el puntal" ref="C-A-3, C-A.3.2.2">
+Con refuerzo que cumpla C-A.3.3: $\beta_s$ = 0.75, entonces $f_{ce}$ = 0.85 × 0.75 × {ej1.fc} = **{f(ej1.con.fceCuerpo, 2)} MPa**. Sin él: $\beta_s$ = 0.60λ = 0.60, $f_{ce}$ = **{f(ej1.sin.fceCuerpo, 2)} MPa**.
+</Paso>
+<Paso titulo="Límite de las zonas nodales" ref="C-A-8, C-A.5.2">
+CCC ($\beta_n$ = 1.0): $f_{ce}$ = {f(ej1.con.fceNodos[0], 2)} MPa; CCT ($\beta_n$ = 0.80): $f_{ce}$ = {f(ej1.con.fceNodos[1], 2)} MPa. Ambos superan el del puntal, así que según C-A.3.1 **gobierna el puntal** en los dos extremos.
+</Paso>
+<Paso titulo="Refuerzo de superficie: la Ec. C-A-4" ref="C-A-4">
+Se colocan dos capas con 2 ramas de No. 4 ({f(ej1.as4, 0)} mm²) cada una: capa 1 cada 200 mm a $\alpha_1$ = 60°; capa 2 cada 250 mm a $\alpha_2$ = 30° (ángulos medidos desde el eje del puntal). Con $b_s$ = {ej1.b} mm:
+
+$$
+\sum\frac{A_{si}}{b_s s_i}\operatorname{sen}\alpha_i=\frac{258}{300\times200}\operatorname{sen}60^\circ+\frac{258}{300\times250}\operatorname{sen}30^\circ
+$$
+
+Resultado: {ej1.t1.toFixed(5)} + {ej1.t2.toFixed(5)} = **{ej1.chk.suma.toFixed(5)}** ≥ 0.003: **{ej1.chk.cumple ? 'cumple' : 'no cumple'}** (y $f'_c$ ≤ 40 MPa, dos direcciones). Se puede usar $\beta_s$ = 0.75.
+</Paso>
+<Paso titulo="Resistencia nominal y de diseño" ref="C-A-2, C-A-1">
+Con refuerzo: $F_{ns}$ = {f(ej1.con.fceExtremos[0], 2)} × {ej1.Acs} / 1000 = **{f(ej1.con.Fns, 1)} kN**; $\phi F_{ns}$ = 0.75 × {f(ej1.con.Fns, 1)} = **{f(ej1.vCon.phiFn, 1)} kN** ≥ {ej1.Fu} kN: **{ej1.vCon.cumple ? 'cumple' : 'no cumple'}** (relación demanda/capacidad {f(ej1.vCon.razon, 3)}).
+
+Sin refuerzo: $F_{ns}$ = {f(ej1.sin.fceExtremos[0], 2)} × {ej1.Acs} / 1000 = **{f(ej1.sin.Fns, 1)} kN**; $\phi F_{ns}$ = **{f(ej1.vSin.phiFn, 1)} kN** frente a {ej1.Fu} kN: **{ej1.vSin.cumple ? 'cumple' : 'no cumple'}**.
+</Paso>
+<Paso titulo="Otras variantes" ref="C-A.3.2.2(b), C-C.9.3.2.6, C-A.3.5">
+Con concreto liviano con arena de peso normal ($\lambda$ = 0.85) el puntal sin refuerzo bajaría a $f_{ce}$ = {f(fceEfectiva(28, betaS('botella-sin-refuerzo', 0.85)), 2)} MPa. Con los factores del Apéndice C-C ($\phi$ = 0.85) el puntal reforzado tendría $\phi F_{ns}$ = {f(ej1.phiFnsCC, 1)} kN. Si se añadieran barras longitudinales de compresión (C-A-5), por ejemplo 4 No. 6 (1136 mm²) con $f'_s$ = 420 MPa (valor supuesto de este ejemplo, la norma no lo fija), $F_{ns}$ = {f(ej1.con.Fns, 1)} + {f(1136 * 420 / 1000, 1)} = {f(resistenciaPuntalReforzado(ej1.con.Fns, 1136, 420), 1)} kN.
+</Paso>
+<Resultado>
+El refuerzo de superficie sube la resistencia del puntal de {f(ej1.sin.Fns, 0)} a {f(ej1.con.Fns, 0)} kN ({f((ej1.con.Fns / ej1.sin.Fns - 1) * 100, 0)} %), la diferencia entre fallar con {ej1.Fu} kN y cumplir con holgura. Las áreas de las barras son las de la Tabla C.3.5.3-2 ([Apéndice C-E](/titulo-c/apendice-ce)). Los datos de entrada son supuestos del autor.
+</Resultado>
+</Ejemplo>
+
+### Resistencia de una zona nodal
+
+<Ejemplo numero={2} titulo="Zona nodal CCT en el apoyo de una viga de gran altura">
+En el apoyo de una viga de $b$ = {ej2.b} mm, la reacción vertical $R$ = {ej2.R} kN actúa sobre una placa de {ej2.lb} mm de longitud. El puntal llega a {ej2.theta}° respecto de la horizontal y el tensor es horizontal, de altura efectiva $w_t$ (la altura de la zona donde se ancla el refuerzo del tensor). $f'_c$ = {ej2.fc} MPa. Verificar las tres caras de la zona nodal, que ancla un solo tensor (CCT).
+
+<Paso titulo="Fuerzas que llegan al nodo" ref="C-A.2.2">
+Por equilibrio del nodo (auxiliar): $C = R/\operatorname{sen}\theta$ = **{f(ej2.C, 1)} kN** y $T = R/\tan\theta$ = **{f(ej2.T, 1)} kN**.
+</Paso>
+<Paso titulo="Resistencia efectiva en el nodo" ref="C-A.5.2.2, C-A-8">
+$\beta_n$ = 0.80 (un tensor): $f_{ce}$ = 0.85 × 0.80 × {ej2.fc} = **{f(ej2.a150.filas[0].fce, 2)} MPa**, igual en las tres caras.
+</Paso>
+<Paso titulo="Geometría de las caras (primer intento: wt = 150 mm)" ref="C-A.2.3, C-A.5.1">
+El ancho del puntal perpendicular a su eje es la proyección de las dos caras del nodo (auxiliar: geometría): $w_s = \ell_b\operatorname{sen}\theta + w_t\cos\theta$ = {f(ej2.a150.ws, 1)} mm.
+
+| Cara | $A_{nz}$ (mm²) | $F_{nn}$ (kN) | $\phi F_{nn}$ (kN) | $F_u$ (kN) | $F_u/\phi F_{nn}$ | |
+|---|---:|---:|---:|---:|---:|---|
+| {ej2.a150.filas[0].nombre} | {f(ej2.a150.filas[0].A, 0)} | {f(ej2.a150.filas[0].Fnn, 1)} | {f(ej2.a150.filas[0].v.phiFn, 1)} | {f(ej2.a150.filas[0].Fu, 1)} | {f(ej2.a150.filas[0].v.razon, 3)} | {ej2.a150.filas[0].v.cumple ? 'cumple' : 'NO'} |
+| {ej2.a150.filas[1].nombre} | {f(ej2.a150.filas[1].A, 0)} | {f(ej2.a150.filas[1].Fnn, 1)} | {f(ej2.a150.filas[1].v.phiFn, 1)} | {f(ej2.a150.filas[1].Fu, 1)} | {f(ej2.a150.filas[1].v.razon, 3)} | {ej2.a150.filas[1].v.cumple ? 'cumple' : 'NO'} |
+| {ej2.a150.filas[2].nombre} | {f(ej2.a150.filas[2].A, 0)} | {f(ej2.a150.filas[2].Fnn, 1)} | {f(ej2.a150.filas[2].v.phiFn, 1)} | {f(ej2.a150.filas[2].Fu, 1)} | {f(ej2.a150.filas[2].v.razon, 3)} | {ej2.a150.filas[2].v.cumple ? 'cumple' : 'NO'} |
+
+La cara del **tensor** no cumple: la zona donde se ancla el refuerzo es demasiado baja para transmitir {f(ej2.T, 0)} kN con $f_{ce}$ = {f(ej2.a150.filas[0].fce, 2)} MPa.
+</Paso>
+<Paso titulo="Segundo intento: wt = 200 mm" ref="C-A.5.1">
+Se sube la altura efectiva del tensor (por ejemplo, más capas de barras): $w_s$ = {f(ej2.a200.ws, 1)} mm.
+
+| Cara | $A_{nz}$ (mm²) | $F_{nn}$ (kN) | $\phi F_{nn}$ (kN) | $F_u$ (kN) | $F_u/\phi F_{nn}$ | |
+|---|---:|---:|---:|---:|---:|---|
+| {ej2.a200.filas[0].nombre} | {f(ej2.a200.filas[0].A, 0)} | {f(ej2.a200.filas[0].Fnn, 1)} | {f(ej2.a200.filas[0].v.phiFn, 1)} | {f(ej2.a200.filas[0].Fu, 1)} | {f(ej2.a200.filas[0].v.razon, 3)} | {ej2.a200.filas[0].v.cumple ? 'cumple' : 'NO'} |
+| {ej2.a200.filas[1].nombre} | {f(ej2.a200.filas[1].A, 0)} | {f(ej2.a200.filas[1].Fnn, 1)} | {f(ej2.a200.filas[1].v.phiFn, 1)} | {f(ej2.a200.filas[1].Fu, 1)} | {f(ej2.a200.filas[1].v.razon, 3)} | {ej2.a200.filas[1].v.cumple ? 'cumple' : 'NO'} |
+| {ej2.a200.filas[2].nombre} | {f(ej2.a200.filas[2].A, 0)} | {f(ej2.a200.filas[2].Fnn, 1)} | {f(ej2.a200.filas[2].v.phiFn, 1)} | {f(ej2.a200.filas[2].Fu, 1)} | {f(ej2.a200.filas[2].v.razon, 3)} | {ej2.a200.filas[2].v.cumple ? 'cumple' : 'NO'} |
+
+Ahora las tres caras cumplen: **{ej2.a200.cumple ? 'el nodo es adecuado' : 'el nodo no es adecuado'}**.
+</Paso>
+<Paso titulo="Si el nodo anclara dos tensores" ref="C-A.5.2.3">
+Con $\beta_n$ = 0.60, $f_{ce}$ = {f(ej2.dos200.filas[0].fce, 2)} MPa y la cara del tensor da $\phi F_{nn}$ = {f(ej2.dos200.filas[2].v.phiFn, 1)} kN frente a {f(ej2.T, 1)} kN: **{ej2.dos200.filas[2].v.cumple ? 'cumple' : 'no cumple'}**. Un nodo con más tensores necesita caras mayores.
+</Paso>
+<Resultado>
+Con $w_t$ = 200 mm todas las caras cumplen $\phi F_{nn} \ge F_u$ ($\phi$ = 0.75, C.9.3.2.6). Con 150 mm falla la cara del tensor, porque es la que tiene el área más pequeña: en una zona nodal CCT suele gobernar la cara donde se **ancla** el tensor. Los datos son supuestos del autor; el apéndice no impone cuál cara gobierna.
+</Resultado>
+</Ejemplo>
+
+### Geometría y verificación de un modelo de viga de gran altura
+
+<Ejemplo numero={3} titulo="Cercha de una viga de gran altura con una carga central">
+Viga simplemente apoyada de $h$ = {ej3.h} mm y $b$ = {ej3.b} mm, con distancia entre ejes de reacciones $L$ = {ej3.L} mm (luz libre menor que 4h: viga de gran altura, C.10.7.1), que lleva una carga mayorada central $P_u$ = {ej3.Pu} kN aplicada por una placa de {ej3.lbPlaca} × {ej3.b} mm. Los apoyos tienen placas iguales. $f'_c$ = {ej3.fc} MPa, $f_y$ = {ej3.fy} MPa, $\phi$ = 0.75. Se adopta la cercha de dos puntales y un tensor de la figura.
+
+<Paso titulo="Geometría del modelo" ref="C-A.2.3, C-A.2.5">
+El eje del tensor está a 150 mm del borde inferior (el refuerzo del tensor ocupa una altura efectiva $w_t$ = 2 × 150 = {ej3.wt} mm) y el del nodo superior a 100 mm del borde superior (supuestos del autor), de modo que $z = h - 100 - 150$ = **{ej3.z} mm** y $\theta = \arctan\left(z/(L/2)\right)$ = arctan({ej3.z}/{ej3.L / 2}) = **{f(ej3.c.theta, 2)}°** ≥ 25°: **{ej3.c.anguloOk ? 'cumple' : 'no cumple'}** C-A.2.5.
+</Paso>
+<Paso titulo="Fuerzas en los elementos (equilibrio)" ref="C-A.2.2">
+Reacción $R = P_u/2$ = {ej3.c.reaccion} kN; compresión en cada puntal $C = R/\operatorname{sen}\theta$ = **{f(ej3.c.puntal, 1)} kN**; tracción en el tensor $T = R/\tan\theta = P_uL/(4z)$ = **{f(ej3.c.tensor, 1)} kN**.
+</Paso>
+<Paso titulo="Tensor" ref="C-A-6, C-A-1">
+$A_{ts} \ge T/(\phi f_y)$ = {f(ej3.c.tensor, 1)} × 1000 / (0.75 × {ej3.fy}) = {f(ej3.asReq, 0)} mm². Con barras No. 8 (510 mm², Tabla C.3.5.3-2): **{ej3.n} No. 8** = {ej3.Ats} mm². $F_{nt}$ = {ej3.Ats} × {ej3.fy}/1000 = {f(ej3.tensor.Fnt, 1)} kN; $\phi F_{nt}$ = **{f(ej3.vTensor.phiFn, 1)} kN** ≥ {f(ej3.c.tensor, 1)} kN: **{ej3.vTensor.cumple ? 'cumple' : 'no cumple'}**. Las barras deben ir con su centroide sobre el eje del tensor (C-A.4.2) y anclarse según C-A.4.3.
+</Paso>
+<Paso titulo="Zonas nodales" ref="C-A-7, C-A-8">
+- **Nodo superior (CCC, $\beta_n$ = 1.0):** $f_{ce}$ = {f(ej3.nodoTop.fce, 2)} MPa; bajo la placa de {ej3.lbPlaca} × {ej3.b} mm: $F_{nn}$ = {f(ej3.nodoTop.Fnn, 1)} kN, $\phi F_{nn}$ = {f(ej3.vTop.phiFn, 1)} kN ≥ {ej3.Pu} kN: **{ej3.vTop.cumple ? 'cumple' : 'no cumple'}**.
+- **Nodo de apoyo (CCT, $\beta_n$ = 0.80):** $f_{ce}$ = {f(ej3.nodoApoyo.fce, 2)} MPa; cara de la placa de apoyo: $F_{nn}$ = {f(ej3.nodoApoyo.Fnn, 1)} kN, $\phi F_{nn}$ = {f(ej3.vApoyo.phiFn, 1)} kN ≥ {ej3.c.reaccion} kN: **{ej3.vApoyo.cumple ? 'cumple' : 'no cumple'}**.
+- **Cara del puntal en el apoyo:** $w_s = \ell_b\operatorname{sen}\theta + w_t\cos\theta$ con $w_t$ = {ej3.wt} mm = {f(ej3.wsPuntal, 1)} mm, $A_{cs}$ = {f(ej3.Acs, 0)} mm²; $F_{nn}$ = {f(ej3.nodoPuntalApoyo.Fnn, 1)} kN, $\phi F_{nn}$ = {f(ej3.vPuntalNodo.phiFn, 1)} kN ≥ {f(ej3.c.puntal, 1)} kN: **{ej3.vPuntalNodo.cumple ? 'cumple' : 'no cumple'}** (relación {f(ej3.vPuntalNodo.razon, 3)}).
+- **Cara del tensor:** $A_{nz}$ = {ej3.b} × {ej3.wt} = {ej3.b * ej3.wt} mm²; $F_{nn}$ = {f(ej3.nodoTensor.Fnn, 1)} kN, $\phi F_{nn}$ = {f(ej3.vTensorNodo.phiFn, 1)} kN ≥ {f(ej3.c.tensor, 1)} kN: **{ej3.vTensorNodo.cumple ? 'cumple' : 'no cumple'}** (relación {f(ej3.vTensorNodo.razon, 3)}). Por eso se dio al tensor una altura efectiva de {ej3.wt} mm: con menos, la cara del tensor gobernaría (como en el ejemplo 2).
+</Paso>
+<Paso titulo="Puntal en forma de botella" ref="C-A-3, C-A-4, C-A-2">
+Se supone el mismo ancho $w_s$ en el extremo superior (simplificación del autor; ese nodo es CCC y tiene $f_{ce}$ mayor). Con refuerzo de superficie de estribos verticales de 2 ramas No. 4 cada 150 mm ($\alpha_1$ = 90° − θ = {f(ej3.capas[0].alfa, 1)}°) y barras horizontales en pares de No. 4 cada 200 mm ($\alpha_2$ = θ = {f(ej3.capas[1].alfa, 1)}°): $\sum$ = **{ej3.chk.suma.toFixed(5)}** ≥ 0.003 ({ej3.chk.cumple ? 'cumple' : 'no cumple'}), por lo que $\beta_s$ = 0.75 y $f_{ce}$ = {f(ej3.puntal.fceCuerpo, 2)} MPa. $F_{ns}$ = {f(ej3.puntal.Fns, 1)} kN; $\phi F_{ns}$ = **{f(ej3.vPuntal.phiFn, 1)} kN** ≥ {f(ej3.c.puntal, 1)} kN: **{ej3.vPuntal.cumple ? 'cumple' : 'no cumple'}** (relación {f(ej3.vPuntal.razon, 3)}).
+</Paso>
+<Resultado>
+Con $\theta$ = {f(ej3.c.theta, 1)}°, un tensor de {ej3.n} No. 8, placas de {ej3.lbPlaca} mm y refuerzo de superficie con $\sum$ = {ej3.chk.suma.toFixed(4)}, el modelo **{ej3.vTensor.cumple && ej3.vTop.cumple && ej3.vApoyo.cumple && ej3.vPuntalNodo.cumple && ej3.vTensorNodo.cumple && ej3.vPuntal.cumple ? 'cumple' : 'no cumple'}** C-A-1 en todos sus elementos; el más exigido tiene una relación $F_u/\phi F_n$ de {f(razonMax({ a: ej3.vTensor, b: ej3.vTop, c: ej3.vApoyo, d: ej3.vPuntalNodo, e: ej3.vTensorNodo, g: ej3.vPuntal }), 3)}. Las dimensiones y la elección de la cercha son del autor: la norma no prescribe cuál cercha usar (C-A.2.1) ni cómo medir el ancho de la zona nodal (C-A.2.3). Una **ménsula** ($a_v/d < 2$) se resuelve igual: puntal desde la carga hasta el nodo del tensor superior, tensor horizontal y, en su caso, tracción horizontal $N_{uc}$ (<NormaRef s="C.11.8.1" pag="C-98" />).
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="Sobre los números">
+Las funciones usadas están en `src/lib/nsr10/puntalTensor.ts` (Ecs. C-A-1 a C-A-8) y en `src/data/apendicesC.ts` (tablas de βs, βn y áreas de barras), con sus pruebas. La estática de la cercha ($\theta$, $C$, $T$) y el ancho de puntal en la zona nodal son **auxiliares**: la norma exige un modelo en equilibrio (C-A.2.2) y que se consideren las dimensiones de la zona nodal (C-A.2.3), pero no da esas fórmulas.
+</Callout>
+
+<Detalle titulo="Erratas y rarezas del PDF en este apéndice">
+
+- **Numeración de la Ec. C-A-7:** el PDF la rotula «(A-7)»; las demás llevan el prefijo «C-A-». Es la C-A-7.
+- **Remisiones sin prefijo:** C-A.2.1 remite a «C.A.1» (es C-A.1); C-A.3.3 remite a «C.3.2.2(a)» (es C-A.3.2.2(a)); el texto de C-A.4.1 dice «ecuación(C-A-6)» sin espacio.
+- **Símbolos no definidos en el apéndice:** $b_s$ (ancho del puntal), $A'_s$ y $f'_s$ no se definen en las páginas del apéndice; están en la nomenclatura C.2.1.
+- **C-A.5.2.2 «ó» C-A.5.2.3:** el PDF intercala una «ó» entre los dos numerales; no es una alternativa libre: se aplica el que corresponda al número de tensores anclados.
+- **Referencia a φ:** C-A.2.6 remite a C.9.3.2.6 (0.75). Con el Apéndice C-C el valor de φ para modelos puntal-tensor es 0.85 (C-C.9.3.2.6). No se pueden mezclar los dos conjuntos (C.9.1.3).
+- **Sin figuras:** a diferencia del reglamento ACI 318, el apéndice no trae figuras de puntales ni de nodos; las de esta página son del autor.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar $\beta_s$ = 0.75 sin colocar el refuerzo de C-A.3.3**: sin él, un puntal en forma de botella vale $0.60\lambda$ (C-A.3.2.2(b)); además la Ec. C-A-4 solo vale con $f'_c \le$ 40 MPa y, con una sola dirección de barras, $\alpha \ge 40°$.
+- **Dimensionar solo el puntal y olvidar la zona nodal**: $f_{ce}$ de C-A.3.1 es el **menor** entre el del puntal y el del nodo, y cada cara del nodo se verifica con su fuerza.
+- **Tomar $\beta_n$ = 1.0 en todos los nodos**: baja a 0.80 con un tensor anclado y a 0.60 con dos o más.
+- **Modelar con ángulos menores de 25°** entre puntal y tensor que llegan al mismo nodo (C-A.2.5).
+- **Anclar el tensor dentro del nodo** en vez de desarrollarlo donde su centroide sale de la zona nodal extendida (C-A.4.3.2 y C-A.4.3.3).
+- **Olvidar el anclaje del refuerzo transversal** de los puntales de botella (C-A.4.3.4, C.12.13).
+- **Mezclar φ de conjuntos distintos**: 0.75 con las combinaciones de C.9, 0.85 solo con el Apéndice C-C y sus combinaciones.
+- **Dibujar los elementos como líneas sin ancho** y no revisar que las dimensiones de puntales, tensores y zonas nodales quepan en la geometría real (C-A.2.3).
+</Callout>
+
+## Resumen en una línea
+
+**Una región-D se modela como cercha de puntales ($f_{ce}$ = 0.85 $\beta_s f'_c$), tensores ($A_{ts}f_y$) y zonas nodales ($f_{ce}$ = 0.85 $\beta_n f'_c$) en equilibrio, con ángulos de al menos 25°, y cada elemento cumple $\phi F_n \ge F_u$ (C-A-1).**

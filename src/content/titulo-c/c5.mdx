@@ -1,0 +1,401 @@
+---
+codigo: 'C.5'
+tipo: capitulo
+titulo: 'Calidad del concreto, mezclado y colocación'
+resumen: 'Cómo se dosifica el concreto para alcanzar una resistencia promedio f′cr mayor que f′c (con o sin registros de planta), cómo se muestrean, ensayan y aceptan los cilindros, qué hacer ante resultados bajos (núcleos y pruebas de carga) y los requisitos de mezclado, transporte, colocación, curado y clima.'
+objetivos:
+  - 'Calcular la desviación estándar de una planta y el factor de modificación para menos de 30 ensayos'
+  - 'Determinar f′cr con las ecuaciones C.5-1, C.5-2 y C.5-3 o con la tabla sin datos'
+  - 'Aplicar el criterio de aceptación de C.5.6.3.3 a una serie de resultados de cilindros'
+  - 'Calcular la frecuencia mínima de muestreo y saber cuándo investigar con núcleos'
+  - 'Recordar los requisitos de curado (7 y 3 días, 10 °C) y de mezclado en obra (90 s)'
+paginasNorma: 'C-39 a C-46'
+paginaPdf: 341
+orden: 5
+calculadoras: ['resistencia-promedio']
+nivel: 'intermedio'
+---
+
+import { desviacionEstandar, promedio, factorModificacionDesviacion, fcrPlanta, fcrConDatos, fcrSinDatos, fcrSinExperiencia, evaluarAceptacion, evaluarNucleos, muestrasMinimasDia, minimoIndividual, curadoEnObraDeficiente } from '../../lib/nsr10/dosificacion';
+
+export const ej1 = (() => {
+  const fc = 28;
+  const ensayos = [28.9, 33.5, 27.1, 35.0, 30.2, 25.8, 34.1, 31.0, 28.0, 33.0, 26.9, 31.5, 35.2, 29.0, 32.4];
+  const n = ensayos.length;
+  const media = promedio(ensayos);
+  const s = desviacionEstandar(ensayos);
+  const factor = factorModificacionDesviacion(n);
+  const r = fcrPlanta(fc, s, n);
+  return { fc, ensayos, n, media, s, factor, r, sinDatos: fcrSinDatos(fc), sinExp: fcrSinExperiencia(fc), ahorro: fcrSinDatos(fc) - r.fcr };
+})();
+
+export const ej2 = (() => {
+  const fc = 28;
+  const s = 3.0;
+  const filas = [15, 20, 25, 30].map((n) => ({ n, factor: factorModificacionDesviacion(n), r: fcrPlanta(fc, s, n) }));
+  const alto = fcrConDatos(42, 5);
+  const alto2 = fcrConDatos(42, 3);
+  return { fc, s, filas, alto, alto2, sinDatos42: fcrSinDatos(42), r12: fcrPlanta(fc, s, 12) };
+})();
+
+export const ej3 = (() => {
+  const fc = 28;
+  const a = [29.5, 27.0, 28.6, 30.2, 26.8, 28.9, 29.4, 27.5, 29.1];
+  const b = [29.5, 24.0, 33.0, 30.2, 28.9, 29.7];
+  return { fc, a, b, ea: evaluarAceptacion(a, fc), eb: evaluarAceptacion(b, fc), minimo: minimoIndividual(fc), nucleos: [25.0, 22.6, 24.1], en: evaluarNucleos([25.0, 22.6, 24.1], fc), enMalo: evaluarNucleos([25.0, 20.5, 26.0], fc) };
+})();
+
+export const ej4 = (() => {
+  const m = muestrasMinimasDia(120, 700, 0);
+  return { m, deficiente: curadoEnObraDeficiente(24, 30, 28), ok: curadoEnObraDeficiente(26, 30, 28) };
+})();
+
+## Idea central del capítulo
+
+El $f'_c$ de los planos es un **mínimo garantizado**; el concreto que se fabrica debe tener un promedio **mayor**, porque los resultados de ensayos varían. El Capítulo C.5 organiza ese puente entre el diseño y la obra:
+
+1. **Dosificar** para una resistencia promedio requerida $f'_{cr}$ mayor que $f'_c$, tanto más grande cuanto más variable sea la planta (C.5.3) o, sin datos, con valores de tabla (C.5.3.2.2 y C.5.4).
+2. **Cumplir la durabilidad** del Capítulo C.4 (a/mc, aire, cloruros) al mismo tiempo (C.5.1.1 y C.5.2.1).
+3. **Muestrear y ensayar** cilindros con una frecuencia mínima (C.5.6.2) y **aceptar** el concreto si los promedios móviles de tres ensayos llegan a $f'_c$ y ningún resultado cae demasiado (C.5.6.3.3).
+4. Si hay baja resistencia, **investigar** con núcleos y, en último caso, con pruebas de carga (C.5.6.5).
+5. **Mezclar, transportar, colocar y curar** de modo que lo dosificado sea lo que queda en la estructura (C.5.7 a C.5.13).
+
+<Callout tipo="importante" titulo="Los tres números que se repiten">
+- $f'_c \ge$ **17 MPa** en todo concreto diseñado con la NSR-10 (<NormaRef s="C.5.1.1" pag="C-39" />).
+- Aceptación: promedio de **tres ensayos consecutivos ≥ $f'_c$** y **ningún ensayo menor que $f'_c$ por más de 3.5 MPa** (o 0.10 $f'_c$ si $f'_c$ > 35 MPa) (<NormaRef s="C.5.6.3.3" pag="C-42" />).
+- Curado: **≥ 10 °C y húmedo durante 7 días** (3 días si es de alta resistencia inicial) (<NormaRef s="C.5.11.1" pag="C-45" />).
+</Callout>
+
+## C.5.1 — Generalidades
+
+- **C.5.1.1.** El concreto se dosifica para dar una resistencia promedio $f'_{cr}$ (C.5.3.2), debe satisfacer la durabilidad de C.4 y se produce de modo que se **minimice la frecuencia de resultados inferiores a $f'_c$** (C.5.6.3.3). En concreto diseñado y construido con la NSR-10, **$f'_c$ no puede ser inferior a 17 MPa** (<NormaRef s="C.5.1.1" pag="C-39" />).
+- **C.5.1.2.** Los requisitos de $f'_c$ se basan en **ensayos de cilindros** hechos y ensayados según C.5.6.3 (<NormaRef s="C.5.1.2" pag="C-39" />).
+- **C.5.1.3.** Salvo que se indique otra cosa, $f'_c$ se basa en ensayos **a los 28 días**; si la edad es otra, debe indicarse en planos o especificaciones (<NormaRef s="C.5.1.3" pag="C-39" />).
+- **C.5.1.4.** Cuando C.8.6.1, C.12.2.4(d) o C.22.5.6.1 pidan usar la resistencia a tracción por hendimiento, se hacen ensayos de laboratorio según NTC 4045 (ASTM C330) para fijar un valor $f_{ct}$ correspondiente a $f'_c$ (<NormaRef s="C.5.1.4" pag="C-39" />).
+- **C.5.1.5.** Los ensayos de tracción por hendimiento **no sirven** como base de aceptación del concreto en obra (<NormaRef s="C.5.1.5" pag="C-39" />).
+- **C.5.1.6.** El concreto con fibras de acero cumple NTC 5541 (ASTM C1116) y su $f'_c$ mínimo cumple C.5.1.1 (<NormaRef s="C.5.1.6" pag="C-39" />).
+
+## C.5.2 — Dosificación del concreto
+
+La dosificación debe lograr (<NormaRef s="C.5.2.1" pag="C-39" />): **(a)** trabajabilidad y consistencia para colocar el concreto en el encofrado y alrededor del refuerzo sin segregación ni exudación excesiva; **(b)** resistencia a las exposiciones especiales de C.4; **(c)** conformidad con el ensayo de resistencia de C.5.6. Si se usan **materiales distintos** en partes distintas de la obra, **cada combinación** se evalúa por separado (<NormaRef s="C.5.2.2" pag="C-39" />). La dosificación se establece por C.5.3 o, alternativamente, por C.5.4, y siempre cumple C.4 (<NormaRef s="C.5.2.3" pag="C-39" />).
+
+## C.5.3 — Dosificación basada en la experiencia en obra o en mezclas de prueba
+
+### C.5.3.1 — Desviación estándar de la muestra
+
+**C.5.3.1.1.** Si la planta de concreto tiene registros de ensayos de **menos de 12 meses** de antigüedad, debe establecerse la desviación estándar $s_s$ de la muestra con registros que (<NormaRef s="C.5.3.1.1" pag="C-39" />):
+
+- **(a)** representen materiales, control de calidad y condiciones **similares** a las esperadas, con variaciones de materiales y proporciones **no más restrictivas** que las de la obra propuesta;
+- **(b)** correspondan a un concreto producido para una o varias resistencias especificadas **dentro de 7 MPa de $f'_c$**;
+- **(c)** consistan en **al menos 30 ensayos consecutivos**, o en dos grupos consecutivos que sumen al menos 30 (ensayo = promedio de al menos dos cilindros 150×300 mm o tres de 100×200 mm, C.5.6.2.4), salvo C.5.3.1.2.
+
+La norma no escribe la fórmula de $s_s$; se usa la definición estadística usual de desviación estándar de la muestra (**dato del autor, no texto de la norma**):
+
+$$
+s = \sqrt{\frac{\sum_{i=1}^{n}\left(x_i-\bar{x}\right)^2}{n-1}}
+$$
+
+**C.5.3.1.2.** Si la planta no tiene 30 ensayos pero sí un registro de **15 a 29 ensayos consecutivos** de menos de 12 meses, se toma $s_s$ como el **producto de la desviación calculada por el factor de modificación** de la Tabla C.5.3.1.2. El registro debe cumplir (a) y (b) de C.5.3.1.1 y abarcar **un solo registro consecutivo de no menos de 45 días calendario** (<NormaRef s="C.5.3.1.2" pag="C-40" />).
+
+<TablaNorma numero="Tabla C.5.3.1.2" titulo="Factor de modificación para la desviación estándar de la muestra cuando se dispone de menos de 30 ensayos" pag="C-40" nota="* Interpolar para un número de ensayos intermedios. † Desviación estándar de la muestra modificada, s_s, para usar en la determinación de f′cr de C.5.3.2.1.">
+
+| Número de ensayos * | Factor de modificación para la desviación estándar de la muestra † |
+|---|---|
+| Menos de 15 | Emplee la Tabla C.5.3.2.2 |
+| 15 | 1.16 |
+| 20 | 1.08 |
+| 25 | 1.03 |
+| 30 o más | 1.00 |
+
+</TablaNorma>
+
+La interpolación es **lineal**: por ejemplo, con 17 ensayos el factor es {factorModificacionDesviacion(17).toFixed(3)}; con 22, {factorModificacionDesviacion(22).toFixed(3)}; con 27, {factorModificacionDesviacion(27).toFixed(3)} (cálculo del autor con la nota * de la tabla).
+
+### C.5.3.2 — Resistencia promedio requerida
+
+**C.5.3.2.1 — Con datos.** Con $s_s$ de C.5.3.1.1 o C.5.3.1.2, $f'_{cr}$ se toma de la Tabla C.5.3.2.1: el **mayor** de dos ecuaciones (<NormaRef s="C.5.3.2.1" pag="C-40" />).
+
+<TablaNorma numero="Tabla C.5.3.2.1" titulo="Resistencia promedio a la compresión requerida cuando hay datos disponibles para establecer una desviación estándar de la muestra" pag="C-40" nota="Resistencias en MPa. Verificada contra la imagen de la página.">
+
+| Resistencia especificada $f'_c$ (MPa) | Resistencia promedio requerida $f'_{cr}$ (MPa) |
+|---|---|
+| f′c ≤ 35 | Usar el **mayor** valor de las ecuaciones (C.5-1) f′cr = f′c + 1.34 s_s y (C.5-2) f′cr = f′c + 2.33 s_s − 3.5 |
+| f′c > 35 | Usar el **mayor** valor de las ecuaciones (C.5-1) f′cr = f′c + 1.34 s_s y (C.5-3) f′cr = 0.90 f′c + 2.33 s_s |
+
+</TablaNorma>
+
+<Ecuacion num="C.5-1" titulo="Resistencia promedio requerida (1.ª ecuación)">
+
+$$
+f'_{cr} = f'_c + 1.34\, s_s
+$$
+
+- $f'_{cr}$: resistencia promedio requerida (MPa). $f'_c$: resistencia especificada (MPa). $s_s$: desviación estándar de la muestra, modificada si hay 15 a 29 ensayos (MPa).
+- Lectura del autor (no es texto de la norma): 1.34 y 2.33 son los factores estadísticos con los que se busca una baja probabilidad (del orden de 1 en 100) de que un promedio de tres ensayos o un ensayo individual queden por debajo del límite de aceptación.
+
+</Ecuacion>
+
+<Ecuacion num="C.5-2" titulo="Resistencia promedio requerida (2.ª ecuación, f′c ≤ 35 MPa)">
+
+$$
+f'_{cr} = f'_c + 2.33\, s_s - 3.5
+$$
+
+- Se usa solo si $f'_c \le 35$ MPa; el «3.5» es el margen individual de C.5.6.3.3(b).
+
+</Ecuacion>
+
+<Ecuacion num="C.5-3" titulo="Resistencia promedio requerida (f′c mayor de 35 MPa)">
+
+$$
+f'_{cr} = 0.90\, f'_c + 2.33\, s_s
+$$
+
+- Se usa solo si $f'_c > 35$ MPa; el «0.90» es el 10 % de margen individual de C.5.6.3.3(b).
+
+</Ecuacion>
+
+<Callout tipo="practica" titulo="¿Cuál ecuación manda?">
+Para $f'_c \le 35$ MPa, C.5-1 gobierna mientras $s_s$ < 3.5/0.99 ≈ **3.54 MPa**; por encima, gobierna C.5-2. Para $f'_c$ > 35 MPa, C.5-1 gobierna mientras $s_s$ < 0.1 $f'_c$/0.99, o sea, para $f'_c$ = 42 MPa, mientras $s_s$ < **4.24 MPa**. (Deducción del autor igualando las ecuaciones.) La calculadora de abajo lo muestra con una gráfica.
+</Callout>
+
+**C.5.3.2.2 — Sin datos.** Si la planta no tiene registros que cumplan C.5.3.1.1 ni C.5.3.1.2, $f'_{cr}$ sale de la Tabla C.5.3.2.2 y la documentación debe cumplir C.5.3.3 (<NormaRef s="C.5.3.2.2" pag="C-40" />).
+
+<TablaNorma numero="Tabla C.5.3.2.2" titulo="Resistencia promedio a la compresión requerida cuando no hay datos disponibles para establecer una desviación estándar de la muestra" pag="C-41" nota="Resistencias en MPa.">
+
+| Resistencia especificada $f'_c$ (MPa) | Resistencia promedio requerida $f'_{cr}$ (MPa) |
+|---|---|
+| f′c < 21 | f′cr = f′c + 7.0 |
+| 21 ≤ f′c ≤ 35 | f′cr = f′c + 8.3 |
+| f′c > 35 | f′cr = 1.10 f′c + 5.0 |
+
+</TablaNorma>
+
+<Ejemplo numero={1} titulo="f′cr para una planta con 15 ensayos">
+
+Una planta tiene un registro de **15 ensayos consecutivos** en 50 días, de menos de 12 meses y con resistencias dentro de 7 MPa de lo requerido. Se necesita un concreto de $f'_c$ = {ej1.fc} MPa. Resultados (MPa): {ej1.ensayos.join('; ')}. (Datos hipotéticos del autor.)
+
+<Paso titulo="Estadística del registro" ref="C.5.3.1.1">
+$n$ = {ej1.n}; promedio = {ej1.media.toFixed(2)} MPa; desviación estándar de la muestra $s$ = **{ej1.s.toFixed(3)} MPa**.
+</Paso>
+<Paso titulo="Factor de modificación" ref="Tabla C.5.3.1.2">
+Con 15 ensayos el factor es **{ej1.factor.toFixed(2)}**. $s_s$ = {ej1.s.toFixed(3)} × {ej1.factor.toFixed(2)} = **{ej1.r.ss.toFixed(3)} MPa**.
+</Paso>
+<Paso titulo="Ecuación C.5-1" ref="C.5-1">
+$f'_{cr}$ = {ej1.fc} + 1.34 × {ej1.r.ss.toFixed(3)} = **{ej1.r.detalle.c51.toFixed(2)} MPa**.
+</Paso>
+<Paso titulo="Ecuación C.5-2" ref="C.5-2">
+$f'_{cr}$ = {ej1.fc} + 2.33 × {ej1.r.ss.toFixed(3)} − 3.5 = **{ej1.r.detalle.segunda.toFixed(2)} MPa**.
+</Paso>
+<Paso titulo="Tomar el mayor" ref="Tabla C.5.3.2.1">
+Gobierna **{ej1.r.detalle.gobierna}**: $f'_{cr}$ = {ej1.r.fcr.toFixed(2)} MPa. Sin registros se habría usado la Tabla C.5.3.2.2: {ej1.fc} + 8.3 = **{ej1.sinDatos.toFixed(1)} MPa**, es decir, {ej1.ahorro.toFixed(1)} MPa más.
+</Paso>
+<Resultado>
+La dosificación debe producir un promedio de al menos **{ej1.r.fcr.toFixed(1)} MPa** (frente a {ej1.sinDatos.toFixed(1)} MPa sin registros): tener datos de planta abarata el concreto. Comprueba las cuentas en la calculadora.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Cuántos ensayos pagan: f′cr según n, y concreto de alta resistencia">
+
+Con la misma desviación $s$ = {ej2.s.toFixed(1)} MPa y $f'_c$ = {ej2.fc} MPa, ¿cómo cambia $f'_{cr}$ con el tamaño del registro? Luego, un caso con $f'_c$ = 42 MPa. (Cálculo del autor con las funciones del repositorio.)
+
+<Paso titulo="Efecto del número de ensayos" ref="Tabla C.5.3.1.2, Tabla C.5.3.2.1">
+Con 15 ensayos: factor {ej2.filas[0].factor.toFixed(2)}, $s_s$ = {ej2.filas[0].r.ss.toFixed(3)}, $f'_{cr}$ = **{ej2.filas[0].r.fcr.toFixed(2)}**. Con 20: factor {ej2.filas[1].factor.toFixed(2)}, $s_s$ = {ej2.filas[1].r.ss.toFixed(3)}, $f'_{cr}$ = **{ej2.filas[1].r.fcr.toFixed(2)}**. Con 25: factor {ej2.filas[2].factor.toFixed(2)}, $s_s$ = {ej2.filas[2].r.ss.toFixed(3)}, $f'_{cr}$ = **{ej2.filas[2].r.fcr.toFixed(2)}**. Con 30: factor {ej2.filas[3].factor.toFixed(2)}, $s_s$ = {ej2.filas[3].r.ss.toFixed(3)}, $f'_{cr}$ = **{ej2.filas[3].r.fcr.toFixed(2)}** (MPa). Con menos de 15 ensayos (por ejemplo 12) se vuelve a la tabla sin datos: **{ej2.r12.fcr.toFixed(1)} MPa**.
+</Paso>
+<Paso titulo="f′c = 42 MPa y s_s = 5 MPa" ref="C.5-1, C.5-3">
+C.5-1: 42 + 1.34 × 5 = {ej2.alto.c51.toFixed(2)}. C.5-3: 0.90 × 42 + 2.33 × 5 = {ej2.alto.segunda.toFixed(2)}. Gobierna **{ej2.alto.gobierna}**: $f'_{cr}$ = {ej2.alto.fcr.toFixed(2)} MPa. Con $s_s$ = 3 MPa gobierna {ej2.alto2.gobierna}: {ej2.alto2.fcr.toFixed(2)} MPa. Sin datos: 1.10 × 42 + 5.0 = {ej2.sinDatos42.toFixed(1)} MPa.
+</Paso>
+<Resultado>
+Cada ensayo que se suma al registro reduce el sobrediseño: de {ej2.filas[0].r.fcr.toFixed(1)} MPa (15 ensayos) a {ej2.filas[3].r.fcr.toFixed(1)} MPa (30 ensayos) con la misma $s$.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="resistencia-promedio" />
+
+### C.5.3.3 — Documentación de la resistencia promedio
+
+La documentación de que la dosificación propuesta produce un promedio **igual o mayor que $f'_{cr}$** debe consistir en **un registro de ensayos en obra**, **varios registros** o **mezclas de prueba** (<NormaRef s="C.5.3.3" pag="C-41" />).
+
+- **C.5.3.3.1 (registros).** Deben representar materiales y condiciones similares a las esperadas. Para documentar la resistencia potencial se aceptan registros de **menos de 30 pero no menos de 10 ensayos consecutivos**, siempre que abarquen **no menos de 45 días**. La dosificación puede establecerse **interpolando** entre dos o más registros (<NormaRef s="C.5.3.3.1" pag="C-41" />).
+- **C.5.3.3.2 (mezclas de prueba).** Si no hay registro aceptable: (a) materiales **los propuestos para la obra**; (b) mezclas con un **rango de dosificaciones** que dé una gama de resistencias que **abarque $f'_{cr}$** y cumpla la durabilidad de C.4; (b′) asentamiento dentro del rango de la obra y, con aire incorporado, aire dentro de la tolerancia; (c) por mezcla, **al menos 2 cilindros 150×300 mm o 3 de 100×200 mm** (NTC 1377, ASTM C192M) ensayados a 28 días o a la edad de $f'_c$; (d) con los resultados se establece la composición de la mezcla, que debe alcanzar $f'_{cr}$ y la durabilidad (<NormaRef s="C.5.3.3.2" pag="C-41" />).
+
+## C.5.4 — Dosificación sin experiencia en obra ni mezclas de prueba
+
+Si no están disponibles los datos de C.5.3, la dosificación se basa en **otras experiencias o información, con aprobación del profesional facultado para diseñar**. El $f'_{cr}$ del concreto con materiales similares debe ser **al menos 8.3 MPa mayor que $f'_c$**, y **esta alternativa no se usa si $f'_c$ > 35 MPa** (<NormaRef s="C.5.4.1" pag="C-41" />). El concreto así dosificado cumple C.4 y los criterios de C.5.6 (<NormaRef s="C.5.4.2" pag="C-41" />).
+
+Para $f'_c$ = 28 MPa: {ej1.fc} + 8.3 = **{ej1.sinExp.toFixed(1)} MPa**.
+
+## C.5.5 — Reducción de la resistencia promedio
+
+A medida que hay más datos durante la construcción, se permite **reducir** la cantidad en que $f'_{cr}$ excede $f'_c$, siempre que (<NormaRef s="C.5.5" pag="C-42" />): **(a)** haya **30 o más ensayos** y su promedio exceda el requerido por C.5.3.2.1 con $s_s$ según C.5.3.1.1, o **(b)** haya **15 a 29 ensayos** y su promedio exceda el requerido con $s_s$ según C.5.3.1.2, **y (c)** se cumpla la exposición especial de C.4.
+
+## C.5.6 — Evaluación y aceptación del concreto
+
+### C.5.6.1 — Ensayos y personal
+
+El concreto se ensaya según C.5.6.2 a C.5.6.5. Los ensayos del concreto fresco en obra, la preparación de probetas con curado en obra, la preparación de probetas para laboratorio y el registro de temperatura del concreto fresco los hacen **técnicos calificados en ensayos de campo**; los de laboratorio, **técnicos de laboratorio calificados** (<NormaRef s="C.5.6.1" pag="C-42" />).
+
+### C.5.6.2 — Frecuencia de los ensayos
+
+- **C.5.6.2.1.** Para cada clase de concreto colocado cada día: **no menos de una vez al día**, ni menos de una vez por cada **40 m³** de concreto, ni menos de una vez por cada **200 m²** de superficie de losas o muros; además, como mínimo **una muestra por cada 50 tandas** de cada clase (<NormaRef s="C.5.6.2.1" pag="C-42" />).
+- **C.5.6.2.2.** Si la frecuencia anterior da **menos de cinco ensayos** de una clase en el proyecto, se ensayan **al menos cinco tandas** escogidas al azar, o **todas** si hay menos de cinco (<NormaRef s="C.5.6.2.2" pag="C-42" />).
+- **C.5.6.2.3.** Si la cantidad total de una clase es **menor de 10 m³**, no se exigen ensayos cuando el **Supervisor Técnico** apruebe la evidencia de que la resistencia es satisfactoria (<NormaRef s="C.5.6.2.3" pag="C-42" />).
+- **C.5.6.2.4.** Un **ensayo de resistencia** es el promedio de al menos **dos probetas 150×300 mm** o **tres de 100×200 mm** de la misma muestra, ensayadas a 28 días o a la edad de $f'_c$ (<NormaRef s="C.5.6.2.4" pag="C-42" />).
+
+<Ejemplo numero={3} titulo="Muestras mínimas de un día de fundida">
+
+En un día se funden **120 m³** de una losa de **700 m²** de superficie. ¿Cuántas muestras como mínimo? (Interpretación del autor: cada criterio se redondea hacia arriba.)
+
+<Paso titulo="Por volumen" ref="C.5.6.2.1">
+120 / 40 = 3 → **{ej4.m.porVolumen}** muestras.
+</Paso>
+<Paso titulo="Por superficie" ref="C.5.6.2.1">
+700 / 200 = 3.5 → **{ej4.m.porSuperficie}** muestras.
+</Paso>
+<Paso titulo="Mínimo de un día" ref="C.5.6.2.1">
+Una vez al día → {ej4.m.porDia}. Gobierna el mayor.
+</Paso>
+<Resultado>
+Mínimo **{ej4.m.minimo} muestras** (cada una con 2 cilindros de 150×300 o 3 de 100×200 mm). Si además se usaron, por ejemplo, 120 tandas, el criterio de 50 tandas daría 3, que no cambia el resultado.
+</Resultado>
+</Ejemplo>
+
+### C.5.6.3 — Probetas curadas en forma estándar
+
+- **C.5.6.3.1.** Las muestras se toman según NTC 454 (ASTM C172).
+- **C.5.6.3.2.** Los cilindros se fabrican y curan **en laboratorio** (NTC 550, ASTM C31M) y se ensayan según NTC 673 (ASTM C39M); miden 100×200 o 150×300 mm.
+- **C.5.6.3.3.** El nivel de resistencia de una clase de concreto es **satisfactorio** si cumple **los dos** requisitos (<NormaRef s="C.5.6.3.3" pag="C-42" />):
+
+<Ecuacion num="C.5.6.3.3 (a) y (b)" titulo="Criterios de aceptación del nivel de resistencia">
+
+$$
+\text{(a)}\;\; \frac{x_i+x_{i+1}+x_{i+2}}{3} \ge f'_c \quad \forall i
+\qquad
+\text{(b)}\;\; x_i \ge f'_c - 3.5\ \text{(si } f'_c\le 35\text{)}\quad \text{o}\quad x_i \ge 0.90\,f'_c\ \text{(si } f'_c>35\text{)}
+$$
+
+- $x_i$: resultado de un ensayo de resistencia (promedio de las probetas de una muestra, C.5.6.2.4), en MPa.
+- (a): **cada** promedio aritmético de tres ensayos consecutivos debe ser igual o superior a $f'_c$.
+- (b): ningún ensayo individual menor que $f'_c$ por más de 3.5 MPa (si $f'_c \le 35$ MPa) o por más de 0.10 $f'_c$ (si $f'_c$ > 35 MPa).
+
+</Ecuacion>
+
+- **C.5.6.3.4.** Si falla cualquiera de los dos, deben tomarse medidas para **aumentar el promedio** de los siguientes ensayos. Si falla **(b)**, se cumple además C.5.6.5 (investigación) (<NormaRef s="C.5.6.3.4" pag="C-43" />).
+
+<Ejemplo numero={4} titulo="Evaluar la aceptación de dos series de ensayos">
+
+Concreto de $f'_c$ = {ej3.fc} MPa. El límite individual de (b) es {ej3.fc} − 3.5 = **{ej3.minimo.toFixed(1)} MPa**. Serie A (MPa): {ej3.a.join('; ')}. Serie B (MPa): {ej3.b.join('; ')}. (Datos hipotéticos del autor.)
+
+<Paso titulo="Serie A: promedios móviles de tres" ref="C.5.6.3.3(a)">
+Promedios: {ej3.ea.promediosMoviles.map((p) => p.toFixed(2)).join('; ')}. Menor promedio: **{Math.min(...ej3.ea.promediosMoviles).toFixed(2)} MPa** ≥ {ej3.fc}: {ej3.ea.cumpleA ? 'cumple (a)' : 'NO cumple (a)'}.
+</Paso>
+<Paso titulo="Serie A: ensayo individual mínimo" ref="C.5.6.3.3(b)">
+El menor resultado es {Math.min(...ej3.a).toFixed(1)} MPa ≥ {ej3.minimo.toFixed(1)}: {ej3.ea.cumpleB ? 'cumple (b)' : 'NO cumple (b)'}. **Serie A: {ej3.ea.satisfactorio ? 'nivel satisfactorio' : 'no satisfactorio'}.**
+</Paso>
+<Paso titulo="Serie B" ref="C.5.6.3.3">
+Promedios móviles: {ej3.eb.promediosMoviles.map((p) => p.toFixed(2)).join('; ')} → (a) {ej3.eb.cumpleA ? 'cumple' : 'no cumple'}. Pero el ensayo #2 ({ej3.b[1]} MPa) es menor que {ej3.minimo.toFixed(1)} MPa → (b) {ej3.eb.cumpleB ? 'cumple' : 'no cumple'}. **Serie B: {ej3.eb.satisfactorio ? 'satisfactoria' : 'no satisfactoria'}**; al fallar (b) hay que investigar según C.5.6.5.
+</Paso>
+<Paso titulo="Investigación con tres núcleos del elemento dudoso" ref="C.5.6.5.4">
+Núcleos (MPa): {ej3.nucleos.join('; ')}. Promedio {ej3.en.promedio.toFixed(2)} MPa frente al umbral de 85 % de $f'_c$ = {ej3.en.umbralPromedio.toFixed(1)} MPa: {ej3.en.cumplePromedio ? 'cumple' : 'no cumple'}. Ningún núcleo debe bajar de 75 % de $f'_c$ = {ej3.en.umbralMinimo.toFixed(1)} MPa: {ej3.en.cumpleMinimo ? 'cumple' : 'no cumple'}. **Concreto {ej3.en.adecuado ? 'estructuralmente adecuado' : 'no adecuado'}.** Con núcleos de 25.0; 20.5 y 26.0 el segundo está bajo {ej3.enMalo.umbralMinimo.toFixed(1)} MPa: {ej3.enMalo.adecuado ? 'adecuado' : 'no adecuado'}.
+</Paso>
+<Resultado>
+Serie A: aceptada. Serie B: no pasa el criterio (b) pero el elemento dudoso puede aceptarse si los núcleos cumplen 85 % / 75 % de $f'_c$; si no, la autoridad competente puede ordenar una prueba de carga (Capítulo C.20).
+</Resultado>
+</Ejemplo>
+
+### C.5.6.4 — Probetas curadas en obra
+
+- Si lo requiere la autoridad competente, se ensayan cilindros **curados en condiciones de obra** (NTC 550), fabricados **al mismo tiempo y con el mismo material** que los curados en laboratorio (<NormaRef s="C.5.6.4.1" pag="C-43" />).
+- **C.5.6.4.4.** Se deben **mejorar** la protección y el curado cuando la resistencia de los cilindros curados en obra, a la edad de $f'_c$, sea **inferior al 85 %** de la de sus compañeros curados en laboratorio. El 85 % **no se aplica** si los curados en obra exceden $f'_c$ en más de 3.5 MPa (<NormaRef s="C.5.6.4.4" pag="C-43" />).
+
+Ejemplo del autor ($f'_c$ = 28 MPa, cilindros de laboratorio a 30 MPa): una resistencia en obra de 24 MPa {ej4.deficiente ? 'indica curado deficiente' : 'es aceptable'} (24 &lt; 0.85 × 30 = 25.5); 26 MPa {ej4.ok ? 'indica curado deficiente' : 'es aceptable'}.
+
+### C.5.6.5 — Investigación de resultados de baja resistencia
+
+1. Si un ensayo de cilindros de laboratorio es menor que $f'_c$ **por más** de lo permitido en C.5.6.3.3(b), o si los de obra indican deficiencia de curado (C.5.6.4.4), se toman medidas para asegurar que **no se ponen en peligro** la capacidad de carga ni la durabilidad (<NormaRef s="C.5.6.5.1" pag="C-43" />).
+2. Si se confirma la baja resistencia y los cálculos indican que la capacidad de carga **se redujo significativamente**, se permiten **núcleos** (NTC 3658, ASTM C42M): **tres núcleos por cada resultado** menor que los de C.5.6.3.3(b) (<NormaRef s="C.5.6.5.2" pag="C-43" />).
+3. Los núcleos se extraen conservando la humedad (recipientes o bolsas herméticas), se transportan y se ensayan **no antes de 48 horas ni más tarde de 7 días** de extraídos, salvo aprobación distinta del profesional diseñador, quien especifica los ensayos (<NormaRef s="C.5.6.5.3" pag="C-43" />).
+4. El concreto de la zona es **estructuralmente adecuado** si el **promedio de tres núcleos ≥ 85 % de $f'_c$** y **ningún núcleo < 75 % de $f'_c$**. Si los resultados son erráticos se permiten núcleos adicionales de la misma zona (<NormaRef s="C.5.6.5.4" pag="C-43" />).
+5. Si no se cumple y la seguridad sigue en duda, la **autoridad competente** puede ordenar **pruebas de carga** (Capítulo C.20) u otras medidas (<NormaRef s="C.5.6.5.5" pag="C-43" />).
+
+### C.5.6.6 — Concreto reforzado con fibra de acero
+
+La aceptación del concreto con fibras de acero usado en vigas según C.11.4.6.1(f) se determina con ensayos **ASTM C1609**, y el procedimiento cumple C.5.6.1 (<NormaRef s="C.5.6.6.1" pag="C-43" />). Es aceptable para cortante si cumple **las tres** condiciones (<NormaRef s="C.5.6.6.2" pag="C-43" />):
+
+- **(a)** masa de fibras corrugadas por m³ de concreto **≥ 60 kg**;
+- **(b)** resistencia residual a deflexión en el centro de la luz de **L/300** ≥ **90 %** de la resistencia del primer pico del ensayo, o de 90 % de la resistencia correspondiente al módulo de rotura de la Ec. (C.9-10), la que sea mayor;
+- **(c)** resistencia residual a deflexión de **L/150** ≥ **75 %** (misma comparación).
+
+## C.5.7 — Preparación del equipo y del lugar de colocación
+
+Antes de colocar el concreto (<NormaRef s="C.5.7.1" pag="C-44" />): **(a)** equipo de mezclado y transporte limpio; **(b)** retirar escombros y hielo de los espacios; **(c)** encofrado con desmoldante adecuado; **(d)** humedecer las unidades de albañilería de relleno en contacto con el concreto; **(e)** refuerzo libre de hielo y recubrimientos perjudiciales; **(f)** retirar el agua libre del lugar (salvo tubo tremie o autorización de la autoridad competente); **(g)** superficie del concreto endurecido libre de lechada y materiales deleznables antes de fundir encima.
+
+## C.5.8 — Mezclado
+
+- **C.5.8.1.** Mezclar hasta lograr una **distribución uniforme** de los materiales; la mezcladora se descarga **completamente** antes de recargarse (<NormaRef s="C.5.8.1" pag="C-44" />).
+- **C.5.8.2.** El concreto **premezclado** se mezcla y entrega según NTC 3318 (ASTM C94M) o NTC 4027 (ASTM C685M) (<NormaRef s="C.5.8.2" pag="C-44" />).
+- **C.5.8.3.** El concreto **mezclado en obra** (<NormaRef s="C.5.8.3" pag="C-44" />): mezcladora de tipo aprobado; velocidad recomendada por el fabricante; mezclado de **al menos 90 segundos** después de que todos los materiales estén en el tambor (salvo ensayos de uniformidad que demuestren que menos es satisfactorio); manejo y dosificación según NTC 3318; y un **registro detallado** de (1) número de tandas, (2) dosificación, (3) localización aproximada del depósito final, (4) hora y fecha del mezclado y de la colocación.
+
+## C.5.9 — Transporte
+
+El concreto se transporta de la mezcladora al sitio final con métodos que **eviten segregación o pérdida de material** (<NormaRef s="C.5.9.1" pag="C-45" />). El equipo debe abastecer el sitio **sin segregación** y **sin interrupciones** que causen pérdida de plasticidad entre capas sucesivas (<NormaRef s="C.5.9.2" pag="C-45" />).
+
+## C.5.10 — Colocación
+
+- Depositar **lo más cerca posible** de la ubicación final (C.5.10.1).
+- Colocar a una velocidad que mantenga el concreto **plástico** y fluyendo entre las barras (C.5.10.2).
+- **No colocar** concreto parcialmente endurecido o contaminado (C.5.10.3).
+- **No usar** concreto al que se le añadió agua después de preparado, ni mezclado después del fraguado inicial, salvo aprobación del profesional diseñador (C.5.10.4).
+- Una vez iniciada, la colocación es **continua** hasta terminar el panel o sección definido por sus juntas, salvo lo permitido o prohibido por C.6.4 (C.5.10.5).
+- La superficie superior de las capas entre encofrados verticales debe, por lo general, estar **a nivel** (C.5.10.6); las juntas de construcción siguen C.6.4 (C.5.10.7).
+- **Compactar cuidadosamente** y acomodar por completo alrededor del refuerzo, de lo embebido y en las esquinas del encofrado (C.5.10.8).
+
+(Todas en <NormaRef s="C.5.10" pag="C-45" />.)
+
+## C.5.11 — Curado
+
+<TablaNorma numero="C.5.11 (resumen)" titulo="Curado del concreto" pag="C-45" nota="Resumen del autor del texto de C.5.11.1 a C.5.11.3. Excepto cuando se cure aceleradamente según C.5.11.3.">
+
+| Concreto | Temperatura | Condición | Duración mínima | Numeral |
+|---|---|---|---|---|
+| Normal | Por encima de 10 °C | En condiciones de humedad | **7 días** después de la colocación | C.5.11.1 |
+| De alta resistencia inicial | Por encima de 10 °C | En condiciones de humedad | **3 días** | C.5.11.2 |
+| Curado acelerado (vapor a alta presión, vapor a presión atmosférica, calor y humedad u otro proceso aceptado) | Según el proceso | Debe dar en la etapa de carga una resistencia al menos igual a la de diseño requerida en esa etapa, y una durabilidad equivalente a la de C.5.11.1 o C.5.11.2 | Reduce el tiempo de curado | C.5.11.3 |
+
+</TablaNorma>
+
+Cuando lo requiera el profesional diseñador, se hacen **ensayos complementarios** de resistencia según C.5.6.4 para comprobar que el curado es satisfactorio (<NormaRef s="C.5.11.4" pag="C-45" />).
+
+## C.5.12 — Requisitos para clima frío
+
+Debe disponerse de equipo para **calentar** los materiales y proteger el concreto contra temperaturas de congelamiento o cercanas. Los materiales componentes, el refuerzo, el encofrado, los rellenos y el suelo en contacto con el concreto deben estar **libres de escarcha**, y no se usan materiales congelados o con hielo (<NormaRef s="C.5.12.1" pag="C-46" />, C.5.12.2 y C.5.12.3).
+
+## C.5.13 — Requisitos para clima cálido
+
+Debe darse atención adecuada a los materiales, la producción, el manejo, la colocación, la protección y el **curado** para evitar **temperaturas excesivas** del concreto o **evaporación** del agua que afecten la resistencia requerida o el comportamiento del elemento (<NormaRef s="C.5.13" pag="C-46" />). La norma no fija números; en Colombia esto es lo habitual en tierra caliente (buenas prácticas: agua fría, hielo en la mezcla, fundir en horas frescas y curar sin demora; es recomendación del autor).
+
+<Callout tipo="nota" titulo="Erratas y observaciones del PDF (verificadas contra la imagen)">
+- **C.5.3.3.2** tiene **dos ítems marcados (b)** (el segundo debería ser (c), con lo que (c) y (d) se corren). Aquí se cita el segundo como (b′).
+- **C.5.6.5.5** remite a «5.6.5.4» sin la «C.»; se entiende C.5.6.5.4.
+- **C.5.6.6.2 (b) y (c)** hablan de la resistencia «correspondiente a $f_f$ obtenido por la ecuación (C.9-10)»; esa ecuación es la del **módulo de rotura $f_r$** (C.9.5.2.3). Es lectura del autor.
+- **C.5.10.4** tiene una errata («se le adiciones agua»).
+- La norma **no da la fórmula** de la desviación estándar de la muestra ni explica las probabilidades de C.5-1 a C.5-3; ambas cosas en este capítulo son del autor.
+- Los criterios del «registro de 45 días» y de «menos de 12 meses» **no pueden verificarse** con las calculadoras: son responsabilidad del usuario.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Dosificar para $f'_c$ exacto**: sin sobrediseño, cerca de la mitad de los ensayos quedaría por debajo de $f'_c$. Hay que dosificar para $f'_{cr}$.
+- **Usar $s$ sin el factor de modificación** cuando hay 15 a 29 ensayos, o usar el registro con menos de 15 ensayos (en ese caso corresponde la Tabla C.5.3.2.2).
+- **Mezclar registros de resistencias muy distintas**: los datos deben estar dentro de 7 MPa de $f'_c$ y representar materiales y condiciones similares.
+- **Evaluar cada cilindro contra $f'_c$** en vez de aplicar los **dos** criterios: promedio móvil de tres ≥ $f'_c$ y mínimo individual (3.5 MPa o 0.10 $f'_c$).
+- **Confundir cilindro con ensayo**: un ensayo es el promedio de al menos dos cilindros 150×300 (o tres 100×200) de la misma muestra.
+- **Olvidar que $f'_c$ ≥ 17 MPa** y que C.5.4 (+8.3 MPa) no se permite para $f'_c$ > 35 MPa.
+- **Sacar los núcleos demasiado pronto o tarde**: entre 48 horas y 7 días, y en recipiente hermético.
+- **Añadir agua en obra** para recuperar asentamiento (C.5.10.4) o **curar menos de 7 días**.
+</Callout>
+
+## Resumen en una línea
+
+**El concreto se dosifica para un promedio $f'_{cr}$ mayor que $f'_c$ (el mayor de $f'_c$+1.34 $s_s$ y $f'_c$+2.33 $s_s$−3.5, o 0.90 $f'_c$+2.33 $s_s$ si $f'_c$ > 35; con tabla +7.0 / +8.3 / 1.10 $f'_c$+5.0 si no hay datos), se acepta si cada promedio de tres ensayos llega a $f'_c$ y ninguno baja de $f'_c$−3.5 MPa (o 0.9 $f'_c$), y se cura al menos 7 días a más de 10 °C.**

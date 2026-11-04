@@ -24,6 +24,21 @@ import EmpujeTierra from '../calc/EmpujeTierra';
 import VientoSimplificado from '../calc/VientoSimplificado';
 import VientoExposicion from '../calc/VientoExposicion';
 import VientoPresion from '../calc/VientoPresion';
+import RecubrimientoDurabilidad from '../calc/RecubrimientoDurabilidad';
+import ResistenciaPromedio from '../calc/ResistenciaPromedio';
+import DetallesRefuerzo from '../calc/DetallesRefuerzo';
+import PropiedadesConcreto from '../calc/PropiedadesConcreto';
+import EspesorMinimo from '../calc/EspesorMinimo';
+import FlexionViga from '../calc/FlexionViga';
+import ColumnaInteraccion from '../calc/ColumnaInteraccion';
+import CortanteViga from '../calc/CortanteViga';
+import Punzonamiento from '../calc/Punzonamiento';
+import LongitudDesarrollo from '../calc/LongitudDesarrollo';
+import LosaDosDirecciones from '../calc/LosaDosDirecciones';
+import ZapataDiseno from '../calc/ZapataDiseno';
+import PreesforzoEsfuerzos from '../calc/PreesforzoEsfuerzos';
+import ConfinamientoColumna from '../calc/ConfinamientoColumna';
+import AnclajeConcreto from '../calc/AnclajeConcreto';
 
 interface Props {
   id: string;
@@ -55,6 +70,21 @@ const meta = calculadoraPorId(id);
       {id === 'viento-simplificado' && <VientoSimplificado client:visible />}
       {id === 'viento-exposicion' && <VientoExposicion client:visible />}
       {id === 'viento-presion' && <VientoPresion client:visible />}
+      {id === 'recubrimiento-durabilidad' && <RecubrimientoDurabilidad client:visible />}
+      {id === 'resistencia-promedio' && <ResistenciaPromedio client:visible />}
+      {id === 'detalles-refuerzo' && <DetallesRefuerzo client:visible />}
+      {id === 'propiedades-concreto' && <PropiedadesConcreto client:visible />}
+      {id === 'espesor-minimo' && <EspesorMinimo client:visible />}
+      {id === 'flexion-viga' && <FlexionViga client:visible />}
+      {id === 'columna-interaccion' && <ColumnaInteraccion client:visible />}
+      {id === 'cortante-viga' && <CortanteViga client:visible />}
+      {id === 'punzonamiento' && <Punzonamiento client:visible />}
+      {id === 'longitud-desarrollo' && <LongitudDesarrollo client:visible />}
+      {id === 'losa-dos-direcciones' && <LosaDosDirecciones client:visible />}
+      {id === 'zapata-diseno' && <ZapataDiseno client:visible />}
+      {id === 'preesforzo-esfuerzos' && <PreesforzoEsfuerzos client:visible />}
+      {id === 'confinamiento-columna' && <ConfinamientoColumna client:visible />}
+      {id === 'anclaje-concreto' && <AnclajeConcreto client:visible />}
     </div>
   ) : (
     <section id={`calc-${id}`} class="not-prose my-8 scroll-mt-24 rounded-2xl border border-chart-2/40 bg-card shadow-sm" aria-label={`Calculadora: ${meta?.nombre ?? id}`}>
@@ -82,6 +112,21 @@ const meta = calculadoraPorId(id);
       {id === 'viento-simplificado' && <VientoSimplificado client:visible />}
       {id === 'viento-exposicion' && <VientoExposicion client:visible />}
       {id === 'viento-presion' && <VientoPresion client:visible />}
+      {id === 'recubrimiento-durabilidad' && <RecubrimientoDurabilidad client:visible />}
+      {id === 'resistencia-promedio' && <ResistenciaPromedio client:visible />}
+      {id === 'detalles-refuerzo' && <DetallesRefuerzo client:visible />}
+      {id === 'propiedades-concreto' && <PropiedadesConcreto client:visible />}
+      {id === 'espesor-minimo' && <EspesorMinimo client:visible />}
+      {id === 'flexion-viga' && <FlexionViga client:visible />}
+      {id === 'columna-interaccion' && <ColumnaInteraccion client:visible />}
+      {id === 'cortante-viga' && <CortanteViga client:visible />}
+      {id === 'punzonamiento' && <Punzonamiento client:visible />}
+      {id === 'longitud-desarrollo' && <LongitudDesarrollo client:visible />}
+      {id === 'losa-dos-direcciones' && <LosaDosDirecciones client:visible />}
+      {id === 'zapata-diseno' && <ZapataDiseno client:visible />}
+      {id === 'preesforzo-esfuerzos' && <PreesforzoEsfuerzos client:visible />}
+      {id === 'confinamiento-columna' && <ConfinamientoColumna client:visible />}
+      {id === 'anclaje-concreto' && <AnclajeConcreto client:visible />}
       </div>
       {meta && <p class="border-t px-5 py-2 text-xs text-muted-foreground">{meta.descripcion}</p>}
     </section>

@@ -1,0 +1,539 @@
+---
+codigo: 'C.11b'
+tipo: capitulo
+titulo: 'Cortante y torsión (II): fricción, ménsulas, muros y losas'
+resumen: 'Cortante por fricción, vigas altas, ménsulas, muros, transmisión de momentos a columnas y cortante en dos direcciones (punzonamiento) de losas y zapatas, con las ecuaciones C.11-25 a C.11-39.'
+objetivos:
+  - 'Diseñar cortante por fricción con C.11-25 y C.11-26 y verificar sus límites de Vn'
+  - 'Reconocer los límites de vigas altas y el diseño de ménsulas (Avf, An, Af, Ah)'
+  - 'Calcular Vc y el refuerzo horizontal y vertical de un muro con C.11-27 a C.11-30'
+  - 'Verificar el punzonamiento de losas y zapatas con las tres expresiones de Vc y, si hace falta, con refuerzo de cortante'
+paginasNorma: 'C.11.6 a C.11.11: C-96 a C-105 (continuación de C.11)'
+paginaPdf: 398
+orden: 11
+calculadoras: ['punzonamiento']
+nivel: 'avanzado'
+---
+
+import {
+  avfRequerido, vnMaxFriccion, vnFriccionInclinado, muFriccion, vcMuro, vcMuroSimple, rhoVerticalMuro, sMaxHorizontalMuro, sMaxVerticalMuro, disenoMensula, dMuro,
+} from '../../lib/nsr10/cortante';
+import { cortanteZapata, verificarPunzonamiento, perimetroExteriorMinimo } from '../../lib/nsr10/punzonamiento';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej3 = (() => {
+  const fc = 21, c = 400, d = 350, B = 2.2, Pu = 1200;
+  const z = cortanteZapata({ Pu, B, L: B, c1: c, c2: c, d });
+  const r = verificarPunzonamiento({ fc, d, c1: c, c2: c, ubicacion: 'interior', Vu: z.Vu });
+  return { fc, c, d, B, Pu, z, r };
+})();
+
+export const ej4 = (() => {
+  const fc = 28, d = 180, c = 350, Vu = 520;
+  const sin = verificarPunzonamiento({ fc, d, c1: c, c2: c, ubicacion: 'interior', Vu });
+  const con = verificarPunzonamiento({ fc, d, c1: c, c2: c, ubicacion: 'interior', Vu, refuerzo: 'estribos', Av: 8 * 71, fyt: 420, s: 90, dbCortante: 9.5 });
+  const boExt = perimetroExteriorMinimo({ Vu, d, fc });
+  return { fc, d, c, Vu, sin, con, boExt, xExt: (boExt - 2 * (c + c)) / 8 };
+})();
+
+export const ej5 = (() => {
+  const fc = 21, fy = 420, Vu = 250, Ac = 300 * 400, mu = muFriccion('rugosa');
+  const Avf = avfRequerido({ Vu, fy, mu });
+  const AvfInc = (Vu / 0.75 * 1000) / (fy * (mu * Math.sin(Math.PI / 6) + Math.cos(Math.PI / 6)));
+  return { fc, fy, Vu, Ac, mu, Avf, AvfInc, VnReq: Vu / 0.75, VnMax: vnMaxFriccion({ fc, Ac }), VnInc: vnFriccionInclinado({ Avf: AvfInc, fy, mu, alphaGrados: 30 }) };
+})();
+
+export const ej6 = (() => {
+  const fc = 28, h = 250, lw = 4000, hw = 12000, Nu = 800, Mu = 12000, Vu = 1500, fy = 420;
+  const d = dMuro(lw);
+  const m = vcMuro({ fc, h, lw, Nu, Mu, Vu });
+  const Vs = Math.max(0, Vu / 0.75 - m.Vc);
+  const avPorS = (Vs * 1000) / (fy * d); // mm²/mm
+  const rhoT = avPorS / h;
+  const Av = 2 * 129; // dos capas de No. 4
+  const s = Math.floor(Av / avPorS / 10) * 10;
+  return {
+    fc, h, lw, hw, Nu, Mu, Vu, d, m, Vs, avPorS, rhoT, Av, s, VnMax: 0.83 * Math.sqrt(fc) * h * d / 1000,
+    rhoV: rhoVerticalMuro({ hw, lw, rhoT: Math.max(rhoT, 0.0025) }), sH: sMaxHorizontalMuro(lw, h), sV: sMaxVerticalMuro(lw, h), simple: vcMuroSimple({ fc, h, lw }),
+  };
+})();
+
+export const ej7 = (() => {
+  const m = disenoMensula({ Vu: 200, av: 150, bw: 300, h: 450, d: 400, fc: 28, fy: 420, mu: 1.4, Af: 700 });
+  return m;
+})();
+
+## Idea central del capítulo (continuación)
+
+Esta página continúa el [Capítulo C.11](/titulo-c/c11), que ya cubrió la condición $\phi V_n \ge V_u$, el aporte del concreto $V_c$, el refuerzo de cortante $V_s$ en vigas y la torsión. Aquí están los **casos especiales**: el **cortante por fricción** (juntas frías, apoyos prefabricados), las **vigas altas** y **ménsulas** (donde el cortante se transmite por puntales), los **muros** (cortante en su plano) y el **cortante en dos direcciones o punzonamiento** de losas y zapatas, que es el control típico alrededor de las columnas.
+
+<Callout tipo="importante" titulo="Lo que cambia respecto a una viga">
+En cada caso especial, $\phi V_n \ge V_u$ sigue siendo el criterio, pero cambian la **sección crítica** (a $d/2$ de la columna en punzonamiento, en la cara del apoyo en ménsulas, a $0.8\,\ell_w$ en muros) y las **expresiones de $V_c$**. Todas respetan $\sqrt{f'_c} \le 8.3$ MPa (C.11.1.2).
+</Callout>
+
+## C.11.6 — Cortante por fricción
+
+La sección C.11.6 se aplica donde interesa transmitir cortante **a través de un plano** dado: una fisura existente o potencial, una superficie de contacto entre materiales distintos (concreto-acero) o entre dos concretos colocados en momentos distintos, como una junta fría o un apoyo prefabricado (<NormaRef s="C.11.6.1" pag="C-96" />). Se supone que ya hay una fisura a lo largo del plano, y el refuerzo que la cruza la "cose": al intentar abrirse, la fisura lo tensiona y se genera la fuerza de compresión que moviliza la fricción. El diseño parte de C.11-1, con $V_n$ de C.11.6.4 (C.11.6.2 y C.11.6.3).
+
+### C.11.6.4 — Método de diseño
+
+<Ecuacion num="C.11-25" titulo="Refuerzo perpendicular al plano de cortante">
+
+$$
+V_n = A_{vf}\,f_y\,\mu
+$$
+
+- $A_{vf}$: área del refuerzo de cortante por fricción a través del plano; $f_y$ no mayor de 420 MPa (C.11.6.6).
+
+</Ecuacion>
+
+<Ecuacion num="C.11-26" titulo="Refuerzo inclinado respecto al plano (el cortante lo tensiona)">
+
+$$
+V_n = A_{vf}\,f_y\,\left(\mu\sin\alpha+\cos\alpha\right)
+$$
+
+- $\alpha$: ángulo entre el refuerzo y el plano de cortante.
+
+</Ecuacion>
+
+El coeficiente de fricción $\mu$ depende de la superficie (<NormaRef s="C.11.6.4.3" pag="C-97" />):
+
+<TablaNorma numero="C.11.6.4.3" titulo="Coeficiente de fricción μ" pag="C-97" nota="λ = 1.0 para concreto normal y 0.75 para concreto liviano en todos sus componentes; para otros casos λ se determina por dosificación volumétrica (C.8.6.1) y no excede 0.85.">
+
+| Superficie de cortante | $\mu$ |
+|---|:---:|
+| Concreto colocado monolíticamente | 1.4 λ |
+| Concreto sobre concreto endurecido con superficie intencionalmente rugosa (amplitud completa de ≈ 6 mm, C.11.6.9) | 1.0 λ |
+| Concreto sobre concreto endurecido no intencionalmente rugoso | 0.6 λ |
+| Concreto anclado a acero estructural con pernos con cabeza o barras de refuerzo (C.11.6.10) | 0.7 λ |
+
+</TablaNorma>
+
+### C.11.6.5 a C.11.6.10 — Límites y detalles
+
+- **Límite de $V_n$** (C.11.6.5): para concreto de peso normal colocado monolíticamente o contra concreto endurecido con superficie rugosa, $V_n$ no excede el **menor** de $0.2\,f'_c A_c$, $(3.3+0.08\,f'_c)A_c$ y $11\,A_c$ ($A_c$ en mm², 3.3 y 11 en MPa). En los demás casos, el menor de $0.2\,f'_c A_c$ y $5.5\,A_c$. Si se vacía concreto de menor resistencia contra otro de mayor resistencia, $f'_c$ es el del **más débil**.
+- **Tracción neta y compresión permanente** (C.11.6.7): la tracción neta a través del plano se resiste con refuerzo adicional; la compresión neta **permanente** puede sumarse a la fuerza $A_{vf} f_y$ al calcular el $A_{vf}$ requerido.
+- **Anclaje** (C.11.6.8): el refuerzo se coloca a lo largo del plano y se ancla para desarrollar $f_y$ a ambos lados (longitud embebida, ganchos o soldadura a dispositivos especiales).
+- **Interfaz** (C.11.6.9 y C.11.6.10): limpia y libre de lechada; si $\mu$ = 1.0λ, rugosa con amplitud completa de unos 6 mm. El acero laminado debe estar limpio y sin pintura donde se ancla con pasadores o barras soldadas.
+
+<Ejemplo numero={3} titulo="Junta fría entre viga y columna prefabricada: Avf por fricción">
+
+Se debe transmitir $V_u$ = {ej5.Vu} kN a través de un plano de 300 × 400 mm ($A_c$ = {ej5.Ac.toLocaleString('en-US')} mm²) de concreto de $f'_c$ = {ej5.fc} MPa colocado sobre concreto endurecido con superficie intencionalmente rugosa. $f_y$ = {ej5.fy} MPa, $\lambda$ = 1.0.
+
+<Paso titulo="Coeficiente de fricción y Vn requerido" ref="C.11.6.4.3">
+
+$\mu$ = 1.0 λ = **{ej5.mu.toFixed(1)}** y $V_n \ge V_u/\phi$ = {ej5.Vu}/0.75 = **{f(ej5.VnReq, 1)} kN**.
+
+</Paso>
+<Paso titulo="Límite superior de Vn" ref="C.11.6.5">
+
+Menor de $0.2\,f'_c A_c$ = 504 kN, $(3.3+0.08\,f'_c)A_c$ = 598 kN y $11\,A_c$ = 1320 kN: $V_{n,max}$ = **{f(ej5.VnMax, 0)} kN** ≥ {f(ej5.VnReq, 1)} kN: **cumple**.
+
+</Paso>
+<Paso titulo="Refuerzo perpendicular al plano" ref="C.11-25">
+
+$$
+A_{vf} = \frac{V_u}{\phi\,f_y\,\mu} = \frac{250\,000}{0.75\,(420)\,(1.0)}\ \text{mm}^2
+$$
+
+$A_{vf}$ = **{f(ej5.Avf, 0)} mm²** (por ejemplo, 4 barras No. 5 = 796 mm²).
+
+</Paso>
+<Paso titulo="Variante con barras inclinadas 30° respecto al plano" ref="C.11-26">
+
+Con $\alpha$ = 30°: $\mu\sin\alpha + \cos\alpha$ = 1.366, y $A_{vf}$ = {f(ej5.AvfInc, 0)} mm² (**{f((1 - ej5.AvfInc / ej5.Avf) * 100, 0)} % menos**). Solo es válida si el cortante tensiona las barras inclinadas (C.11.6.4.2).
+
+</Paso>
+<Resultado>
+$A_{vf}$ ≥ **{f(ej5.Avf, 0)} mm²** con barras perpendiculares al plano, ancladas para desarrollar $f_y$ a ambos lados del plano.
+</Resultado>
+</Ejemplo>
+
+## C.11.7 — Vigas altas
+
+Las disposiciones de C.11.7 se aplican a elementos con luz libre $\ell_n$ no mayor que **cuatro veces la altura total**, o a las regiones de una viga cargadas con cargas concentradas dentro del **doble de la altura** desde el apoyo, que estén cargadas en una cara y apoyadas en la opuesta, de modo que se formen **puntales de compresión** entre cargas y apoyos (<NormaRef s="C.11.7.1" pag="C-98" />; ver también C.12.10.6). Se diseñan con análisis no lineal (C.10.7.1) o con el **Apéndice C-A** (C.11.7.2). Además:
+
+| Requisito | Valor | Numeral |
+|---|---|---|
+| Resistencia máxima | $V_n \le 0.83\sqrt{f'_c}\,b_w d$ | C.11.7.3 |
+| Refuerzo de cortante perpendicular al de flexión | $A_v \ge 0.0025\,b_w s$, con $s \le$ menor de $d/5$ y 300 mm | C.11.7.4 |
+| Refuerzo de cortante paralelo al de flexión | $A_{vh} \ge 0.0015\,b_w s_2$, con $s_2 \le$ menor de $d/5$ y 300 mm | C.11.7.5 |
+
+Se puede diseñar el refuerzo con C-A.3.3 en lugar del mínimo horizontal y vertical de C.11.7.4 y C.11.7.5 (C.11.7.6). <NormaRef s="C.11.7.3" pag="C-98" />
+
+## C.11.8 — Ménsulas y cartelas
+
+Las ménsulas y cartelas con relación de luz de cortante a altura $a_v/d$ **menor que 2** pueden diseñarse con el Apéndice C-A. Con C.11.8.3 y C.11.8.4 solo si $a_v/d \le 1$ **y** la tracción horizontal mayorada $N_{uc}$ no excede $V_u$; la altura útil $d$ se determina en la cara del apoyo (<NormaRef s="C.11.8.1" pag="C-98" />).
+
+- **Altura en el borde exterior** del apoyo: no menor de $0.5d$ (C.11.8.2).
+- **Solicitaciones en la cara del apoyo** (C.11.8.3): $V_u$, un momento $\left[V_u a_v + N_{uc}(h-d)\right]$ y la tracción horizontal $N_{uc}$. Con $\phi$ = **0.75** en todo C.11.8 (C.11.8.3.1).
+- **$A_{vf}$** (C.11.8.3.2) se diseña con C.11.6; $V_n$ no excede, en concreto normal, el menor de $0.2\,f'_c b_w d$, $(3.3+0.08\,f'_c)\,b_w d$ y $11\,b_w d$ (C.11.8.3.2.1); en concreto liviano, el menor de $(0.2-0.07\,a_v/d)\,f'_c b_w d$ y $(5.5-1.9\,a_v/d)\,b_w d$ (C.11.8.3.2.2).
+- **$A_f$** resiste el momento mayorado, calculado con C.10.2 y C.10.3 (C.11.8.3.3). **$A_n$** resiste $N_{uc}$: $\phi A_n f_y \ge N_{uc}$, con $N_{uc}$ no menor que $0.2V_u$ salvo medidas especiales y tratada como carga viva aun cuando provenga de retracción, flujo plástico o temperatura (C.11.8.3.4).
+- **Refuerzo principal** (C.11.8.3.5 y C.11.8.5): $A_{sc} \ge$ el mayor entre $(A_f + A_n)$ y $(2A_{vf}/3 + A_n)$, y $A_{sc}/(bd) \ge 0.04\,f'_c/f_y$.
+- **Estribos** (C.11.8.4): $A_h \ge 0.5\,(A_{sc}-A_n)$, repartidos uniformemente en los **$2d/3$** adyacentes al refuerzo principal.
+- **Anclaje** del refuerzo principal en la cara frontal (C.11.8.6): soldadura estructural a una barra transversal de al menos igual diámetro (diseñada para desarrollar $f_y$), doblado hacia atrás formando un lazo horizontal, u otro anclaje positivo. El apoyo no se proyecta más allá de la porción recta de las barras principales ni de la cara interior de la barra transversal de anclaje (C.11.8.7).
+
+<Callout tipo="nota" titulo="Ejemplo numérico rápido (ménsula)">
+Ménsula con $V_u$ = 200 kN, $a_v$ = 150 mm, $b_w$ = 300, $h$ = 450, $d$ = 400 mm, $f'_c$ = 28 MPa, $f_y$ = 420 MPa, concreto monolítico ($\mu$ = 1.4) y $A_f$ = 700 mm² (de C.10.2). $N_{uc}$ = 0.2 $V_u$ = {f(ej7.Nuc, 0)} kN; $A_{vf}$ = $V_u/(\phi f_y \mu)$ = {f(ej7.Avf, 0)} mm²; $A_n$ = {f(ej7.An, 0)} mm². $A_{sc}$ ≥ máx({f(700 + ej7.An, 0)}; {f(2 * ej7.Avf / 3 + ej7.An, 0)}; {f(ej7.AscMin, 0)}) = **{f(ej7.Asc, 0)} mm²**; $A_h$ ≥ **{f(ej7.Ah, 0)} mm²** en los 267 mm superiores. $a_v/d$ = {f(ej7.avSobreD, 2)} ≤ 1: {ej7.aplicaC1183 ? 'se puede usar C.11.8.3 y C.11.8.4.' : 'no aplica C.11.8.3.'}
+</Callout>
+
+## C.11.9 — Muros
+
+El cortante **perpendicular al plano** del muro se diseña como una losa (C.11.11); el cortante **horizontal en el plano** con C.11.9.2 a C.11.9.9. Como alternativa, para muros con altura no mayor que **el doble de su largo** se permite el Apéndice C-A y C.11.9.9.2 a C.11.9.9.5 (<NormaRef s="C.11.9.1" pag="C-99" />). El diseño se basa en C.11-1 y C.11-2 con $V_c$ de C.11.9.5 o C.11.9.6 y $V_s$ de C.11.9.9 (C.11.9.2).
+
+- **Máximo** (C.11.9.3): $V_n \le 0.83\sqrt{f'_c}\,h\,d$, con $h$ el espesor del muro.
+- **Altura efectiva** (C.11.9.4): $d = 0.8\,\ell_w$, con $\ell_w$ la longitud total del muro. Se permite un $d$ mayor, igual a la distancia de la fibra extrema en compresión a la resultante de las fuerzas de todo el refuerzo en tracción, si se determina por compatibilidad de deformaciones.
+- **$V_c$ simplificado** (C.11.9.5): no mayor que $0.17\,\lambda\sqrt{f'_c}\,h\,d$ con compresión axial, ni mayor que el valor de C.11.2.2.3 (C.11-8) con tracción axial.
+- **$V_c$ detallado** (C.11.9.6): el **menor** de las dos ecuaciones siguientes.
+
+<Ecuacion num="C.11-27" titulo="Vc de muros, primera expresión">
+
+$$
+V_c = 0.27\,\lambda\sqrt{f'_c}\;h\,d + \frac{N_u\,d}{4\,\ell_w}
+$$
+
+- $N_u$ positivo en compresión y negativo en tracción.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-28" titulo="Vc de muros, segunda expresión">
+
+$$
+V_c = \left[0.05\,\lambda\sqrt{f'_c} + \frac{\ell_w\left(0.1\,\lambda\sqrt{f'_c} + 0.2\,\dfrac{N_u}{\ell_w\,h}\right)}{\dfrac{M_u}{V_u}-\dfrac{\ell_w}{2}}\right]h\,d
+$$
+
+- Si $\left(M_u/V_u-\ell_w/2\right)$ es negativo, **no se usa** esta ecuación.
+
+</Ecuacion>
+
+Las secciones más cercanas a la base que $\ell_w/2$ o que la mitad de la altura del muro (la menor) pueden diseñarse con el mismo $V_c$ calculado a esa distancia (C.11.9.7). Donde $V_u$ es menor que $0.5\,\phi V_c$ el refuerzo se proporciona con C.11.9.9 o con el Capítulo C.14; donde es mayor, con C.11.9.9 (C.11.9.8, <NormaRef s="C.11.9.8" pag="C-100" />).
+
+### C.11.9.9 — Refuerzo de cortante en muros
+
+Donde $V_u > \phi V_c$ el refuerzo **horizontal** se diseña con C.11-1 y C.11-2:
+
+<Ecuacion num="C.11-29" titulo="Vs en muros (refuerzo horizontal)">
+
+$$
+V_s = \frac{A_v\,f_y\,d}{s}
+$$
+
+- $A_v$: área del refuerzo horizontal de cortante con espaciamiento $s$; $d$ según C.11.9.4. El PDF usa $f_y$ en esta ecuación (no $f_{yt}$).
+
+</Ecuacion>
+
+- Cuantía horizontal $\rho_t \ge 0.0025$ (C.11.9.9.2); separación horizontal no mayor que el menor de $\ell_w/5$, $3h$ y 450 mm (C.11.9.9.3).
+- Separación vertical no mayor que el menor de $\ell_w/3$, $3h$ y 450 mm (C.11.9.9.5).
+
+<Ecuacion num="C.11-30" titulo="Cuantía mínima del refuerzo vertical de cortante">
+
+$$
+\rho_\ell = 0.0025 + 0.5\left(2.5-\frac{h_w}{\ell_w}\right)\left(\rho_t-0.0025\right)
+$$
+
+- $\rho_\ell$ no menor que 0.0025 y no necesita ser mayor que el $\rho_t$ requerido por C.11.9.9.1. $h_w$: altura total del muro; $\ell_w$: longitud total.
+
+</Ecuacion>
+
+<Ejemplo numero={4} titulo="Muro de 4.0 m de largo y 12 m de altura: Vc, Vs y refuerzo">
+
+Muro con $\ell_w$ = {ej6.lw} mm, $h$ = {ej6.h} mm, $h_w$ = {ej6.hw} mm, $f'_c$ = {ej6.fc} MPa, $f_y$ = 420 MPa. En la base: $V_u$ = {ej6.Vu} kN, $M_u$ = {ej6.Mu} kN·m y $N_u$ = {ej6.Nu} kN (compresión).
+
+<Paso titulo="Altura efectiva y Vc" ref="C.11.9.4, C.11-27, C.11-28">
+
+$d = 0.8\,\ell_w$ = {ej6.d} mm. $M_u/V_u - \ell_w/2$ = 8.0 − 2.0 = 6.0 m > 0: aplican las dos ecuaciones. C.11-27: {f(ej6.m.c1127, 1)} kN; C.11-28: {f(ej6.m.c1128, 1)} kN. $V_c$ = el menor = **{f(ej6.m.Vc, 1)} kN** (el tope simplificado de C.11.9.5 sería {f(ej6.simple, 1)} kN). $\phi V_c$ = {f(0.75 * ej6.m.Vc, 1)} kN, menor que $V_u$: se necesita refuerzo horizontal por resistencia.
+
+</Paso>
+<Paso titulo="Máximo y refuerzo horizontal" ref="C.11.9.3, C.11-29">
+
+$V_{n,max}$ = 0.83$\sqrt{28}$(250)({ej6.d}) = {f(ej6.VnMax, 0)} kN; $\phi V_{n,max}$ = {f(0.75 * ej6.VnMax, 0)} kN ≥ {ej6.Vu}: **cumple**. $V_s = V_u/\phi - V_c$ = **{f(ej6.Vs, 1)} kN**, de donde $A_v/s = V_s/(f_y d)$ = {f(ej6.avPorS, 3)} mm²/mm y $\rho_t = A_v/(h\,s)$ = {f(ej6.rhoT, 5)} ≥ 0.0025. Con dos capas de barras No. 4 ($A_v$ = 258 mm²): $s$ ≤ {ej6.s} mm, y la separación máxima es el menor de {f(ej6.lw / 5, 0)}, {3 * ej6.h} y 450 mm = **{f(ej6.sH, 0)} mm**.
+
+</Paso>
+<Paso titulo="Refuerzo vertical" ref="C.11-30, C.11.9.9.5">
+
+$h_w/\ell_w$ = 3.0: el término $(2.5-3.0)$ es negativo y $\rho_\ell$ calculado cae por debajo de 0.0025, de modo que rige el mínimo: $\rho_\ell$ = **{ej6.rhoV.toFixed(4)}**. Separación vertical máxima = menor de {f(ej6.lw / 3, 0)}, {3 * ej6.h} y 450 mm = **{f(ej6.sV, 0)} mm**.
+
+</Paso>
+<Resultado>
+Refuerzo horizontal de dos capas de No. 4 cada {ej6.s} mm ($\rho_t$ ≈ {f(ej6.rhoT, 4)}) y vertical con $\rho_\ell$ ≥ 0.0025, ambos con separación máxima de 450 mm.
+</Resultado>
+</Ejemplo>
+
+## C.11.10 — Transmisión de momentos a las columnas
+
+Cuando cargas gravitacionales, de viento, sismo u otras fuerzas laterales transmiten momento entre los elementos y las columnas, el **cortante derivado de esa transmisión** debe considerarse en el diseño del refuerzo transversal de la columna (C.11.10.1, <NormaRef s="C.11.10.1" pag="C-101" />). Salvo en conexiones que no forman parte del sistema primario de resistencia sísmica y están **confinadas en los cuatro lados** por vigas o losas de altura aproximadamente igual, las conexiones deben tener dentro de la columna un refuerzo transversal **no menor que el de la ecuación C.11-13**, en una profundidad no menor que la de la conexión más alta de los elementos del pórtico a la columna (C.11.10.2; ver también C.7.9).
+
+## C.11.11 — Losas y zapatas
+
+### C.11.11.1 — Dos comportamientos posibles
+
+La resistencia a cortante de losas y zapatas cerca de columnas, cargas concentradas o reacciones está regida por la **más severa** de dos condiciones (<NormaRef s="C.11.11.1" pag="C-101" />):
+
+1. **Comportamiento como viga** (C.11.11.1.1): cada sección crítica se extiende a través del **ancho total**; se diseña con C.11.1 a C.11.4. Es el cortante en una dirección, a una distancia $d$ de la cara de la columna.
+2. **Comportamiento en dos direcciones** (C.11.11.1.2): la falla es un cono o pirámide truncada alrededor de la columna (**punzonamiento**). La sección crítica se localiza de modo que su perímetro $b_o$ sea **mínimo**, sin acercarse a menos de **$d/2$** de (a) los bordes o esquinas de las columnas, cargas concentradas o áreas de reacción, o (b) los cambios de altura de la losa (capiteles, ábacos, descolgados). Para columnas cuadradas o rectangulares se permiten secciones críticas **de cuatro lados rectos** (C.11.11.1.3).
+
+El diseño en dos direcciones sigue C.11-1 y C.11-2: $V_c$ según C.11.11.2.1, C.11.11.2.2 o C.11.11.3.1; $V_s$ según C.11.11.3; con cabezas de cortante, $V_n$ según C.11.11.4; y si se transfiere momento entre losa y columna, C.11.11.7 (C.11.11.2).
+
+### C.11.11.2 — Vc en dos direcciones
+
+Para losas **no preesforzadas** y zapatas, $V_c$ es el **menor** de (a), (b) y (c) (<NormaRef s="C.11.11.2.1" pag="C-101" />):
+
+<Ecuacion num="C.11-31" titulo="(a) Influencia de la forma de la columna">
+
+$$
+V_c = 0.17\left(1+\frac{2}{\beta}\right)\lambda\sqrt{f'_c}\;b_o\,d
+$$
+
+- $\beta$: relación del lado largo al lado corto de la columna, carga concentrada o área de reacción.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-32" titulo="(b) Influencia de la relación bo/d y de la ubicación">
+
+$$
+V_c = 0.083\left(\frac{\alpha_s\,d}{b_o}+2\right)\lambda\sqrt{f'_c}\;b_o\,d
+$$
+
+- $\alpha_s$: 40 para columnas interiores, 30 para columnas de borde y 20 para columnas de esquina.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-33" titulo="(c) Valor límite">
+
+$$
+V_c = 0.33\,\lambda\sqrt{f'_c}\;b_o\,d
+$$
+
+</Ecuacion>
+
+<TablaNorma numero="C.11-32" titulo="Valores de αs según la ubicación de la columna" pag="C-101" nota="Con bo/d grande (columnas muy grandes frente al espesor) gobierna C.11-32; con β mayor de ≈ 2.1 gobierna C.11-31; en el resto de los casos, C.11-33.">
+
+| Ubicación | Lados de la sección crítica | $\alpha_s$ |
+|---|:---:|:---:|
+| Columna interior | 4 | 40 |
+| Columna de borde | 3 | 30 |
+| Columna de esquina | 2 | 20 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Cuál expresión gobierna (comentario del autor)">
+Igualando las expresiones se obtiene que C.11-31 gobierna cuando $\beta$ supera ≈ 2.13 (columnas muy alargadas, que "punzonan" peor que las cuadradas); C.11-32 gobierna cuando $b_o/d$ supera ≈ 20 en columnas interiores (columnas o cargas muy grandes frente al espesor); y en los demás casos, que son los habituales, gobierna **C.11-33**, el más simple. Las calculadoras de esta web muestran las tres para que se vea cuál manda.
+</Callout>
+
+**Losas preesforzadas y zapatas con C.18.9.3** (C.11.11.2.2, <NormaRef s="C.11.11.2.2" pag="C-102" />):
+
+<Ecuacion num="C.11-34" titulo="Vc en dos direcciones, losas preesforzadas">
+
+$$
+V_c = \left(\beta_p\,\lambda\sqrt{f'_c}+0.3\,f_{pc}\right)b_o\,d + V_p
+$$
+
+- $\beta_p$: el menor entre 0.29 y $0.083\left(\alpha_s d/b_o+1.5\right)$; $\alpha_s$ como en C.11-32.
+- $f_{pc}$: valor promedio de $f_{pc}$ en las dos direcciones; $V_p$: componente vertical de todas las fuerzas efectivas de preesforzado que cruzan la sección crítica.
+
+</Ecuacion>
+
+Solo se permite C.11-34 si (a) ninguna parte de la columna está a menos de **4 veces el espesor** de la losa de un borde discontinuo, (b) $\sqrt{f'_c}$ en C.11-34 no se toma mayor que el límite indicado en el PDF (ver **Erratas** al final: el valor impreso no es utilizable) y (c) $f_{pc}$ en cada dirección está entre **0.9 y 3.5 MPa**. En otro caso se aplica C.11.11.2.1.
+
+<Ejemplo numero={5} titulo="Punzonamiento de una zapata cuadrada con columna interior">
+
+Zapata de {ej3.B} × {ej3.B} m con columna de {ej3.c} × {ej3.c} mm, $d$ = {ej3.d} mm, $f'_c$ = {ej3.fc} MPa y carga mayorada $P_u$ = {ej3.Pu} kN. Verificar el cortante en dos direcciones (el cortante como viga se verifica aparte, con C.11.11.1.1).
+
+<Paso titulo="Sección crítica y Vu" ref="C.11.11.1.2">
+
+$b_o = 2\,(c_1+d) + 2\,(c_2+d)$ = 2(750) + 2(750) = **{ej3.r.bo} mm**. La presión del suelo es $q_u = P_u/(BL)$ = {f(ej3.z.qu, 1)} kPa y el cortante que se "pincha" es la carga menos la reacción dentro del perímetro (área = {f(ej3.z.area, 4)} m²): $V_u = P_u - q_u A$ = **{f(ej3.z.Vu, 1)} kN**. (Esta es estática del autor, no texto de la norma.)
+
+</Paso>
+<Paso titulo="Las tres expresiones de Vc" ref="C.11-31 a C.11-33">
+
+$\beta$ = 1.0 y $\alpha_s$ = 40. (a) = {f(ej3.r.vcA, 1)} kN; (b) = {f(ej3.r.vcB, 1)} kN; (c) = 0.33$\sqrt{21}$(3000)(350) = **{f(ej3.r.vcC, 1)} kN**. Gobierna **{ej3.r.gobierna}**: $V_c$ = {f(ej3.r.Vc, 1)} kN.
+
+</Paso>
+<Paso titulo="Verificación" ref="C.11-1">
+
+$\phi V_c$ = 0.75 × {f(ej3.r.Vc, 1)} = **{f(ej3.r.phiVn, 1)} kN**. Relación $V_u/\phi V_n$ = {f(ej3.r.relacion, 2)}.
+
+</Paso>
+<Resultado>
+$\phi V_n$ = {f(ej3.r.phiVn, 1)} kN {ej3.r.cumple ? '≥' : '<'} $V_u$ = {f(ej3.z.Vu, 1)} kN: {ej3.r.cumple ? 'cumple sin refuerzo de cortante, como es lo habitual en zapatas.' : 'no cumple: hay que aumentar d.'} Con $d$ = {ej3.d} mm la zapata pasa con margen de {f((1 - ej3.r.relacion) * 100, 0)} %. Calcula tu caso:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="punzonamiento" />
+
+### C.11.11.3 — Refuerzo de cortante con barras, alambres o estribos
+
+Se permite refuerzo de cortante de barras o alambres y estribos de una o varias ramas en losas y zapatas con $d$ **no menor de 150 mm** y no menor de **16 veces el diámetro** de la barra del refuerzo de cortante (<NormaRef s="C.11.11.3" pag="C-102" />). Reglas:
+
+- $V_n$ con C.11-2 donde $V_c$ **no se toma mayor que $0.17\,\lambda\sqrt{f'_c}\,b_o d$** y $V_s$ con C.11.4 y C.11-15, tomando $A_v$ como el área de todas las ramas de una **línea periférica** geométricamente similar al perímetro de la columna (C.11.11.3.1).
+- $V_n$ **no mayor que $0.5\sqrt{f'_c}\,b_o d$** (C.11.11.3.2).
+- La primera línea de ramas a **no más de $d/2$** de la cara de la columna; entre ramas adyacentes de la primera línea no más de **$2d$** (paralelo a la cara); entre líneas sucesivas no más de **$d/2$** (perpendicular a la cara) (C.11.11.3.3).
+- Cumple C.12.13 y amarra el refuerzo de flexión longitudinal en la dirección considerada (C.11.11.3.4).
+
+### C.11.11.4 — Cabezas de cortante (perfiles de acero)
+
+Se permiten vigas I o canales de acero como cabezas de cortante cuando el cortante por carga gravitacional se transmite a columnas **interiores**; si se transfiere momento, aplica C.11.11.7.3 (<NormaRef s="C.11.11.4" pag="C-102" />). Requisitos principales:
+
+- **Geometría** (C.11.11.4.1 a C.11.11.4.4): perfiles soldados con soldadura de penetración completa formando brazos idénticos en ángulo recto, sin interrumpirse dentro de la columna; altura no mayor de **70 veces** el espesor del alma; extremos de los brazos cortados a no menos de 30° con la horizontal si el momento plástico remanente basta; alas de compresión dentro de **0.3d** de la superficie comprimida de la losa.
+- **Rigidez** (C.11.11.4.5): $\alpha_v$ (rigidez a flexión de cada brazo / rigidez de la sección de losa agrietada de ancho $(c_2+d)$) **no menor que 0.15**.
+
+<Ecuacion num="C.11-35" titulo="Momento plástico requerido de cada brazo de la cabeza de cortante">
+
+$$
+M_p = \frac{V_u}{2\,\phi\,n}\left[h_v+\alpha_v\left(\ell_v-\frac{c_1}{2}\right)\right]
+$$
+
+- $\phi$ el de elementos controlados por tracción; $n$: número de brazos; $h_v$: altura del perfil; $\ell_v$: longitud mínima de cada brazo que cumple C.11.11.4.7 y C.11.11.4.8.
+
+</Ecuacion>
+
+La sección crítica atraviesa cada brazo a **3/4** de la distancia $\left[\ell_v-(c_1/2)\right]$ desde la cara de la columna hasta el extremo del brazo, con $b_o$ mínimo y sin acercarse más que lo definido en C.11.11.1.2(a) (C.11.11.4.7). $V_n$ no excede $0.33\sqrt{f'_c}\,b_o d$ en esa sección, ni $0.58\sqrt{f'_c}\,b_o d$ en la sección crítica de C.11.11.1.2(a) (C.11.11.4.8).
+
+<Ecuacion num="C.11-36" titulo="Momento resistente aportado por la cabeza de cortante a cada franja de columna">
+
+$$
+M_v = \frac{\phi\,\alpha_v\,V_u}{2\,n}\left(\ell_v-\frac{c_1}{2}\right)
+$$
+
+- $\ell_v$: longitud de cada brazo realmente colocado. $M_v$ no excede el menor de: 30 % del momento mayorado total de cada franja de columna, la variación del momento de la franja en la longitud $\ell_v$, y $M_p$ de C.11-35 (C.11.11.4.9).
+
+</Ecuacion>
+
+Con momentos no balanceados, la cabeza de cortante debe anclarse para transmitir $M_p$ a la columna (C.11.11.4.10).
+
+### C.11.11.5 — Pernos con cabeza (studs)
+
+Se permiten pernos con cabeza colocados perpendicularmente al plano de la losa o zapata. La altura total del ensamblaje no debe ser menor que el espesor del elemento menos la suma del recubrimiento del refuerzo superior de flexión, el recubrimiento de la base común y la mitad del diámetro de la barra de flexión (en zapatas con refuerzo inferior, el equivalente por el lado inferior) (<NormaRef s="C.11.11.5" pag="C-103" />). Reglas de C.11.11.5.1 a C.11.11.5.4:
+
+- $V_n$ con C.11-2; $V_c$ **no mayor que $0.25\,\lambda\sqrt{f'_c}\,b_o d$** y $V_n$ **no mayor que $0.66\sqrt{f'_c}\,b_o d$**. $V_s$ con C.11-15, $A_v$ = área de todos los pernos en una línea periférica y $s$ = espaciamiento de las líneas. Además, **$A_v f_y/(b_o s) \ge 0.17\sqrt{f'_c}$**.
+- Primera línea a no más de $d/2$ de la cara de la columna; separación constante entre líneas: no más de **$0.75d$** si el esfuerzo máximo de las cargas mayoradas es menor o igual que $0.5\,\phi\sqrt{f'_c}$, y no más de **$0.5d$** si es mayor (en losas preesforzadas o zapatas con C.11.11.2.2, hasta $0.75d$). Entre pernos adyacentes de la primera línea, no más de **$2d$**.
+- El esfuerzo cortante por cortante y momento mayorados en la sección crítica a **$d/2$ fuera de la línea más externa** no excede $0.17\,\phi\,\lambda\sqrt{f'_c}$ (C.11.11.5.4).
+
+### C.11.11.6 — Aberturas en losas
+
+Cuando hay aberturas a menos de **10 veces el espesor** de la losa de la zona de carga concentrada o reacción, o aberturas de losas planas dentro de las **franjas de columna** (C.13), las secciones críticas se modifican (<NormaRef s="C.11.11.6" pag="C-104" />): en losas **sin** cabezas de cortante no es efectiva la parte del perímetro comprendida entre rectas que parten del centroide de la columna y son tangentes a la abertura (C.11.11.6.1); en losas **con** cabezas de cortante la parte no efectiva es **la mitad** de esa (C.11.11.6.2).
+
+### C.11.11.7 — Transferencia de momento entre losa y columna
+
+Cuando hay momento no balanceado $M_u$ entre losa y columna por gravedad, viento, sismo u otras fuerzas laterales, la fracción $\gamma_f M_u$ se transmite por **flexión** (C.13.5.3) y el resto $\gamma_v M_u$ por **excentricidad de cortante** alrededor del centroide de la sección crítica de C.11.11.1.2 (C.11.11.7.1, <NormaRef s="C.11.11.7" pag="C-104" />):
+
+<Ecuacion num="C.11-37" titulo="Fracción del momento transferida por excentricidad de cortante">
+
+$$
+\gamma_v = 1-\gamma_f
+$$
+
+- $\gamma_f$ se obtiene de C.13.5.3.
+
+</Ecuacion>
+
+El esfuerzo cortante por transferencia de momento se supone variando **linealmente** alrededor del centroide de la sección crítica; el esfuerzo máximo debido a $V_u$ y $M_u$ no debe exceder $\phi v_n$ (C.11.11.7.2, <NormaRef s="C.11.11.7.2" pag="C-104" />):
+
+<Ecuacion num="C.11-38" titulo="φvn, elementos sin refuerzo de cortante">
+
+$$
+\phi v_n = \frac{\phi\,V_c}{b_o\,d}
+$$
+
+- $V_c$ según C.11.11.2.1 o C.11.11.2.2.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-39" titulo="φvn, elementos con refuerzo de cortante distinto de cabezas de cortante">
+
+$$
+\phi v_n = \frac{\phi\,\left(V_c+V_s\right)}{b_o\,d}
+$$
+
+- $V_c$ y $V_s$ según C.11.11.3.1. El diseño debe tomar en cuenta la variación del esfuerzo alrededor de la columna, y el esfuerzo debido a $V_u$ y $M_u$ no excede $0.17\,\phi\,\lambda\sqrt{f'_c}$ en la sección crítica a $d/2$ fuera de la línea exterior de las ramas de los estribos.
+
+</Ecuacion>
+
+Con cabezas de cortante (C.11.11.7.3), la suma de los esfuerzos por carga vertical sobre la sección crítica de C.11.11.4.7 y los esfuerzos por el momento transferido por excentricidad de cortante alrededor del centroide de la sección crítica de C.11.11.1.2(a) y C.11.11.1.3 **no excede $\phi\,0.33\,\lambda\sqrt{f'_c}$**.
+
+<Callout tipo="atencion" titulo="Qué no trae el texto de C.11.11.7">
+El texto de la norma no desarrolla la fórmula del esfuerzo cortante máximo ($V_u/(b_o d)$ más el término de $\gamma_v M_u$ con el módulo polar $J_c$ de la sección crítica): solo dice que varía linealmente. Esa expresión, con $J_c$ para cada geometría de columna, no está en este capítulo del PDF y por eso **no se incluye como dato**. La calculadora de punzonamiento verifica únicamente la parte de $V_u$ sin momento y lo advierte.
+</Callout>
+
+<Ejemplo numero={6} titulo="Losa plana de 180 mm de altura efectiva: ¿hace falta refuerzo de cortante?">
+
+Losa plana con columna interior de {ej4.c} × {ej4.c} mm, $d$ = {ej4.d} mm, $f'_c$ = {ej4.fc} MPa y $V_u$ = {ej4.Vu} kN en la sección crítica (sin momento no balanceado).
+
+<Paso titulo="Resistencia sin refuerzo" ref="C.11-31 a C.11-33">
+
+$b_o = 2\,(350+180)\times 2$ = **{ej4.sin.bo} mm**. Gobierna {ej4.sin.gobierna}: $V_c$ = {f(ej4.sin.Vc, 1)} kN y $\phi V_c$ = **{f(ej4.sin.phiVn, 1)} kN**, menor que $V_u$ = {ej4.Vu} kN: {ej4.sin.cumple ? 'cumple' : 'no cumple'}. Opciones: aumentar $d$ o la columna, o usar refuerzo de cortante ($d$ = 180 mm ≥ 150 mm lo permite).
+
+</Paso>
+<Paso titulo="Estribos de cortante" ref="C.11.11.3, C.11-15">
+
+$V_c$ se limita a 0.17$\sqrt{28}\,b_o d$ = **{f(ej4.con.VcUsado, 1)} kN**. Con 8 ramas No. 3 por línea ($A_v$ = 568 mm²) cada $s$ = 90 mm = $d/2$ (el máximo permitido entre líneas): $V_s = A_v f_{yt}\,d/s$ = **{f(ej4.con.Vs, 1)} kN**. Máximo $V_n \le 0.5\sqrt{f'_c}\,b_o d$ = {f(ej4.con.VnMax, 1)} kN: cumple.
+
+</Paso>
+<Paso titulo="Verificación y extensión del refuerzo" ref="C.11-1, C.11.11.5.4">
+
+$\phi V_n = 0.75\,(V_c+V_s)$ = **{f(ej4.con.phiVn, 1)} kN ≥ {ej4.Vu} kN**: {ej4.con.cumple ? 'cumple' : 'no cumple'}. El refuerzo debe extenderse hasta donde el esfuerzo a $d/2$ fuera de la última línea baje a $0.17\,\phi\,\lambda\sqrt{f'_c}$: perímetro mínimo $b_{o,ext}$ = $V_u/(\phi\,0.17\sqrt{f'_c}\,d)$ = {f(ej4.boExt, 0)} mm, es decir, la última línea a ≈ {f(ej4.xExt - ej4.d / 2, 0)} mm de la cara de la columna: **3 líneas** a 90, 180 y 270 mm.
+
+</Paso>
+<Resultado>
+Sin refuerzo $\phi V_c$ = {f(ej4.sin.phiVn, 1)} kN no alcanza; con estribos de 8 ramas No. 3 en tres líneas periféricas a 90 mm (primera línea a ≤ $d/2$ = 90 mm de la cara), $\phi V_n$ = {f(ej4.con.phiVn, 1)} kN. La opción de **pernos con cabeza** daría $V_c$ hasta 0.25$\sqrt{f'_c}\,b_o d$ y permite separaciones de 0.75$d$ con esfuerzos bajos.
+</Resultado>
+</Ejemplo>
+
+## Resumen de coeficientes de C.11
+
+Tabla de consulta rápida **elaborada por el autor** con los valores del capítulo (todos en MPa, N y mm):
+
+<TablaNorma numero="Resumen C.11" titulo="Coeficientes de las ecuaciones principales" pag="C-87 a C-105" nota="Elaborado por el autor a partir de las ecuaciones transcritas arriba; todos los coeficientes multiplican a √f′c (con √f′c ≤ 8.3 MPa) salvo que se indique otra cosa.">
+
+| Concepto | Expresión | Numeral |
+|---|---|---|
+| $V_c$ viga, simplificado | $0.17\,\lambda\sqrt{f'_c}\,b_w d$ | C.11-3 |
+| $V_c$ viga, detallado | $\left(0.16\,\lambda\sqrt{f'_c}+17\rho_w V_u d/M_u\right)b_w d \le 0.29\,\lambda\sqrt{f'_c}\,b_w d$ | C.11-5 |
+| $V_c$ preesforzado | entre $0.17$ y $0.42\,\lambda\sqrt{f'_c}\,b_w d$ | C.11-9 |
+| $V_s$ máximo | $0.66\sqrt{f'_c}\,b_w d$ | C.11.4.7.9 |
+| Umbral de reducción de $s$ | $V_s > 0.33\sqrt{f'_c}\,b_w d$ ⇒ $s_{max}/2$ | C.11.4.5.3 |
+| $s_{max}$ estribos | $d/2$ (no preesf.) o $0.75h$; ≤ 600 mm | C.11.4.5.1 |
+| $A_{v,min}$ | $0.062\sqrt{f'_c}\,b_w s/f_{yt} \ge 0.35\,b_w s/f_{yt}$ | C.11-13 |
+| Umbral de torsión | $\phi\,0.083\,\lambda\sqrt{f'_c}\,A_{cp}^2/p_{cp}$ | C.11.5.1(a) |
+| $s_{max}$ estribos de torsión | menor de $p_h/8$ y 300 mm | C.11.5.6.1 |
+| $\mu$ de fricción | 1.4λ · 1.0λ · 0.6λ · 0.7λ | C.11.6.4.3 |
+| Vigas altas, $V_n$ máx. | $0.83\sqrt{f'_c}\,b_w d$ | C.11.7.3 |
+| Muros, $V_n$ máx. | $0.83\sqrt{f'_c}\,h\,d$, $d = 0.8\ell_w$ | C.11.9.3, C.11.9.4 |
+| Punzonamiento, $V_c$ | menor de $0.17(1+2/\beta)$, $0.083(\alpha_s d/b_o+2)$ y $0.33$ (× $\lambda\sqrt{f'_c}\,b_o d$) | C.11-31 a C.11-33 |
+| Punzonamiento con estribos | $V_c \le 0.17$, $V_n \le 0.5\sqrt{f'_c}\,b_o d$ | C.11.11.3 |
+| Punzonamiento con pernos | $V_c \le 0.25\,\lambda\sqrt{f'_c}\,b_o d$, $V_n \le 0.66\sqrt{f'_c}\,b_o d$ | C.11.11.5.1 |
+
+</TablaNorma>
+
+## Erratas y anomalías de esta parte del PDF
+
+<Callout tipo="atencion" titulo="Lo que encontramos al verificar C.11.6 a C.11.11 contra las imágenes">
+Se contrastaron las ecuaciones C.11-25 a C.11-39 con la imagen de cada página (C-96 a C-105). Las ecuaciones están correctas; las anomalías son de redacción o de referencias cruzadas:
+
+- **C.11.9.6** dice que $V_c$ es el menor de las ecuaciones "(C.11-29) y (C.11-30)", pero las de $V_c$ son **C.11-27 y C.11-28** (C.11-29 es $V_s$ y C.11-30 es $\rho_\ell$). Aquí se aplica la lectura evidente.
+- **C.11.11.2.2(b)** limita "$\sqrt{f'_c}$" a "0.5 MPa", valor que no es coherente con un límite sobre $\sqrt{f'_c}$ (equivaldría a $f'_c \le 0.25$ MPa). **No se usa como dato**: antes de aplicar C.11-34 debe consultarse la fe de erratas oficial o la fuente original (ACI 318).
+- Referencias sin el prefijo del Título: C.11.6.5 "11.6.9" y C.11.11.3.1 "ecuación (11-2)"; leer como C.11.6.9 y C.11-2.
+- **C.11.11.4.9(b)**: "la variación en la longitud $\ell_v$ del momento de la franja de columna" está redactada de forma ambigua; el texto se transcribe tal cual.
+- **C.11.11.7.2** no incluye la expresión del esfuerzo cortante máximo ni las propiedades $J_c$; ver el recuadro de C.11.11.7.
+- El PDF no incluye figuras ni tablas numeradas en C.11; las tablas de μ y αs son transcripciones de listas del texto y la de resumen es del autor.
+- Las erratas de C.11.1 a C.11.5 están en [C.11](/titulo-c/c11).
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal en fricción, muros, ménsulas y losas">
+- En cortante por fricción, usar $\mu$ de concreto monolítico (1.4λ) en una junta fría, o no limpiar y rugosificar la superficie cuando se supone 1.0λ; y olvidar el **límite de $V_n$** (C.11.6.5).
+- Suponer que la compresión transitoria ayuda: solo la compresión neta **permanente** se suma a $A_{vf} f_y$ (C.11.6.7).
+- En ménsulas, aplicar C.11.8.3 con $a_v/d > 1$, o ignorar la tracción $N_{uc} \ge 0.2V_u$.
+- Usar el $V_c$ de una viga en un **muro** con $d$ distinto de $0.8\,\ell_w$, o aplicar C.11-28 cuando $M_u/V_u - \ell_w/2$ es negativo.
+- En punzonamiento, medir $b_o$ en la cara de la columna (es a **$d/2$**), tomar solo una de las tres expresiones de $V_c$ (hay que usar la **menor**), usar αs = 40 en columnas de borde o esquina, o ignorar el **momento no balanceado** (C.11.11.7).
+- Verificar solo el cortante en dos direcciones de una zapata y olvidar el **cortante como viga** (C.11.11.1.1), o viceversa.
+- Colocar refuerzo de cortante en losas con $d$ menor de 150 mm (no permitido) o con la primera línea a más de $d/2$ de la columna.
+- Olvidar las **aberturas** a menos de 10 veces el espesor de la losa de la columna o carga (C.11.11.6).
+</Callout>
+
+## Resumen en una línea
+
+**En losas y zapatas el punzonamiento se verifica a $d/2$ de la columna con el menor $V_c$ de C.11-31 a C.11-33 ($\phi V_n \ge V_u$, más refuerzo de cortante si hace falta); en juntas, $V_n = A_{vf} f_y \mu$ con límites de $V_n$; en muros, $d = 0.8\,\ell_w$ y $V_n \le 0.83\sqrt{f'_c}\,h\,d$; en vigas altas y ménsulas, el cortante se transmite por puntales y rigen sus propios mínimos.**

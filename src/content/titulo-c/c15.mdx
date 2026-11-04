@@ -1,0 +1,422 @@
+---
+codigo: 'C.15'
+tipo: capitulo
+titulo: 'Cimentaciones'
+resumen: 'Diseño de zapatas aisladas, combinadas y losas de cimentación: área con cargas de servicio, momentos y cortante con cargas mayoradas, reparto del refuerzo (Ec. 15-1), altura mínima, transmisión de fuerzas en la base de la columna (aplastamiento y dowels), pilotes (Ecs. C.15-2 a C.15-6, Tabla C.15.11-1), muros de contención y vigas de amarre.'
+objetivos:
+  - 'Dimensionar el área de una zapata con cargas no mayoradas y diseñarla con cargas mayoradas'
+  - 'Localizar las secciones críticas de momento y de cortante en una y dos direcciones (con apoyo en C.11.11)'
+  - 'Verificar el aplastamiento en la base de la columna y dimensionar los dowels de la interfaz'
+  - 'Aplicar los límites de esfuerzo axial y la armadura mínima de pilotes y cajones'
+  - 'Dimensionar vigas de amarre según el nivel de disipación de energía'
+paginasNorma: 'C-141 a C-146'
+paginaPdf: 443
+orden: 15
+calculadoras: ['zapata-diseno']
+nivel: 'intermedio'
+---
+
+import {
+  disenarZapataCuadrada,
+  cortanteUnaDireccion,
+  phiVcUnaDireccion,
+  cortanteDosDireccionesZapata,
+  dMinimoUnaDireccion,
+  interfazColumnaZapata,
+  resistenciaAplastamiento,
+  verificarEsfuerzosPilote,
+  astTraccionPilote,
+  armaduraMinimaPilote,
+  repartoRefuerzoCorto,
+  gammaS,
+  dimensionMinimaVigaAmarre,
+  separacionMaximaEstribosAmarre,
+  momentoZapataCara,
+  ladoCuadradoEquivalente,
+  fraccionReaccionPilote,
+} from '../../lib/nsr10/cimentaciones';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const D = 1000, L = 500, c = 400, qa = 200, fc = 21, fy = 420;
+  const P = D + L;
+  const Pu = 1.2 * D + 1.6 * L;
+  const r = disenarZapataCuadrada({ Pservicio: P, Pu, qaNeta: qa, c, fc, fy });
+  return { D, L, c, qa, fc, fy, P, Pu, r };
+})();
+
+export const ej2 = (() => {
+  const { r, Pu, c, fc } = ej1;
+  const d = r.d;
+  const vu1 = cortanteUnaDireccion({ qu: r.qu, ancho: r.B, voladizo: r.voladizo, d });
+  const phiVc1 = phiVcUnaDireccion({ fc, ancho: r.B, d });
+  const dos = cortanteDosDireccionesZapata({ Pu, B: r.B, L: r.B, c1: c, c2: c, d, fc });
+  const dosMenor = cortanteDosDireccionesZapata({ Pu, B: r.B, L: r.B, c1: c, c2: c, d: r.dDosDirecciones - 40, fc });
+  const d1 = dMinimoUnaDireccion({ qu: r.qu, voladizo: r.voladizo, fc });
+  return { d, vu1, phiVc1, dos, dosMenor, d1, dMenor: r.dDosDirecciones - 40, areaCrit: ((c + d) / 1000) ** 2 };
+})();
+
+export const ej3 = (() => {
+  const { r, c } = ej1;
+  const base = { c1: c, c2: c, h: r.h, B: r.B * 1000, L: r.B * 1000, fcColumna: 21, fcZapata: 21, fy: 420 };
+  const a = interfazColumnaZapata({ ...base, Pu: ej1.Pu });
+  const b = interfazColumnaZapata({ ...base, Pu: 2600 });
+  const colMayor = interfazColumnaZapata({ ...base, Pu: 2600, fcColumna: 35 });
+  return { a, b, colMayor, col: resistenciaAplastamiento(21, c * c) };
+})();
+
+export const ej4 = (() => {
+  const Ag = (Math.PI * 400 * 400) / 4;
+  const sin = verificarEsfuerzosPilote({ D: 300, L: 150 }, 21, Ag);
+  const con = verificarEsfuerzosPilote({ D: 300, L: 150, E: 200 }, 21, Ag);
+  const ast = astTraccionPilote(300, 500, 420);
+  const dmi = armaduraMinimaPilote('DMI', 9, Ag);
+  const des = armaduraMinimaPilote('DMO-DES', 9, Ag);
+  return { Ag, sin, con, ast, dmi, des };
+})();
+
+export const ej5 = (() => {
+  const beta = 3.0 / 2.0;
+  const rep = repartoRefuerzoCorto(3000, beta);
+  const luz = 6000;
+  return { beta, rep, g: gammaS(beta), luz, des: dimensionMinimaVigaAmarre(luz, 'DES'), dmo: dimensionMinimaVigaAmarre(luz, 'DMO'), dmi: dimensionMinimaVigaAmarre(luz, 'DMI'), s: separacionMaximaEstribosAmarre(400) };
+})();
+
+## Idea central del capítulo
+
+El Capítulo C.15 explica **cómo se diseña la parte de concreto de la cimentación**: la zapata que recibe la carga de la columna y la reparte al suelo. La clave es usar **dos juegos de cargas distintos**: el área de la base sale de las cargas **no mayoradas** (de servicio) contra la capacidad admisible del suelo, mientras que los momentos, el cortante y el refuerzo salen de las cargas **mayoradas** (<NormaRef s="C.15.2" pag="C-141" />). Después se verifica que la fuerza de la columna pase a la zapata por aplastamiento y por refuerzo (dowels).
+
+- **Momento:** en la cara de la columna, pasando un plano vertical y sumando las fuerzas de un lado (<NormaRef s="C.15.4" pag="C-141" />).
+- **Cortante:** en una dirección y en dos direcciones (punzonamiento), con las reglas de **C.11.11** pero con la sección crítica medida desde la cara de la columna (<NormaRef s="C.15.5" pag="C-142" />).
+- **Altura mínima:** 150 mm sobre el refuerzo inferior (suelo) o 300 mm (pilotes) (<NormaRef s="C.15.7" pag="C-143" />).
+- **Pilotes, muros de contención y vigas de amarre:** requisitos estructurales mínimos; la capacidad geotécnica la fija el estudio del Título H.
+
+<Callout tipo="importante" titulo="Un error clásico: usar cargas mayoradas para el área de la base">
+Con cargas mayoradas el área da un valor que **no es** la presión real sobre el suelo. La norma pide determinar el área base o el número y distribución de pilotes con las **fuerzas y momentos no mayorados** y la capacidad admisible del suelo o del pilote (<NormaRef s="C.15.2.2" pag="C-141" />).
+</Callout>
+
+## C.15.1 — Alcance
+
+Se aplica al diseño de **zapatas aisladas** y, cuando sea aplicable, a zapatas combinadas, zapatas sobre pilotes, losas de cimentación, pilotes, cajones de cimentación (caissons), muros y estructuras de contención y vigas de amarre (<NormaRef s="C.15.1.1" pag="C-141" />). Los requisitos adicionales están en C.15.10 (combinadas y losas), C.15.11 (pilotes y cajones), C.15.12 (muros y contención) y C.15.13 (vigas de amarre) (<NormaRef s="C.15.1.2" pag="C-141" />).
+
+## C.15.2 — Cargas y reacciones
+
+- **C.15.2.1:** las zapatas se diseñan para resistir las **cargas mayoradas** y las reacciones inducidas (<NormaRef s="C.15.2.1" pag="C-141" />).
+- **C.15.2.2:** el **área base** de la zapata, o el número y la distribución de pilotes, se determina con las fuerzas y momentos **no mayorados** transmitidos al suelo o a los pilotes; la resistencia admisible del suelo o la capacidad admisible de los pilotes se obtiene con principios de **mecánica de suelos** (<NormaRef s="C.15.2.2" pag="C-141" />).
+- **C.15.2.3:** para zapatas sobre pilotes, los momentos y cortantes se pueden basar en que la **reacción de cada pilote está concentrada en su centro** (<NormaRef s="C.15.2.3" pag="C-141" />).
+
+<Callout tipo="practica" titulo="Presión neta (nota del autor)">
+La norma no define cómo descontar el peso de la zapata y del relleno; en la práctica se trabaja con la **presión admisible neta**, $q_a$ menos el peso por unidad de área de zapata y relleno. Con carga centrada, el área es $A = P/q_{a,neta}$ y, para una zapata cuadrada, $B = \sqrt{A}$ redondeado hacia arriba. Con momento, la presión varía linealmente: $q = P/(BL)\,(1 \pm 6e/L)$ mientras $e \le L/6$.
+</Callout>
+
+## C.15.3 — Zapatas que soportan columnas o pedestales circulares o poligonales
+
+Para localizar las secciones críticas de momento, cortante y longitud de desarrollo se permite tratar las columnas o pedestales de concreto **circulares o de polígono regular como cuadrados de igual área** (<NormaRef s="C.15.3" pag="C-141" />). Un diámetro $D$ equivale a un lado $D\sqrt{\pi}/2$: una columna circular de 450 mm equivale a un cuadrado de {f(ladoCuadradoEquivalente(450), 1)} mm.
+
+## C.15.4 — Momentos en zapatas
+
+- **C.15.4.1:** el momento externo en cualquier sección se determina pasando un **plano vertical** por la zapata y calculando el momento de las fuerzas que actúan sobre el **área total** de la zapata a un lado del plano (<NormaRef s="C.15.4.1" pag="C-141" />).
+- **C.15.4.2:** el momento máximo mayorado $M_u$ de una zapata aislada se calcula en las secciones críticas siguientes (<NormaRef s="C.15.4.2" pag="C-141" />):
+  - **(a)** en la **cara** de la columna, pedestal o muro de concreto;
+  - **(b)** en el **punto medio entre el eje y el borde del muro**, para muros de albañilería;
+  - **(c)** en el **punto medio entre la cara de la columna y el borde de la platina de base de acero**, para columnas con platina.
+- **C.15.4.3:** en zapatas **en una dirección y cuadradas en dos direcciones**, el refuerzo se distribuye **uniformemente** en todo el ancho de la zapata (<NormaRef s="C.15.4.3" pag="C-141" />).
+- **C.15.4.4:** en zapatas **rectangulares en dos direcciones**, el refuerzo de la dirección larga se distribuye uniformemente en el ancho total (C.15.4.4.1); en la dirección corta, una parte $\gamma_s A_s$ se distribuye uniformemente en una franja centrada con la columna y de ancho igual al **lado corto**, y el resto $(1-\gamma_s)A_s$ uniformemente fuera de ella (C.15.4.4.2) (<NormaRef s="C.15.4.4.2" pag="C-142" />):
+
+<Ecuacion num="15-1" titulo="Fracción del refuerzo de la dirección corta en la franja central">
+
+$$
+\gamma_s=\frac{2}{\beta+1}
+$$
+
+- $\beta$: relación del lado largo al lado corto de la zapata. Con $\beta$ = 1 (zapata cuadrada) $\gamma_s$ = 1: todo el refuerzo va en la franja.
+
+</Ecuacion>
+
+## C.15.5 — Cortante en zapatas
+
+- **C.15.5.1:** la resistencia al cortante de zapatas apoyadas en suelo o roca cumple **C.11.11** (<NormaRef s="C.15.5.1" pag="C-142" />). C.11.11 trata las dos acciones: **viga ancha** (cortante en una dirección con $V_c = 0.17\lambda\sqrt{f'_c}\,b\,d$, Ec. C.11-3) y **punzonamiento** (cortante en dos direcciones, $V_c$ el menor de las Ecs. C.11-31 a C.11-33, con sección crítica a $d/2$ de la cara).
+- **C.15.5.2:** la sección crítica de C.11 se mide **desde la cara** de la columna, pedestal o muro; con platina de base de acero, desde el punto definido en C.15.4.2(c) (<NormaRef s="C.15.5.2" pag="C-142" />).
+- **C.15.5.3 — cabezales de pilotes:** si la distancia entre el eje de cualquier pilote y el eje de la columna es **mayor que dos veces** la distancia entre la parte superior del cabezal y la parte superior del pilote, el cabezal cumple C.11.11 y C.15.5.4. Los demás cabezales cumplen el **Apéndice C-A** (modelo puntal-tensor) o ambos C.11.11 y C.15.5.4; con el Apéndice C-A, $f_{ce}$ de los puntales se determina con C-A.3.2.2(b) (<NormaRef s="C.15.5.3" pag="C-142" />).
+- **C.15.5.4 — zapatas sobre pilotes:** (<NormaRef s="C.15.5.4" pag="C-142" />)
+  - **(.1)** la reacción **total** de todo pilote con su centro a $d_{pile}/2$ o más hacia el **lado exterior** de la sección produce cortante en ella;
+  - **(.2)** la reacción de todo pilote con su centro a $d_{pile}/2$ o más hacia el **lado interior** no produce cortante;
+  - **(.3)** para posiciones intermedias se **interpola linealmente** entre el valor total (a $d_{pile}/2$ afuera) y cero (a $d_{pile}/2$ adentro). Con $d_{pile}$ = 0.40 m, un pilote cuyo centro está a 0.10 m fuera de la sección aporta {f(fraccionReaccionPilote(0.1, 0.4) * 100, 0)} % de su reacción, y uno exactamente sobre la sección, {f(fraccionReaccionPilote(0, 0.4) * 100, 0)} %.
+
+<Callout tipo="nota" titulo="Punto de contacto con C.11 (autor)">
+Las funciones del sitio que calculan el punzonamiento de la zapata (`vcDosDirecciones` y `cortanteZapata`, en `punzonamiento.ts`) y $V_c$ de una dirección (`vcSimplificado`, en `cortante.ts`) son las mismas del Capítulo C.11 y de la calculadora de punzonamiento; el Capítulo C.15 solo fija **dónde** se mide la sección crítica (desde la cara de la columna) y aporta la regla de pilotes. La expresión $V_u = P_u - q_u(c_1+d)(c_2+d)$ para columna interior es **estática del autor**, no texto de la norma.
+</Callout>
+
+## C.15.6 — Desarrollo del refuerzo en zapatas
+
+- **C.15.6.1:** el desarrollo del refuerzo se hace conforme al **Capítulo C.12** (<NormaRef s="C.15.6.1" pag="C-142" />).
+- **C.15.6.2:** la tracción o compresión calculada en el refuerzo en cada sección se desarrolla a cada lado de ella con longitud embebida, ganchos (solo en tracción), dispositivos mecánicos o una combinación (<NormaRef s="C.15.6.2" pag="C-142" />).
+- **C.15.6.3:** las secciones críticas para el desarrollo son las mismas planos definidos en C.15.4.2 para el momento máximo mayorado y todos los planos verticales donde hay cambios de sección o de refuerzo (véase también C.12.10.6) (<NormaRef s="C.15.6.3" pag="C-142" />).
+
+## C.15.7 — Altura mínima de las zapatas
+
+La altura de la zapata **sobre el refuerzo inferior** no debe ser menor de **150 mm** en zapatas apoyadas sobre suelo ni de **300 mm** en zapatas apoyadas sobre pilotes (<NormaRef s="C.15.7" pag="C-143" />). Es decir, $d \ge 150$ mm sobre suelo. La altura total $h$ suma además el recubrimiento: **75 mm** para concreto colocado contra el suelo y expuesto permanentemente a él (<NormaRef s="C.7.7.1" pag="C-53" />) y medio diámetro de barra.
+
+## C.15.8 — Transmisión de fuerzas en la base de columnas, muros o pedestales reforzados
+
+**C.15.8.1:** las fuerzas y momentos en la base se transmiten al pedestal o a la zapata **por aplastamiento del concreto** y mediante **refuerzo, pasadores (dowels) y conectores mecánicos** (<NormaRef s="C.15.8.1" pag="C-143" />).
+
+- **C.15.8.1.1:** el esfuerzo de aplastamiento en la superficie de contacto no excede la resistencia al aplastamiento del concreto para **cualquiera** de las superficies (C.10.14) (<NormaRef s="C.15.8.1.1" pag="C-143" />).
+- **C.15.8.1.2:** el refuerzo, los dowels o los conectores deben transmitir (a) **toda la compresión que exceda** la resistencia al aplastamiento del concreto de cualquiera de los elementos, y (b) cualquier **tracción** calculada en la interfaz (<NormaRef s="C.15.8.1.2" pag="C-143" />).
+- **C.15.8.1.3:** si se transmiten momentos, el refuerzo, dowels o conectores satisfacen C.12.17 (<NormaRef s="C.15.8.1.3" pag="C-143" />).
+- **C.15.8.1.4:** las fuerzas laterales se transmiten con **cortante por fricción** (C.11.6) u otros medios apropiados (<NormaRef s="C.15.8.1.4" pag="C-143" />).
+
+<Ecuacion num="C.10.14.1 (aplastamiento)" titulo="Resistencia de diseño al aplastamiento del concreto">
+
+$$
+\phi B_n=\phi\,(0.85\,f'_c\,A_1)\ \sqrt{A_2/A_1}\ ,\qquad \sqrt{A_2/A_1}\le 2,\qquad \phi=0.65
+$$
+
+- $A_1$: área cargada (la sección de la columna); $A_2$: área de la base inferior del mayor tronco de pirámide, cono o cuña contenido en el apoyo, con $A_1$ como base superior y **pendientes laterales de 1 vertical por 2 horizontal** (Notación C.2, <NormaRef s="C.2" pag="C-6" />). El factor $\sqrt{A_2/A_1}$ solo aplica cuando el apoyo es más ancho que el área cargada por todos los lados (<NormaRef s="C.10.14.1" pag="C-85" />); $\phi$ = 0.65 de <NormaRef s="C.9.3.2.4" pag="C-68" />.
+
+</Ecuacion>
+
+**C.15.8.2 — estructuras construidas en obra:** el refuerzo requerido se logra extendiendo las barras longitudinales dentro del pedestal o la zapata, o con dowels (<NormaRef s="C.15.8.2" pag="C-143" />).
+
+- **C.15.8.2.1:** en columnas y pedestales, el área de refuerzo a través de la interfaz **no es menor de $0.005\,A_g$**, con $A_g$ el área bruta del elemento soportado.
+- **C.15.8.2.2:** en muros, no menor que el refuerzo mínimo vertical de C.14.3.2.
+- **C.15.8.2.3:** en zapatas se permite empalmar por traslapo las barras **No. 43 y No. 57 solo en compresión** con dowels. Los dowels no son mayores que barras **No. 36** y se extienden dentro del elemento soportado una distancia no menor que el mayor de $\ell_{dc}$ de las barras No. 43 y No. 57 y la longitud de empalme por traslapo en compresión de los dowels, y dentro de la zapata no menos que $\ell_{dc}$ de los dowels.
+- **C.15.8.2.4:** una conexión que permita giro (articulada) cumple C.15.8.1 y C.15.8.3.
+
+**C.15.8.3 — construcciones prefabricadas:** se permiten pernos de anclaje o conectores mecánicos para satisfacer C.15.8.1; los pernos se diseñan con el **Apéndice C-D**. La conexión de columnas prefabricadas o pedestales cumple C.16.5.1.3(a) y la de muros prefabricados C.16.5.1.3(b) y (c); los pernos y conectores deben alcanzar su resistencia de diseño **antes** de la falla de anclaje o del concreto que los rodea (<NormaRef s="C.15.8.3" pag="C-143" />, <NormaRef s="C.15.8.3.3" pag="C-144" />).
+
+## C.15.9 — Zapatas inclinadas o escalonadas
+
+En zapatas con pendiente o escalonadas, el ángulo de la pendiente, o la altura y ubicación de los escalones, deben ser tales que se **satisfagan los requisitos de diseño en cada sección** (véase también C.12.10.6). Las que se diseñan como una unidad **se construyen para asegurar ese comportamiento** (<NormaRef s="C.15.9.1" pag="C-144" />, <NormaRef s="C.15.9.2" pag="C-144" />).
+
+## C.15.10 — Zapatas combinadas y losas de cimentación
+
+- **C.15.10.1:** las zapatas que soportan más de una columna, pedestal o muro se diseñan para resistir las cargas mayoradas y las reacciones inducidas (<NormaRef s="C.15.10.1" pag="C-144" />).
+- **C.15.10.2:** el **Método Directo de Diseño del Capítulo C.13 no se usa** para zapatas combinadas ni losas de cimentación (<NormaRef s="C.15.10.2" pag="C-144" />). La razón (del autor): el método supone cargas gravitacionales uniformes sobre paneles con apoyos puntuales, y aquí la carga es la reacción del suelo.
+- **C.15.10.3:** la distribución del esfuerzo del terreno bajo estas zapatas está de acuerdo con las propiedades del suelo y de la estructura y con principios de **mecánica de suelos** (<NormaRef s="C.15.10.3" pag="C-144" />).
+- **C.15.10.4:** el refuerzo mínimo en losas de cimentación **no preesforzadas** cumple C.7.12.2.1 en cada dirección principal, con separación máxima de **450 mm** (<NormaRef s="C.15.10.4" pag="C-144" />).
+
+## C.15.11 — Pilotes y cajones de cimentación
+
+**C.15.11.1 — Alcance.** Son los requisitos mínimos **por razones estructurales** de pilotes y cajones de concreto (hincados, vaciados en sitio con camisa de acero, prebarrenados y cajones excavados manual o mecánicamente). La armadura mínima **no cubre** impacto de hincado ni solicitaciones por empujes laterales y sismo, que define el estudio geotécnico (Título H) (<NormaRef s="C.15.11.1" pag="C-144" />).
+
+**C.15.11.2 — Anclaje.** El refuerzo longitudinal se ancla en la zapata o dado al menos la **longitud de desarrollo en tracción**, sin reducción por refuerzo en exceso (Capítulo C.12) (<NormaRef s="C.15.11.2" pag="C-144" />).
+
+### C.15.11.3 — Esfuerzos axiales máximos
+
+Los esfuerzos axiales máximos admisibles sobre el pilote (o sobre el fuste en pilotes acampanados) son (<NormaRef s="C.15.11.3" pag="C-144" />):
+
+<Ecuacion num="C.15-2" titulo="Compresión por cargas gravitacionales, sin mayorar">
+
+$$
+D+L\le 0.25\,f'_c\,A_g
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.15-3" titulo="Compresión por cargas gravitacionales, mayoradas">
+
+$$
+1.2D+1.6L\le 0.35\,f'_c\,A_g
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.15-4" titulo="Compresión por gravitacionales más sismo, con 0.7E">
+
+$$
+D+L+0.7E\le 0.33\,f'_c\,A_g
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.15-5" titulo="Compresión por gravitacionales más sismo, mayoradas">
+
+$$
+1.2D+1.0L+1.0E\le 0.35\,f'_c\,A_g
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.15-6" titulo="Tracción por sismo (levantamiento)">
+
+$$
+-1.0D+E\le 0.9\,f_y\,A_{st}
+$$
+
+- El pilote se arma **en toda su longitud** para esta tracción, salvo que el estudio geotécnico defina una longitud menor (<NormaRef s="C.15.11.3" pag="C-145" />). $A_{st}$: refuerzo longitudinal del pilote.
+
+</Ecuacion>
+
+**C.15.11.4 — Flexión.** Si el pilote puede recibir momentos por empujes laterales o sismo, los momentos de diseño se determinan según el estudio geotécnico (Título H) y el diseño a flexión cumple este Título C (<NormaRef s="C.15.11.4" pag="C-145" />).
+
+### C.15.11.5 — Cuantías y longitudes mínimas de armado
+
+A menos que C.15.11.3 o C.15.11.4 exijan más (<NormaRef s="C.15.11.5" pag="C-145" />):
+
+<TablaNorma numero="Tabla C.15.11-1" titulo="Cuantías mínimas longitudinales y transversales en pilotes y cajones de cimentación vaciados en sitio" pag="C-145" nota="DMI = capacidad mínima; DES y DMO = capacidad especial y moderada de disipación de energía. Nota de la tabla: cuando el diseño indica disipación de energía en el rango inelástico en la zona superior del pilote o cajón, deben cumplirse los requisitos del Capítulo C.21 y tomarse precauciones para que la articulación plástica se presente en la zona confinada.">
+
+| Requisito | Estructuras con capacidad mínima (DMI) | Estructuras con capacidad especial (DES) y moderada (DMO) |
+|---|---|---|
+| Resistencia mínima del concreto, f′c | 17.5 MPa | 17.5 MPa |
+| Cuantía longitudinal mínima | 0.0025 | 0.0050 |
+| Número mínimo de barras longitudinales | 4 | 4 |
+| Longitud del refuerzo longitudinal, a menos que el estudio geotécnico indique una longitud mayor | tercio superior de la longitud del pilote, pero no menos de 4 m | mitad superior de la longitud del pilote, pero no menos de 6 m |
+| Diámetro de la barra de los estribos | No. 2 (1/4") ó 6M (6 mm) para pilotes hasta de 500 mm de diámetro y No. 3 (3/8") ó 10M (10 mm) para pilotes de más de 500 mm | No. 3 (3/8") ó 10M (10 mm) para pilotes hasta de 750 mm de diámetro y No. 4 (1/2") ó 12M (12 mm) para pilotes de más de 750 mm |
+| Separación máxima de los estribos | 100 mm en los 600 mm superiores del pilote y 16 diámetros de barra longitudinal, a lo largo de la zona armada longitudinalmente | 75 mm en los 1.20 m superiores del pilote y 16 diámetros de barra longitudinal, a lo largo de la zona armada longitudinalmente |
+
+</TablaNorma>
+
+<Figura src="/img/titulo-c/tabla-c15-11-1-pilotes.png" alt="Tabla C.15.11-1 de la NSR-10: cuantías mínimas en pilotes y cajones vaciados en sitio" numero="Tabla C.15.11-1" pie="Recorte de la página del PDF para verificar la transcripción." pag="C-145" />
+
+- **C.15.11.5.1 — vaciados en sitio:** se evitan estrangulamientos por derrumbes internos al vaciar; las cuantías son las de la Tabla C.15.11-1.
+- **C.15.11.5.2 — con camisa de acero:** los mismos requisitos; una camisa **calibre N° 14 (14 gauge) o mayor**, de espiral electrosoldada, puede reemplazar el confinamiento de los estribos si se garantiza su protección contra la corrosión.
+- **C.15.11.5.3 — tubería rellena de concreto:** refuerzo longitudinal con cuantía mínima **0.01** en la parte superior por **2 veces la longitud de anclaje**, con los estribos necesarios para mantenerlo en su sitio al vaciar (<NormaRef s="C.15.11.5.3" pag="C-145" />).
+- **C.15.11.5.4 — prefabricados de concreto reforzado:** cuantía longitudinal mínima **0.01** en toda la longitud; estribos o espiral equivalente de diámetro mínimo No. 2 (6 mm), separación máxima **100 mm** en los 600 mm superiores y 16 diámetros de barra longitudinal en el resto; verificar que sea suficiente para el hincado; $f'_c$ mínimo **21 MPa** antes del hincado; en **DES**, espiral con $\rho_s \ge 0.006$ en vez de estribos (<NormaRef s="C.15.11.5.4" pag="C-145" />).
+- **C.15.11.5.5 — prefabricados preesforzados:** estribos o espiral equivalente mínimo No. 3 (10 mm) con separación máxima **100 mm** en los 600 mm superiores; conexión a la zapata por barras adicionales; $f'_c$ mínimo **28 MPa** antes del hincado (<NormaRef s="C.15.11.5.5" pag="C-146" />).
+- **C.15.11.5.6 — perfil laminado de acero:** en **DES**, la conexión con la zapata o dado resiste una tracción igual al **10 %** de la capacidad a compresión del pilote (<NormaRef s="C.15.11.5.6" pag="C-146" />).
+
+## C.15.12 — Muros y estructuras de contención
+
+Los muros y elementos de contención de concreto reforzado se diseñan con los requisitos apropiados de este Título C; los empujes, presiones activas y pasivas del suelo, los empujes sísmicos y los demás parámetros los define el **estudio geotécnico** (Título H) (<NormaRef s="C.15.12.1" pag="C-146" />). Si están conectados o dan apoyo al sistema de resistencia sísmica, las conexiones cumplen el **Título A** y los elementos de contención deben tener un comportamiento **compatible con el grado de disipación de energía** del sistema (<NormaRef s="C.15.12.2" pag="C-146" />).
+
+## C.15.13 — Vigas de amarre de la cimentación
+
+- **C.15.13.1 — Fuerzas de diseño:** se cumplen (a) A.3.6.4.2 para las fuerzas axiales sísmicas que resiste la viga, (b) las recomendaciones del estudio geotécnico y (c) las del Título H (<NormaRef s="C.15.13.1" pag="C-146" />).
+- **C.15.13.3 — Dimensiones mínimas:** se establecen en función de las solicitaciones: fuerzas axiales sísmicas, rigidez ante diferencias de carga vertical y posibilidad de asentamientos totales y diferenciales. La **mayor dimensión** de la sección es ≥ **luz/20** (DES), **luz/30** (DMO) o **luz/40** (DMI) (<NormaRef s="C.15.13.3.1" pag="C-146" />).
+- **C.15.13.2 — Refuerzo longitudinal:** las vigas de amarre sobre el terreno que enlazan dados o zapatas tienen refuerzo longitudinal **continuo**, capaz de desarrollar $f_y$ por anclaje en la columna exterior del vano final (<NormaRef s="C.15.13.2" pag="C-146" />).
+- **C.15.13.4 — Refuerzo transversal:** estribos cerrados en toda su longitud con separación **no mayor que la mitad de la menor dimensión** de la sección ni **300 mm**. Si resisten momentos de columnas, cumplen la separación y cantidad de refuerzo transversal del nivel de disipación de energía del sistema (<NormaRef s="C.15.13.4" pag="C-146" />).
+
+<CalculadoraEmbed id="zapata-diseno" />
+
+<Ejemplo numero={1} titulo="Dimensionamiento de una zapata aislada con presión neta">
+Zapata cuadrada bajo una columna de {ej1.c} × {ej1.c} mm con carga muerta $D$ = {ej1.D} kN y viva $L$ = {ej1.L} kN. Presión admisible **neta** del suelo $q_a$ = {ej1.qa} kPa (ya descontado el peso de la zapata y el relleno). Concreto $f'_c$ = {ej1.fc} MPa y $f_y$ = {ej1.fy} MPa.
+
+<Paso titulo="Área con cargas de servicio" ref="C.15.2.2">
+$P = D + L$ = **{ej1.P} kN** (no mayorada). $A = P/q_a$ = {ej1.P}/{ej1.qa} = **{f(ej1.P / ej1.qa, 2)} m²**, $B = \sqrt{A}$ = {f(ej1.r.Bcalculado, 3)} m → se adopta **$B$ = {f(ej1.r.B, 2)} m** (múltiplo de 0.05 m). Presión de servicio real = {ej1.P}/{f(ej1.r.area, 4)} = **{f(ej1.r.quServicio, 1)} kPa** ≤ {ej1.qa} ✓.
+</Paso>
+<Paso titulo="Carga mayorada y presión última" ref="C.9-2, C.15.2.1">
+$P_u = 1.2D + 1.6L$ = 1.2({ej1.D}) + 1.6({ej1.L}) = **{ej1.Pu} kN**. $q_u = P_u/B^2$ = {ej1.Pu}/{f(ej1.r.area, 4)} = **{f(ej1.r.qu, 2)} kPa** (presión neta mayorada para diseñar la zapata).
+</Paso>
+<Paso titulo="Voladizo y momento" ref="C.15.4.2(a)">
+Voladizo desde la cara: $v = (B - c)/2$ = ({f(ej1.r.B, 2)} − {f(ej1.c / 1000, 2)})/2 = **{f(ej1.r.voladizo, 3)} m**. $M_u = q_u\,B\,v^2/2$ = {f(ej1.r.qu, 2)}·{f(ej1.r.B, 2)}·{f(ej1.r.voladizo, 3)}²/2 = **{f(ej1.r.Mu, 1)} kN·m** (en cada dirección, por simetría).
+</Paso>
+<Paso titulo="Altura útil por cortante" ref="C.15.5.1, C.11.11">
+Una dirección: $d \ge q_u v/[\phi\,0.17\sqrt{f'_c} + q_u/1000]$ = **{f(ej1.r.dUnaDireccion, 0)} mm**. Dos direcciones (punzonamiento, resolviendo $V_u = \phi V_c$): **{f(ej1.r.dDosDirecciones, 0)} mm**. Mínimo de C.15.7: 150 mm. Gobierna el punzonamiento: $d$ requerido = {f(ej1.r.dRequerido, 0)} mm → se adopta **$d$ = {ej1.r.d} mm**; con 75 mm de recubrimiento y 8 mm de medio diámetro de barra, $h$ = **{ej1.r.h} mm**.
+</Paso>
+<Paso titulo="Refuerzo por flexión" ref="C.10.2, C.10.5.4">
+Con $\phi$ = 0.90 ($\varepsilon_t$ = {f(ej1.r.flexion.epsilonT, 4)} ≥ 0.005, controlada por tracción): $A_s$ por flexión = **{f(ej1.r.flexion.AsFlexion, 0)} mm²** en todo el ancho de {f(ej1.r.B * 1000, 0)} mm. Mínimo de C.10.5.4 = C.7.12.2.1: 0.0018·b·h = **{f(ej1.r.flexion.AsMin, 0)} mm²**. Gobierna {ej1.r.flexion.AsMin > ej1.r.flexion.AsFlexion ? 'el mínimo' : 'la flexión'}: $A_s$ = **{f(ej1.r.flexion.As, 0)} mm²** por dirección, distribuidos uniformemente (C.15.4.3). Con barras de 16 mm (200 mm²) son {f(ej1.r.flexion.As / 200, 1)} barras; separación máxima mín(3h, 450 mm) = 450 mm (C.10.5.4).
+</Paso>
+<Resultado>
+Zapata de **{f(ej1.r.B, 2)} × {f(ej1.r.B, 2)} m**, $d$ = **{ej1.r.d} mm** ($h$ ≈ {ej1.r.h} mm), refuerzo **{f(ej1.r.flexion.As, 0)} mm² por dirección**. Gobierna el cortante en dos direcciones para la altura, y el área sale de las cargas de servicio.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Cortante en una y dos direcciones de la zapata del ejemplo 1">
+Se verifican las dos acciones de cortante con $d$ = {ej2.d} mm (<NormaRef s="C.15.5.1" pag="C-142" />).
+
+<Paso titulo="Una dirección (viga ancha)" ref="C.11-3, C.15.5.2">
+La sección crítica está a $d$ de la cara de la columna (el voladizo restante es {f(ej1.r.voladizo - ej2.d / 1000, 3)} m). $V_u = q_u B (v - d)$ = {f(ej1.r.qu, 2)}·{f(ej1.r.B, 2)}·{f(ej1.r.voladizo - ej2.d / 1000, 3)} = **{f(ej2.vu1, 1)} kN**. $\phi V_c = 0.75\cdot 0.17\sqrt{f'_c}\,B\,d$ = **{f(ej2.phiVc1, 1)} kN**. {ej2.vu1 <= ej2.phiVc1 ? 'Cumple' : 'No cumple'}; $V_u/\phi V_c$ = {f(ej2.vu1 / ej2.phiVc1, 2)}.
+</Paso>
+<Paso titulo="Dos direcciones (punzonamiento)" ref="C.11.11.1.2, C.11.11.2.1">
+Perímetro crítico a $d/2$ de la cara: $b_o = 4(c + d)$ = 4({ej1.c} + {ej2.d}) = **{ej2.dos.bo} mm**. Área encerrada = ({f((ej1.c + ej2.d) / 1000, 2)})² = {f(ej2.areaCrit, 4)} m². $V_u = P_u - q_u(c+d)^2$ = {ej1.Pu} − {f(ej1.r.qu, 2)}·{f(ej2.areaCrit, 4)} = **{f(ej2.dos.Vu, 1)} kN**.
+</Paso>
+<Paso titulo="Resistencia de dos direcciones" ref="C.11-31, C.11-32, C.11-33">
+Con $\beta$ = 1 (columna cuadrada), $\alpha_s$ = 40 (columna interior): $V_c$ es el menor de 0.17(1 + 2/β)λ√f′c·b_o·d, 0.083(α_s d/b_o + 2)λ√f′c·b_o·d y 0.33λ√f′c·b_o·d; gobierna **{ej2.dos.gobierna}** (0.33). $\phi V_c$ = 0.75·{f(ej2.dos.phiVc / 0.75, 1)} = **{f(ej2.dos.phiVc, 1)} kN**; $V_u/\phi V_c$ = {f(ej2.dos.razon, 2)}: {ej2.dos.cumple ? 'cumple' : 'no cumple'}.
+</Paso>
+<Paso titulo="Qué pasaría con menos altura" ref="C.11.11">
+Con $d$ = {f(ej2.dMenor, 0)} mm (40 mm menos que el mínimo por punzonamiento): $V_u$ = {f(ej2.dosMenor.Vu, 0)} kN > $\phi V_c$ = {f(ej2.dosMenor.phiVc, 0)} kN → {ej2.dosMenor.cumple ? 'cumple' : 'no cumple'}. En cambio la viga ancha solo exigía {f(ej2.d1, 0)} mm: el punzonamiento gobierna.
+</Paso>
+<Resultado>
+Una dirección: $V_u$ = {f(ej2.vu1, 0)} kN ≤ $\phi V_c$ = {f(ej2.phiVc1, 0)} kN. Dos direcciones: $V_u$ = {f(ej2.dos.Vu, 0)} kN ≤ $\phi V_c$ = {f(ej2.dos.phiVc, 0)} kN. Ambas cumplen con $d$ = {ej2.d} mm y el punzonamiento es el que fija la altura.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Aplastamiento en la base de la columna y dowels">
+Columna de {ej1.c} × {ej1.c} mm ($f'_c$ = 21 MPa) sobre la zapata del ejemplo 1 ($f'_c$ = 21 MPa, $h$ = {ej1.r.h} mm, $B$ = {f(ej1.r.B, 2)} m), $f_y$ = 420 MPa.
+
+<Paso titulo="Aplastamiento del lado de la columna" ref="C.15.8.1.1, C.10.14.1">
+$A_1 = c^2$ = {f(ej3.a.A1, 0)} mm². $\phi B_n = 0.65(0.85\cdot 21\cdot A_1)$ = **{f(ej3.a.phiBnColumna, 1)} kN** (sin factor de ampliación: el soporte de la columna es la columna misma).
+</Paso>
+<Paso titulo="Aplastamiento del lado de la zapata" ref="C.10.14.1">
+$A_2$: tronco con pendiente 1:2 dentro de la zapata → crecimiento por lado $\Delta$ = mín(2h, (B − c)/2) = mín({2 * ej1.r.h}, {f((ej1.r.B * 1000 - ej1.c) / 2, 0)}) mm, $A_2$ = {f(ej3.a.A2, 0)} mm². $\sqrt{A_2/A_1}$ = {f(Math.sqrt(ej3.a.A2 / ej3.a.A1), 2)} → se limita a **{f(ej3.a.factorZapata, 1)}**; $\phi B_n$ de la zapata = **{f(ej3.a.phiBnZapata, 1)} kN**. Gobierna el menor: {f(ej3.a.phiBn, 1)} kN (la columna).
+</Paso>
+<Paso titulo="Exceso y refuerzo de la interfaz" ref="C.15.8.1.2(a), C.15.8.2.1">
+$P_u$ = {ej1.Pu} kN > {f(ej3.a.phiBn, 1)} kN: exceso = **{f(ej3.a.exceso, 1)} kN**, que debe pasar por refuerzo. Con $\phi$ = 0.65 (criterio del autor): $A_s = $ exceso/(0.65 $f_y$) = {f(ej3.a.AsPorExceso, 0)} mm². Mínimo $0.005A_g$ = {f(ej3.a.AsMinimo, 0)} mm². Se necesitan al menos **{f(ej3.a.As, 0)} mm²** (rige el mínimo): por ejemplo 4 dowels No. 5 (800 mm²) o más, que lleguen a $\ell_{dc}$ dentro de la zapata.
+</Paso>
+<Paso titulo="Si la carga fuera mayor, Pu = 2600 kN" ref="C.15.8.1.2(a)">
+Exceso = 2600 − {f(ej3.b.phiBn, 1)} = **{f(ej3.b.exceso, 1)} kN** → $A_s$ = {f(ej3.b.AsPorExceso, 0)} mm² > mínimo: rige el exceso (por ejemplo 6 barras No. 8 de 510 mm² = 3060 mm²; los dowels no pasan de No. 36, C.15.8.2.3). Con columna de $f'_c$ = 35 MPa el exceso baja a {f(ej3.colMayor.exceso, 1)} kN y $A_s$ a {f(ej3.colMayor.As, 0)} mm² (el aplastamiento de la columna sube a {f(ej3.colMayor.phiBnColumna, 1)} kN).
+</Paso>
+<Resultado>
+Con $P_u$ = {ej1.Pu} kN el concreto en contacto resiste {f(ej3.a.phiBn, 0)} kN; el exceso de {f(ej3.a.exceso, 0)} kN y el mínimo de 0.005 $A_g$ exigen **{f(ej3.a.As, 0)} mm²** de refuerzo a través de la interfaz (dowels o barras extendidas de la columna).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={4} titulo="Esfuerzos axiales y armadura mínima de un pilote">
+Pilote vaciado en sitio de 400 mm de diámetro ($A_g$ = {f(ej4.Ag, 0)} mm²), $f'_c$ = 21 MPa, con $D$ = 300 kN, $L$ = 150 kN y $E$ = 200 kN.
+
+<Paso titulo="Compresión por gravedad" ref="C.15-2, C.15-3">
+$0.25f'_cA_g$ = **{f(ej4.sin[0].limite, 1)} kN** y $D + L$ = {f(ej4.sin[0].demanda, 0)} kN: {ej4.sin[0].cumple ? 'cumple' : 'no cumple'}. $0.35f'_cA_g$ = **{f(ej4.sin[1].limite, 1)} kN** y $1.2D + 1.6L$ = {f(ej4.sin[1].demanda, 0)} kN: {ej4.sin[1].cumple ? 'cumple' : 'no cumple'}.
+</Paso>
+<Paso titulo="Con sismo" ref="C.15-4, C.15-5">
+$D + L + 0.7E$ = {f(ej4.con[2].demanda, 0)} kN ≤ $0.33f'_cA_g$ = {f(ej4.con[2].limite, 1)} kN: {ej4.con[2].cumple ? 'cumple' : 'no cumple'}. $1.2D + L + E$ = {f(ej4.con[3].demanda, 0)} kN ≤ $0.35f'_cA_g$ = {f(ej4.con[3].limite, 1)} kN: {ej4.con[3].cumple ? 'cumple' : 'no cumple'}.
+</Paso>
+<Paso titulo="Tracción con levantamiento (E = 500 kN)" ref="C.15-6">
+$-D + E$ = −300 + 500 = 200 kN → $A_{st} \ge 200000/(0.9\cdot 420)$ = **{f(ej4.ast, 0)} mm²**, armado en **toda la longitud** (salvo que el geotécnico indique menos).
+</Paso>
+<Paso titulo="Armadura mínima de la Tabla C.15.11-1 (L = 9 m)" ref="Tabla C.15.11-1">
+DMI: $0.0025A_g$ = **{f(ej4.dmi.asMin, 0)} mm²** (mínimo 4 barras), longitud armada = máx(9/3, 4) = **{f(ej4.dmi.longitudArmada, 1)} m**. DES o DMO: $0.005A_g$ = **{f(ej4.des.asMin, 0)} mm²**, longitud = máx(9/2, 6) = **{f(ej4.des.longitudArmada, 1)} m**; estribos No. 2 (DMI, ≤ 500 mm) a 100 mm en los 600 mm superiores, o No. 3 a 75 mm en los 1.20 m superiores (DES/DMO).
+</Paso>
+<Resultado>
+El pilote cumple los límites axiales; para el sismo con levantamiento necesita al menos {f(ej4.ast, 0)} mm² en toda su longitud, y la armadura mínima de la tabla es {f(ej4.dmi.asMin, 0)} mm² (DMI) ó {f(ej4.des.asMin, 0)} mm² (DES/DMO); se adopta la mayor de las que apliquen.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={5} titulo="Zapata rectangular: reparto del refuerzo corto y viga de amarre">
+Zapata de 3.0 × 2.0 m (β = {f(ej5.beta, 2)}) que requiere $A_s$ = 3000 mm² en la dirección corta, unida por una viga de amarre de luz {ej5.luz} mm.
+
+<Paso titulo="Franja central" ref="Ec. 15-1">
+$\gamma_s = 2/(\beta+1)$ = 2/({f(ej5.beta, 2)} + 1) = **{f(ej5.g, 3)}**. En la franja central de ancho 2.0 m: $\gamma_sA_s$ = **{f(ej5.rep.franjaCentral, 0)} mm²**; fuera de ella: $(1-\gamma_s)A_s$ = **{f(ej5.rep.extremos, 0)} mm²** (repartidos uniformemente a los dos lados) (<NormaRef s="C.15.4.4.2" pag="C-142" />).
+</Paso>
+<Paso titulo="Viga de amarre: dimensión mayor" ref="C.15.13.3.1">
+Luz/20 (DES) = **{ej5.des} mm**; luz/30 (DMO) = **{f(ej5.dmo, 0)} mm**; luz/40 (DMI) = **{f(ej5.dmi, 0)} mm**.
+</Paso>
+<Paso titulo="Estribos" ref="C.15.13.4">
+Si la menor dimensión es 400 mm: separación máxima = mín(400/2, 300) = **{ej5.s} mm**, con estribos cerrados en toda la longitud.
+</Paso>
+<Resultado>
+{f(ej5.rep.franjaCentral, 0)} mm² en la franja central de 2.0 m y {f(ej5.rep.extremos, 0)} mm² a los lados; la viga de amarre tiene su mayor dimensión ≥ {ej5.des} mm (DES), {f(ej5.dmo, 0)} mm (DMO) o {f(ej5.dmi, 0)} mm (DMI).
+</Resultado>
+</Ejemplo>
+
+## Erratas y observaciones sobre el texto del PDF
+
+<Callout tipo="nota" titulo="Observaciones del autor (no son texto de la norma)">
+- **C.15.13:** los numerales aparecen en el orden **C.15.13.1, C.15.13.3 (con .3.1), C.15.13.2, C.15.13.4**; aquí se respeta el orden del PDF.
+- C.15.4.4 remite a «15.4.4.1 y 15.4.4.2» sin la «C.».
+- En C.15.8.2.3 el PDF imprime «Νο.» (con letra griega nu) en «No. 43», «No. 57» y «No. 36», y $\ell_{dc}$ sale como «Adc» en el texto extraído; la imagen de la página C-143 confirma $\ell_{dc}$.
+- C.15.5.4.1 a .3 usan $d_{pile}$ sin definirlo; se entiende que es el diámetro del pilote (lectura del autor).
+- Las Ecs. 15-1 y C.15-2 a C.15-6 se verificaron contra las imágenes de las páginas C-142, C-144 y C-145. La ecuación de C.15.4.4.2 se numera «15-1» sin la «C.».
+- La Ec. C.15-2 es una verificación con cargas **sin mayorar** y C.15-3 con mayoradas; ambas deben cumplirse.
+- Las recomendaciones de este capítulo para pilotes **no cubren** impacto de hincado ni efectos laterales y sísmicos (C.15.11.1).
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Hallar el área de la zapata con cargas mayoradas** (<NormaRef s="C.15.2.2" pag="C-141" />) o con la presión admisible **bruta** sin descontar el peso de zapata y relleno (práctica, no texto de la norma).
+- **Medir la sección crítica de momento o cortante desde el eje** en vez de desde la **cara** de la columna (<NormaRef s="C.15.4.2" pag="C-141" />, <NormaRef s="C.15.5.2" pag="C-142" />).
+- **Revisar solo el cortante en una dirección:** en zapatas bajo columna suele gobernar el **punzonamiento** (C.11.11).
+- **Distribuir mal el refuerzo corto** en zapatas rectangulares: $\gamma_s A_s$ en la franja central y el resto afuera (Ec. 15-1) (<NormaRef s="C.15.4.4.2" pag="C-142" />).
+- **Tomar $d$ menor de 150 mm** sobre suelo (300 mm sobre pilotes) (<NormaRef s="C.15.7" pag="C-143" />).
+- **Olvidar el aplastamiento** y los dowels: el refuerzo a través de la interfaz no es menor que 0.005 $A_g$ y debe transmitir todo el exceso sobre $\phi B_n$ (<NormaRef s="C.15.8.2.1" pag="C-143" />). Usar $\sqrt{A_2/A_1} > 2$ es un error.
+- **Dowels mayores que No. 36** o empalmes por traslapo de barras No. 43 y No. 57 en tracción (<NormaRef s="C.15.8.2.3" pag="C-143" />).
+- **Usar el método directo de C.13** para una losa de cimentación (<NormaRef s="C.15.10.2" pag="C-144" />).
+- **No armar el pilote en toda su longitud** cuando hay tracción por levantamiento (Ec. C.15-6).
+- **Dimensionar vigas de amarre sin considerar el nivel de disipación de energía** (luz/20, /30 ó /40) (<NormaRef s="C.15.13.3.1" pag="C-146" />).
+</Callout>
+
+## Resumen en una línea
+
+**El área de la zapata sale de las cargas de servicio contra el suelo, y el momento (en la cara de la columna), el cortante en una y dos direcciones (C.11.11), el refuerzo (Ec. 15-1), el aplastamiento con dowels de al menos 0.005 Ag y los pilotes (Ecs. C.15-2 a C.15-6 y Tabla C.15.11-1) se diseñan con cargas mayoradas.**

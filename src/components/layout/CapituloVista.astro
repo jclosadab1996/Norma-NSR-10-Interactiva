@@ -16,12 +16,15 @@ import Detalle from '../content/Detalle.astro';
 import Figura from '../content/Figura.astro';
 import CalculadoraEmbed from '../content/CalculadoraEmbed.astro';
 import { calculadoraPorId } from '../../data/calculadoras';
+import type { LetraTitulo } from '../../data/titulos';
+
+type Entrada = CollectionEntry<'titulo-a'> | CollectionEntry<'titulo-b'> | CollectionEntry<'titulo-c'>;
 
 interface Props {
-  titulo: 'a' | 'b';
-  entry: CollectionEntry<'titulo-a'> | CollectionEntry<'titulo-b'>;
-  anterior?: CollectionEntry<'titulo-a'> | CollectionEntry<'titulo-b'>;
-  siguiente?: CollectionEntry<'titulo-a'> | CollectionEntry<'titulo-b'>;
+  titulo: LetraTitulo;
+  entry: Entrada;
+  anterior?: Entrada;
+  siguiente?: Entrada;
 }
 const { titulo, entry, anterior, siguiente } = Astro.props;
 const base = `/titulo-${titulo}`;

@@ -57,7 +57,7 @@ function Rico({ texto, q = '' }: { texto: string; q?: string }) {
   );
 }
 
-/** Enlace a la página del capítulo o apéndice de los Títulos A y B según la sección citada. */
+/** Enlace a la página del capítulo o apéndice de los Títulos A, B y C según la sección citada (A, B y C). */
 export function hrefSeccion(ref?: string): string | undefined {
   if (!ref) return undefined;
   const cap = /^A\.(\d{1,2})(?:\.|$)/.exec(ref);
@@ -75,6 +75,17 @@ export function hrefSeccion(ref?: string): string | undefined {
       return '/titulo-b/b6c';
     }
   }
+  const c = /^C\.(\d{1,2})(?:\.(\d{1,2}))?/.exec(ref);
+  if (c && Number(c[1]) >= 1 && Number(c[1]) <= 23) {
+    const n = Number(c[1]);
+    const sub = c[2] ? Number(c[2]) : 0;
+    // C.11 y C.21 se dividen en dos páginas (c11/c11b y c21/c21b).
+    if (n === 11 && sub >= 6) return '/titulo-c/c11b';
+    if (n === 21 && sub >= 7) return '/titulo-c/c21b';
+    return `/titulo-c/c${n}`;
+  }
+  const apc = /^C-([A-G])(?:\.|$)/.exec(ref);
+  if (apc) return `/titulo-c/apendice-c${apc[1].toLowerCase()}`;
   return undefined;
 }
 

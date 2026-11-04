@@ -1,0 +1,227 @@
+---
+codigo: 'C.16'
+tipo: capitulo
+titulo: 'Concreto prefabricado'
+resumen: 'Qué agrega el Título C a las estructuras con elementos prefabricados: diseño para todas las etapas (desencofrado a montaje), tolerancias, distribución de fuerzas, amarres de integridad estructural, apoyos y conexiones, identificación, manejo y evaluación de la resistencia.'
+objetivos:
+  - 'Reconocer qué etapas de carga (izaje, transporte, montaje) debe cubrir el diseño de un elemento prefabricado'
+  - 'Dimensionar la longitud mínima de apoyo de una losa o viga prefabricada sobre un apoyo simple'
+  - 'Calcular las resistencias mínimas de amarres de integridad estructural en columnas, paneles y diafragmas'
+  - 'Determinar el refuerzo mínimo de un muro prefabricado no preesforzado'
+  - 'Saber qué debe aparecer en planos de taller y marcas de identificación'
+paginasNorma: 'C-147 a C-150'
+paginaPdf: 449
+orden: 16
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import { distanciaMinimaApoyo, amarreVerticalColumna, refuerzoMinimoMuroPrefabricado } from '../../lib/nsr10/preesforzado';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ap1 = distanciaMinimaApoyo(9000, 'losa');
+export const ap2 = distanciaMinimaApoyo(12000, 'losa');
+export const ap3 = distanciaMinimaApoyo(18000, 'viga');
+export const ap4 = distanciaMinimaApoyo(9000, 'viga');
+export const col1 = amarreVerticalColumna(160000);
+export const col2 = amarreVerticalColumna(160000, 60000);
+export const muroInt = refuerzoMinimoMuroPrefabricado(150, false);
+export const muroExt = refuerzoMinimoMuroPrefabricado(200, true);
+
+## Idea central del capítulo
+
+Un elemento prefabricado se fabrica en una planta, se almacena, se transporta, se iza y se conecta en obra: **cada una de esas etapas es una condición de carga** que el diseñador debe revisar, además de la condición final en servicio. El Capítulo C.16 **no reemplaza** al resto del Título C: se aplican **todas** las disposiciones que no se excluyan y no contradigan este capítulo (<NormaRef s="C.16.1.1" pag="C-147" />). Lo que añade es lo propio de la prefabricación:
+
+- diseñar para **todas las etapas**, no solo la final (C.16.2, C.16.9);
+- definir y absorber **tolerancias** de fabricación y montaje (C.16.2.3);
+- asegurar que las **fuerzas se transfieran entre elementos** (C.16.3, C.16.6) y que la estructura tenga **integridad estructural** mediante amarres (C.16.5);
+- controlar **apoyos, elementos embebidos, marcas** y la **evaluación de resistencia** (C.16.6 a C.16.10).
+
+<Callout tipo="importante" titulo="El capítulo es cualitativo, con pocos números">
+C.16 es corto y casi no tiene ecuaciones: los números que contiene son **mínimos de resistencia de amarres**, **longitudes de apoyo** y **cuantías mínimas de muro**. Están reunidos abajo para que puedas usarlos directamente; los cálculos de ejemplo usan las funciones de `src/lib/nsr10/preesforzado.ts`, que comparten los mismos valores.
+</Callout>
+
+## C.16.1 — Alcance
+
+Todas las disposiciones del Reglamento NSR-10 que no estén específicamente excluidas y no contradigan C.16 se aplican a las estructuras que incorporan elementos estructurales prefabricados de concreto (<NormaRef s="C.16.1.1" pag="C-147" />).
+
+## C.16.2 — Generalidades
+
+- **C.16.2.1 — Todas las etapas.** El diseño de los elementos y de sus conexiones debe incluir las condiciones de carga y de restricción **desde la fabricación inicial hasta completar la estructura**: **desencofrado, almacenamiento, transporte y montaje** (<NormaRef s="C.16.2.1" pag="C-147" />).
+- **C.16.2.2 — Fuerzas en las conexiones.** Cuando los prefabricados se integran a un sistema estructural, las fuerzas y deformaciones que se producen **dentro y junto a las conexiones** deben incluirse en el diseño (<NormaRef s="C.16.2.2" pag="C-147" />).
+- **C.16.2.3 — Tolerancias.** Deben **especificarse** las tolerancias tanto de los elementos prefabricados como de los elementos de interconexión, y el diseño debe incluir **sus efectos** (<NormaRef s="C.16.2.3" pag="C-147" />).
+- **C.16.2.4 — Planos y especificaciones.** Además de lo exigido en C.1.2, los documentos contractuales o los **planos de taller** deben incluir: (a) detallado del refuerzo, insertos y **dispositivos de izaje** necesarios para resistir las fuerzas temporales de manejo, almacenamiento, transporte y montaje; y (b) la **resistencia del concreto a las edades o etapas de construcción** establecidas (<NormaRef s="C.16.2.4" pag="C-147" />).
+
+## C.16.3 — Distribución de fuerzas entre elementos
+
+- **C.16.3.1.** La distribución de fuerzas **perpendiculares al plano** de los elementos se establece por **análisis o ensayos** (<NormaRef s="C.16.3.1" pag="C-147" />).
+- **C.16.3.2.** Cuando el comportamiento del sistema exige transferir fuerzas **en el plano** entre elementos de un muro o piso prefabricado: la **trayectoria de fuerzas en el plano debe ser continua** a través de conexiones y elementos (C.16.3.2.1), y donde haya **tracción** debe haber una **trayectoria continua de acero o refuerzo** (C.16.3.2.2) (<NormaRef s="C.16.3.2" pag="C-147" />).
+
+(Lectura del autor: es el caso típico de un diafragma de entrepiso hecho con losas alveolares: las fuerzas sísmicas horizontales deben viajar de losa a losa y de ahí a los muros o pórticos sin interrupciones.)
+
+## C.16.4 — Diseño de los elementos
+
+### C.16.4.1 — Retracción y temperatura en losas y paneles preesforzados
+
+En **losas de piso o cubierta en una dirección** y en **paneles de muros prefabricados preesforzados**, con **anchos menores de 3.7 m**, y cuando los elementos **no estén conectados mecánicamente** de modo que se produzca restricción en la dirección transversal, se permite **omitir** el refuerzo de retracción y temperatura de C.7.12 en la dirección normal al refuerzo de flexión. Esta omisión **no aplica** a elementos que requieren ese refuerzo para resistir esfuerzos transversales de flexión (<NormaRef s="C.16.4.1" pag="C-147" />).
+
+### C.16.4.2 — Muros prefabricados no preesforzados
+
+El refuerzo se diseña según los Capítulos C.10 o C.14, **excepto** que las áreas de refuerzo **vertical** y **horizontal** deben ser, **cada una, no menores de $0.001\,A_g$**, con $A_g$ el área bruta del muro. La separación no excede **5 veces el espesor del muro** ni **750 mm** en muros **interiores** o **450 mm** en muros **exteriores** (<NormaRef s="C.16.4.2" pag="C-147" />; continúa en C-148).
+
+<Ejemplo numero={1} titulo="Refuerzo mínimo de dos muros prefabricados">
+Se revisan un muro **interior** de 150 mm de espesor y un muro **exterior** de 200 mm. Hallar el refuerzo mínimo por metro de muro en cada dirección y la separación máxima (muros no preesforzados, <NormaRef s="C.16.4.2" pag="C-147" />).
+
+<Paso titulo="Muro interior, t = 150 mm" ref="C.16.4.2">
+$A_g$ por metro de longitud = 150 × 1000 = 150 000 mm². $A_{s,min}$ = 0.001 × 150 000 = **{f(muroInt.asPorMetro, 0)} mm²/m** en cada dirección. Separación máxima = menor entre 5t = {5 * 150} mm y 750 mm = **{f(muroInt.separacionMax, 0)} mm**.
+</Paso>
+<Paso titulo="Muro exterior, t = 200 mm" ref="C.16.4.2">
+$A_{s,min}$ = 0.001 × 200 000 = **{f(muroExt.asPorMetro, 0)} mm²/m**. Separación máxima = menor entre 5t = {5 * 200} mm y 450 mm = **{f(muroExt.separacionMax, 0)} mm**.
+</Paso>
+<Paso titulo="Traducción a barras (lectura del autor)" ref="Auxiliar">
+Con barras No. 3 (71 mm² cada una): en el muro interior la separación por área sería 1000·71/150 = {f(1000 * 71 / 150, 0)} mm (≤ 750 mm, cumple); en el exterior, 1000·71/200 = {f(1000 * 71 / 200, 0)} mm (≤ 450 mm, cumple). En la práctica suelen usarse mallas electrosoldadas.
+</Paso>
+<Resultado>
+Muro interior: **{f(muroInt.asPorMetro, 0)} mm²/m**, separación ≤ **{f(muroInt.separacionMax, 0)} mm**. Muro exterior: **{f(muroExt.asPorMetro, 0)} mm²/m**, separación ≤ **{f(muroExt.separacionMax, 0)} mm**. Estos son mínimos: el diseño por C.10 o C.14 puede pedir más.
+</Resultado>
+</Ejemplo>
+
+## C.16.5 — Integridad estructural
+
+La integridad estructural es la capacidad de la estructura de **no colapsar de forma desproporcionada** si falla un elemento. En prefabricados se logra con **amarres** continuos de tracción entre elementos. C.16.5 define un nivel mínimo general (C.16.5.1) y uno más exigente para muros portantes de tres o más pisos (C.16.5.2).
+
+### C.16.5.1 — Estructuras prefabricadas en general
+
+<Callout tipo="nota" titulo="Cuándo aplica C.16.5.1">
+Se aplica **excepto cuando controlan** las disposiciones de C.16.5.2 (muros portantes prefabricados de tres o más pisos) (<NormaRef s="C.16.5.1" pag="C-148" />).
+</Callout>
+
+- **C.16.5.1.1.** Los **amarres longitudinales y transversales** de C.7.13.3 deben conectar los elementos a un sistema resistente a cargas laterales (<NormaRef s="C.16.5.1.1" pag="C-148" />).
+- **C.16.5.1.2 — Diafragmas.** Las conexiones entre el diafragma de piso o cubierta y los elementos soportados lateralmente por él deben tener una **resistencia nominal a la tracción no menor que 4.4 kN por metro lineal** (<NormaRef s="C.16.5.1.2" pag="C-148" />).
+- **C.16.5.1.3 — Amarres verticales de tracción** (de C.7.13.3) en todos los elementos estructurales verticales, **excepto enchapes de fachada**, mediante conexiones en las juntas horizontales:
+  - **(a) Columnas:** resistencia nominal a tracción **no menor que $1.4\,A_g$ en N** (con $A_g$ en mm²). En columnas con sección mayor que la requerida por carga se permite un área efectiva reducida basada en la sección requerida, **pero no menor que la mitad del área total** (<NormaRef s="C.16.5.1.3" pag="C-148" />).
+  - **(b) Paneles de muro:** **mínimo dos amarres por panel**, cada uno con resistencia nominal a tracción **no menor que 44 kN**.
+  - **(c)** Si las fuerzas de diseño no generan tracción en la base, los amarres de (b) pueden anclarse en una **losa sobre el terreno** de concreto apropiadamente reforzada.
+- **C.16.5.1.4.** **No** se deben usar conexiones que dependan **solamente de la fricción** causada por las cargas gravitacionales (<NormaRef s="C.16.5.1.4" pag="C-148" />).
+
+### C.16.5.2 — Muros portantes prefabricados de tres o más pisos
+
+<TablaNorma numero="C.16.5.2.1 a C.16.5.2.5" titulo="Amarres mínimos en muros portantes prefabricados de tres o más pisos" pag="C-148" nota="Resumen en tabla elaborado por el autor a partir de los cinco numerales; los valores son los del PDF.">
+
+| Numeral | Amarre | Requisito |
+|---|---|---|
+| C.16.5.2.1 | Transversales y longitudinales en pisos y cubiertas | Resistencia nominal de **22 kN por metro** de ancho o largo; sobre los apoyos de muros interiores y entre elementos y muros exteriores; a **≤ 600 mm** del plano del piso o cubierta |
+| C.16.5.2.2 | Longitudinales, paralelos a los vanos | Separados **≤ 3 m** entre centros; prever la transferencia de fuerzas alrededor de aberturas |
+| C.16.5.2.3 | Transversales, perpendiculares a los vanos | Separación **no mayor que la separación de los muros de carga** |
+| C.16.5.2.4 | Perimetrales (dentro de 1.2 m del borde de cada piso o cubierta) | Resistencia nominal a tracción **≥ 71 kN** |
+| C.16.5.2.5 | Verticales en todos los muros | **Continuos en toda la altura**; **≥ 44 kN por metro horizontal** de muro; **no menos de dos por panel** |
+
+</TablaNorma>
+
+<Ejemplo numero={2} titulo="Amarres de una columna y de un entrepiso prefabricado">
+Una columna prefabricada de 400 × 400 mm ($A_g$ = 160 000 mm²) en una estructura de dos pisos (C.16.5.1 gobierna). Una variante tiene una sección mayor que la requerida por cargas, cuya sección requerida equivale a 60 000 mm². Un panel de muro de entrepiso de 3 pisos mide 2.4 m de ancho.
+
+<Paso titulo="Amarre vertical de la columna" ref="C.16.5.1.3(a)">
+$T_n \ge 1.4\,A_g$ = 1.4 × 160 000 = 224 000 N = **{f(col1.tnKn, 0)} kN**.
+</Paso>
+<Paso titulo="Sección mayor que la requerida" ref="C.16.5.1.3(a)">
+El área efectiva reducida no puede ser menor que la mitad del área total: ½ × 160 000 = 80 000 mm² (> 60 000). Se usa **{f(col2.agEfectivo, 0)} mm²** y $T_n \ge$ 1.4 × 80 000 = **{f(col2.tnKn, 0)} kN**.
+</Paso>
+<Paso titulo="Panel de muro en edificio de tres o más pisos" ref="C.16.5.2.5">
+El amarre vertical debe ser ≥ 44 kN por metro horizontal: 44 × 2.4 = **{f(44 * 2.4, 1)} kN** repartidos en **al menos dos amarres** por panel, es decir, ≥ {f(44 * 2.4 / 2, 1)} kN cada uno. (En edificios de menos de tres pisos regiría C.16.5.1.3(b): dos amarres de 44 kN.)
+</Paso>
+<Paso titulo="Amarre de piso" ref="C.16.5.2.1">
+Una franja de 12 m de longitud de sistema de piso necesita una resistencia nominal de 22 kN/m × 12 m = **{f(22 * 12, 0)} kN**, con amarres longitudinales a ≤ 3 m y amarre perimetral ≥ 71 kN dentro de 1.2 m del borde (<NormaRef s="C.16.5.2.4" pag="C-148" />).
+</Paso>
+<Resultado>
+Columna: **{f(col1.tnKn, 0)} kN** (o **{f(col2.tnKn, 0)} kN** con área efectiva reducida). Panel en edificio alto: **≥ {f(44 * 2.4, 1)} kN** en dos o más amarres. Todos los amarres deben quedar continuos hasta un sistema resistente a cargas laterales.
+</Resultado>
+</Ejemplo>
+
+## C.16.6 — Diseño de conexiones y apoyos
+
+### C.16.6.1 — Conexiones
+
+Las fuerzas pueden transmitirse entre elementos por **juntas inyectadas con mortero, llaves de cortante, conectores mecánicos, conexiones con refuerzo de acero, afinado de piso reforzado**, o combinación de ellos (<NormaRef s="C.16.6.1" pag="C-149" />).
+
+- **C.16.6.1.1.** La efectividad de las conexiones se determina por **análisis o ensayos**. Cuando el cortante es la carga principal, se permite usar C.11.6 (cortante por fricción).
+- **C.16.6.1.2.** Si la conexión usa **materiales con distintas propiedades estructurales**, deben considerarse sus **rigideces, resistencias y ductilidades relativas**.
+
+### C.16.6.2 — Apoyos en apoyos simples
+
+- **C.16.6.2.1 — Aplastamiento.** El esfuerzo de aplastamiento admisible entre el elemento de apoyo y el apoyado (y entre cualquier elemento intermedio) no debe exceder la resistencia al aplastamiento de ninguna de las superficies ni del elemento de apoyo. La del concreto está en C.10.17 (<NormaRef s="C.16.6.2.1" pag="C-149" />).
+- **C.16.6.2.2 — Longitud y retranqueo.** A menos que análisis o ensayos muestren que el comportamiento no se afecta:
+  - **(a)** después de considerar tolerancias, la distancia del **borde del apoyo al extremo** del prefabricado, en la dirección de la luz, debe ser al menos **$\ell_n/180$**, y no menos de **50 mm** para losas sólidas o alveolares (*hollow-core*) ni **75 mm** para vigas o elementos en T alargada;
+  - **(b)** las **almohadillas** de soporte en bordes no reforzados se desplazan hacia atrás **al menos 13 mm** desde la cara del apoyo, o al menos la dimensión del chaflán en bordes achaflanados.
+- **C.16.6.2.3.** Los requisitos de C.12.11.1 no se aplican al refuerzo de momento positivo en prefabricados estáticamente determinados, pero **al menos un tercio** de ese refuerzo debe extenderse hasta el **centro del apoyo**, considerando las tolerancias de C.7.5.2.2 y C.16.2.3 (<NormaRef s="C.16.6.2.3" pag="C-149" />).
+
+<Ejemplo numero={3} titulo="Longitud de apoyo de losas alveolares y de una viga">
+Se apoyan losas alveolares de luz libre $\ell_n$ = 9.0 m y 12.0 m, y una viga en T alargada de $\ell_n$ = 18.0 m y otra de 9.0 m, sobre apoyos simples. Hallar la distancia mínima del borde del apoyo al extremo del elemento (<NormaRef s="C.16.6.2.2" pag="C-149" />).
+
+<Paso titulo="Losa alveolar, ℓn = 9.0 m" ref="C.16.6.2.2(a)">
+$\ell_n/180$ = 9000/180 = {f(ap1.ln180, 1)} mm; mínimo de losas = 50 mm. Rige **{f(ap1.requerido, 1)} mm**.
+</Paso>
+<Paso titulo="Losa alveolar, ℓn = 12.0 m" ref="C.16.6.2.2(a)">
+$\ell_n/180$ = 12000/180 = {f(ap2.ln180, 1)} mm > 50 mm. Rige **{f(ap2.requerido, 1)} mm**.
+</Paso>
+<Paso titulo="Viga en T alargada, ℓn = 18.0 m y 9.0 m" ref="C.16.6.2.2(a)">
+Con 18 m: 18000/180 = {f(ap3.ln180, 0)} mm > 75 mm → **{f(ap3.requerido, 0)} mm**. Con 9 m: 9000/180 = {f(ap4.ln180, 0)} mm < 75 mm → rige el mínimo de **{f(ap4.requerido, 0)} mm**.
+</Paso>
+<Paso titulo="Almohadilla" ref="C.16.6.2.2(b)">
+Si el borde no está reforzado, la almohadilla se retira **al menos 13 mm** de la cara del apoyo. Por lo tanto, la longitud efectiva sobre la almohadilla es menor que la distancia total: el apoyo útil se mide a partir de ese retranqueo.
+</Paso>
+<Resultado>
+Losas: **{f(ap1.requerido, 0)} mm** (9 m) y **{f(ap2.requerido, 1)} mm** (12 m). Vigas: **{f(ap4.requerido, 0)} mm** (9 m) y **{f(ap3.requerido, 0)} mm** (18 m). Estos son mínimos **después de tolerancias**: en el plano se especifica una longitud nominal mayor, que absorba la tolerancia de fabricación y de montaje.
+</Resultado>
+</Ejemplo>
+
+## C.16.7 — Elementos embebidos después de la colocación del concreto
+
+Con **aprobación del profesional facultado para diseñar**, elementos embebidos (como **espigos** o **insertos**) que sobresalgan del concreto o queden expuestos para inspección pueden embeberse **mientras el concreto está plástico**, siempre que (<NormaRef s="C.16.7.1" pag="C-149" />):
+
+1. no se exija engancharlos o amarrarlos al refuerzo dentro del concreto (C.16.7.1.1);
+2. se mantengan en la **posición correcta** mientras el concreto está plástico (C.16.7.1.2);
+3. el concreto se **compacte** adecuadamente alrededor de ellos (C.16.7.1.3).
+
+## C.16.8 — Marcas de identificación
+
+Todo elemento prefabricado debe marcarse para indicar su **ubicación y orientación** en la estructura y su **fecha de fabricación** (C.16.8.1), y las marcas deben **corresponder con las de los planos de montaje** (C.16.8.2) (<NormaRef s="C.16.8" pag="C-149" />).
+
+## C.16.9 — Manejo
+
+- **C.16.9.1.** El diseño debe considerar las fuerzas y distorsiones del **curado, desencofrado, almacenamiento y montaje**, de modo que los elementos **no sufran sobreesfuerzos ni se dañen** (<NormaRef s="C.16.9.1" pag="C-150" />).
+- **C.16.9.2.** Durante el montaje, estructuras y elementos deben estar **adecuadamente apoyados y arriostrados** para asegurar alineamiento e integridad hasta completar las conexiones permanentes (<NormaRef s="C.16.9.2" pag="C-150" />).
+
+## C.16.10 — Evaluación de la resistencia de estructuras prefabricadas
+
+- **C.16.10.1.** Un elemento prefabricado que **se vuelve compuesto** al vaciar concreto en sitio puede **ensayarse aislado a flexión**, si (<NormaRef s="C.16.10.1" pag="C-150" />):
+  - las cargas se aplican solo cuando los cálculos indican que para el elemento aislado **no es crítica la compresión ni el pandeo** (C.16.10.1.1);
+  - la carga de prueba es la que, aplicada al elemento aislado, induce **las mismas fuerzas totales en el refuerzo de tracción** que las que induciría al cargar el elemento compuesto con las cargas de ensayo de **C.20.3.2** (C.16.10.1.2).
+- **C.16.10.2.** Las disposiciones de **C.20.5** (criterio de aceptación) son la base para aceptar o rechazar los elementos (<NormaRef s="C.16.10.2" pag="C-150" />). Ver el Capítulo C.20.
+
+## Caso práctico — ¿Quién firma qué en un entrepiso de losas alveolares?
+
+Proceso paso a paso para un entrepiso prefabricado, con los documentos que lo respaldan (lectura del autor, a partir de C.16.2.4, C.16.8 y C.16.9):
+
+1. **Diseño:** el profesional facultado para diseñar define la losa alveolar, el sistema de apoyo y las **tolerancias** (C.16.2.3), los **amarres** (C.16.5) y la longitud de apoyo (C.16.6.2). Calcula las etapas de **izaje y transporte** (C.16.2.1).
+2. **Planos de taller:** el prefabricador detalla **refuerzo, insertos y dispositivos de izaje**, y fija la **resistencia del concreto por etapa** (por ejemplo, f′c mínimo para desencofrar y tensar), como exige C.16.2.4.
+3. **Fabricación:** cada pieza se **marca** con ubicación, orientación y fecha (C.16.8.1), con el mismo código de los planos de montaje (C.16.8.2).
+4. **Montaje:** se apuntala y arriostra hasta completar conexiones (C.16.9.2); se verifica la **longitud de apoyo real** contra el mínimo después de tolerancias.
+5. **Conexiones y diafragma:** se colocan los amarres y la trayectoria continua de acero en las juntas (C.16.3.2.2), con **juntas inyectadas** o **afinado reforzado** como lo defina el diseño (C.16.6.1).
+6. **Dudas de resistencia:** se evalúa con el procedimiento de C.20; si el elemento será compuesto, se puede ensayar aislado (C.16.10.1).
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Lo que más se olvida en prefabricados">
+- **Diseñar solo la condición final.** El izaje, el transporte y el almacenamiento suelen gobernar el refuerzo superior y los puntos de izaje (<NormaRef s="C.16.2.1" pag="C-147" />).
+- **Contar con fricción para transferir cargas horizontales.** Está prohibido apoyarse **solo** en la fricción de las cargas gravitacionales (<NormaRef s="C.16.5.1.4" pag="C-148" />).
+- **Aplicar C.16.5.1 en un edificio de muros portantes de tres o más pisos.** En ese caso controla C.16.5.2, con 22 kN/m, 71 kN perimetral y 44 kN/m verticales.
+- **Usar $\ell_n/180$ sin respetar los mínimos de 50 y 75 mm**, o ignorar que ese valor es **después de tolerancias**.
+- **Confundir los 44 kN:** en C.16.5.1.3(b) es **por amarre** (dos por panel); en C.16.5.2.5 es **por metro horizontal** de muro.
+- **Omitir el refuerzo mínimo de 0.001 Ag** en muros no preesforzados por suponer que el panel solo trabaja a compresión.
+</Callout>
+
+## Resumen en una línea
+
+Un prefabricado se diseña para **cada etapa** de su vida (desencofrado, almacenamiento, transporte, montaje y servicio), con **tolerancias**, **amarres continuos** de integridad estructural, **apoyos** de longitud suficiente ($\ge \ell_n/180$ y 50 o 75 mm) y **marcas** que coincidan con los planos de montaje.

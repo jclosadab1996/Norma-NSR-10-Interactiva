@@ -1,0 +1,468 @@
+---
+codigo: 'C.8'
+tipo: capitulo
+titulo: 'Análisis y diseño — Consideraciones generales'
+resumen: 'Métodos de diseño, cargas, análisis elástico y redistribución de momentos, módulo de elasticidad, concreto liviano, rigidez, luz de cálculo, disposición de la carga viva, vigas T, losas nervadas y acabados de piso.'
+objetivos:
+  - 'Calcular el módulo de elasticidad Ec del concreto normal y liviano y el factor λ'
+  - 'Aplicar la redistribución de momentos (1000 εt, máximo 20 %) manteniendo el equilibrio'
+  - 'Determinar la luz de cálculo de vigas y losas según estén o no unidas monolíticamente a sus apoyos'
+  - 'Hallar el ancho efectivo del ala de vigas T y verificar los límites geométricos de losas nervadas'
+  - 'Conocer las suposiciones de rigidez y disposición de carga viva que permite el Título C'
+paginasNorma: 'C-61 a C-65'
+paginaPdf: 363
+orden: 8
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import { moduloElasticidad, lambdaPorHendimiento, lambdaConcreto } from '../../lib/nsr10/concreto';
+import {
+  anchoEfectivoAla,
+  epsilonT,
+  espesorMinimoLoseta,
+  espesorMinimoLosetaRemovible,
+  espesorMinimoSobreDucto,
+  factorRigidezLateral,
+  lambdaInterpolado,
+  luzElementoNoMonolitico,
+  luzLosaLuzCorta,
+  momentoPositivoPorEquilibrio,
+  momentoRedistribuido,
+  redistribucionMaxima,
+  relacionModular,
+  separacionMaximaNervios,
+  separacionMaximaViguetasReparticion,
+  verificarNervadas,
+} from '../../lib/nsr10/analisisConcreto';
+
+export const e1 = (() => {
+  const fc = 28;
+  const raiz = Math.sqrt(fc);
+  const EcNormal = moduloElasticidad(fc);
+  const EcGeneral2300 = moduloElasticidad(fc, 2300);
+  const EcLiviano = moduloElasticidad(fc, 1800);
+  const n = relacionModular(fc);
+  const nLiviano = relacionModular(fc, 1800);
+  const fct = 2.2;
+  const lambdaFct = lambdaPorHendimiento(fct, fc);
+  const lamArena = lambdaConcreto('liviano-arena-normal');
+  const lamOtros = lambdaConcreto('liviano-otros');
+  const lamInterpFino = lambdaInterpolado('fino-liviano', 0.5);
+  const lamInterpGrueso = lambdaInterpolado('grueso-mixto', 0.5);
+  return { fc, raiz, EcNormal, EcGeneral2300, EcLiviano, n, nLiviano, fct, lambdaFct, lamArena, lamOtros, lamInterpFino, lamInterpGrueso };
+})();
+
+export const e2 = (() => {
+  const wu = 40; // kN/m
+  const L = 6; // m
+  const M0 = (wu * L * L) / 8;
+  const Mneg = (wu * L * L) / 12;
+  const Mpos = (wu * L * L) / 24;
+  const c = 110; // mm
+  const dt = 450; // mm
+  const eps = epsilonT(c, dt);
+  const red = redistribucionMaxima(eps);
+  const MnegRed = momentoRedistribuido(Mneg, eps);
+  const MposRed = momentoPositivoPorEquilibrio(M0, MnegRed, MnegRed);
+  const aumento = (100 * (MposRed - Mpos)) / Mpos;
+  const tope = redistribucionMaxima(0.02);
+  const no = redistribucionMaxima(0.005);
+  return { wu, L, M0, Mneg, Mpos, c, dt, eps, red, MnegRed, MposRed, aumento, tope, no };
+})();
+
+export const e3 = (() => {
+  const a = luzElementoNoMonolitico(5.6, 0.45, 6.2);
+  const b = luzElementoNoMonolitico(5.9, 0.5, 6.2);
+  const losa1 = luzLosaLuzCorta(2.8);
+  const losa2 = luzLosaLuzCorta(3.2);
+  return { a, b, losa1, losa2 };
+})();
+
+export const e4 = (() => {
+  const L = 6000;
+  const hf = 100;
+  const bw = 300;
+  const libre = 2000;
+  const ambos = anchoEfectivoAla({ tipo: 'ambos-lados', luz: L, hf, bw, libreAlmas: libre });
+  const ambosLargo = anchoEfectivoAla({ tipo: 'ambos-lados', luz: 10000, hf, bw, libreAlmas: libre });
+  const uno = anchoEfectivoAla({ tipo: 'un-lado', luz: L, hf, bw, libreAlmas: libre });
+  const aislada = anchoEfectivoAla({ tipo: 'aislada', luz: L, hf: 150, bw });
+  return { L, hf, bw, libre, ambos, ambosLargo, uno, aislada };
+})();
+
+export const e5 = (() => {
+  const h = 400;
+  const sep = 800;
+  const bSup = 120;
+  const bProm = 100;
+  const hNervio = 350;
+  const v = verificarNervadas({ direcciones: 1, h, separacion: sep, anchoSuperior: bSup, anchoPromedio: bProm, alturaNervio: hNervio });
+  const libre = sep - bProm;
+  const repart = separacionMaximaViguetasReparticion(h);
+  const loseta = espesorMinimoLoseta(libre);
+  const loseta40 = espesorMinimoLoseta(libre, true);
+  const removible = espesorMinimoLosetaRemovible(libre);
+  const ducto = espesorMinimoSobreDucto(20);
+  const dosDir = separacionMaximaNervios(h, 2);
+  return { h, sep, bSup, bProm, hNervio, v, libre, repart, loseta, loseta40, removible, ducto, dosDir };
+})();
+
+export const rig = { mayoradas: factorRigidezLateral('mayoradas'), servicio: factorRigidezLateral('servicio') };
+
+## Idea central del capítulo
+
+El Capítulo C.8 es la **caja de herramientas común** del diseño en concreto: antes de dimensionar una viga, una columna o una losa hay que saber con qué método de diseño se trabaja, qué cargas se consideran, cómo se analiza la estructura, qué módulo de elasticidad y qué rigideces se usan y cómo se miden las luces. Contiene además reglas geométricas de dos sistemas muy comunes en Colombia: las **vigas T** y las **losas nervadas** (viguetas).
+
+- **Método de diseño** (C.8.1): resistencia con los factores de carga y de reducción $\phi$ del Capítulo C.9; el Apéndice C-B es una alternativa y el Apéndice C-D rige los anclajes.
+- **Análisis** (C.8.3, C.8.4): elástico, con una **redistribución de momentos** limitada a $1000\,\varepsilon_t$ por ciento y 20 %.
+- **Propiedades** (C.8.5 a C.8.8): $E_c$, $E_s$, factor $\lambda$ del concreto liviano y rigideces para deflexiones laterales.
+- **Geometría del análisis** (C.8.9 a C.8.12): luces, columnas, carga viva y alas de vigas T.
+- **Losas nervadas y acabado de piso** (C.8.13, C.8.14).
+
+<Callout tipo="importante" titulo="Lo que más se usa de este capítulo">
+$E_c = 4700\sqrt{f'_c}$ (concreto de densidad normal), $E_s$ = 200 000 MPa, redistribución máxima de 20 % solo si $\varepsilon_t \ge 0.0075$, luz de cálculo igual a la distancia entre centros de apoyos para los momentos, ancho efectivo de ala de vigas T y límites de separación y espesor de las losas nervadas.
+</Callout>
+
+## C.8.1 — Métodos de diseño
+
+- **C.8.1.1.** Los elementos se diseñan con **resistencia adecuada** según este Título, usando los factores de carga y de reducción de resistencia $\phi$ del Capítulo C.9.
+- **C.8.1.2.** Se permite diseñar el concreto reforzado con las disposiciones del **Apéndice C-B**.
+- **C.8.1.3.** Los anclajes instalados en el concreto para transferir cargas entre elementos conectados, dentro del alcance del Apéndice C-D, se diseñan según el **Apéndice C-D** (<NormaRef s="C.8.1" pag="C-61" />).
+
+## C.8.2 — Cargas
+
+- **C.8.2.1.** Las disposiciones del Título C suponen que las estructuras se diseñan para resistir **todas las cargas solicitadas**.
+- **C.8.2.2.** Las cargas de servicio cumplen el Título B, **incluidas las reducciones de carga viva** que allí se permitan.
+- **C.8.2.3.** Para viento y sismo, las partes integrales de la estructura se diseñan para resistir las **fuerzas laterales totales**. El viento está en el Capítulo B.6 y el sismo en el Título A.
+- **C.8.2.4.** Debe prestarse **especial atención** a los efectos de preesforzado, puentes grúa, vibración, impacto, retracción, variación de temperatura, flujo plástico, expansión de concretos de retracción compensada y asentamientos diferenciales de los apoyos (<NormaRef s="C.8.2" pag="C-61" />).
+
+## C.8.3 — Métodos de análisis
+
+- **C.8.3.1.** Todos los elementos de pórticos o estructuras continuas se diseñan para los efectos máximos de las cargas mayoradas obtenidos con la **teoría del análisis elástico**, salvo cuando se modifiquen según C.8.4.
+- **C.8.3.2.** Se permite usar **modelos puntal-tensor** para el diseño del concreto estructural (Apéndice C-A) (<NormaRef s="C.8.3" pag="C-61" />).
+
+## C.8.4 — Redistribución de momentos en elementos continuos sometidos a flexión
+
+Cuando un apoyo de una viga continua llega a la fluencia, el momento no sigue creciendo allí: se transfiere a otras secciones. La norma permite aprovecharlo, con límites:
+
+- **C.8.4.1.** Salvo que se usen valores **aproximados** de los momentos, los momentos mayorados elásticos en las secciones de máximo momento negativo o positivo de cualquier vano de elementos continuos a flexión pueden **disminuirse en no más de $1000\,\varepsilon_t$ por ciento, con un máximo de 20 %**.
+- **C.8.4.2.** La redistribución se hace **solo si $\varepsilon_t \ge 0.0075$** en la sección cuyo momento se reduce.
+- **C.8.4.3.** El momento reducido se usa para calcular los momentos redistribuidos en las demás secciones del vano, y el **equilibrio estático** se mantiene para cada disposición de carga (<NormaRef s="C.8.4" pag="C-61" />).
+
+<Ecuacion num="C.8.4.1 (texto)" titulo="Reducción máxima del momento elástico">
+
+$$
+\Delta M\,(\%) \;\le\; 1000\,\varepsilon_t \;\le\; 20
+$$
+
+$$
+M_{red} = M_{el}\left(1 - \frac{\Delta M\,(\%)}{100}\right) \qquad \varepsilon_t \ge 0.0075
+$$
+
+- $\varepsilon_t$: deformación unitaria neta de tracción en el acero más traccionado en la sección cuyo momento se reduce, con el concreto en su deformación límite de 0.003 (C.10.2.3).
+- Con $\varepsilon_t = 0.0075$ la reducción permitida es 7.5 %; con $\varepsilon_t \ge 0.020$ llega al tope de 20 %.
+- La ecuación $M_{red}$ es la aplicación directa del texto (criterio propio de presentación).
+
+</Ecuacion>
+
+La deformación $\varepsilon_t$ sale de la compatibilidad de deformaciones: $\varepsilon_t = 0.003\,(d_t - c)/c$, con $c$ la profundidad del eje neutro y $d_t$ la distancia de la fibra comprimida extrema al acero más traccionado (<NormaRef s="C.10.2.3" pag="C-75" />).
+
+<Ejemplo numero={1} titulo="Redistribución de momentos en una viga empotrada con carga uniforme">
+Una viga empotrada en ambos extremos, de luz $L$ = {e2.L} m, soporta $w_u$ = {e2.wu} kN/m. En el apoyo la sección diseñada tiene $c$ = {e2.c} mm y $d_t$ = {e2.dt} mm. Calcular cuánto puede reducirse el momento negativo y cómo cambia el positivo.
+
+<Paso titulo="Momentos elásticos" ref="C.8.3.1">
+Con empotramiento perfecto: $M^-$ = $w_u L^2/12$ = {e2.Mneg.toFixed(1)} kN·m; $M^+$ = $w_u L^2/24$ = {e2.Mpos.toFixed(1)} kN·m. El momento isostático es $M_0$ = $w_u L^2/8$ = {e2.M0.toFixed(1)} kN·m.
+</Paso>
+<Paso titulo="Deformación unitaria neta de tracción" ref="C.10.2.3">
+
+$$
+\varepsilon_t = \frac{0.003\,(d_t - c)}{c} = \frac{0.003\,(450 - 110)}{110}
+$$
+
+Resultado: $\varepsilon_t$ = **{e2.eps.toFixed(5)}**, mayor que 0.0075: **se permite redistribuir** (C.8.4.2).
+
+</Paso>
+<Paso titulo="Reducción máxima" ref="C.8.4.1">
+1000 × {e2.eps.toFixed(5)} = {(1000*e2.eps).toFixed(2)} % (menor que el tope de 20 %) → reducción **{e2.red.porcentaje.toFixed(2)} %**.
+</Paso>
+<Paso titulo="Momento negativo redistribuido" ref="C.8.4.1">
+$M^-_{red}$ = {e2.Mneg.toFixed(1)} × (1 − {e2.red.porcentaje.toFixed(2)}/100) = **{e2.MnegRed.toFixed(1)} kN·m** en cada apoyo.
+</Paso>
+<Paso titulo="Equilibrio estático: nuevo momento positivo" ref="C.8.4.3">
+
+$$
+M^+ = M_0 - \frac{M^-_{izq} + M^-_{der}}{2}
+$$
+
+$M^+$ = {e2.M0.toFixed(1)} − {e2.MnegRed.toFixed(1)} = **{e2.MposRed.toFixed(1)} kN·m**, es decir, {e2.aumento.toFixed(1)} % más que el positivo elástico de {e2.Mpos.toFixed(1)} kN·m. La viga debe diseñarse para ese momento positivo mayor.
+
+</Paso>
+<Paso titulo="Casos límite" ref="C.8.4.1, C.8.4.2">
+Con $\varepsilon_t$ = 0.020 el resultado 1000 $\varepsilon_t$ = 20 % ya es el tope: {e2.tope.porcentaje} %. Con $\varepsilon_t$ = 0.005 (menor que 0.0075) **no se permite redistribuir**: {e2.no.porcentaje} %.
+</Paso>
+<Resultado>
+Con $\varepsilon_t$ = {e2.eps.toFixed(5)} el momento negativo baja de {e2.Mneg.toFixed(1)} a {e2.MnegRed.toFixed(1)} kN·m ({e2.red.porcentaje.toFixed(1)} %) y el positivo sube de {e2.Mpos.toFixed(1)} a {e2.MposRed.toFixed(1)} kN·m. La suma $M^+ + M^-$ sigue siendo $M_0$ = {e2.M0.toFixed(1)} kN·m. Los datos del ejemplo son supuestos propios.
+</Resultado>
+</Ejemplo>
+
+## C.8.5 — Módulo de elasticidad
+
+- **C.8.5.1.** El módulo de elasticidad del concreto, $E_c$, puede tomarse como $w_c^{1.5}\,0.043\sqrt{f'_c}$ (en MPa), para $w_c$ entre **1440 y 2560 kg/m³**. Para concreto de **densidad normal**, $E_c$ puede tomarse como $4700\sqrt{f'_c}$.
+- **C.8.5.2.** El módulo del acero de refuerzo no preesforzado, $E_s$, puede tomarse como **200 000 MPa**.
+- **C.8.5.3.** El módulo del acero de preesforzado, $E_p$, debe determinarse con **ensayos** o ser informado por el fabricante (<NormaRef s="C.8.5" pag="C-62" />).
+
+<Ecuacion num="C.8.5.1" titulo="Módulo de elasticidad del concreto">
+
+$$
+E_c = w_c^{1.5}\;0.043\sqrt{f'_c} \quad (1440 \le w_c \le 2560\ \text{kg/m}^3)
+$$
+
+$$
+E_c = 4700\sqrt{f'_c} \quad \text{(densidad normal)}
+$$
+
+- $E_c$ en MPa; $f'_c$ en MPa (la raíz es de $f'_c$ en MPa); $w_c$ en kg/m³.
+- Las dos expresiones coinciden (±1 %) con $w_c \approx 2300$ kg/m³.
+
+</Ecuacion>
+
+## C.8.6 — Concreto liviano
+
+Para concreto de peso liviano se usa el factor de modificación $\lambda$ como **multiplicador de $\sqrt{f'_c}$** en todas las ecuaciones y secciones aplicables del Título C (<NormaRef s="C.8.6.1" pag="C-62" />):
+
+<Ecuacion num="C.8.6.1" titulo="Factor λ del concreto liviano">
+
+$$
+\lambda = 0.85 \;\text{(liviano con arena de peso normal)} \qquad \lambda = 0.75 \;\text{(otros livianos)} \qquad \lambda = 1.0 \;\text{(peso normal)}
+$$
+
+$$
+\lambda = \frac{f_{ct}}{0.56\sqrt{f'_c}} \le 1.0 \quad \text{si se especifica la resistencia promedio a tracción por hendimiento } f_{ct}
+$$
+
+- Se permite **interpolar** entre 0.75 y 0.85 con base en fracciones volumétricas cuando parte del fino liviano se reemplaza por fino de peso normal.
+- Se permite **interpolación lineal** entre 0.85 y 1.0 para concreto con fino de peso normal y una combinación de gruesos de peso normal y liviano.
+- $f_{ct}$ y $f'_c$ en MPa.
+
+</Ecuacion>
+
+<Ejemplo numero={2} titulo="Módulo de elasticidad y factor λ">
+Calcular $E_c$ para $f'_c$ = {e1.fc} MPa en concreto normal y liviano, la relación modular y $\lambda$ para un concreto liviano con $f_{ct}$ = {e1.fct} MPa.
+
+<Paso titulo="Concreto de densidad normal" ref="C.8.5.1">
+
+$$
+E_c = 4700\sqrt{28} = 4700 \times 5.2915
+$$
+
+$\sqrt{f'_c}$ = {e1.raiz.toFixed(4)} MPa → $E_c$ = **{e1.EcNormal.toFixed(0)} MPa** (≈ {(e1.EcNormal/1000).toFixed(1)} GPa).
+
+</Paso>
+<Paso titulo="Con la expresión general, wc = 2300 kg/m³" ref="C.8.5.1">
+$E_c$ = 2300<sup>1.5</sup> × 0.043 × {e1.raiz.toFixed(4)} = **{e1.EcGeneral2300.toFixed(0)} MPa**, {(100*Math.abs(e1.EcGeneral2300/e1.EcNormal-1)).toFixed(1)} % de diferencia con el valor de densidad normal.
+</Paso>
+<Paso titulo="Concreto liviano, wc = 1800 kg/m³" ref="C.8.5.1">
+$E_c$ = 1800<sup>1.5</sup> × 0.043 × {e1.raiz.toFixed(4)} = **{e1.EcLiviano.toFixed(0)} MPa**, solo {(100*e1.EcLiviano/e1.EcNormal).toFixed(0)} % del módulo del concreto normal con la misma resistencia.
+</Paso>
+<Paso titulo="Relación modular n = Es / Ec" ref="C.8.5.2">
+Normal: 200 000 / {e1.EcNormal.toFixed(0)} = **{e1.n.toFixed(2)}**. Liviano: 200 000 / {e1.EcLiviano.toFixed(0)} = **{e1.nLiviano.toFixed(2)}**.
+</Paso>
+<Paso titulo="Factor λ" ref="C.8.6.1">
+Por tipo: {e1.lamArena} (liviano con arena de peso normal) y {e1.lamOtros} (otros livianos). Con $f_{ct}$ = {e1.fct} MPa: $\lambda$ = {e1.fct} / (0.56 × {e1.raiz.toFixed(4)}) = **{e1.lambdaFct.toFixed(3)}** (≤ 1.0). Con 50 % de fino de peso normal (criterio de interpolación propio): {e1.lamInterpFino.toFixed(3)}; con 50 % de grueso de peso normal sobre fino normal: {e1.lamInterpGrueso.toFixed(3)}.
+</Paso>
+<Resultado>
+$E_c$ = {e1.EcNormal.toFixed(0)} MPa (normal) y {e1.EcLiviano.toFixed(0)} MPa (liviano de 1800 kg/m³); $n$ = {e1.n.toFixed(2)} y {e1.nLiviano.toFixed(2)}; $\lambda$ = {e1.lambdaFct.toFixed(3)} con el ensayo de hendimiento dado. En las ecuaciones de cortante y de otros capítulos, $\sqrt{f'_c}$ se multiplica por ese $\lambda$.
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="Sobre las interpolaciones de λ">
+La norma dice «con base en fracciones volumétricas» para el rango 0.75–0.85 y «interpolación lineal» para 0.85–1.0, pero no define cuál fracción es la variable. Aquí se interpola linealmente con la fracción volumétrica de agregado de peso normal (criterio propio, a confirmar con el profesional responsable).
+</Callout>
+
+## C.8.7 — Rigidez
+
+- **C.8.7.1.** Se permite adoptar **cualquier conjunto de suposiciones razonables** para las rigideces relativas a flexión y torsión de columnas, muros y sistemas de entrepiso y cubierta; las suposiciones deben ser **consistentes en todo el análisis**.
+- **C.8.7.2.** Al determinar momentos y diseñar los elementos debe considerarse el **efecto de las cartelas** (<NormaRef s="C.8.7" pag="C-62" />).
+
+## C.8.8 — Rigidez efectiva para determinar las deflexiones laterales
+
+- **C.8.8.1.** Las deflexiones laterales causadas por fuerzas laterales de **servicio** se calculan con un análisis lineal usando una rigidez de los elementos igual a **1.4 veces** la rigidez a flexión definida en C.8.8.2 y C.8.8.3, o con un análisis más detallado. Las propiedades **no deben tomarse mayores** que las de la sección bruta.
+- **C.8.8.2.** Las deflexiones causadas por fuerzas laterales **mayoradas** se calculan con análisis lineal con la rigidez definida por (a) las propiedades de sección de C.10.10.4(a) a (c), o (b) **el 50 %** de la rigidez basada en la sección bruta; o con un análisis más detallado que considere la rigidez reducida de todos los elementos.
+- **C.8.8.3.** Para **losas en dos direcciones sin vigas** que forman parte del sistema de resistencia sísmica, las deflexiones por cargas laterales mayoradas pueden calcularse con análisis lineal; la rigidez de la losa se define con un modelo que coincida sustancialmente con ensayos y análisis representativos, y la de los demás elementos como en C.8.8.2. El Título A restringe estos sistemas (<NormaRef s="C.8.8" pag="C-62" />).
+
+Con la opción (b) de C.8.8.2, la rigidez para cargas mayoradas es **{rig.mayoradas} $EI_g$** y, para cargas de servicio, 1.4 × {rig.mayoradas} = **{rig.servicio.toFixed(1)} $EI_g$** (menor que $EI_g$, por tanto se acepta). Este producto es aritmética propia sobre el texto de la norma.
+
+## C.8.9 — Longitud del vano
+
+- **C.8.9.1.** La luz de elementos **no construidos monolíticamente** con sus apoyos es la **luz libre más la altura del elemento**, sin exceder la distancia entre centros de apoyos.
+- **C.8.9.2.** En el análisis de pórticos o elementos continuos para obtener momentos, la luz es la **distancia entre centros de apoyos**.
+- **C.8.9.3.** Para vigas construidas integralmente con sus apoyos, se permite **diseñar con los momentos en la cara de los apoyos**.
+- **C.8.9.4.** Las losas macizas o nervadas monolíticas con luces libres **no mayores de 3 m** pueden analizarse como **losas continuas sobre apoyos simples**, con luces iguales a las **luces libres** y despreciando el ancho de las vigas (<NormaRef s="C.8.9" pag="C-63" />).
+
+<Ejemplo numero={3} titulo="Luz de cálculo de una viga y de una losa">
+Una viga de 0.45 m de altura se apoya sobre muros (no es monolítica con ellos): luz libre 5.60 m y distancia entre centros de apoyos 6.20 m. Calcular la luz de cálculo; repetir con luz libre 5.90 m y altura 0.50 m. Luego, una losa monolítica con luces libres de 2.80 m y 3.20 m.
+
+<Paso titulo="Primera viga" ref="C.8.9.1">
+Luz libre + h = {(5.6).toFixed(2)} + {(0.45).toFixed(2)} = {(5.6+0.45).toFixed(2)} m ≤ 6.20 m (centros): luz de cálculo = **{e3.a.luz.toFixed(2)} m**.
+</Paso>
+<Paso titulo="Segunda viga" ref="C.8.9.1">
+Luz libre + h = {(5.9).toFixed(2)} + {(0.5).toFixed(2)} = {(5.9+0.5).toFixed(2)} m &gt; 6.20 m: la suma excede la distancia entre centros y gobierna esta: **{e3.b.luz.toFixed(2)} m**.
+</Paso>
+<Paso titulo="Losa con luz libre de 2.80 m" ref="C.8.9.4">
+Luz libre ≤ 3 m y construida monolíticamente con sus apoyos: se analiza como losa continua sobre apoyos simples con luz = **{e3.losa1.luz.toFixed(2)} m**, sin considerar el ancho de las vigas.
+</Paso>
+<Paso titulo="Losa con luz libre de 3.20 m" ref="C.8.9.4">
+Supera 3 m: **{e3.losa2 === null ? 'no se permite esa simplificación' : 'se permite'}**; el análisis usa la distancia entre centros de apoyos (C.8.9.2), con momentos de diseño en la cara de los apoyos (C.8.9.3).
+</Paso>
+<Resultado>
+Luces de cálculo: {e3.a.luz.toFixed(2)} m y {e3.b.luz.toFixed(2)} m (vigas no monolíticas); la losa de 2.80 m usa su luz libre y la de 3.20 m no puede usar esa simplificación.
+</Resultado>
+</Ejemplo>
+
+## C.8.10 — Columnas
+
+- **C.8.10.1.** Se diseñan para resistir las **fuerzas axiales** de las cargas mayoradas de todos los pisos o cubierta y el **momento máximo** debido a cargas mayoradas en **un solo vano adyacente** del entrepiso o cubierta considerado; también la condición que produzca la **máxima relación momento/carga axial**.
+- **C.8.10.2.** En pórticos o elementos continuos se atiende el efecto de **cargas no balanceadas** de entrepisos o cubierta, en columnas exteriores e interiores, y la carga excéntrica por otras causas.
+- **C.8.10.3.** Para momentos por cargas gravitacionales en columnas monolíticas con la estructura, los **extremos lejanos** pueden considerarse **empotrados**.
+- **C.8.10.4.** La resistencia a flexión de la columna en cualquier piso se determina distribuyendo el momento entre las columnas inmediatamente sobre y bajo el entrepiso, **en proporción a las rigideces relativas** y según las condiciones de restricción al giro (<NormaRef s="C.8.10" pag="C-63" />).
+
+## C.8.11 — Disposición de la carga viva
+
+- **C.8.11.1.** Se permite suponer que (a) la carga viva se aplica **solo al piso o cubierta** bajo consideración y (b) los extremos lejanos de las columnas monolíticas con la estructura están **empotrados**.
+- **C.8.11.2.** Se permite limitar la disposición de la carga viva a las combinaciones de (a) carga muerta mayorada en **todos** los vanos con carga viva mayorada en **dos vanos adyacentes**, y (b) carga muerta mayorada en todos los vanos con carga viva mayorada en **vanos alternados** (<NormaRef s="C.8.11" pag="C-63" />).
+
+<Callout tipo="practica">
+Estas dos combinaciones («dos vanos adyacentes» para el momento negativo máximo en un apoyo y «vanos alternados» para el positivo máximo) son las que se usan en la práctica para obtener las envolventes de vigas continuas sin evaluar todas las posibilidades. La explicación es propia; el texto solo autoriza la simplificación.
+</Callout>
+
+## C.8.12 — Sistemas de vigas T
+
+- **C.8.12.1.** Ala y alma se construyen **monolíticamente** o se unen efectivamente.
+- **C.8.12.2.** El ancho efectivo de la losa usada como ala no excede **1/4 de la luz** de la viga, y el ancho sobresaliente efectivo a **cada lado** del alma no excede (a) **8 veces el espesor de la losa** y (b) **la mitad de la distancia libre a la siguiente alma**.
+- **C.8.12.3.** Para vigas con losa a **un solo lado**, el ancho sobresaliente efectivo no excede (a) **1/12 de la luz**, (b) **6 veces el espesor** de la losa y (c) **la mitad de la distancia libre** a la siguiente alma.
+- **C.8.12.4.** En vigas **aisladas** con forma T solo para dar área adicional de compresión, el ala tiene espesor no menor de **1/2 del ancho del alma** y ancho efectivo no mayor de **4 veces** el ancho del alma.
+- **C.8.12.5.** Si el refuerzo principal de flexión de la losa-ala (excluyendo viguetas) es **paralelo a la viga**, se dispone refuerzo **perpendicular** a la viga en la cara superior: (C.8.12.5.1) se diseña para la carga mayorada que actúa sobre el ala trabajando en **voladizo** (ancho total del ala en vigas aisladas; solo el sobresaliente efectivo en las demás); (C.8.12.5.2) con separación no mayor de **5 veces el espesor de la losa ni 450 mm** (<NormaRef s="C.8.12" pag="C-63" /> y <NormaRef s="C.8.12" pag="C-64" />).
+
+<TablaNorma numero="C.8.12 (resumen)" titulo="Ancho efectivo del ala de vigas T" pag="C-63" nota="Resumen propio de C.8.12.2 a C.8.12.4. h_f = espesor de la losa; b_w = ancho del alma; L = luz; s = distancia libre a la siguiente alma.">
+
+| Caso | Voladizo efectivo (por lado) | Ancho efectivo total |
+|---|---|---|
+| Losa a ambos lados (C.8.12.2) | $\le \min(8h_f;\ s/2)$ | $b_e \le L/4$ |
+| Losa a un solo lado (C.8.12.3) | $\le \min(L/12;\ 6h_f;\ s/2)$ | $b_e = b_w$ + voladizo |
+| Viga aislada (C.8.12.4) | — | $b_e \le 4b_w$, con $h_f \ge b_w/2$ |
+
+</TablaNorma>
+
+<Ejemplo numero={4} titulo="Ancho efectivo del ala de una viga T">
+Una viga de luz $L$ = {e4.L} mm tiene alma $b_w$ = {e4.bw} mm, losa de $h_f$ = {e4.hf} mm y distancia libre a la siguiente alma de {e4.libre} mm. Calcular el ancho efectivo con losa a ambos lados, a un solo lado, y para una viga aislada con $h_f$ = 150 mm.
+
+<Paso titulo="Voladizo máximo a cada lado (ambos lados)" ref="C.8.12.2">
+8 $h_f$ = {8*e4.hf} mm; $s/2$ = {e4.libre/2} mm → voladizo {Math.min(8*e4.hf, e4.libre/2)} mm por lado → $b_w$ + 2 × {Math.min(8*e4.hf, e4.libre/2)} = {e4.bw + 2*Math.min(8*e4.hf, e4.libre/2)} mm.
+</Paso>
+<Paso titulo="Límite de L/4" ref="C.8.12.2">
+$L/4$ = {e4.L/4} mm &lt; {e4.bw + 2*Math.min(8*e4.hf, e4.libre/2)} mm: gobierna $L/4$, **$b_e$ = {e4.ambos.be} mm**. Con una luz de 10 000 mm, $L/4$ = 2500 mm no gobierna y $b_e$ = {e4.ambosLargo.be} mm (voladizo {e4.ambosLargo.voladizo} mm por lado).
+</Paso>
+<Paso titulo="Losa a un solo lado" ref="C.8.12.3">
+Voladizo ≤ mín($L/12$ = {(e4.L/12).toFixed(0)}; 6 $h_f$ = {6*e4.hf}; $s/2$ = {e4.libre/2}) = {e4.uno.voladizo.toFixed(0)} mm → **$b_e$ = {e4.bw} + {e4.uno.voladizo.toFixed(0)} = {e4.uno.be.toFixed(0)} mm**.
+</Paso>
+<Paso titulo="Viga aislada" ref="C.8.12.4">
+Espesor mínimo del ala: $b_w/2$ = {e4.bw/2} mm; con $h_f$ = 150 mm {e4.aislada.cumpleEspesorAislada ? 'cumple' : 'no cumple'}. Ancho efectivo máximo: 4 $b_w$ = **{e4.aislada.be} mm**.
+</Paso>
+<Resultado>
+$b_e$ = {e4.ambos.be} mm (ambos lados, gobierna L/4), {e4.uno.be.toFixed(0)} mm (un lado) y {e4.aislada.be} mm (aislada, con ala de 150 mm). Los datos son supuestos propios.
+</Resultado>
+</Ejemplo>
+
+## C.8.13 — Viguetas en losas nervadas
+
+La **losa nervada** es una combinación monolítica o prefabricada de viguetas regularmente espaciadas en una o dos direcciones y una loseta superior que actúa en una o dos direcciones ortogonales; la loseta puede ser parcialmente prefabricada, pero al menos una parte de su espesor debe vaciarse en sitio (<NormaRef s="C.8.13.1" pag="C-64" />).
+
+- **C.8.13.1 (segunda, sísmica).** Los nervios principales y los nervios transversales o riostras de losas nervadas **en una dirección** no se tienen en cuenta para la **rigidez ante fuerzas horizontales** del sistema sísmico. El elemento paralelo a la viguetería que enlaza las columnas debe cumplir los requisitos de vigas del Capítulo C.21 y su rigidez puede considerarse para cargas horizontales.
+- **C.8.13.2.** Ancho de nervaduras **≥ 100 mm** en su parte superior y **ancho promedio ≥ 80 mm**; altura **≤ 5 veces el ancho promedio**.
+- **C.8.13.3.** Separación máxima centro a centro entre nervios: **una dirección**, 2.5 veces el espesor total de la losa sin exceder 1.20 m; **dos direcciones**, 3.5 veces sin exceder 1.50 m.
+- **C.8.13.3.1.** En losas en una dirección, **viguetas transversales de repartición** con separación libre máxima de **10 veces** el espesor total, sin exceder **4.0 m**.
+- **C.8.13.3.2.** Esas viguetas se diseñan a flexión y cortante para transportar la **carga total (muerta más viva)** de cada nervio a los dos adyacentes.
+- **C.8.13.3.3.** En los elementos donde se apoyan se considera una carga aferente equivalente al **doble** de la carga total de un nervio típico principal.
+- **C.8.13.4.** Las losas nervadas que no cumplan C.8.13.1 a C.8.13.3 se diseñan como **losas y vigas** (<NormaRef s="C.8.13" pag="C-64" />).
+
+<TablaNorma numero="C.8.13 (resumen)" titulo="Límites geométricos de losas nervadas" pag="C-64" nota="Resumen propio de C.8.13.2, C.8.13.3, C.8.13.5 a C.8.13.7; h = espesor total de la losa. Véase la errata sobre C.8.13.5.2.">
+
+| Parámetro | Límite | Numeral |
+|---|---|---|
+| Ancho superior de la nervadura | ≥ 100 mm | C.8.13.2 |
+| Ancho promedio de la nervadura | ≥ 80 mm | C.8.13.2 |
+| Altura de la nervadura | ≤ 5 × ancho promedio | C.8.13.2 |
+| Separación entre nervios, una dirección | ≤ 2.5 h y ≤ 1.20 m | C.8.13.3 |
+| Separación entre nervios, dos direcciones | ≤ 3.5 h y ≤ 1.50 m | C.8.13.3 |
+| Viguetas transversales de repartición (una dirección) | Separación libre ≤ 10 h y ≤ 4.0 m | C.8.13.3.1 |
+| Loseta con aligeramiento de arcilla o concreto de $f'_c$ ≥ el de las viguetas | ≥ 45 mm y ≥ 1/20 de la distancia libre entre nervios (40 mm sobre aligeramientos permanentes) | C.8.13.5.2 |
+| Loseta con encofrados o aligeramientos removibles | ≥ 1/12 de la distancia libre y ≥ 50 mm | C.8.13.6.1 |
+| Espesor sobre ductos o tuberías embebidas | ≥ altura del ducto + 25 mm | C.8.13.7 |
+
+</TablaNorma>
+
+### C.8.13.5 a C.8.13.8 — Aligeramientos, loseta, ductos y cortante
+
+- **C.8.13.5.** Con aligeramientos de arcilla cocida o concreto de resistencia unitaria a compresión al menos igual al $f'_c$ de las viguetas: (C.8.13.5.1) puede incluirse la **pared vertical** del aligeramiento en contacto con la vigueta en los cálculos de cortante y momento negativo, y ninguna otra parte; (C.8.13.5.2) la loseta vaciada en sitio tiene **al menos 45 mm** y **no menos de 1/20** de la distancia libre entre nervios; sobre aligeramientos permanentes de concreto, arcilla o plaquetas prefabricadas la parte vaciada en sitio del espesor mínimo **puede reducirse a 40 mm**; (C.8.13.5.3) en losas en una dirección, refuerzo normal a las nervaduras según C.7.12.
+- **C.8.13.6.** Con encofrados o aligeramientos **removibles** que no cumplan C.8.13.5: (C.8.13.6.1) espesor de loseta **≥ 1/12** de la distancia libre y **≥ 50 mm**; (C.8.13.6.2) refuerzo perpendicular a las viguetas que cumpla flexión (con concentraciones de carga, si las hay) y no menos que C.7.12.
+- **C.8.13.7.** Con ductos o tuberías embebidas (C.6.3), el espesor en cualquier punto es **al menos 25 mm mayor** que la altura total del ducto o tubería, sin afectar significativamente la resistencia.
+- **C.8.13.8.** En losas nervadas $V_c$ puede considerarse **10 % mayor** que lo especificado en el Capítulo C.11 (<NormaRef s="C.8.13" pag="C-65" />).
+
+<Ejemplo numero={5} titulo="Verificación geométrica de una losa nervada en una dirección">
+Losa nervada de espesor total $h$ = {e5.h} mm, nervios cada {e5.sep} mm centro a centro, con ancho superior {e5.bSup} mm, ancho promedio {e5.bProm} mm y altura de nervadura {e5.hNervio} mm. Verificar C.8.13.2 y C.8.13.3 y determinar las viguetas de repartición y el espesor de la loseta.
+
+<Paso titulo="Separación máxima entre nervios" ref="C.8.13.3">
+mín(2.5 × {e5.h} = {2.5*e5.h}; 1200) = **{e5.v.separacionMaxima} mm**; la separación real de {e5.sep} mm {e5.v.cumpleSeparacion ? 'cumple' : 'no cumple'}. (En dos direcciones el límite sería mín(3.5 × {e5.h}; 1500) = {e5.dosDir} mm.)
+</Paso>
+<Paso titulo="Dimensiones del nervio" ref="C.8.13.2">
+Ancho superior {e5.bSup} mm ≥ 100: {e5.v.cumpleAnchoSuperior ? 'cumple' : 'no cumple'}. Ancho promedio {e5.bProm} mm ≥ 80: {e5.v.cumpleAnchoPromedio ? 'cumple' : 'no cumple'}. Altura máxima 5 × {e5.bProm} = {e5.v.alturaMaximaNervio} mm ≥ {e5.hNervio} mm: {e5.v.cumpleAlturaNervio ? 'cumple' : 'no cumple'}.
+</Paso>
+<Paso titulo="Viguetas transversales de repartición" ref="C.8.13.3.1">
+Separación libre máxima: mín(10 × {e5.h} = {10*e5.h}; 4000) = **{e5.repart} mm**.
+</Paso>
+<Paso titulo="Espesor mínimo de la loseta" ref="C.8.13.5.2, C.8.13.6.1">
+Distancia libre entre nervios = {e5.sep} − {e5.bProm} = {e5.libre} mm. Con aligeramientos de arcilla o concreto: máx(45; {e5.libre}/20 = {(e5.libre/20).toFixed(0)}) = **{e5.loseta.toFixed(0)} mm** (40 mm si se aplica la reducción sobre aligeramientos permanentes: {e5.loseta40.toFixed(0)} mm). Con aligeramientos removibles: máx({e5.libre}/12 = {(e5.libre/12).toFixed(1)}; 50) = **{e5.removible.toFixed(1)} mm**.
+</Paso>
+<Paso titulo="Tubería embebida de 20 mm de altura" ref="C.8.13.7">
+Espesor mínimo en ese punto: 20 + 25 = **{e5.ducto} mm**.
+</Paso>
+<Resultado>
+La losa nervada {e5.v.cumple ? 'cumple' : 'no cumple'} los límites geométricos de C.8.13.2 y C.8.13.3; viguetas de repartición a menos de {e5.repart} mm libres; loseta de {e5.loseta.toFixed(0)} mm con aligeramientos de arcilla o concreto o {e5.removible.toFixed(1)} mm con aligeramientos removibles. Los datos son supuestos propios.
+</Resultado>
+</Ejemplo>
+
+## C.8.14 — Acabado de piso separado
+
+- **C.8.14.1.** El acabado de piso **no se incluye** como parte de un elemento estructural, a menos que se construya **monolíticamente** con la losa o se diseñe como sección compuesta según el Capítulo C.17.
+- **C.8.14.2.** Todo acabado de concreto de un piso puede considerarse parte del **recubrimiento requerido** o del **espesor total** para consideraciones **no estructurales** (<NormaRef s="C.8.14" pag="C-65" />).
+
+## Errata y vacíos del PDF
+
+<Callout tipo="nota" titulo="Observaciones sobre la transcripción (verificadas contra la imagen)">
+- **Numeración duplicada en C.8.13:** el PDF imprime dos veces «C.8.13.1» (la definición de losa nervada y la nota sobre rigidez sísmica de losas en una dirección). Aquí se distinguen como «primera» y «segunda».
+- **C.8.13.5.2:** la redacción permite leer «45 mm» como mínimo general y «40 mm» como reducción sobre aligeramientos permanentes, aunque la primera frase ya trata de aligeramientos de arcilla o concreto. Se transcribieron ambos valores; la función de cálculo ofrece los dos casos.
+- **C.8.12.2:** «ancho efectivo … no debe exceder 1/4 de la luz» se aplica al ancho total del ala (incluye el alma), como en la práctica usual (criterio propio de lectura).
+- **C.8.4.1:** el texto dice «en no más de $1000\,\varepsilon_t$ por ciento»: con $\varepsilon_t$ = 0.0075 resulta 7.5 %.
+- **C.8.8.2(a):** remite a las propiedades de C.10.10.4(a) a (c), que están en el Capítulo C.10 y no se reproducen aquí.
+- **C.8.1.1:** el símbolo $\phi$ sale como «ϕ» en el PDF; se mantiene la lectura de factor de reducción de resistencia.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Redistribuir sin comprobar $\varepsilon_t$:** con $\varepsilon_t$ &lt; 0.0075 no se permite ninguna redistribución; y nunca más de 20 %.
+- **Reducir el momento negativo y olvidar aumentar el positivo:** el equilibrio estático ($M^+ + \overline{M^-} = M_0$) debe mantenerse.
+- **Usar $4700\sqrt{f'_c}$ con concreto liviano:** para $w_c$ distinto de densidad normal se usa $w_c^{1.5}\,0.043\sqrt{f'_c}$.
+- **No aplicar $\lambda$** en las ecuaciones donde multiplica a $\sqrt{f'_c}$ cuando el concreto es liviano.
+- **Tomar la luz libre como luz de cálculo del análisis:** para momentos en pórticos se usa la distancia entre centros de apoyos (C.8.9.2); solo losas con luz libre ≤ 3 m usan la luz libre (C.8.9.4).
+- **Dar a toda la losa el ancho efectivo de la viga T** sin recortar por L/4, 8 $h_f$ o la mitad de la distancia libre.
+- **Olvidar el refuerzo transversal del ala** cuando el refuerzo de la losa es paralelo a la viga (C.8.12.5).
+- **Contar los nervios principales o riostras como rigidez sísmica** en losas nervadas en una dirección.
+- **Pasar tuberías por la loseta de una nervada** sin que el espesor supere la altura del ducto en 25 mm.
+- **Contar el afinado de piso como espesor estructural** si no es monolítico ni compuesto diseñado según C.17.
+</Callout>
+
+## Resumen en una línea
+
+**El Título C se diseña por resistencia con análisis elástico (se pueden redistribuir hasta 1000 εt % y como máximo 20 % si εt ≥ 0.0075), con Ec = 4700√f′c y Es = 200 000 MPa, luces entre centros de apoyos, alas de vigas T limitadas por L/4, 8 hf y la mitad de la luz libre, y nervios y lositas dentro de los límites geométricos de C.8.13.**

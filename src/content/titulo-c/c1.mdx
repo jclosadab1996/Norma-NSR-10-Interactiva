@@ -1,0 +1,323 @@
+---
+codigo: 'C.1'
+tipo: capitulo
+titulo: 'Requisitos generales'
+resumen: 'Alcance del Título C (concreto estructural con f′c ≥ 17 MPa), qué incluyen planos y memorias, cómo se supervisa la obra, qué normas técnicas son obligatorias y en qué sistema de unidades está escrito el Título.'
+objetivos:
+  - 'Saber qué cubre y qué no cubre el Título C, y cuál manda cuando hay conflicto con otras normas'
+  - 'Relacionar los grados DMI, DMO y DES con los capítulos del Título C que deben cumplirse'
+  - 'Enumerar qué debe contener un plano estructural de concreto y quién debe firmarlo'
+  - 'Conocer los registros de supervisión técnica y los umbrales de temperatura de 4 °C y 35 °C'
+  - 'Usar las equivalencias SI, mks e inglés del Apéndice C-F sin confundir unidades'
+paginasNorma: 'C-1 a C-4'
+paginaPdf: 303
+orden: 1
+calculadoras: []
+nivel: 'basico'
+---
+
+import { FC_MINIMO_MPA, cumpleFcMinimo, esfuerzoDesdeMpa } from '../../lib/nsr10/concretoGenerales';
+
+export const ej1 = (() => {
+  const fc = 21;
+  return {
+    fc,
+    ok: cumpleFcMinimo(fc),
+    bajo: cumpleFcMinimo(16),
+    pisos: 5,
+    area: 2800,
+    usaIps1: 5 <= 5 && 2800 < 3000,
+    areaGrande: 3200,
+    usaIps1Grande: 5 <= 5 && 3200 < 3000,
+    mks: esfuerzoDesdeMpa(fc, 'mks'),
+    psi: esfuerzoDesdeMpa(fc, 'ingles'),
+  };
+})();
+
+## Idea central del capítulo
+
+El Capítulo C.1 es la **puerta de entrada** del Título C. No trae ecuaciones de diseño: responde preguntas de contexto que hay que resolver antes de calcular una sola viga.
+
+1. **¿Qué cubre el Título C?** El diseño y la construcción de elementos de **concreto estructural** de cualquier estructura de la NSR-10, y la evaluación de estructuras existentes (<NormaRef s="C.1.1.1" pag="C-1" />).
+2. **¿Con qué concreto?** Con $f'_c$ **no menor de 17 MPa** y sin valor máximo, salvo restricciones específicas del propio Título.
+3. **¿Qué grado de ductilidad?** Los grados de capacidad de disipación de energía **DMI, DMO y DES** se alcanzan sumando, a los Capítulos C.1 a C.19, los requisitos del Capítulo C.21 (<NormaRef s="C.1.1.10.1" pag="C-2" />).
+4. **¿Qué se entrega y quién responde?** Planos y especificaciones firmados, memorias de cálculo disponibles y **supervisión técnica** con registros (C.1.2 y C.1.3).
+5. **¿Qué normas técnicas obligan?** Las NTC de Icontec; si no existe NTC, la norma ASTM equivalente (C.1.5).
+6. **¿En qué unidades?** Sistema internacional (MPa, kN, m, mm); el Apéndice C-F traduce las ecuaciones no homogéneas al sistema mks y al inglés (C.1.6).
+
+<Callout tipo="importante" titulo="Un solo número que debes recordar de C.1">
+$f'_c \ge$ **17 MPa** para todo concreto estructural (<NormaRef s="C.1.1.1" pag="C-1" />). No hay valor máximo general: si usas concretos de alta resistencia, cada capítulo puede imponer sus propios límites (por ejemplo, los topes de $\sqrt{f'_c}$ en cortante).
+</Callout>
+
+## C.1.1 — Alcance
+
+### C.1.1.1 — Qué cubre el Título C
+
+El Título C da los **requisitos mínimos** para el **diseño y la construcción** de elementos de concreto estructural de cualquier estructura construida según la NSR-10, y también cubre la **evaluación de resistencia de estructuras existentes** (Capítulo C.20). Para el concreto estructural, $f'_c$ **no debe ser inferior a 17 MPa**; no se fija un máximo salvo que lo restrinja alguna disposición específica del Título (<NormaRef s="C.1.1.1" pag="C-1" />).
+
+### C.1.1.2 — Complemento de la NSR-10
+
+El Título C **complementa** el Reglamento NSR-10 y **rige en todos los aspectos** relativos al diseño y la construcción de concreto estructural (<NormaRef s="C.1.1.2" pag="C-1" />).
+
+### C.1.1.3 — Prelación sobre otras normas
+
+Cuando haya **conflicto** entre el Título C y los requisitos de otras normas a las que éste remite, **manda el Título C** en diseño, construcción y propiedades de los materiales (<NormaRef s="C.1.1.3" pag="C-1" />).
+
+### C.1.1.4 — Concreto dentro de estructuras de otro material
+
+Los requisitos del Título C se emplean también para diseñar los **elementos de concreto estructural que formen parte de estructuras de otro material** (acero, mampostería, madera…). Si el Título de la NSR-10 de ese otro material pide algo distinto a lo que dice el Título C, **rige lo que diga ese otro Título** para esas estructuras (<NormaRef s="C.1.1.4" pag="C-1" />).
+
+### C.1.1.5 — Estructuras especiales
+
+Para arcos, tolvas y silos, tanques, estanques, estructuras resistentes a explosiones y chimeneas, el Título C rige **cuando sea aplicable** (<NormaRef s="C.1.1.5" pag="C-1" />). La norma remite además a la sección 22.1.3 (sin el prefijo "C." en el PDF).
+
+### C.1.1.6 — Pilotes, pilas y cajones
+
+El Título C controla el **diseño estructural y la instalación** de las porciones de pilotes de concreto, pilas excavadas y cajones de cimentación que **quedan enterradas en el suelo**, en el Capítulo C.15 (<NormaRef s="C.1.1.6" pag="C-1" />).
+
+### C.1.1.7 — Losas sobre el terreno
+
+El Título C **no rige** para el diseño y construcción de losas sobre el terreno, **a menos que la losa transmita al suelo cargas verticales o fuerzas laterales de otras partes de la estructura** (<NormaRef s="C.1.1.7" pag="C-1" />).
+
+<Callout tipo="nota" titulo="Interpretación (no es texto de la norma)">
+Un contrapiso o una placa de piso que solo carga su propio uso queda fuera del Título C. Una placa de cimentación (platea) o una losa que hace de **diafragma** y reparte fuerza sísmica al suelo sí cae dentro. Véase también el literal (m) de <NormaRef s="C.1.2.1" pag="C-3" />.
+</Callout>
+
+### C.1.1.8 — Requisitos esenciales para edificios de concreto reforzado (ACI 314.1R)
+
+Para cumplir el Título C **se permite** usar el documento “Requisitos esenciales para edificios de concreto reforzado” (AIS, Icontec y ACI; designación **ACI IPS-1** de 2002 y, actualizado, **ACI 314.1R**). El uso se **limita a edificaciones de hasta cinco pisos y menos de 3000 m² de área**, y deben cumplirse todas las salvedades del documento sobre procedimientos simplificados de diseño (<NormaRef s="C.1.1.8" pag="C-1" />).
+
+| Condición de C.1.1.8 | Valor límite |
+|---|---|
+| Número de pisos | hasta **5** |
+| Área de la edificación | menos de **3000 m²** |
+
+### C.1.1.9 — Concreto sobre tableros permanentes de acero (steel form deck)
+
+#### C.1.1.9.1 — Losas no compuestas
+
+El diseño y construcción de losas de concreto estructural sobre tableros permanentes de acero **consideradas como no compuestas** lo rige el Título C (<NormaRef s="C.1.1.9.1" pag="C-1" />).
+
+#### C.1.1.9.2 — Losas compuestas
+
+El Título C **no rige** el **diseño compuesto** de esas losas. El concreto de tales losas sí debe cumplir los **Capítulos 1 a 6** del Título C cuando sea aplicable, y las secciones diseñadas como concreto reforzado se rigen por el Título C (<NormaRef s="C.1.1.9.2" pag="C-1" />). (Observación nuestra: el diseño compuesto acero-concreto debe buscarse en el Título F; C.1.1.9.2 solo dice que no lo rige el Título C.)
+
+### C.1.1.10 — Disposiciones para resistencia sísmica
+
+#### C.1.1.10.1 — Capacidad de disipación de energía
+
+El Título A de la NSR-10 **asigna** la capacidad de disipación de energía usada en el diseño sísmico; el Título C define cómo se **logra** en concreto (<NormaRef s="C.1.1.10.1" pag="C-2" />):
+
+| Grado | Cómo se logra con el Título C |
+|---|---|
+| **DMI** — mínima | Diseño según los Capítulos **C.1 a C.19** y los requisitos del Capítulo C.21 aplicables a este tipo de estructuras |
+| **DMO** — moderada | Capítulos **C.1 a C.19** más los requisitos especiales de **C.21 para capacidad moderada** |
+| **DES** — especial | Capítulos **C.1 a C.19** más los requisitos adicionales de **C.21 para capacidad especial** |
+
+<Callout tipo="nota" titulo="Cómo se complementa con las definiciones de C.2.2">
+Las definiciones de C.2.2 precisan los capítulos de C.21 por grado: pórtico ordinario DMI con C.21.2, intermedio DMO con C.21.3 y especial DES con C.21.1.3 a C.21.1.7 y C.21.5 a C.21.7; para muros, DMO con C.21.4 y DES con C.21.1.3 a C.21.1.7, C.21.9 y C.21.10. Los dos bloques de la norma no están redactados idénticamente (aquí se dice "C.1 a C.19", allá "C.1 a C.18"): al diseñar, aplica el detalle del Capítulo C.21 y de C.2.2 para el sistema concreto que uses. Véase [Capítulo C.2](/titulo-c/c2).
+</Callout>
+
+#### C.1.1.10.2 — Todas las estructuras
+
+**Todas** las estructuras deben cumplir los requisitos aplicables del Capítulo 21 (en el PDF aparece sin el prefijo "C.", por herencia del texto ACI; se refiere a C.21) (<NormaRef s="C.1.1.10.2" pag="C-2" />).
+
+### C.1.1.11 — Tanques, piscinas y compartimentos estancos
+
+El diseño y la construcción de **tanques, piscinas y compartimentos estancos** que sean parte del equipamiento de edificaciones están cubiertos por el **Capítulo C.23** (<NormaRef s="C.1.1.11" pag="C-2" />).
+
+## C.1.2 — Planos y especificaciones
+
+### C.1.2.1 — Contenido mínimo
+
+El contenido mínimo de planos, memorias, estudios y especificaciones se ajusta a **A.1.5** y a las resoluciones de la Comisión Asesora Permanente (Ley 400 de 1997, Parágrafo 1 del Art. 6 y Art. 42). Las copias de **planos de diseño, detalles típicos y especificaciones** deben llevar la **firma (o sello registrado) de un profesional facultado para diseñar** (<NormaRef s="C.1.2.1" pag="C-2" />). Deben incluir:
+
+| Literal | Información que debe aparecer en planos y especificaciones |
+|---|---|
+| (a) | Nombre y fecha de publicación del Reglamento NSR y suplementos con que se hizo el diseño |
+| (b) | Carga viva y otras cargas usadas en el diseño |
+| (c) | Resistencia especificada a la compresión del concreto ($f'_c$) a las edades o etapas de construcción para las que se diseñó cada parte |
+| (d) | Resistencia especificada o tipo de acero del refuerzo |
+| (e) | Dimensiones y localización de todos los elementos, refuerzo y anclajes |
+| (f) | Precauciones por cambios dimensionales (flujo plástico, retracción, temperatura) |
+| (g) | Magnitud y localización de las fuerzas de preesforzado |
+| (h) | Longitud de anclaje del refuerzo y localización y longitud de los empalmes por traslapo |
+| (i) | Tipo y localización de los empalmes soldados y mecánicos del refuerzo |
+| (j) | Ubicación y detallado de las juntas de contracción o expansión del concreto simple (Capítulo 22, es decir, C.22) |
+| (k) | Resistencia mínima a compresión del concreto en el momento de postensar |
+| (l) | Secuencia de tensionamiento de los tendones de postensado |
+| (m) | Si una losa sobre el terreno se diseñó como **diafragma estructural** (sección 21.12.3.4, sic) |
+
+<Callout tipo="practica" titulo="Lista de chequeo para el plano estructural">
+Antes de entregar planos de concreto, verifica que ninguno de estos literales falte. Los más olvidados en la práctica (observación nuestra, no de la norma): la **edad** a la que se exige $f'_c$ (literal c), las **longitudes de empalme** (h) y la **ubicación de juntas** (j).
+</Callout>
+
+### C.1.2.2 — Memorias de cálculo y programas de computador
+
+Los **cálculos** se presentan junto con los planos cuando lo requiera la **autoridad competente**. Se puede analizar y diseñar con **programas de computador** siempre que se entreguen las **suposiciones de diseño, los datos de entrada y los resultados** que genera el programa. Se pueden usar análisis de modelos para complementar los cálculos (<NormaRef s="C.1.2.2" pag="C-3" />).
+
+## C.1.3 — Supervisión técnica
+
+### C.1.3.1 — Quién inspecciona
+
+Las construcciones de concreto se inspeccionan **según el Título I** de la NSR-10, durante **todas las etapas de la obra**, por (o bajo la supervisión de) un **profesional facultado para diseñar** o por un **supervisor técnico calificado**. Excepción: los casos que prevé la Ley 400 de 1997, donde el control de calidad de los materiales es responsabilidad del constructor (<NormaRef s="C.1.3.1" pag="C-3" />).
+
+### C.1.3.2 — Qué debe registrar el supervisor
+
+El supervisor técnico **exige el cumplimiento de planos y especificaciones**. Salvo que el Título I diga otra cosa, los registros incluyen (<NormaRef s="C.1.3.2" pag="C-3" />):
+
+1. Entrega, colocación e informes de ensayos que documenten cantidades, ubicación, ensayos del concreto fresco, resistencia y otros ensayos de todas las mezclas.
+2. Colocación y remoción de **encofrados, cimbras y apuntalamientos**.
+3. Colocación del **refuerzo y anclajes**.
+4. **Mezclado, colocación y curado** del concreto.
+5. Secuencia de montaje y conexión de elementos **prefabricados**.
+6. **Tensionamiento** de los tendones de preesforzado.
+7. Cualquier **carga de construcción significativa** sobre pisos, elementos o muros terminados.
+8. **Avance general** de la obra.
+
+### C.1.3.3 — Temperaturas extremas
+
+Cuando la temperatura ambiente sea **menor que 4 °C o mayor que 35 °C**, debe llevarse un **registro de las temperaturas del concreto y de la protección** dada durante la colocación y el curado (<NormaRef s="C.1.3.3" pag="C-3" />).
+
+### C.1.3.4 — Conservación de los registros
+
+El supervisor técnico conserva los registros de C.1.3.2 y C.1.3.3 durante el plazo que fije el Título I **después de terminado el proyecto** (<NormaRef s="C.1.3.4" pag="C-3" />). (La norma los cita como "1.3.2 y 1.3.3", sin el prefijo "C.".)
+
+### C.1.3.5 — Pórticos especiales resistentes a momento
+
+Para **pórticos especiales resistentes a momento** (designación del Capítulo C.21, grado DES) debe hacerse una **supervisión técnica continua** de la colocación del refuerzo y del concreto, realizada por un **inspector calificado** bajo la dirección del supervisor técnico (<NormaRef s="C.1.3.5" pag="C-3" />).
+
+## C.1.4 — Aprobación de sistemas especiales de diseño o de construcción
+
+Se pueden emplear en concreto estructural **sistemas alternos de diseño y construcción** cuando se cumplan los requisitos del **Capítulo 2 del Título II de la Ley 400 de 1997** (<NormaRef s="C.1.4" pag="C-4" />).
+
+## C.1.5 — Obligatoriedad de las normas técnicas citadas en el Título C
+
+### C.1.5.1 — Las NTC hacen parte del Reglamento
+
+Las **Normas Técnicas Colombianas (NTC)** citadas en el Título C **hacen parte de él**. Las promulga **Icontec**, único organismo nacional de normalización reconocido por el gobierno (véanse A.1.6 y C.3.8) (<NormaRef s="C.1.5.1" pag="C-4" />).
+
+### C.1.5.2 — Si no hay NTC
+
+Cuando **no exista NTC**, se acepta la norma **ASTM** (o de otras instituciones), que también hace parte del Reglamento en ese caso (<NormaRef s="C.1.5.2" pag="C-4" />).
+
+### C.1.5.3 — La norma entre paréntesis es solo referencia
+
+Junto a cada NTC aparece entre paréntesis una norma ASTM u otra: es **solo referencia**, **la obligatoria es siempre la NTC**. La referencia es compatible con los requisitos del Reglamento, aunque no es necesariamente la norma de antecedente de la NTC (<NormaRef s="C.1.5.3" pag="C-4" />). Ejemplo del propio texto de C.2.2: agregado liviano según “NTC 4045 (ASTM C330)”.
+
+### C.1.5.4 — Usar otra norma exige autorización
+
+Para usar una norma distinta de las NTC listadas en **C.3.8** (o de la ASTM mencionada cuando no hay NTC) se necesita **autorización especial** de la **Comisión Asesora Permanente del Régimen de Construcciones Sismo Resistentes** (Ley 400 de 1997, adscrita al Ministerio de Ambiente, Vivienda y Desarrollo Territorial) (<NormaRef s="C.1.5.4" pag="C-4" />).
+
+## C.1.6 — Sistema de unidades
+
+### C.1.6.1 — SI, y equivalencias en el Apéndice C-F
+
+El Título C está en el **sistema internacional (SI)**. El **Apéndice C-F** da la equivalencia entre SI, mks e inglés de las **ecuaciones no homogéneas** del Título (<NormaRef s="C.1.6.1" pag="C-4" />). Una ecuación es "no homogénea" cuando sus coeficientes numéricos dependen de las unidades: por ejemplo, $0.17\sqrt{f'_c}$ vale en MPa, pero con $f'_c$ en kgf/cm² el coeficiente cambia a 0.53.
+
+<TablaNorma numero="Apéndice C-F (extracto)" titulo="Equivalencias de esfuerzos entre sistemas" pag="C-251" nota="Valores transcritos de la primera parte de la tabla del Apéndice C-F, verificados contra la imagen del PDF (p. 553). Son equivalencias redondeadas de la norma, no conversiones exactas.">
+
+| Magnitud | SI (MPa) | mks (kgf/cm²) | Inglés (psi) |
+|---|---:|---:|---:|
+| Factor | 1 MPa | 10 kgf/cm² | 142.2 psi |
+| $f'_c$ | 21 MPa | 210 kgf/cm² | 3 000 psi |
+| $f'_c$ | 28 MPa | 280 kgf/cm² | 4 000 psi |
+| $f'_c$ | 35 MPa | 350 kgf/cm² | 5 000 psi |
+| $f'_c$ | 40 MPa | 420 kgf/cm² | 6 000 psi |
+| $f_y$ | 280 MPa | 2 800 kgf/cm² | 40 000 psi |
+| $f_y$ | 420 MPa | 4 200 kgf/cm² | 60 000 psi |
+| $f_{pu}$ | 1 725 MPa | 17 600 kgf/cm² | 250 000 psi |
+| $f_{pu}$ | 1 860 MPa | 19 000 kgf/cm² | 270 000 psi |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Anomalía en el Apéndice C-F: la fila de 40 MPa">
+La fila “$f'_c$ = 40 MPa = 420 kgf/cm² = 6 000 psi” **no es coherente consigo misma** (observación nuestra, no texto de la norma): con el factor 10 de la propia tabla, 40 MPa equivalen a 400 kgf/cm², y 6 000 psi son unos 41 MPa (≈ 420 kgf/cm²). La fila parece ser una equivalencia "blanda" entre los tres sistemas más que una conversión exacta. Aquí se transcribe tal cual está impresa; si necesitas 40 MPa, trabaja en SI. Algo parecido ocurre con $f_{pu}$: 1 725 MPa ↔ 17 600 kgf/cm² y 1 860 MPa ↔ 19 000 kgf/cm² usan una conversión más fina (1 MPa ≈ 10.2 kgf/cm²) y no el factor 10 de la primera fila.
+</Callout>
+
+Los términos con raíz de $f'_c$ (los que más se usan en cortante y desarrollo) se tabulan en los tres sistemas. La Sección C.2 los ejemplifica en el [Ejemplo 2 del Capítulo C.2](/titulo-c/c2); los coeficientes verificados son:
+
+| Cantidad (misma para los tres sistemas) | SI, $f'_c$ en MPa | mks, $f'_c$ en kgf/cm² | Inglés, $f'_c$ en psi |
+|---|---:|---:|---:|
+| $\sqrt{f'_c}$ | $\sqrt{f'_c}$ | $3.18\sqrt{f'_c}$ | $12\sqrt{f'_c}$ |
+| $0.313\sqrt{f'_c}$ en MPa | $0.313\sqrt{f'_c}$ | $\sqrt{f'_c}$ | $3.77\sqrt{f'_c}$ |
+| $0.083\sqrt{f'_c}$ en MPa | $0.083\sqrt{f'_c}$ | $0.27\sqrt{f'_c}$ | $\sqrt{f'_c}$ |
+| $0.17\sqrt{f'_c}$ en MPa | $0.17\sqrt{f'_c}$ | $0.53\sqrt{f'_c}$ | $2\sqrt{f'_c}$ |
+
+(Fuente: Apéndice C-F, <NormaRef s="C-F" pag="C-251" />. En esta primera página la tabla incluye además las ecuaciones C.5-2, Tabla C.5.3.2.2, C.7.12.2.1(c), C.8.5.1, C.8.6.1, Tabla C.9.5(a), C.9-10, C.9-12 y C.9-13; se verán en sus capítulos.)
+
+<Callout tipo="importante" titulo="Unidades dentro de las ecuaciones del Título C">
+(Observación derivada de la notación de C.2.1, <NormaRef s="C.2.1" pag="C-5" />.) Las áreas van en **mm²**, las longitudes en **mm**, las fuerzas en **N**, los momentos en **N·mm** y los esfuerzos en **MPa**. Si trabajas en kN y kN·m, conviértelos antes de reemplazar: 1 kN = 10³ N y 1 kN·m = 10⁶ N·mm.
+</Callout>
+
+## Cómo se articula C.1 con los Títulos A, B, H e I
+
+<Detalle titulo="Mapa de relaciones (resumen de las remisiones de C.1; algunas conexiones son explicación nuestra)">
+
+| Título | Qué aporta al diseño en concreto | Dónde lo dice C.1 |
+|---|---|---|
+| **A** | Fuerzas sísmicas, coeficiente $R$, grupos de uso, **asignación de DMI/DMO/DES**, contenido mínimo de planos (A.1.5) | C.1.1.10.1, C.1.2.1 |
+| **B** | Cargas (muertas, vivas, viento…) y combinaciones de carga **sin mayorar**; el Título C las mayora y aplica $\phi$ (Capítulo C.9) | Definiciones de C.2.2 (carga de servicio, mayorada, muerta, viva) |
+| **H** | Estudios geotécnicos: capacidad portante y parámetros para zapatas, pilotes y muros de contención (observación nuestra: C.1 solo remite el diseño estructural de los elementos enterrados al Capítulo C.15) | C.1.1.6 |
+| **I** | Supervisión técnica de la construcción | C.1.3.1, C.1.3.2, C.1.3.4 |
+| **F, D, G** | Si el material estructural principal no es concreto, rige su Título; el Título C se aplica solo al concreto que forme parte | C.1.1.4, C.1.1.9.2 |
+
+</Detalle>
+
+## Casos prácticos
+
+<Ejemplo numero={1} titulo="¿Qué capítulos del Título C aplican? Edificio de apartamentos de 5 pisos">
+Un edificio de apartamentos de **5 pisos y {ej1.area} m²** de área, con **pórticos de concreto reforzado de capacidad moderada (DMO)** y concreto de $f'_c$ = {ej1.fc} MPa. Se quiere saber **qué partes del Título C aplican a una viga, una columna, una zapata y un muro de contención de sótano**, y qué exige C.1 al proyecto. (Los datos del edificio son hipotéticos; los capítulos citados vienen del Título C.)
+
+<Paso titulo="¿Aplica el Título C y con qué concreto?" ref="C.1.1.1, C.1.1.2">
+Es concreto estructural de una edificación NSR-10: **aplica**. Verificación de $f'_c$ mínimo: {ej1.fc} MPa ≥ {FC_MINIMO_MPA} MPa, cumple ({ej1.ok ? 'sí' : 'no'}); con 16 MPa no se cumpliría ({ej1.bajo ? 'sí' : 'no'} cumple).
+</Paso>
+<Paso titulo="¿Qué grado de disipación de energía?" ref="C.1.1.10.1, Título A">
+Lo asigna el **Título A** (sistema estructural, zona de amenaza). Como el proyecto es DMO, los pórticos se diseñan con los Capítulos C.1 a C.19 **más** los requisitos de C.21 para capacidad **moderada**. Si el Título A exigiera DES, se agregarían los requisitos de C.21 para capacidad especial y la **supervisión continua** de C.1.3.5.
+</Paso>
+<Paso titulo="Capítulos por elemento" ref="Capítulos C.3 a C.15, C.21">
+Los Capítulos C.3 a C.9 son **transversales** (materiales, durabilidad, calidad del concreto, cimbras, detalles del refuerzo, análisis y resistencia). Encima de eso, cada elemento activa otros:
+
+| Elemento | Capítulos específicos | Qué resuelve |
+|---|---|---|
+| **Viga** | C.10, C.11, C.12, C.9 (deflexiones), C.21 | Flexión, cortante y torsión, desarrollo y empalmes, deflexión, detallado DMO |
+| **Columna** | C.10, C.11, C.12, C.7 (estribos), C.21 | Flexo-compresión y esbeltez, cortante, empalmes, confinamiento |
+| **Zapata** | C.15, C.10, C.11, C.12 y Título H | Dimensionamiento con la capacidad portante, flexión, cortante y punzonamiento |
+| **Muro de sótano** | C.14, C.11, C.21 (si hace parte del sistema sismo resistente) | Muro de carga y estructural; cortante; empujes del Título B (suelo) |
+| **Losa** | C.13 | Losas en una y dos direcciones |
+
+(Tabla elaborada a partir de los títulos de los capítulos del Título C: es una guía de lectura, no un texto de la norma.)
+</Paso>
+<Paso titulo="¿Se puede usar el documento simplificado ACI 314.1R?" ref="C.1.1.8">
+La condición es ≤ 5 pisos **y** menos de 3000 m²: con {ej1.area} m² y 5 pisos {ej1.usaIps1 ? 'se cumplen las dos condiciones' : 'no se cumplen'}. Si el área fuera {ej1.areaGrande} m², {ej1.usaIps1Grande ? 'aún cumpliría' : 'ya no se podría usar'}. Aun cumpliendo, deben respetarse **todas las salvedades** del documento.
+</Paso>
+<Paso titulo="Planos, memorias y firmas" ref="C.1.2.1, C.1.2.2">
+Planos y especificaciones **firmados por un profesional facultado para diseñar**, con los literales (a) a (m) que apliquen: edición de la NSR, cargas, $f'_c$ y edades, tipo de acero, dimensiones, empalmes y longitudes de anclaje, y las precauciones por retracción y temperatura. Las memorias de cálculo se entregan si la autoridad competente las pide; si se usó software, se anexan suposiciones, datos de entrada y resultados.
+</Paso>
+<Paso titulo="Obra: inspección y registros" ref="C.1.3.1 a C.1.3.5">
+Supervisión técnica **según el Título I**. Registros de entregas y ensayos, encofrados, refuerzo, mezclado/colocación/curado y cargas de construcción. Si la temperatura ambiente baja de 4 °C o supera 35 °C (por ejemplo, vaciados al mediodía en clima cálido), se **registra la temperatura del concreto y su protección**. Los registros se conservan el plazo que fije el Título I.
+</Paso>
+<Paso titulo="Unidades al calcular" ref="C.1.6.1">
+Si el especificador entrega $f'_c$ = 210 kgf/cm², en el Título C se usa **{ej1.fc} MPa** (210 ÷ 10). La equivalencia inversa con los factores de C-F es {ej1.fc} MPa = {ej1.mks} kgf/cm² = {ej1.psi.toFixed(0)} psi (la norma redondea a 3 000 psi).
+</Paso>
+<Resultado>
+El proyecto se rige por el **Título C completo** (viga, columna, zapata, muro), con DMO por el Título A, planos firmados con los literales de C.1.2.1, supervisión del Título I con los registros de C.1.3 y, si la propiedad y los pisos lo permiten, la opción simplificada de C.1.1.8. Combinaciones de carga: [Capítulo B.2](/titulo-b/b2); sismo y grupos de uso: [Título A](/titulo-a/a1).
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores frecuentes con el Capítulo C.1">
+- **Usar $f'_c$ < 17 MPa** en concreto estructural (por ejemplo, 14 MPa de "concreto pobre" para columnas): no está permitido (<NormaRef s="C.1.1.1" pag="C-1" />).
+- **Creer que el Título C no aplica al concreto de una estructura metálica** (por ejemplo, una zapata o un muro de concreto en un edificio de acero): sí aplica, salvo lo que el Título del otro material exija distinto (<NormaRef s="C.1.1.4" pag="C-1" />).
+- **Ignorar el tope de ACI 314.1R**: solo para ≤ 5 pisos y menos de 3000 m², y con todas sus salvedades (<NormaRef s="C.1.1.8" pag="C-1" />).
+- **Dar por hecho que toda losa sobre el terreno queda fuera**: entra cuando transmite cargas verticales o laterales de la estructura al suelo (<NormaRef s="C.1.1.7" pag="C-1" />).
+- **Presentar planos sin firma** del profesional facultado, o sin indicar $f'_c$, edad y tipo de acero (<NormaRef s="C.1.2.1" pag="C-2" />).
+- **Olvidar el registro de temperaturas** cuando se funde por debajo de 4 °C o por encima de 35 °C (<NormaRef s="C.1.3.3" pag="C-3" />).
+- **Escoger una norma ASTM cuando sí existe NTC**: la obligatoria es la NTC; el paréntesis es solo referencia (<NormaRef s="C.1.5.3" pag="C-4" />).
+- **Mezclar unidades**: reemplazar kN y m en ecuaciones escritas para N y mm, o usar el coeficiente de MPa con $f'_c$ en kgf/cm² (<NormaRef s="C.1.6.1" pag="C-4" />).
+</Callout>
+
+## Resumen en una línea
+
+**El Título C rige todo el concreto estructural de la NSR-10 (con $f'_c$ ≥ 17 MPa), se alcanza DMI, DMO o DES sumando C.21 a los Capítulos C.1–C.19, exige planos firmados, supervisión técnica con registros, NTC obligatorias y unidades SI (con equivalencias en C-F).**

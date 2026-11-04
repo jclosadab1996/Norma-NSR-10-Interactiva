@@ -1,0 +1,168 @@
+---
+codigo: 'C.17'
+tipo: capitulo
+titulo: 'Elementos compuestos concreto-concreto a flexión'
+resumen: 'Vigas y losas hechas por etapas (prefabricado más concreto vaciado en sitio) que trabajan como una sola unidad: etapas de carga, apuntalamiento, cortante vertical, cortante horizontal en la interfaz (Ec. C.17-1) y estribos de unión.'
+objetivos:
+  - 'Distinguir qué requisitos del Título C se mantienen y cuáles modifica el capítulo para elementos compuestos'
+  - 'Calcular la resistencia nominal al cortante horizontal Vnh según el estado de la superficie de contacto'
+  - 'Verificar Vu ≤ φVnh y dimensionar la separación de estribos de unión'
+  - 'Aplicar los límites de área y separación de los estribos de cortante horizontal (C.17.6)'
+paginasNorma: 'C-151 a C-152'
+paginaPdf: 453
+orden: 17
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import { resistenciaCortanteHorizontal, verificarCortanteHorizontal, rhoEstribosInterfaz, avMinimoC11463, separacionMaximaEstribosInterfaz, separacionRequeridaInterfaz, dCortanteHorizontal, PHI_CORTANTE } from '../../lib/nsr10/compuestos';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const bv = 300, d = 500, fy = 420, av = 142, s = 200, vu = 250000;
+  const rho = rhoEstribosInterfaz(av, bv, s);
+  const rugosa = resistenciaCortanteHorizontal({ caso: 'rugosa', bv, d });
+  const lisa = resistenciaCortanteHorizontal({ caso: 'lisa-con-estribos-minimos', bv, d });
+  const con = resistenciaCortanteHorizontal({ caso: 'rugosa-con-estribos', bv, d, rhoV: rho, fy });
+  const ver = verificarCortanteHorizontal({ caso: 'rugosa-con-estribos', bv, d, rhoV: rho, fy, vu });
+  const mini = avMinimoC11463(28, bv, s, fy);
+  const sMax = separacionMaximaEstribosInterfaz(100);
+  const sMax2 = separacionMaximaEstribosInterfaz(200);
+  const sReq = separacionRequeridaInterfaz({ vu: 300000, bv, d, av, fy });
+  const sReqBaja = separacionRequeridaInterfaz({ vu: 100000, bv, d, av, fy });
+  const sReqAlta = separacionRequeridaInterfaz({ vu: 400000, bv, d, av, fy });
+  const verSolo = verificarCortanteHorizontal({ caso: 'rugosa', bv, d, vu });
+  const d640 = dCortanteHorizontal(500, 800, true);
+  return { bv, d, fy, av, s, vu, rho, rugosa, lisa, con, ver, mini, sMax, sMax2, sReq, sReqBaja, sReqAlta, verSolo, d640 };
+})();
+
+## Idea central del capítulo
+
+Un **elemento compuesto** se construye **en etapas**: por ejemplo, una vigueta prefabricada sobre la que se funde, en obra, una losa de concreto. Para que ambas partes **respondan a las cargas como una sola unidad**, la interfaz entre el concreto viejo y el nuevo debe transmitir un **cortante horizontal** que impida el deslizamiento. Eso es lo que resuelve el Capítulo C.17: define el elemento compuesto, exige revisar **cada etapa** de carga y limita la resistencia al **cortante horizontal** en la superficie de contacto con la Ec. C.17-1, $V_u = \phi V_{nh}$, y los casos de C.17.5.3 (<NormaRef s="C.17.1.1" pag="C-151" />, <NormaRef s="C.17.5.3" pag="C-152" />).
+
+<Callout tipo="importante" titulo="El cortante vertical se trata como en un elemento monolítico">
+Para el cortante **vertical** se aplica el Capítulo C.11 como si la sección compuesta fuera monolítica. El cortante **horizontal**, en cambio, es una verificación nueva: es la fuerza que debe resistir la **interfaz** para que las dos partes trabajen juntas (<NormaRef s="C.17.4.1" pag="C-151" />).
+</Callout>
+
+## C.17.1 — Alcance
+
+- **C.17.1.1.** El capítulo se aplica al diseño de elementos compuestos de concreto a flexión, definidos como elementos **prefabricados y/o fabricados en obra, construidos en etapas diferentes pero interconectados** de manera que respondan a las cargas **como una sola unidad** (<NormaRef s="C.17.1.1" pag="C-151" />).
+- **C.17.1.2.** Todas las disposiciones del Título C aplican a los elementos compuestos a flexión, **excepto lo modificado explícitamente** en el Capítulo C.17 (<NormaRef s="C.17.1.2" pag="C-151" />).
+
+## C.17.2 — Generalidades
+
+- **C.17.2.1.** Se puede usar el elemento compuesto **completo o por partes** para resistir cortante y momento.
+- **C.17.2.2.** Los elementos individuales deben investigarse para **todas las etapas críticas de carga**.
+- **C.17.2.3.** Si la resistencia especificada, la densidad u otras propiedades de los elementos difieren, se usan las **propiedades de los elementos individuales o los valores más críticos**.
+- **C.17.2.4.** En el cálculo de resistencia **no se distingue** entre elementos **apuntalados** y **no apuntalados**.
+- **C.17.2.5.** Todos los elementos deben diseñarse para resistir las **cargas introducidas antes del desarrollo completo** de la resistencia de diseño del compuesto. (En el PDF este numeral aparece como "17.2.5", sin la "C." inicial.)
+- **C.17.2.6.** Se debe diseñar el refuerzo requerido para **controlar el agrietamiento** y **evitar la separación** de los elementos individuales.
+- **C.17.2.7.** Los elementos compuestos deben cumplir los requisitos de **control de deflexiones** de **C.9.5.5** (<NormaRef s="C.17.2" pag="C-151" />).
+
+(Lectura del autor: C.17.2.4 es una regla de simplicidad para la **resistencia**; no impide que, en la revisión de **deflexiones** y de esfuerzos de construcción, el apuntalamiento sí cambie las etapas de carga.)
+
+## C.17.3 — Apuntalamiento
+
+Si se usa apuntalamiento, **no debe retirarse** hasta que los elementos soportados hayan desarrollado las propiedades de diseño necesarias para **resistir todas las cargas** y **limitar las deflexiones y el agrietamiento** en el momento de retirar los puntales (<NormaRef s="C.17.3" pag="C-151" />).
+
+## C.17.4 — Resistencia al cortante vertical
+
+- **C.17.4.1.** Si se considera que el cortante vertical lo resiste **todo el elemento compuesto**, se diseña con el **Capítulo C.11**, como si fuera de la **misma sección transversal construida monolíticamente**.
+- **C.17.4.2.** El refuerzo de cortante debe estar **totalmente anclado** dentro de los elementos interconectados, según **C.12.13**.
+- **C.17.4.3.** El refuerzo de cortante **anclado y prolongado** puede considerarse como **estribos para tomar el cortante horizontal** (<NormaRef s="C.17.4" pag="C-151" />).
+
+## C.17.5 — Resistencia al cortante horizontal
+
+### C.17.5.1 y C.17.5.2 — Transmisión completa y definición de d
+
+En un elemento compuesto debe asegurarse la **transmisión completa** de las fuerzas cortantes horizontales en las superficies de contacto (<NormaRef s="C.17.5.1" pag="C-152" />). En los requisitos de C.17.5, **$d$** es la distancia de la **fibra extrema en compresión de la sección compuesta total** al **centroide del refuerzo longitudinal de tracción** (preesforzado y no preesforzado), y **no necesita tomarse menor que $0.8h$** en concreto preesforzado (<NormaRef s="C.17.5.2" pag="C-152" />).
+
+### C.17.5.3 — Método general
+
+A menos que se calcule según C.17.5.4, el diseño de las secciones sometidas a cortante horizontal se basa en:
+
+<Ecuacion num="C.17-1" titulo="Cortante horizontal">
+
+$$
+V_u=\phi\,V_{nh}
+$$
+
+- $V_u$: fuerza cortante mayorada en la sección considerada.
+- $V_{nh}$: resistencia nominal al cortante horizontal, según C.17.5.3.1 a C.17.5.3.4.
+- $\phi$: factor de reducción de resistencia por cortante, 0.75 (C.9.3.2.3). *(El texto de C.17.5 no repite el valor de $\phi$; se toma el de cortante del Capítulo C.9. Lectura del autor.)*
+
+</Ecuacion>
+
+<TablaNorma numero="C.17.5.3.1 a C.17.5.3.3" titulo="Resistencia nominal al cortante horizontal Vnh según la interfaz" pag="C-152" nota="Resumen en tabla elaborado por el autor a partir de los tres numerales; las expresiones son las del PDF (b_v y d en mm, esfuerzos en MPa, Vnh en N). Todo con la superficie limpia y libre de lechada.">
+
+| Numeral | Superficie de contacto | Estribos | Vnh no mayor que |
+|---|---|---|---|
+| C.17.5.3.1 | Rugosa intencionalmente | No exigidos por este numeral | $0.55\,b_v\,d$ |
+| C.17.5.3.2 | **No** rugosa | Mínimo de C.17.6 | $0.55\,b_v\,d$ |
+| C.17.5.3.3 | Rugosa con amplitud aprox. 6 mm | Mínimo de C.17.6 | $\left(1.8+0.6\,\rho_v\,f_y\right)\lambda\,b_v\,d$, pero no mayor que $3.5\,b_v\,d$ |
+
+</TablaNorma>
+
+En C.17.5.3.3, $\rho_v = A_v/(b_v s)$ y $\lambda$ toma los valores de C.11.6.4.3 (1.0 en concreto de peso normal) (<NormaRef s="C.17.5.3.3" pag="C-152" />). Si $V_u$ excede $\phi\,(3.5\,b_v\,d)$, el diseño por cortante horizontal se hace según **C.11.6.4** (cortante por fricción) (<NormaRef s="C.17.5.3.4" pag="C-152" />).
+
+### C.17.5.4 — Método alternativo por equilibrio de fuerzas
+
+Como alternativa a C.17.5.3, el cortante horizontal puede determinarse calculando la **variación real de la fuerza de compresión o de tracción** en cualquier segmento y tomando medidas para transferir esa fuerza como cortante horizontal al elemento que la recibe. La fuerza cortante horizontal mayorada no debe exceder $\phi V_{nh}$ según C.17.5.3.1 a C.17.5.3.4, **sustituyendo $b_v d$ por el área de la superficie de contacto** (<NormaRef s="C.17.5.4" pag="C-152" />).
+
+- **C.17.5.4.1.** Si los estribos se diseñan con C.17.5.4, la relación entre su **área y su separación** a lo largo del elemento debe reflejar aproximadamente la **distribución del esfuerzo cortante** en el elemento.
+
+### C.17.5.5 — Tracción a través de la interfaz
+
+Si existe **tracción** a través de cualquier superficie de contacto entre elementos interconectados, solo se permite transmitir cortante por contacto cuando se coloque el **mínimo de estribos** de C.17.6 (<NormaRef s="C.17.5.5" pag="C-152" />).
+
+## C.17.6 — Estribos para cortante horizontal
+
+- **C.17.6.1 — Área y separación.** El área de los estribos no debe ser menor que la requerida por **C.11.4.6.3** ($A_{v,min}$ = $0.062\sqrt{f'_c}\,b_w s/f_{yt}$, pero no menos de $0.35\,b_w s/f_{yt}$, Ec. C.11-13), y su separación **no debe exceder 4 veces la dimensión menor del elemento soportado ni 600 mm** (<NormaRef s="C.17.6.1" pag="C-152" />).
+- **C.17.6.2.** Los estribos son **barras individuales o alambre, estribos de ramas múltiples o ramas verticales de refuerzo electrosoldado**.
+- **C.17.6.3.** Todos los estribos se **anclan totalmente** en los elementos interconectados, según **C.12.13**.
+
+<Ejemplo numero={1} titulo="Cortante horizontal en la interfaz de una viga compuesta">
+Una viga compuesta tiene una interfaz de ancho $b_v$ = {ej1.bv} mm y $d$ = {ej1.d} mm. La superficie es limpia, libre de lechada y rugosa con amplitud de 6 mm. Los estribos de unión son de dos ramas No. 3 (2 × 71 = {ej1.av} mm²) con $f_y$ = {ej1.fy} MPa cada {ej1.s} mm; concreto de peso normal (λ = 1.0). El cortante mayorado en la sección es $V_u$ = {ej1.vu / 1000} kN. (Datos supuestos para el ejemplo.)
+
+<Paso titulo="Cuantía de estribos de la interfaz" ref="C.17.5.3.3">
+$\rho_v = A_v/(b_v s)$ = {ej1.av}/({ej1.bv}·{ej1.s}) = **{ej1.rho.toFixed(5)}**.
+</Paso>
+<Paso titulo="Verificar el mínimo y la separación" ref="C.17.6.1">
+$A_{v,min}$ = máximo entre $0.062\sqrt{28}\,(300)(200)/420$ = {f(ej1.mini.porRaiz, 1)} mm² y $0.35(300)(200)/420$ = {f(ej1.mini.porMinimo, 1)} mm² = **{f(ej1.mini.avMin, 1)} mm²** (se supone $f'_c$ = 28 MPa). Como {ej1.av} mm² ≥ {f(ej1.mini.avMin, 1)} mm², **cumple**. La separación de {ej1.s} mm es menor que 600 mm y que 4 veces la dimensión menor del elemento soportado, si ésta es ≥ 50 mm; con una losa de 100 mm el límite sería **{f(ej1.sMax, 0)} mm**.
+</Paso>
+<Paso titulo="Resistencia nominal" ref="C.17.5.3.3">
+$V_{nh} = (1.8 + 0.6\rho_v f_y)\lambda b_v d$: el paréntesis vale 1.8 + 0.6 × {ej1.rho.toFixed(5)} × {ej1.fy} = **{f((1.8 + 0.6 * ej1.rho * ej1.fy), 4)} MPa**, y {f((1.8 + 0.6 * ej1.rho * ej1.fy), 4)} × {ej1.bv} × {ej1.d} = **{f(ej1.con.vnhSinTope / 1000, 1)} kN**. El tope $3.5\,b_v d$ = **{f(ej1.con.tope / 1000, 1)} kN** no gobierna.
+</Paso>
+<Paso titulo="Comparar con Vu" ref="C.17-1">
+$\phi V_{nh}$ = 0.75 × {f(ej1.con.vnh / 1000, 1)} = **{f(ej1.con.phiVnh / 1000, 1)} kN** frente a $V_u$ = {ej1.vu / 1000} kN: relación $V_u/\phi V_{nh}$ = **{f(ej1.ver.relacion, 3)}** → **{ej1.ver.cumple ? 'cumple' : 'no cumple'}**.
+</Paso>
+<Paso titulo="Sin estribos o con superficie lisa" ref="C.17.5.3.1, C.17.5.3.2">
+Si la superficie fuese rugosa pero sin contar los estribos (C.17.5.3.1), $V_{nh} \le 0.55\,b_v d$ = **{f(ej1.rugosa.vnh / 1000, 1)} kN**, y $\phi V_{nh}$ = {f(ej1.rugosa.phiVnh / 1000, 1)} kN < {ej1.vu / 1000} kN: **no cumpliría**. Con superficie lisa y estribos mínimos (C.17.5.3.2) el límite es igual: {f(ej1.lisa.vnh / 1000, 1)} kN. Por eso la **rugosidad de 6 mm** más los estribos permiten resistir casi **{f(ej1.con.vnh / ej1.rugosa.vnh, 1)} veces más**.
+</Paso>
+<Paso titulo="Separación necesaria para otro cortante (auxiliar)" ref="C.17.5.3.3">
+Despejando $\rho_v$ de $V_u = \phi V_{nh}$ (auxiliar): para $V_u$ = 300 kN, con dos ramas No. 3, la separación debe ser **{f(ej1.sReq, 1)} mm** como máximo. Para $V_u$ = 100 kN basta el término de 1.8 MPa ({ej1.sReqBaja === Infinity ? 'no se exige cuantía por cálculo, solo el mínimo de C.17.6' : ''}). Para $V_u$ = 400 kN {ej1.sReqAlta === null ? 'se excede φ(3.5 bv d) = 393.8 kN y hay que diseñar por C.11.6.4 (C.17.5.3.4)' : ''}.
+</Paso>
+<Resultado>
+Con rugosidad de 6 mm y estribos No. 3 de dos ramas a {ej1.s} mm: $\phi V_{nh}$ = **{f(ej1.con.phiVnh / 1000, 1)} kN** ≥ $V_u$ = {ej1.vu / 1000} kN. La verificación **cumple** con relación {f(ej1.ver.relacion, 2)}.
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="d mínimo en preesforzados">
+En una viga compuesta preesforzada de $h$ = 800 mm con el acero a {ej1.d} mm de la fibra comprimida, $d$ para cortante horizontal no se toma menor que 0.8h = **{f(ej1.d640, 0)} mm**, aunque la altura al acero sea menor (<NormaRef s="C.17.5.2" pag="C-152" />).
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Lo que más falla en elementos compuestos">
+- **Aceptar una superficie lisa sin estribos.** Sin rugosidad intencional ni estribos mínimos, no se tiene ninguno de los casos de C.17.5.3.
+- **Confundir los topes.** $0.55\,b_v d$ rige en C.17.5.3.1 y C.17.5.3.2; el tope $3.5\,b_v d$ solo limita la expresión de C.17.5.3.3.
+- **Usar $\rho_v$ sobre el área equivocada.** $\rho_v = A_v/(b_v s)$ con $b_v$ el ancho de la **interfaz**.
+- **Olvidar el anclaje de los estribos** en ambas partes (C.12.13): un estribo que no está anclado en las dos mitades no resiste cortante horizontal.
+- **Retirar el apuntalamiento antes de tiempo** (C.17.3) o ignorar las cargas aplicadas antes de que el compuesto alcance su resistencia (C.17.2.5).
+- **Usar $d < 0.8h$** en un compuesto preesforzado al calcular el cortante horizontal.
+</Callout>
+
+## Resumen en una línea
+
+Un elemento compuesto solo trabaja como una unidad si la interfaz resiste el cortante horizontal: $V_u \le \phi V_{nh}$ con $V_{nh} \le 0.55\,b_v d$ (superficie sin rugosidad especial) o $(1.8+0.6\rho_v f_y)\lambda b_v d \le 3.5\,b_v d$ (rugosa 6 mm con estribos), y estribos anclados con $s \le 4\,\text{(dim. menor)}$ y 600 mm.

@@ -13,7 +13,7 @@ const esquema = z.object({
     objetivos: z.array(z.string()).default([]),
     /** Páginas impresas de la norma (p. ej. "A-1 a A-12"). */
     paginasNorma: z.string(),
-    /** Página PDF inicial (PDF = impresa + 43 en el Título A, + 219 en el Título B). */
+    /** Página PDF inicial (PDF = impresa + 43 en el Título A, + 219 en el B, + 302 en el C). */
     paginaPdf: z.number().int(),
     orden: z.number().int(),
     /** Calculadoras relacionadas (ids de src/data/calculadoras.ts). */
@@ -32,4 +32,8 @@ const coleccionTitulo = (slug: string) =>
     schema: esquema,
   });
 
-export const collections = { 'titulo-a': coleccionTitulo('titulo-a'), 'titulo-b': coleccionTitulo('titulo-b') };
+export const collections = {
+  'titulo-a': coleccionTitulo('titulo-a'),
+  'titulo-b': coleccionTitulo('titulo-b'),
+  'titulo-c': coleccionTitulo('titulo-c'),
+};

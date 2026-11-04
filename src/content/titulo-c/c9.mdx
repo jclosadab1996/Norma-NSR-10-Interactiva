@@ -1,0 +1,641 @@
+---
+codigo: 'C.9'
+tipo: capitulo
+titulo: 'Requisitos de resistencia y funcionamiento'
+resumen: 'Cómo se comprueba un elemento de concreto: resistencia requerida U con las combinaciones C.9-1 a C.9-7, factores de reducción φ (incluida la zona de transición según εt), alturas mínimas sin calcular deflexiones (Tablas C.9.5(a) y C.9.5(c)) y control de deflexiones inmediatas y diferidas con Ie y λΔ.'
+objetivos:
+  - 'Armar las siete combinaciones de C.9.2.1, aplicar sus excepciones (a) a (d) y reconocer la gobernante'
+  - 'Hallar φ de una sección a partir de la deformación unitaria εt del acero extremo en tracción'
+  - 'Dimensionar la altura mínima de vigas y losas sin verificar deflexiones, ajustada por fy y por densidad del concreto'
+  - 'Calcular la inercia efectiva Ie, la deflexión inmediata y la diferida, y compararlas con la Tabla C.9.5(b)'
+paginasNorma: 'C-67 a C-74'
+paginaPdf: 369
+orden: 9
+calculadoras: ['propiedades-concreto', 'espesor-minimo']
+nivel: 'intermedio'
+---
+
+import { resistenciaRequerida, envolventeU, puedeReducirL, phiDetalle, epsilonTDesdeC, phiPorCargaAxial, alturaMinimaUnaDireccion, factorFyAltura, factorConcretoLiviano, espesorMinimoDosDirecciones, divisorC95c, propiedadesRectangulares, momentoAgrietamiento, inerciaFisuradaRectangular, inerciaEfectiva, deflexionInmediataUniforme, lambdaDiferida, rhoPrima, factorXi, limiteDeflexion } from '../../lib/nsr10/resistenciaServicio';
+import { moduloElasticidad, moduloRotura } from '../../lib/nsr10/concreto';
+import { EPSILON_CU } from '../../data/resistenciaServicioC9';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const zonaTxt = { compresion: 'compresión', transicion: 'transición', traccion: 'tracción' };
+
+export const vu = (lista, id, inverso = false) => lista.find((c) => c.id === id && (inverso ? c.variante : !c.variante)).valor;
+
+export const ej1 = (() => {
+  const cargas = { D: 85, L: 30, E: 60 };
+  const lista = resistenciaRequerida(cargas, { sentidos: 'ambos' });
+  const red = resistenciaRequerida(cargas, { sentidos: 'ambos', reducirL: true });
+  return { lista, red, env: envolventeU(lista), envRed: envolventeU(red), permite: puedeReducirL('general', 2.4), noParq: puedeReducirL('estacionamiento', 2.4) };
+})();
+
+export const ej2 = (() => {
+  const dt = 450;
+  const filas = [270, 220, 180, 150].map((c) => {
+    const e = epsilonTDesdeC(c, dt);
+    return { c, e, otro: phiDetalle(e, 'otro'), espiral: phiDetalle(e, 'espiral') };
+  });
+  const cMaxViga = (EPSILON_CU * dt) / (EPSILON_CU + 0.004);
+  const mn = 420;
+  const f180 = filas[2];
+  return { dt, filas, cMaxViga, mn, phiMn: f180.otro.phi * mn, axial: phiPorCargaAxial(224, 28, 160000, 'otro') };
+})();
+
+export const ej3 = (() => {
+  const a = alturaMinimaUnaDireccion({ elemento: 'viga-nervada', apoyo: 'ambos-extremos', luzMm: 7500 });
+  const b = alturaMinimaUnaDireccion({ elemento: 'viga-nervada', apoyo: 'un-extremo', luzMm: 7500 });
+  const c = alturaMinimaUnaDireccion({ elemento: 'viga-nervada', apoyo: 'ambos-extremos', luzMm: 7500, fy: 280 });
+  const d = alturaMinimaUnaDireccion({ elemento: 'viga-nervada', apoyo: 'ambos-extremos', luzMm: 7500, fy: 500 });
+  const e = alturaMinimaUnaDireccion({ elemento: 'viga-nervada', apoyo: 'ambos-extremos', luzMm: 7500, wc: 1700 });
+  const g = alturaMinimaUnaDireccion({ elemento: 'losa-maciza', apoyo: 'voladizo', luzMm: 1800 });
+  return { a, b, c, d, e, g };
+})();
+
+export const ej4 = (() => {
+  const b = 300, h = 500, d = 450, as = 1530, fc = 21, L = 6, wD = 15, wL = 8, dP = 50;
+  const ec = moduloElasticidad(fc);
+  const fr = moduloRotura(fc);
+  const { ig, yt } = propiedadesRectangulares(b, h);
+  const mcr = momentoAgrietamiento(fr, ig, yt);
+  const xi = factorXi(60);
+  const maD = (wD * L * L) / 8;
+  const maDL = ((wD + wL) * L * L) / 8;
+  const caso = (asP) => {
+    const cr = inerciaFisuradaRectangular({ bMm: b, dMm: d, asMm2: as, ecMpa: ec, asPrimaMm2: asP || undefined, dPrimaMm: asP ? dP : undefined });
+    const ieD = inerciaEfectiva(mcr, maD, ig, cr.icr);
+    const ieDL = inerciaEfectiva(mcr, maDL, ig, cr.icr);
+    const dD = deflexionInmediataUniforme('simple', wD, L, ec, ieD);
+    const dDL = deflexionInmediataUniforme('simple', wD + wL, L, ec, ieDL);
+    const dL = dDL - dD;
+    const rp = asP ? rhoPrima(asP, b, d) : 0;
+    const lam = lambdaDiferida(xi, rp);
+    const lp = lam * dD;
+    const despues = lp + dL;
+    const l = L * 1000;
+    return { cr, ieD, ieDL, dD, dDL, dL, rp, lam, lp, despues, l360: limiteDeflexion('entrepiso', l), l480: limiteDeflexion('susceptibles', l), l240: limiteDeflexion('no-susceptibles', l) };
+  };
+  const sin = caso(0);
+  const con = caso(600);
+  return { b, h, d, as, fc, L, wD, wL, ec, fr, ig, yt, mcr, xi, maD, maDL, n: 200000 / ec, sin, con, rhoCon: rhoPrima(600, b, d) };
+})();
+
+export const ej5 = (() => {
+  const a = espesorMinimoDosDirecciones({ lnMm: 6000, beta: 1.2, alfaFm: 0, fy: 420, abaco: 'sin-abaco', panel: 'interior' });
+  const a2 = espesorMinimoDosDirecciones({ lnMm: 6000, beta: 1.2, alfaFm: 0, fy: 420, abaco: 'sin-abaco', panel: 'ext-sin-borde' });
+  const b = espesorMinimoDosDirecciones({ lnMm: 6000, beta: 1.2, alfaFm: 1.0, fy: 420 });
+  const c = espesorMinimoDosDirecciones({ lnMm: 6000, beta: 1.2, alfaFm: 3.0, fy: 420 });
+  const c2 = espesorMinimoDosDirecciones({ lnMm: 6000, beta: 1.2, alfaFm: 3.0, fy: 420, bordeDiscontinuoSinViga: true });
+  return { a, a2, b, c, c2, divInterp: divisorC95c(350, 'sin-abaco', 'interior') };
+})();
+
+## Idea central del capítulo
+
+El Capítulo C.9 es el **contrato de seguridad y de servicio** del Título C. Todo elemento de concreto se diseña para que, **en cualquier sección**, su **resistencia de diseño** ($\phi$ por la resistencia nominal) sea **al menos igual a la resistencia requerida $U$**, que sale de combinar las cargas mayoradas, y además para que sus **deformaciones** (sobre todo las deflexiones) no perjudiquen la resistencia ni el funcionamiento (<NormaRef s="C.9.1.1" pag="C-67" />, <NormaRef s="C.9.1.2" pag="C-67" />). El capítulo reúne cuatro piezas:
+
+- **C.9.2 — Qué carga hay que resistir:** siete combinaciones $U$ (C.9-1 a C.9-7) con coeficientes de carga 1.4, 1.2, 1.6, 0.9…
+- **C.9.3 — Cuánto resiste el elemento:** resistencia nominal por el factor $\phi$ (0.90, 0.75, 0.65, 0.85, 0.60), que en flexión depende de la deformación unitaria $\varepsilon_t$ del acero.
+- **C.9.4 — Límite del acero:** $f_y$ y $f_{yt}$ de diseño no mayores de 550 MPa (con excepciones).
+- **C.9.5 — Deflexiones:** alturas mínimas que **eximen** de calcularlas (Tablas C.9.5(a) y C.9.5(c)) o cálculo con el momento de inercia efectivo $I_e$, el factor diferido $\lambda_\Delta$ y los límites de la Tabla C.9.5(b).
+
+<Callout tipo="importante" titulo="Los factores de carga y los φ van de la mano">
+Las combinaciones de C.9.2.1 tienen factores de carga **menores** que los de la NSR-98, pero los $\phi$ de la NSR-10 también son **menores** que los de la NSR-98, y los dos conjuntos son concordantes con la probabilidad de falla que limita el Reglamento. Por eso **es incorrecto e inseguro** usar las ecuaciones de C.9.2.1 con los $\phi$ de la NSR-98 (<NormaRef s="C.9.2" pag="C-67" />). Tampoco se permite **mezclar** las combinaciones de este capítulo con los $\phi$ del Apéndice C-C (<NormaRef s="C.9.1.3" pag="C-67" />).
+</Callout>
+
+## C.9.1 — Generalidades
+
+- **C.9.1.1:** estructuras y elementos se diseñan para que en **cualquier sección** la resistencia de diseño sea **al menos igual** a la resistencia requerida, calculada con las cargas y fuerzas mayoradas en las condiciones del Título C (<NormaRef s="C.9.1.1" pag="C-67" />).
+- **C.9.1.2:** además deben cumplir **todos los demás requisitos** del Título C para comportarse bien a nivel de **carga de servicio** (<NormaRef s="C.9.1.2" pag="C-67" />).
+- **C.9.1.3:** se permite diseñar con las **combinaciones de mayoración y los $\phi$ del Apéndice C-C** (alternativa a este capítulo), pero **sin mezclar** las combinaciones de C.9 con los $\phi$ de C-C (<NormaRef s="C.9.1.3" pag="C-67" />).
+
+## C.9.2 — Resistencia requerida
+
+### C.9.2.1 — Combinaciones de carga mayorada
+
+La resistencia requerida $U$ debe ser **por lo menos igual** al efecto de las cargas mayoradas de las Ecuaciones C.9-1 a C.9-7, y **debe investigarse el efecto de una o más cargas que no actúan simultáneamente** (<NormaRef s="C.9.2.1" pag="C-67" />). Son idénticas a las combinaciones B.2.4-1 a B.2.4-7 del Capítulo B.2 (con distinta numeración).
+
+<Ecuacion num="C.9-1" titulo="Solo cargas permanentes">
+
+$$
+U=1.4\,(D+F)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.9-2" titulo="Cargas gravitacionales dominantes">
+
+$$
+U=1.2\,(D+F+T)+1.6\,(L+H)+0.5\left(L_r \text{ ó } G \text{ ó } L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.9-3" titulo="Cubierta dominante">
+
+$$
+U=1.2\,D+1.6\left(L_r \text{ ó } G \text{ ó } L_e\right)+\left(1.0\,L \text{ ó } 0.8\,W\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.9-4" titulo="Viento dominante">
+
+$$
+U=1.2\,D+1.6\,W+1.0\,L+0.5\left(L_r \text{ ó } G \text{ ó } L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.9-5" titulo="Sismo">
+
+$$
+U=1.2\,D+1.0\,E+1.0\,L
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.9-6" titulo="Viento con carga muerta reducida">
+
+$$
+U=0.9\,D+1.6\,W+1.6\,H
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.9-7" titulo="Sismo con carga muerta reducida">
+
+$$
+U=0.9\,D+1.0\,E+1.6\,H
+$$
+
+</Ecuacion>
+
+Los símbolos son los de la nomenclatura B.2.2: $D$ muerta, $L$ viva, $L_r$ viva de cubierta, $G$ granizo, $L_e$ empozamiento, $W$ viento, $E$ sismo reducido ($F_s/R$), $F$ fluidos, $H$ empuje lateral y $T$ temperatura, retracción, flujo plástico y asentamientos. En "$L_r$ ó $G$ ó $L_e$" entra **una sola**, la más desfavorable.
+
+<TablaNorma numero="Resumen C.9-1 a C.9-7" titulo="Coeficientes de carga de C.9.2.1" pag="C-67" nota="Elaborado por el autor a partir de las ecuaciones; las excepciones (a) a (d) están en la columna final.">
+
+| Ec. | D | F | T | L | H | Lr/G/Le | W | E | Excepciones permitidas |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| C.9-1 | 1.4 | 1.4 | — | — | — | — | — | — | — |
+| C.9-2 | 1.2 | 1.2 | 1.2 | 1.6 | 1.6 | 0.5 | — | — | — |
+| C.9-3 | 1.2 | — | — | 1.0 ó — | — | 1.6 | 0.8 ó — | — | (a) L con 0.5 |
+| C.9-4 | 1.2 | — | — | 1.0 | — | 0.5 | 1.6 | — | (a) L con 0.5; (b) 1.3W |
+| C.9-5 | 1.2 | — | — | 1.0 | — | — | — | 1.0 | (a) L con 0.5; (c) 1.4E |
+| C.9-6 | 0.9 | — | — | — | 1.6 | — | 1.6 | — | (b) 1.3W; (d) H = 0 |
+| C.9-7 | 0.9 | — | — | — | 1.6 | — | — | 1.0 | (c) 1.4E; (d) H = 0 |
+
+</TablaNorma>
+
+#### Excepciones (a) a (d)
+
+- **(a) Reducir $L$ a 0.5** en C.9-3, C.9-4 y C.9-5, **excepto** en estacionamientos, lugares de reunión pública y en todas las áreas donde $L_0$ sea **mayor de 4.8 kN/m²** (<NormaRef s="C.9.2.1(a)" pag="C-67" />). Es una reducción del **coeficiente de carga**; en C.9-2 el 1.6 de $L$ no se reduce.
+- **(b) 1.3W en vez de 1.6W** en C.9-4 y C.9-6 cuando las cargas de viento del Capítulo B.6 **no** se han reducido por el factor de direccionalidad allí prescrito (<NormaRef s="C.9.2.1(b)" pag="C-67" />).
+- **(c) $E$ con 1.0**, porque el Título A define las fuerzas sísmicas **al nivel de resistencia**; se puede usar **1.4E** en C.9-5 y C.9-7 si los efectos $E$ se basan en los **niveles de servicio** de las fuerzas sísmicas (<NormaRef s="C.9.2.1(c)" pag="C-68" />).
+- **(d) $H$ puede valer cero** en C.9-6 y C.9-7 si su acción estructural **neutraliza** la causada por $W$ o $E$. Si el empuje del suelo **aporta resistencia** a acciones de otras fuerzas, no se incluye en $H$ sino en la **resistencia de diseño** (<NormaRef s="C.9.2.1(d)" pag="C-68" />).
+
+### C.9.2.2 a C.9.2.4 — Impacto, efectos diferidos y anclajes de postensado
+
+- **C.9.2.2:** si el diseño considera la resistencia a **impacto**, éste se incluye en $L$ (<NormaRef s="C.9.2.2" pag="C-68" />).
+- **C.9.2.3:** los estimativos de asentamientos diferenciales, flujo plástico, retracción, expansión de concretos de retracción compensada y variaciones de temperatura deben basarse en una **evaluación realista** de lo que puede ocurrir en la vida útil (<NormaRef s="C.9.2.3" pag="C-68" />).
+- **C.9.2.4:** en las **zonas de anclaje de postensado** se usa un factor **1.2** sobre la fuerza máxima aplicada por el gato (<NormaRef s="C.9.2.4" pag="C-68" />). Por ejemplo, un gato de 1000 kN da una fuerza de diseño de 1200 kN.
+
+<Ejemplo numero={1} titulo="Momento requerido en el apoyo de una viga con D, L y E">
+Una viga de un edificio de oficinas ($L_0$ = 2.4 kN/m²) tiene, en el apoyo, un **momento negativo** por carga muerta $M_D$ = 85 kN·m, por carga viva $M_L$ = 30 kN·m y por sismo reducido $M_E$ = ±60 kN·m (reversible). Para simplificar se expresa el momento negativo como valor **positivo**: $E$ = +60 suma al efecto de la gravedad y $E$ = −60 lo resta. No hay viento, cubierta ni empuje. Hallar el momento requerido $M_u$ con C.9.2.1.
+
+<Paso titulo="Evaluar las combinaciones" ref="C.9-1 a C.9-7">
+
+| Ecuación | Cálculo (kN·m) | Valor |
+|---|---|---:|
+| C.9-1 | 1.4(85) | {f(vu(ej1.lista, 'C.9-1'))} |
+| C.9-2 | 1.2(85) + 1.6(30) | {f(vu(ej1.lista, 'C.9-2'))} |
+| C.9-3 | 1.2(85) + (1.0·30 ó 0.8·0), toma 30 | {f(vu(ej1.lista, 'C.9-3'))} |
+| C.9-4 | 1.2(85) + 1.0(30) | {f(vu(ej1.lista, 'C.9-4'))} |
+| C.9-5 con E = +60 | 1.2(85) + 1.0(60) + 1.0(30) | {f(vu(ej1.lista, 'C.9-5'))} |
+| C.9-5 con E = −60 | 1.2(85) − 60 + 30 | {f(vu(ej1.lista, 'C.9-5', true))} |
+| C.9-6 | 0.9(85) | {f(vu(ej1.lista, 'C.9-6'))} |
+| C.9-7 con E = +60 | 0.9(85) + 60 | {f(vu(ej1.lista, 'C.9-7'))} |
+| C.9-7 con E = −60 | 0.9(85) − 60 | {f(vu(ej1.lista, 'C.9-7', true))} |
+
+</Paso>
+<Paso titulo="Gobernante" ref="C.9.2.1">
+La mayor es **{ej1.env.maxima.id}** ({ej1.env.maxima.expresion}) con **{f(ej1.env.maxima.valor)} kN·m**: el sismo con la carga viva gobierna el refuerzo para momento negativo.
+</Paso>
+<Paso titulo="¿Se invierte el signo?" ref="C.9-7">
+La menor es **{ej1.env.minima.id}** con {f(ej1.env.minima.valor)} kN·m. Como es positiva (en nuestra convención sigue siendo momento negativo), **el momento no se invierte** y el refuerzo inferior en el apoyo no recibe tracción por esta causa. Si la menor hubiera sido negativa, habría que armar también la cara contraria.
+</Paso>
+<Paso titulo="Reducir el factor de L a 0.5" ref="C.9.2.1(a)">
+Es uso de oficinas con $L_0$ = 2.4 ≤ 4.8 kN/m² y no es estacionamiento ni reunión pública: **está permitido** ({ej1.permite ? 'verificado' : 'no permitido'}). C.9-5 baja a 1.2(85) + 60 + 0.5(30) = {f(vu(ej1.red, 'C.9-5'))} kN·m. En un estacionamiento ({ej1.noParq ? 'se permite' : 'no se permite'} reducir) se queda en {f(ej1.env.maxima.valor)}.
+</Paso>
+<Resultado>
+Sin la excepción (a): $M_u$ = **{f(ej1.env.maxima.valor)} kN·m**. Con la excepción (a) aplicable a este uso: $M_u$ = **{f(ej1.envRed.maxima.valor)} kN·m**. Ambas gobiernan por **{ej1.env.maxima.id}**.
+</Resultado>
+</Ejemplo>
+
+## C.9.3 — Resistencia de diseño
+
+### C.9.3.1 — Definición
+
+La resistencia de diseño de un elemento, sus conexiones y sus secciones, en flexión, carga axial, cortante y torsión, es la **resistencia nominal** calculada con los requisitos y suposiciones del Título C **multiplicada por el factor $\phi$** de reducción de resistencia de C.9.3.2, C.9.3.4 y C.9.3.5 (<NormaRef s="C.9.3.1" pag="C-68" />).
+
+### C.9.3.2 — Factores de reducción de resistencia φ
+
+<TablaNorma numero="C.9.3.2.1 a C.9.3.2.7" titulo="Factores de reducción de resistencia φ" pag="C-68" nota="Transcritos del texto de la norma, páginas C-68 y C-69, y agrupados en una tabla por el autor. Incluye también los valores de C.9.3.4 y C.9.3.5.">
+
+| Numeral | Solicitación o caso | φ |
+|---|---|---:|
+| C.9.3.2.1 | Secciones controladas por tracción (C.10.3.4) | 0.90 |
+| C.9.3.2.2(a) | Secciones controladas por compresión: elementos con refuerzo en espiral (C.10.9.3) | 0.75 |
+| C.9.3.2.2(b) | Secciones controladas por compresión: otros elementos reforzados | 0.65 |
+| C.9.3.2.3 | Cortante y torsión | 0.75 |
+| C.9.3.2.4 | Aplastamiento en el concreto (excepto anclajes de postensado y modelos puntal-tensor) | 0.65 |
+| C.9.3.2.5 | Zonas de anclaje de postensado | 0.85 |
+| C.9.3.2.6 | Modelos puntal-tensor (Apéndice C-A): puntales, tensores, zonas de nodos y áreas de apoyo | 0.75 |
+| C.9.3.2.7(a) | Flexión en elementos pretensados, del extremo del elemento al fin de la longitud de transferencia | 0.75 |
+| C.9.3.2.7(b) | Flexión en elementos pretensados, del fin de la longitud de transferencia al fin de la longitud de desarrollo | 0.75 → 0.90 (lineal) |
+| C.9.3.4(a) | DMO o DES: cortante si Vn del elemento es menor que el cortante asociado a su resistencia nominal a flexión | 0.60 |
+| C.9.3.4(c) | DMO o DES: cortante en nudos y vigas de acople reforzadas en diagonal | 0.85 |
+| C.9.3.5 | Concreto estructural simple (C.22): flexión, compresión, cortante y aplastamiento | 0.60 |
+
+</TablaNorma>
+
+#### La zona de transición según εt (C.9.3.2.2)
+
+Una sección es **controlada por compresión** si la deformación unitaria neta de tracción $\varepsilon_t$ del acero extremo en tracción es **igual o menor** que el límite de compresión cuando el concreto alcanza 0.003, y **controlada por tracción** si $\varepsilon_t \ge 0.005$ (<NormaRef s="C.10.3.3" pag="C-76" />, <NormaRef s="C.10.3.4" pag="C-76" />). El límite de compresión es la deformación en condición **balanceada**; para refuerzo **Grado 420** y todo refuerzo preesforzado se permite fijarlo en **0.002**.
+
+Entre ambos límites $\phi$ **aumenta linealmente** desde el valor de compresión (0.65 u 0.75) hasta **0.90**, en la medida en que $\varepsilon_t$ aumenta hasta 0.005 (<NormaRef s="C.9.3.2.2" pag="C-68" />). La norma lo dice con palabras; la forma explícita es del autor:
+
+<Ecuacion num="C.9.3.2.2 (forma explícita)" titulo="φ en la zona de transición (expresión del autor)">
+
+$$
+\phi=\phi_c+\left(0.90-\phi_c\right)\frac{\varepsilon_t-\varepsilon_{cl}}{0.005-\varepsilon_{cl}}\qquad \varepsilon_{cl}\le\varepsilon_t\le 0.005
+$$
+
+- $\phi_c$: 0.75 (refuerzo en espiral) ó 0.65 (otros).
+- $\varepsilon_{cl}$: límite de deformación controlada por compresión; 0.002 para Grado 420.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Otros fy y la deformación εt en vigas">
+Para un $f_y$ distinto de 420 MPa la norma no da un valor tabulado: C.10.3.3 define el límite como la $\varepsilon_t$ balanceada, que **(lectura del autor)** es $f_y/E_s$ (p. ej. 0.0025 para 500 MPa). Además, en elementos no preesforzados a flexión (o con carga axial mayorada de compresión menor que 0.10 f′c Ag) **$\varepsilon_t$ no debe ser menor de 0.004** en el estado de resistencia nominal (<NormaRef s="C.10.3.5" pag="C-76" />), de modo que una viga nunca queda en la zona controlada por compresión.
+</Callout>
+
+**Alternativa por carga axial.** Cuando se usa el Apéndice C-B, para elementos con $f_y \le 420$ MPa, refuerzo simétrico y $(d-d')/h \ge 0.70$, se permite aumentar $\phi$ linealmente hasta 0.90 a medida que $\phi P_n$ **disminuye desde $0.10 f'_c A_g$ hasta cero**. Para otros elementos reforzados, $\phi$ aumenta linealmente hasta 0.90 al disminuir $\phi P_n$ desde $0.10 f'_c A_g$ **o $\phi P_b$, el que sea menor**, hasta cero (<NormaRef s="C.9.3.2.2" pag="C-68" />).
+
+**Pretensado.** En flexión de elementos pretensados donde el embebido del torón es menor que la longitud de desarrollo (C.12.9.1.1), $\phi$ = 0.75 hasta el fin de la longitud de transferencia y **crece linealmente hasta 0.90** al llegar a la longitud de desarrollo. Si la adherencia no llega al extremo del elemento, se supone que el embebido empieza donde termina la longitud no adherida (<NormaRef s="C.9.3.2.7" pag="C-69" />).
+
+<Ejemplo numero={2} titulo="φ de una sección según la deformación εt">
+Una sección de columna con acero Grado 420 ($f_y$ = 420 MPa) tiene su acero extremo en tracción a $d_t$ = {ej2.dt} mm de la fibra más comprimida. Se estudian cuatro profundidades del eje neutro $c$ en el estado de resistencia nominal, con concreto en 0.003 (deformaciones lineales). Hallar $\phi$ con y sin refuerzo en espiral.
+
+<Paso titulo="Deformación del acero extremo" ref="C.10.3.3, C.10.3.4">
+Por proporción de triángulos (con $\varepsilon_{cu}$ = 0.003): $\varepsilon_t = 0.003\,(d_t-c)/c$.
+</Paso>
+<Paso titulo="φ por zona" ref="C.9.3.2.1, C.9.3.2.2">
+
+| c (mm) | εt | Zona | φ (otros) | φ (espiral) |
+|---:|---:|---|---:|---:|
+| {ej2.filas[0].c} | {ej2.filas[0].e.toFixed(5)} | {zonaTxt[ej2.filas[0].otro.zona]} | {ej2.filas[0].otro.phi.toFixed(3)} | {ej2.filas[0].espiral.phi.toFixed(3)} |
+| {ej2.filas[1].c} | {ej2.filas[1].e.toFixed(5)} | {zonaTxt[ej2.filas[1].otro.zona]} | {ej2.filas[1].otro.phi.toFixed(3)} | {ej2.filas[1].espiral.phi.toFixed(3)} |
+| {ej2.filas[2].c} | {ej2.filas[2].e.toFixed(5)} | {zonaTxt[ej2.filas[2].otro.zona]} | {ej2.filas[2].otro.phi.toFixed(3)} | {ej2.filas[2].espiral.phi.toFixed(3)} |
+| {ej2.filas[3].c} | {ej2.filas[3].e.toFixed(5)} | {zonaTxt[ej2.filas[3].otro.zona]} | {ej2.filas[3].otro.phi.toFixed(3)} | {ej2.filas[3].espiral.phi.toFixed(3)} |
+
+Para $c$ = {ej2.filas[1].c} mm, por ejemplo: $\phi = 0.65 + 0.25\,(\varepsilon_t - 0.002)/0.003$ = **{ej2.filas[1].otro.phi.toFixed(3)}** sin espiral, y $0.75 + 0.15\,(\varepsilon_t - 0.002)/0.003$ = **{ej2.filas[1].espiral.phi.toFixed(3)}** con espiral.
+</Paso>
+<Paso titulo="Resistencia de diseño" ref="C.9.3.1">
+Si en $c$ = {ej2.filas[2].c} mm la resistencia nominal a flexión es $M_n$ = {ej2.mn} kN·m, la resistencia de diseño es $\phi M_n$ = {ej2.filas[2].otro.phi.toFixed(3)} × {ej2.mn} = **{ej2.phiMn.toFixed(1)} kN·m**.
+</Paso>
+<Paso titulo="Si fuera una viga" ref="C.10.3.5">
+En una viga no preesforzada se exige $\varepsilon_t \ge$ 0.004, es decir $c \le$ {ej2.cMaxViga.toFixed(1)} mm para $d_t$ = {ej2.dt} mm. Con $c$ = {ej2.filas[1].c} mm la sección **no sería admisible** como viga, y con $c$ = {ej2.filas[2].c} y {ej2.filas[3].c} mm sí.
+</Paso>
+<Resultado>
+Con $\varepsilon_t$ ≤ 0.002, $\phi$ = 0.65 (0.75 con espiral); con $\varepsilon_t$ ≥ 0.005, $\phi$ = 0.90; entre ambos, interpolación lineal. Para $c$ = {ej2.filas[2].c} mm: $\phi$ = **{ej2.filas[2].otro.phi.toFixed(3)}** (sin espiral).
+</Resultado>
+</Ejemplo>
+
+### C.9.3.3 — Longitudes de desarrollo
+
+Las longitudes de desarrollo del Capítulo C.12 **no llevan factor $\phi$** (<NormaRef s="C.9.3.3" pag="C-69" />).
+
+### C.9.3.4 — Estructuras DMO y DES
+
+Para estructuras de capacidad de disipación de energía **moderada (DMO)** o **especial (DES)** que resisten sismo con muros estructurales (vaciados en sitio o prefabricados) o pórticos resistentes a momento, $\phi$ se modifica así (<NormaRef s="C.9.3.4" pag="C-69" />):
+
+- **(a)** $\phi$ para **cortante = 0.60** en cualquier elemento diseñado para resistir $E$ si su resistencia nominal a cortante es **menor** que el cortante que corresponde al desarrollo de su resistencia nominal a flexión (determinada con las cargas axiales mayoradas más críticas e incluyendo $E$).
+- **(b)** En **diafragmas**, $\phi$ para cortante no excede el mínimo $\phi$ de cortante usado en los elementos verticales del sistema primario de resistencia sísmica.
+- **(c)** En **nudos y vigas de acople reforzadas en diagonal**, $\phi$ para cortante = **0.85**.
+
+### C.9.3.5 — Concreto simple
+
+En el Capítulo C.22, $\phi$ = **0.60** para flexión, compresión, cortante y aplastamiento en concreto estructural simple (<NormaRef s="C.9.3.5" pag="C-69" />).
+
+## C.9.4 — Resistencia de diseño para el refuerzo
+
+Los valores de $f_y$ y $f_{yt}$ usados en el diseño **no deben exceder 550 MPa**, excepto en los aceros de **preesforzado** y en el refuerzo transversal en **espiral** de C.10.9.3 y C.21.1.5.4 (<NormaRef s="C.9.4" pag="C-69" />).
+
+## C.9.5 — Control de deflexiones
+
+### C.9.5.1 — Principio
+
+Los elementos de concreto reforzado a flexión deben tener **rigidez adecuada** para limitar cualquier deflexión que pueda afectar adversamente la resistencia o el funcionamiento de la estructura (<NormaRef s="C.9.5.1" pag="C-69" />). Hay dos caminos: **(1)** cumplir una **altura mínima** y no calcular, o **(2)** calcular la deflexión y compararla con la Tabla C.9.5(b).
+
+### C.9.5.2 — Elementos reforzados en una dirección (no preesforzados)
+
+#### C.9.5.2.1 — Alturas mínimas (Tabla C.9.5(a))
+
+Las alturas o espesores mínimos de la Tabla C.9.5(a) se aplican a elementos en una dirección que **no soporten ni estén ligados** a particiones u otros elementos susceptibles de dañarse por deflexiones grandes, **a menos que** el cálculo de las deflexiones muestre que puede usarse un espesor menor sin efectos adversos (<NormaRef s="C.9.5.2.1" pag="C-69" />).
+
+<TablaNorma numero="Tabla C.9.5(a)" titulo="Alturas o espesores mínimos de vigas no preesforzadas o losas reforzadas en una dirección, a menos que se calculen las deflexiones" pag="C-70" nota="Espesor mínimo h = ℓ / n. Valores directos para concreto de peso normal y refuerzo grado 420 MPa; para otras condiciones se aplican las notas (a) y (b) siguientes. Elementos que NO soporten ni estén ligados a divisiones u otros elementos susceptibles de dañarse por deflexiones grandes.">
+
+| Elemento | Simplemente apoyados | Con un extremo continuo | Ambos extremos continuos | En voladizo |
+|---|:---:|:---:|:---:|:---:|
+| Losas macizas en una dirección | ℓ/20 | ℓ/24 | ℓ/28 | ℓ/10 |
+| Vigas o losas nervadas en una dirección | ℓ/16 | ℓ/18.5 | ℓ/21 | ℓ/8 |
+
+</TablaNorma>
+
+**Notas de la tabla** (<NormaRef s="Tabla C.9.5(a)" pag="C-70" />):
+
+- **(a)** Concreto **liviano estructural** con densidad $w_c$ entre 1 440 y 1 840 kg/m³: multiplicar los valores por $(1.65-0.0003\,w_c)$, **pero no menos de 1.09**.
+- **(b)** Para $f_y$ distinto de 420 MPa: multiplicar los valores por $(0.4+f_y/700)$.
+
+Con ambos ajustes, la altura mínima es $h = \dfrac{\ell}{n}\,(0.4+f_y/700)\,(1.65-0.0003\,w_c)$; en concreto de peso normal solo aplica el factor de $f_y$. Por ejemplo, el factor de $f_y$ vale {f(factorFyAltura(280), 3)} con 280 MPa, 1.000 con 420 MPa y {f(factorFyAltura(500), 3)} con 500 MPa; el de concreto liviano vale {f(factorConcretoLiviano(1700), 3)} con $w_c$ = 1700 kg/m³ y {f(factorConcretoLiviano(1840), 3)} con 1840 (el mínimo de 1.09 no llega a regir dentro del rango de la nota).
+
+<CalculadoraEmbed id="espesor-minimo" />
+
+<Ejemplo numero={3} titulo="Altura mínima de una viga continua sin verificar deflexiones">
+Una viga nervada de una dirección, de concreto de peso normal, que **no soporta divisiones frágiles**, tiene una luz $\ell$ = 7.5 m. Hallar la altura mínima según la continuidad y el acero.
+
+<Paso titulo="Ambos extremos continuos, fy = 420 MPa" ref="Tabla C.9.5(a)">
+$h = \ell/21$ = 7500/21 = **{f(ej3.a.hMm, 0)} mm**. No hay factor de $f_y$ (1.000).
+</Paso>
+<Paso titulo="Un solo extremo continuo" ref="Tabla C.9.5(a)">
+$h = \ell/18.5$ = 7500/18.5 = **{f(ej3.b.hMm, 0)} mm**: con menos continuidad la viga necesita más altura.
+</Paso>
+<Paso titulo="Otros aceros" ref="Tabla C.9.5(a), nota (b)">
+Con $f_y$ = 280 MPa el factor es 0.4 + 280/700 = {f(ej3.c.factorFy, 3)} y $h$ = **{f(ej3.c.hMm, 0)} mm**. Con $f_y$ = 500 MPa el factor es 0.4 + 500/700 = {f(ej3.d.factorFy, 3)} y $h$ = **{f(ej3.d.hMm, 0)} mm**. Un acero más resistente **exige más altura** porque trabaja con mayor deformación.
+</Paso>
+<Paso titulo="Concreto liviano" ref="Tabla C.9.5(a), nota (a)">
+Con $w_c$ = 1700 kg/m³ el factor es 1.65 − 0.0003(1700) = {f(ej3.e.factorLiviano, 3)} y $h$ = **{f(ej3.e.hMm, 0)} mm** (con $f_y$ = 420).
+</Paso>
+<Paso titulo="Voladizo" ref="Tabla C.9.5(a)">
+Una losa maciza en voladizo de 1.8 m: $h = \ell/10$ = 1800/10 = **{f(ej3.g.hMm, 0)} mm**.
+</Paso>
+<Resultado>
+Viga continua por ambos extremos con 420 MPa: **{f(ej3.a.hMm, 0)} mm** (en la práctica se redondea hacia arriba, por ejemplo a 360 mm). Es una **altura mínima para omitir el cálculo**, no una condición de resistencia: debe verificarse además flexión y cortante.
+</Resultado>
+</Ejemplo>
+
+#### C.9.5.2.2 — Deflexión inmediata
+
+Cuando se calculan las deflexiones, las que ocurren **inmediatamente al aplicar la carga** se calculan con los métodos o fórmulas **usuales para deflexiones elásticas**, considerando los efectos de la **fisuración y del refuerzo** en la rigidez del elemento (<NormaRef s="C.9.5.2.2" pag="C-69" />).
+
+#### C.9.5.2.3 — Inercia efectiva Ie
+
+A menos que la rigidez se obtenga con un análisis más completo, las deflexiones inmediatas se calculan con el **módulo de elasticidad $E_c$** de C.8.5.1 (concreto de peso normal o liviano) y el **momento de inercia efectivo $I_e$**, **sin tomarlo mayor que $I_g$** (<NormaRef s="C.9.5.2.3" pag="C-70" />).
+
+<Ecuacion num="C.9-8" titulo="Momento de inercia efectivo">
+
+$$
+I_e=\left(\frac{M_{cr}}{M_a}\right)^{3} I_g+\left[1-\left(\frac{M_{cr}}{M_a}\right)^{3}\right] I_{cr}
+$$
+
+- $M_{cr}$: momento de agrietamiento (C.9-9).
+- $M_a$: momento máximo en el elemento, para la etapa en que se calcula la deflexión.
+- $I_g$: momento de inercia de la sección bruta de concreto; $I_{cr}$: de la sección fisurada transformada.
+
+</Ecuacion>
+
+<Ecuacion num="C.9-9" titulo="Momento de agrietamiento">
+
+$$
+M_{cr}=\frac{f_r\,I_g}{y_t}
+$$
+
+- $y_t$: distancia del eje centroidal de la sección bruta, sin considerar el refuerzo, a la fibra extrema en tracción.
+
+</Ecuacion>
+
+<Ecuacion num="C.9-10" titulo="Módulo de rotura">
+
+$$
+f_r=0.62\,\lambda\sqrt{f'_c}
+$$
+
+- $f'_c$ en MPa; $\lambda$ factor de concreto liviano (1.0 para peso normal).
+
+</Ecuacion>
+
+Si $M_a \le M_{cr}$ la sección no se fisura y $I_e = I_g$; cuando $M_a$ crece, $I_e$ baja hacia $I_{cr}$. La norma no define $I_{cr}$ aquí: es la inercia de la **sección fisurada transformada** (para una sección rectangular con acero a tracción, $I_{cr} = b\,x^3/3 + n A_s (d-x)^2$ con $n = E_s/E_c$; esta fórmula es del autor, de la mecánica usual).
+
+<CalculadoraEmbed id="propiedades-concreto" />
+
+#### C.9.5.2.4 — Elementos continuos y prismáticos
+
+En elementos **continuos** se permite tomar $I_e$ como el **promedio** de los valores de C.9-8 en las secciones críticas de momento positivo y negativo. En elementos **prismáticos** se permite usar el valor de C.9-8 **en el centro de la luz** (tramos simples y continuos) y **en el apoyo** para voladizos (<NormaRef s="C.9.5.2.4" pag="C-70" />).
+
+#### C.9.5.2.5 — Deflexión adicional a largo plazo
+
+A menos que se obtenga con un análisis más completo, la deflexión adicional por **flujo plástico y retracción** (concreto normal o liviano) se calcula **multiplicando la deflexión inmediata causada por la carga permanente** por el factor $\lambda_\Delta$ (<NormaRef s="C.9.5.2.5" pag="C-70" />):
+
+<Ecuacion num="C.9-11" titulo="Factor de deflexión diferida">
+
+$$
+\lambda_\Delta=\frac{\xi}{1+50\,\rho'}
+$$
+
+- $\rho'$: cuantía de refuerzo en compresión, $A'_s/(b\,d)$, **a mitad de luz** en tramos simples y continuos y **en el apoyo** en voladizos.
+- $\xi$: factor dependiente del tiempo para cargas sostenidas (tabla siguiente).
+
+</Ecuacion>
+
+<TablaNorma numero="Factor ξ" titulo="Factor dependiente del tiempo para cargas sostenidas" pag="C-70" nota="C.9.5.2.5. Valores que 'puede tomarse' ξ; la norma no da valores intermedios.">
+
+| Duración de la carga sostenida | ξ |
+|---|---:|
+| 5 años o más | 2.0 |
+| 12 meses | 1.4 |
+| 6 meses | 1.2 |
+| 3 meses | 1.0 |
+
+</TablaNorma>
+
+El refuerzo en compresión **reduce** la deflexión diferida: con $\rho'$ = 0.01 y $\xi$ = 2.0, $\lambda_\Delta$ = 2.0/(1 + 0.5) = {f(lambdaDiferida(2, 0.01), 3)}, frente a 2.0 sin él.
+
+#### C.9.5.2.6 — Límites
+
+La deflexión calculada con C.9.5.2.2 a C.9.5.2.5 **no debe exceder** los límites de la Tabla C.9.5(b) (<NormaRef s="C.9.5.2.6" pag="C-70" />).
+
+<TablaNorma numero="Tabla C.9.5(b)" titulo="Deflexión máxima admisible calculada" pag="C-71" nota="Límite = ℓ / n. Las marcas *, ‡ y § remiten a las notas bajo la tabla; † está en la columna de deflexión de las dos últimas filas (celda combinada en la norma).">
+
+| Tipo de elemento | Deflexión considerada | Límite |
+|---|---|:---:|
+| Cubiertas planas que no soporten ni estén ligadas a elementos no estructurales susceptibles de sufrir daños debido a deflexiones grandes | Deflexión inmediata debida a la carga viva, L | ℓ/180 (*) |
+| Entrepisos que no soporten ni estén ligados a elementos no estructurales susceptibles de sufrir daños debido a deflexiones grandes | Deflexión inmediata debida a la carga viva, L | ℓ/360 |
+| Sistema de entrepiso o cubierta que soporte o esté ligado a elementos no estructurales **susceptibles** de sufrir daños debido a deflexiones grandes | La parte de la deflexión total que ocurre después de la unión de los elementos no estructurales (la suma de la deflexión a largo plazo debida a todas las cargas permanentes y la deflexión inmediata debida a cualquier carga viva adicional) (†) | ℓ/480 (‡) |
+| Sistema de entrepiso o cubierta que soporte o esté ligado a elementos no estructurales **no susceptibles** de sufrir daños debido a deflexiones grandes | Igual que la fila anterior (†) | ℓ/240 (§) |
+
+</TablaNorma>
+
+Notas al pie de la Tabla C.9.5(b) (<NormaRef s="Tabla C.9.5(b)" pag="C-71" />):
+
+- **(\*)** Este límite no pretende ser un resguardo contra el **empozamiento** de aguas; éste se verifica con cálculos de deflexión adecuados, incluyendo las deflexiones por agua estancada, los efectos a largo plazo de todas las cargas permanentes, la contraflecha, las tolerancias de construcción y la confiabilidad de las medidas de drenaje.
+- **(†)** Las deflexiones a largo plazo se determinan con C.9.5.2.5 ó C.9.5.4.3, pero **se pueden reducir** en la cantidad de deflexión calculada que ocurra **antes** de unir los elementos no estructurales, con base en datos de ingeniería aceptables sobre las características tiempo-deflexión de elementos similares.
+- **(‡)** Este límite se puede exceder si se toman medidas adecuadas para prevenir daños en elementos apoyados o unidos.
+- **(§)** Pero no mayor que la tolerancia establecida para los elementos no estructurales. Este límite se puede exceder si se proporciona una **contraflecha** de modo que la deflexión total menos la contraflecha no exceda dicho límite.
+
+<Ejemplo numero={4} titulo="Deflexión inmediata y diferida de una viga simplemente apoyada">
+Viga rectangular simplemente apoyada, $b$ = {ej4.b} mm, $h$ = {ej4.h} mm, $d$ = {ej4.d} mm, $A_s$ = {ej4.as} mm² (3 barras de 510 mm²), concreto $f'_c$ = {ej4.fc} MPa de peso normal, luz $\ell$ = {ej4.L} m. Cargas de servicio uniformes: $w_D$ = {ej4.wD} kN/m (incluye el peso propio) y $w_L$ = {ej4.wL} kN/m. Entrepiso que **soporta elementos no estructurales susceptibles** de dañarse; las cargas permanentes actúan 5 años o más. Las deflexiones se calculan con las fórmulas elásticas usuales (el cálculo de $\delta$ y de $I_{cr}$ es del autor; la norma exige $I_e$, $\lambda_\Delta$ y los límites).
+
+<Paso titulo="Propiedades de la sección" ref="C.8.5.1, C.9-9, C.9-10">
+$E_c = 4700\sqrt{f'_c}$ = **{f(ej4.ec, 0)} MPa**; $f_r = 0.62\sqrt{f'_c}$ = **{f(ej4.fr, 3)} MPa**; $I_g = b h^3/12$ = **{(ej4.ig / 1e9).toFixed(3)} × 10⁹ mm⁴**; $y_t = h/2$ = {ej4.yt} mm; $M_{cr} = f_r I_g / y_t$ = **{f(ej4.mcr)} kN·m**.
+</Paso>
+<Paso titulo="Sección fisurada" ref="Auxiliar">
+Con $n = E_s/E_c$ = {f(ej4.n, 2)}, el eje neutro fisurado está en $x$ = {f(ej4.sin.cr.x, 1)} mm y $I_{cr}$ = **{(ej4.sin.cr.icr / 1e9).toFixed(3)} × 10⁹ mm⁴** (sin acero de compresión).
+</Paso>
+<Paso titulo="Momentos y Ie" ref="C.9-8">
+$M_D = w_D\ell^2/8$ = **{f(ej4.maD)} kN·m** y $M_{D+L} = (w_D+w_L)\ell^2/8$ = **{f(ej4.maDL)} kN·m**, ambos mayores que $M_{cr}$ ({f(ej4.mcr)}), así que hay fisuración. Entonces $I_e$(D) = **{(ej4.sin.ieD / 1e9).toFixed(3)} × 10⁹ mm⁴** e $I_e$(D+L) = **{(ej4.sin.ieDL / 1e9).toFixed(3)} × 10⁹ mm⁴**, ambos entre $I_{cr}$ e $I_g$.
+</Paso>
+<Paso titulo="Deflexiones inmediatas" ref="C.9.5.2.2">
+Con $\delta = 5 w \ell^4/(384 E_c I_e)$: $\delta_D$ = **{f(ej4.sin.dD, 2)} mm**; $\delta_{D+L}$ = {f(ej4.sin.dDL, 2)} mm; por carga viva $\delta_L = \delta_{D+L}-\delta_D$ = **{f(ej4.sin.dL, 2)} mm**.
+</Paso>
+<Paso titulo="Deflexión diferida" ref="C.9-11">
+Sin refuerzo de compresión ($\rho'$ = 0) y $\xi$ = 2.0: $\lambda_\Delta$ = **{f(ej4.sin.lam, 2)}**; deflexión adicional $\lambda_\Delta\,\delta_D$ = **{f(ej4.sin.lp, 2)} mm**.
+</Paso>
+<Paso titulo="Comparación con la Tabla C.9.5(b)" ref="Tabla C.9.5(b)">
+Límites con $\ell$ = {ej4.L} m: $\ell/360$ = {f(ej4.sin.l360, 1)} mm (solo carga viva) y $\ell/480$ = {f(ej4.sin.l480, 1)} mm (permanente a largo plazo + viva adicional).
+
+| Verificación | Calculada | Límite | Resultado |
+|---|---:|---:|---|
+| Carga viva inmediata δL (si no hubiera elementos frágiles: ℓ/360) | {f(ej4.sin.dL, 2)} mm | {f(ej4.sin.l360, 1)} mm | {ej4.sin.dL <= ej4.sin.l360 ? 'cumple' : 'no cumple'} |
+| λΔ·δD + δL (elementos susceptibles: ℓ/480) | {f(ej4.sin.despues, 2)} mm | {f(ej4.sin.l480, 1)} mm | {ej4.sin.despues <= ej4.sin.l480 ? 'cumple' : 'no cumple'} |
+| λΔ·δD + δL (no susceptibles: ℓ/240) | {f(ej4.sin.despues, 2)} mm | {f(ej4.sin.l240, 1)} mm | {ej4.sin.despues <= ej4.sin.l240 ? 'cumple' : 'no cumple'} |
+
+Se toma de forma **conservadora** que toda la carga permanente actúa antes de unir los elementos no estructurales; la nota (†) permite descontar la parte que ocurre antes de unirlos.
+</Paso>
+<Paso titulo="Efecto del refuerzo de compresión" ref="C.9-11">
+Si se añaden $A'_s$ = 600 mm² a $d'$ = 50 mm, $\rho'$ = 600/({ej4.b}·{ej4.d}) = {ej4.rhoCon.toFixed(4)} y $\lambda_\Delta$ baja a **{f(ej4.con.lam, 2)}**. Además $I_{cr}$ sube a {(ej4.con.cr.icr / 1e9).toFixed(3)} × 10⁹ mm⁴, y los resultados quedan: $\delta_L$ = {f(ej4.con.dL, 2)} mm y $\lambda_\Delta\delta_D + \delta_L$ = **{f(ej4.con.despues, 2)} mm** frente a los {f(ej4.sin.despues, 2)} mm anteriores ({ej4.con.despues <= ej4.con.l480 ? 'cumple' : 'sigue sin cumplir'} el límite ℓ/480 = {f(ej4.con.l480, 1)} mm).
+</Paso>
+<Resultado>
+Sin acero de compresión: deflexión inmediata por carga viva = **{f(ej4.sin.dL, 2)} mm**, adicional a largo plazo = **{f(ej4.sin.lp, 2)} mm** y total después de unir los elementos no estructurales = **{f(ej4.sin.despues, 2)} mm**, que **{ej4.sin.despues <= ej4.sin.l480 ? 'cumple' : 'no cumple'}** el límite ℓ/480 = {f(ej4.sin.l480, 1)} mm. Si no cumple, se aumenta $h$, se añade refuerzo de compresión, se usa contraflecha (nota §) o se retrasa la unión de los elementos frágiles.
+</Resultado>
+</Ejemplo>
+
+### C.9.5.3 — Elementos reforzados en dos direcciones (no preesforzados)
+
+#### C.9.5.3.1 — Alcance
+
+La sección C.9.5.3 define el espesor mínimo de losas u otros elementos en dos direcciones diseñados con el Capítulo C.13 y que cumplan C.13.6.1.2. Las losas **sin vigas interiores** entre apoyos en todos los sentidos cumplen C.9.5.3.2 ó C.9.5.3.4; las losas **con vigas** entre apoyos en todos los sentidos cumplen C.9.5.3.3 ó C.9.5.3.4 (<NormaRef s="C.9.5.3.1" pag="C-71" />).
+
+#### C.9.5.3.2 — Losas sin vigas interiores
+
+Para losas **sin vigas interiores** y con relación entre lados **no mayor que 2**, el espesor debe cumplir la Tabla C.9.5(c) y **no ser menor que** (<NormaRef s="C.9.5.3.2" pag="C-71" />): **(a)** 125 mm en losas **sin ábacos** (C.13.2.5) y **(b)** 100 mm en losas **con ábacos**.
+
+<TablaNorma numero="Tabla C.9.5(c)" titulo="Espesores mínimos de losas sin vigas interiores" pag="C-72" nota="h = ℓn / n, donde ℓn es la luz libre en la dirección larga, medida entre caras de los apoyos en losas sin vigas y entre caras de las vigas en losas con vigas u otros apoyos. Para fy entre los valores dados, interpolación lineal. Ábaco según C.13.2.5. Con vigas de borde: el αf de la viga de borde no debe ser menor que 0.8.">
+
+| fy (MPa) | Sin ábacos: ext. sin vigas de borde | Sin ábacos: ext. con vigas de borde | Sin ábacos: panel interior | Con ábacos: ext. sin vigas de borde | Con ábacos: ext. con vigas de borde | Con ábacos: panel interior |
+|---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 280 | ℓn/33 | ℓn/36 | ℓn/36 | ℓn/36 | ℓn/40 | ℓn/40 |
+| 420 | ℓn/30 | ℓn/33 | ℓn/33 | ℓn/33 | ℓn/36 | ℓn/36 |
+| 520 | ℓn/28 | ℓn/31 | ℓn/31 | ℓn/31 | ℓn/34 | ℓn/34 |
+
+</TablaNorma>
+
+#### C.9.5.3.3 — Losas con vigas entre los apoyos en todos los lados
+
+El espesor mínimo $h$ depende de $\alpha_{fm}$, el **valor promedio de la relación de rigidez $\alpha_f$** de las vigas del panel (la relación $\alpha_f$ es la de la Ec. C.13-3; véase el Capítulo C.13) (<NormaRef s="C.9.5.3.3" pag="C-71" />):
+
+- **(a)** $\alpha_{fm} \le 0.2$: se aplica C.9.5.3.2 (Tabla C.9.5(c) y mínimos de 125 ó 100 mm).
+- **(b)** $0.2 < \alpha_{fm} \le 2.0$: $h$ no menor que la Ec. C.9-12, y **no menor de 125 mm**.
+- **(c)** $\alpha_{fm} > 2.0$: $h$ no menor que la Ec. C.9-13, y **no menor de 90 mm**.
+
+<Ecuacion num="C.9-12" titulo="Espesor mínimo con 0.2 menor que αfm y αfm ≤ 2.0">
+
+$$
+h=\frac{\ell_n\left(0.8+\dfrac{f_y}{1400}\right)}{36+5\beta\left(\alpha_{fm}-0.2\right)}\ \ge 125\ \text{mm}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.9-13" titulo="Espesor mínimo con αfm mayor que 2.0">
+
+$$
+h=\frac{\ell_n\left(0.8+\dfrac{f_y}{1400}\right)}{36+9\beta}\ \ge 90\ \text{mm}
+$$
+
+- $\ell_n$: luz libre en la dirección larga, medida cara a cara de las vigas; $\beta$: relación entre la luz libre larga y la luz libre corta de la losa.
+
+</Ecuacion>
+
+- **(d)** En **bordes discontinuos** debe disponerse una viga de borde con $\alpha_f \ge 0.80$, o bien **aumentar en al menos 10 %** el espesor requerido por C.9-12 ó C.9-13 en el panel con borde discontinuo (<NormaRef s="C.9.5.3.3" pag="C-72" />).
+
+#### C.9.5.3.4 — Espesores menores calculando deflexiones
+
+Se pueden usar espesores menores que los de C.9.5.3.1 a C.9.5.3.3 cuando las deflexiones calculadas no exceden los límites de la Tabla C.9.5(b). El cálculo considera el tamaño y forma del panel, las condiciones de apoyo y la naturaleza de las restricciones de borde; usa $E_c$ de C.8.5.1 e $I_e$ de C.9-8 (se permiten otros valores si concuerdan razonablemente con ensayos de alcance apropiado), y la deflexión diferida de C.9.5.2.5 (<NormaRef s="C.9.5.3.4" pag="C-72" />).
+
+<Ejemplo numero={5} titulo="Espesor mínimo de una losa en dos direcciones">
+Losa con luz libre larga $\ell_n$ = 6.0 m, $\beta$ = 1.2 y $f_y$ = 420 MPa. Hallar el espesor mínimo según el tipo de losa.
+
+<Paso titulo="Losa plana sin ábacos ni vigas interiores" ref="C.9.5.3.2, Tabla C.9.5(c)">
+Panel **interior**: $h = \ell_n/33$ = 6000/33 = **{f(ej5.a.hMm, 0)} mm** (mayor que el mínimo de 125 mm). Panel **exterior sin viga de borde**: $\ell_n/30$ = **{f(ej5.a2.hMm, 0)} mm**. Con $f_y$ = 350 MPa un panel interior sin ábacos usaría ℓn/{f(ej5.divInterp, 1)} por interpolación lineal.
+</Paso>
+<Paso titulo="Con vigas y αfm = 1.0" ref="C.9-12">
+$h = 6000\,(0.8+420/1400)/[36+5(1.2)(1.0-0.2)]$ = 6600/40.8 = {f(ej5.b.hCalculadaMm, 1)} mm → **{f(ej5.b.hMm, 0)} mm** (regla {ej5.b.regla}).
+</Paso>
+<Paso titulo="Con vigas muy rígidas, αfm = 3.0" ref="C.9-13">
+$h = 6000\,(1.1)/(36+9\cdot 1.2)$ = {f(ej5.c.hCalculadaMm, 1)} mm → **{f(ej5.c.hMm, 0)} mm**. En un panel con **borde discontinuo sin viga de borde** de $\alpha_f \ge 0.8$ se aumenta al menos 10 %: **{f(ej5.c2.hMm, 0)} mm** (C.9.5.3.3(d)).
+</Paso>
+<Resultado>
+Losa plana: **{f(ej5.a.hMm, 0)} mm** (interior) a **{f(ej5.a2.hMm, 0)} mm** (exterior sin borde); con vigas ($\alpha_{fm}$ = 1.0): **{f(ej5.b.hMm, 0)} mm**; con vigas más rígidas ($\alpha_{fm}$ = 3.0): **{f(ej5.c.hMm, 0)} mm**. A más rigidez de las vigas, menos espesor.
+</Resultado>
+</Ejemplo>
+
+### C.9.5.4 — Elementos de concreto preesforzado
+
+- **C.9.5.4.1:** en elementos a flexión del Capítulo C.18, las deflexiones inmediatas se calculan con las fórmulas elásticas usuales y se permite usar $I_g$ en elementos **Clase U** (C.18.3.3) (<NormaRef s="C.9.5.4.1" pag="C-72" />).
+- **C.9.5.4.2:** en elementos **Clase C y Clase T**, el cálculo se basa en la **sección agrietada transformada**; se permite una relación momento-deflexión bilineal o el $I_e$ de C.9-8 (<NormaRef s="C.9.5.4.2" pag="C-72" />).
+- **C.9.5.4.3:** la deflexión a largo plazo considera los esfuerzos en concreto y acero bajo carga permanente, incluyendo flujo plástico, retracción y **relajación del acero** (<NormaRef s="C.9.5.4.3" pag="C-72" />).
+- **C.9.5.4.4:** la deflexión calculada no debe exceder los límites de la Tabla C.9.5(b) (<NormaRef s="C.9.5.4.4" pag="C-72" />).
+
+### C.9.5.5 — Elementos compuestos
+
+<Detalle titulo="Elementos apuntalados y sin apuntalar (C.9.5.5)">
+
+- **C.9.5.5.1 — Apuntalados.** Si al retirar los apoyos temporales la carga muerta la soporta la **sección compuesta total**, el elemento se considera equivalente a uno **monolítico** para el cálculo de la deflexión. En no preesforzados, la parte del elemento **en compresión** determina si se usan los valores de la Tabla C.9.5(a) para concreto normal o liviano. Si se calcula la deflexión, debe considerarse la curvatura por la retracción diferencial de los componentes prefabricados y construidos en obra y los efectos del flujo plástico a lo largo del eje del elemento preesforzado (<NormaRef s="C.9.5.5.1" pag="C-73" />).
+- **C.9.5.5.2 — Sin apuntalar.** Si el espesor de un elemento prefabricado no preesforzado a flexión cumple la Tabla C.9.5(a), no se calcula su deflexión. Si el espesor del elemento compuesto no preesforzado la cumple, no se calcula la deflexión posterior a la acción compuesta; sin embargo, la deflexión a largo plazo del prefabricado debe investigarse según la magnitud y duración de la carga antes de que la acción compuesta sea efectiva (<NormaRef s="C.9.5.5.2" pag="C-73" />).
+- **C.9.5.5.3:** la deflexión calculada no debe exceder los límites de la Tabla C.9.5(b) (<NormaRef s="C.9.5.5.3" pag="C-73" />).
+
+</Detalle>
+
+## Erratas y observaciones sobre el texto del PDF
+
+<Callout tipo="nota" titulo="Observaciones del autor (no son texto de la norma)">
+- **C.9.3.2.1** remite a "10.3.4" sin la "C." inicial; se entiende C.10.3.4.
+- **C.9.2.1(a)** dice "factor de carga de carga viva" (repetición) y define $L_0$ "como se define en B.4.2.1", mientras que la nomenclatura B.2.2 remite a B.4.5.1; el valor 4.8 kN/m² coincide con B.2.4.2.2.
+- **C.9.5.3.2(a) y (b):** en el PDF los valores 125 mm y 100 mm quedan pegados a la remisión "C.13.2.5" ("C.13.2.5125 mm"); son dos números separados.
+- **C.9-10** se introduce "para concreto de peso normal" pero incluye $\lambda$ (que vale 1.0 en ese caso); aquí se usa con $\lambda$, igual que `moduloRotura` en el código del sitio.
+- En la Tabla C.9.5(b) la deflexión de las dos últimas filas es una **celda combinada**; aquí se repite para que cada fila se lea sola.
+- Las ecuaciones C.9-8 a C.9-13 y los radicales salen rotos en el texto extraído del PDF; se verificaron contra la imagen de las páginas C-70 y C-71. La página C-74 está en blanco ("Notas:").
+- El límite de $\varepsilon_t$ de compresión para un $f_y$ distinto de 420 MPa no está tabulado (lectura del autor: $f_y/E_s$).
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar los φ de la NSR-98** con las combinaciones de C.9.2.1, o **mezclar** las combinaciones de C.9 con los $\phi$ del Apéndice C-C (<NormaRef s="C.9.2" pag="C-67" />, <NormaRef s="C.9.1.3" pag="C-67" />).
+- **Mayorar el sismo otra vez:** $E$ de C.9-5 y C.9-7 ya está a nivel de resistencia y lleva **1.0** (o 1.4 solo si se basa en niveles de servicio) (<NormaRef s="C.9.2.1(c)" pag="C-68" />).
+- **Reducir $L$ a 0.5** en estacionamientos, reuniones públicas o con $L_0$ mayor de 4.8 kN/m², o reducirla en C.9-2 (<NormaRef s="C.9.2.1(a)" pag="C-67" />).
+- **Sumar $L_r$, $G$ y $L_e$** entre sí: entra una sola.
+- **Olvidar las combinaciones con 0.9D** (C.9-6 y C.9-7), que gobiernan volcamiento, levantamiento y la inversión de momentos.
+- **Dejar $H$ en la combinación** cuando neutraliza a $W$ o $E$; debe valer cero (<NormaRef s="C.9.2.1(d)" pag="C-68" />).
+- **Usar φ = 0.90 en una columna** sin comprobar $\varepsilon_t$: solo vale con $\varepsilon_t \ge 0.005$; en la transición se interpola (<NormaRef s="C.9.3.2.2" pag="C-68" />).
+- **Aplicar la Tabla C.9.5(a) a elementos que soportan divisiones frágiles:** es solo para los que **no** soportan ni están ligados a elementos susceptibles de dañarse (<NormaRef s="C.9.5.2.1" pag="C-69" />).
+- **Olvidar las notas (a) y (b)** de la Tabla C.9.5(a): sus valores son para peso normal y $f_y$ = 420 MPa.
+- **Usar $I_g$ en vez de $I_e$** en una sección fisurada, o $I_e$ mayor que $I_g$ (<NormaRef s="C.9.5.2.3" pag="C-70" />).
+- **Aplicar $\lambda_\Delta$ a toda la carga:** multiplica solo la deflexión inmediata por **carga permanente** (<NormaRef s="C.9.5.2.5" pag="C-70" />).
+- **Tomar ℓ/180 como protección contra empozamiento** (nota * de la Tabla C.9.5(b)).
+</Callout>
+
+## Resumen en una línea
+
+**Se diseña con $\phi$ por la resistencia nominal ≥ $U$ (las siete combinaciones C.9-1 a C.9-7, con $\phi$ de 0.90 a 0.65 según $\varepsilon_t$) y se garantiza el servicio con una altura mínima (Tabla C.9.5(a) o C.9.5(c)) o con deflexiones calculadas con $I_e$ y $\lambda_\Delta$ que no excedan la Tabla C.9.5(b).**

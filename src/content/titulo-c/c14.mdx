@@ -1,0 +1,447 @@
+---
+codigo: 'C.14'
+tipo: capitulo
+titulo: 'Muros'
+resumen: 'Diseño de muros de concreto con carga axial, con o sin flexión: refuerzo mínimo vertical y horizontal, dos capas, separación máxima, método empírico (Ec. C.14-1) con espesores mínimos, muros no portantes, muros como vigas de cimentación y el método alterno para muros esbeltos con flexión fuera del plano.'
+objetivos:
+  - 'Elegir el método de diseño de un muro (como columna, empírico C.14.5 o alterno C.14.8) según sus condiciones'
+  - 'Calcular el espesor mínimo y el refuerzo mínimo vertical y horizontal de un muro, con su separación y número de capas'
+  - 'Aplicar la Ecuación C.14-1 con el factor de longitud efectiva k y verificar el tercio central'
+  - 'Verificar un muro esbelto con el método alterno: Mcr, φMn, Icr, Mu amplificado y la deflexión de servicio'
+paginasNorma: 'C-137 a C-140'
+paginaPdf: 439
+orden: 14
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import {
+  MUROS,
+  cuantiasMinimasMuro,
+  areaMinimaPorMetro,
+  separacionBarrasMuro,
+  separacionMaximaRefuerzoMuro,
+  ubicacionDosCapas,
+  espesorMinimoMuroEmpirico,
+  espesorMinimoEmpiricoTotal,
+  espesorMinimoNoPortante,
+  largoEfectivoCargaConcentrada,
+  phiPnMuroEmpirico,
+  factorKMuro,
+  verificarMuroEsbelto,
+  momentoAgrietamientoMuro,
+} from '../../lib/nsr10/murosConcreto';
+import { buscarBarra } from '../../data/refuerzoDetalles';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const altura = 3000, largo = 6000;
+  const tMin = espesorMinimoMuroEmpirico(altura, largo);
+  const h = 150;
+  const barra = buscarBarra('No.4');
+  const q = cuantiasMinimasMuro('barra-corrugada', barra.db, 420);
+  const asV = areaMinimaPorMetro(q.rhoVertical, h);
+  const asH = areaMinimaPorMetro(q.rhoHorizontal, h);
+  const sv = separacionBarrasMuro(barra.area, asV, h);
+  const sh = separacionBarrasMuro(barra.area, asH, h);
+  const q19 = cuantiasMinimasMuro('barra-corrugada', buscarBarra('No.6').db, 420);
+  const h2 = 300;
+  const capas = ubicacionDosCapas(h2);
+  const asV2 = areaMinimaPorMetro(q.rhoVertical, h2);
+  return {
+    altura, largo, tMin, h, barra, q, asV, asH, sv, sh, q19, h2, capas, asV2,
+    sotano: espesorMinimoEmpiricoTotal(altura, largo, true),
+    noPortante: espesorMinimoNoPortante(2800),
+    sepMax: separacionMaximaRefuerzoMuro(h),
+  };
+})();
+
+export const ej2 = (() => {
+  const fc = 21, h = 200, lc = 3000, ag = 1000 * h;
+  const caso = (cond) => phiPnMuroEmpirico({ fc, ag, k: factorKMuro(cond), lc, h });
+  const a = caso('arriostrado-restringido');
+  const b = caso('arriostrado-libre');
+  const c = caso('no-arriostrado');
+  return {
+    fc, h, lc, a, b, c,
+    tMin: espesorMinimoMuroEmpirico(lc, 6000),
+    tercio: h / 6,
+    ancho: largoEfectivoCargaConcentrada(2500, 300, h),
+    // Carga de servicio-resistencia: wu de una viga que apoya cada 2.5 m con ancho de apoyo 300 mm
+  };
+})();
+
+export const ej3 = (() => {
+  const r = verificarMuroEsbelto({ fc: 28, fy: 420, lw: 1000, h: 200, d: 100, as: 796, lc: 4500, mua: 5.0625e6, pu: 60000, maa: 3.54375e6, ps: 40000 });
+  return { r, mcr: momentoAgrietamientoMuro(28, 1000, 200), mn: r.mn, ig: r.ig };
+})();
+
+## Idea central del capítulo
+
+Un muro de concreto es, en esencia, una columna muy ancha: recibe carga axial (con o sin flexión) y, a veces, empujes laterales. El Capítulo C.14 se ocupa de los muros que **resisten cargas axiales** y de los que se usan como vigas de cimentación. Las fuerzas en el plano del muro (cortante, muros de cortante) se diseñan con **C.11.9** (<NormaRef s="C.14.2.3" pag="C-137" />); y los muros estructurales sísmicos tienen requisitos propios del Capítulo C.21.
+
+La norma ofrece **tres caminos** para el muro cargado axialmente (<NormaRef s="C.14.2.2" pag="C-137" />):
+
+- **C.14.4** — diseñarlo como **elemento en compresión** con los capítulos C.10 (el camino general);
+- **C.14.5** — el **método empírico**, simple, para muros rectangulares macizos con la resultante en el tercio central;
+- **C.14.8** — el **método alterno para muros esbeltos**, cuando la flexión fuera del plano controla.
+
+En todos ellos se cumplen además C.14.2 (generalidades) y C.14.3 (refuerzo mínimo).
+
+<Callout tipo="importante" titulo="El refuerzo mínimo y el espesor mínimo no son opcionales">
+Tanto el espesor mínimo (C.14.5.3, C.14.6) como las cuantías mínimas (C.14.3) pueden **dispensarse** solo si un **análisis estructural** demuestra que el muro tiene resistencia y estabilidad adecuadas (<NormaRef s="C.14.2.7" pag="C-137" />).
+</Callout>
+
+## C.14.1 — Alcance
+
+- **C.14.1.1.** Las disposiciones de C.14 se aplican al diseño de muros sometidos a **carga axial, con o sin flexión** (<NormaRef s="C.14.1.1" pag="C-137" />).
+- **C.14.1.2.** Los **muros de contención en voladizo** se diseñan por flexión con el Capítulo C.10, con un refuerzo horizontal mínimo según C.14.3.3 (<NormaRef s="C.14.1.2" pag="C-137" />).
+
+## C.14.2 — Generalidades
+
+- **C.14.2.1.** Los muros se diseñan para **cargas excéntricas** y cualquier carga lateral o de otro tipo (<NormaRef s="C.14.2.1" pag="C-137" />).
+- **C.14.2.2.** Los muros con cargas axiales se diseñan con C.14.2, C.14.3 y C.14.4, C.14.5 **o** C.14.8 (<NormaRef s="C.14.2.2" pag="C-137" />).
+- **C.14.2.3.** El diseño por **cortante** cumple C.11.9 (<NormaRef s="C.14.2.3" pag="C-137" />).
+- **C.14.2.4.** Salvo que un análisis demuestre otra cosa, la **longitud horizontal efectiva** por cada carga concentrada **no excede** la menor de la distancia centro a centro de las cargas y el **ancho de apoyo más cuatro veces el espesor** del muro (<NormaRef s="C.14.2.4" pag="C-137" />).
+- **C.14.2.5.** Los elementos en compresión construidos **monolíticamente** con muros cumplen C.10.8.2 (<NormaRef s="C.14.2.5" pag="C-137" />).
+- **C.14.2.6.** Los muros se **anclan** a los elementos que los intersecan (pisos, cubiertas, columnas, pilastras, contrafuertes, otros muros y zapatas) (<NormaRef s="C.14.2.6" pag="C-137" />).
+- **C.14.2.7.** La cuantía de refuerzo y los límites de espesor de C.14.3 y C.14.5 pueden **dispensarse** si el análisis estructural muestra resistencia y estabilidad adecuadas (<NormaRef s="C.14.2.7" pag="C-137" />).
+- **C.14.2.8.** La transferencia de fuerzas a la cimentación en la base del muro se hace según **C.15.8** (<NormaRef s="C.14.2.8" pag="C-137" />).
+
+## C.14.3 — Refuerzo mínimo
+
+### C.14.3.1 a C.14.3.3 — Cuantías mínimas
+
+El refuerzo mínimo vertical y horizontal cumple C.14.3.2 y C.14.3.3, **a menos que se requiera más por cortante** (C.11.9.8 y C.11.9.9) (<NormaRef s="C.14.3.1" pag="C-137" />). Las cuantías son sobre el área bruta de concreto de la sección considerada:
+
+<TablaNorma numero="C.14.3.2 y C.14.3.3" titulo="Cuantías mínimas de refuerzo de muros" pag="C-137" nota="MW200/MD200 corresponden a alambres de 16 mm de diámetro como máximo. «No. 5 (16M)» es la barra de 15.9/16 mm.">
+
+| Tipo de refuerzo | Vertical $\rho_\ell$ (C.14.3.2) | Horizontal $\rho_t$ (C.14.3.3) |
+|---|:---:|:---:|
+| (a) Barras corrugadas no mayores que No. 5 (5/8″) ó 16M, con $f_y \ge$ 420 MPa | 0.0012 | 0.0020 |
+| (b) Otras barras corrugadas | 0.0015 | 0.0025 |
+| (c) Malla de alambre (liso o corrugado) no mayor que MW200 ó MD200 (16 mm) | 0.0012 | 0.0020 |
+
+</TablaNorma>
+
+(<NormaRef s="C.14.3.2" pag="C-137" />, <NormaRef s="C.14.3.3" pag="C-138" />.) El texto de C.14.3.2 llama a la cuantía vertical «$\rho_A$»; es $\rho_\ell$ (ver erratas).
+
+### C.14.3.4 — Dos capas de refuerzo
+
+Los muros con **espesor mayor de 250 mm**, **excepto los muros de sótano**, llevan el refuerzo de cada dirección en **dos capas** paralelas a las caras (<NormaRef s="C.14.3.4" pag="C-138" />):
+
+- **(a)** una capa con **no menos de 1/2 y no más de 2/3** del refuerzo total de esa dirección, a **no menos de 50 mm** ni más de **1/3 del espesor** desde la superficie **exterior**;
+- **(b)** la otra, con el resto, a **no menos de 20 mm** ni más de **1/3 del espesor** desde la superficie **interior**.
+
+### C.14.3.5 a C.14.3.7 — Separación, estribos y aberturas
+
+- **C.14.3.5.** El refuerzo vertical y el horizontal se espacian a **no más de 3 veces el espesor** del muro ni de **450 mm** (<NormaRef s="C.14.3.5" pag="C-138" />).
+- **C.14.3.6.** El refuerzo vertical **no necesita estribos laterales** cuando no excede **0.01 veces el área total de concreto**, o cuando no se requiere como refuerzo de compresión (<NormaRef s="C.14.3.6" pag="C-138" />).
+- **C.14.3.7.** Alrededor de vanos de ventanas, puertas y aberturas similares, además del mínimo, se colocan al menos **dos barras No. 5 (16M)** en muros con dos capas de refuerzo en ambas direcciones, y **una barra No. 5 (16M)** en muros con una capa. Esas barras se anclan para desarrollar $f_y$ en tracción en las esquinas de la abertura (<NormaRef s="C.14.3.7" pag="C-138" />; la longitud de anclaje se calcula con el capítulo C.12).
+
+<Ejemplo numero={1} titulo="Espesor mínimo y refuerzo de un muro de carga">
+
+Un muro de carga de {f(ej1.altura / 1000, 1)} m de altura y {f(ej1.largo / 1000, 1)} m de longitud se diseña con el método empírico. Refuerzo de barras No. 4 (12.7 mm, $f_y$ = 420 MPa) en una sola capa.
+
+<Paso titulo="Espesor mínimo" ref="C.14.5.3.1">
+
+$h_{min}$ = mayor de (menor entre altura y longitud)/25 = {ej1.altura}/25 = {f(ej1.altura / 25, 0)} mm y 100 mm → **{f(ej1.tMin, 0)} mm**. Se adopta **h = {ej1.h} mm**. (Si fuera un muro exterior de sótano o cimentación, el mínimo sube a **{f(ej1.sotano, 0)} mm**, C.14.5.3.2.)
+
+</Paso>
+<Paso titulo="Cuantías mínimas" ref="C.14.3.2, C.14.3.3">
+
+Barra No. 4 ≤ No. 5 con $f_y$ = 420 MPa: caso (a) → $\rho_\ell$ = **{ej1.q.rhoVertical}** y $\rho_t$ = **{ej1.q.rhoHorizontal}**. Por metro de muro:
+
+$A_{s,v}$ = {ej1.q.rhoVertical}·{ej1.h}·1000 = **{f(ej1.asV, 0)} mm²/m**; $A_{s,h}$ = {ej1.q.rhoHorizontal}·{ej1.h}·1000 = **{f(ej1.asH, 0)} mm²/m**.
+
+</Paso>
+<Paso titulo="Separación" ref="C.14.3.5">
+
+Máximo: el menor de 3h = {3 * ej1.h} mm y 450 mm → **{f(ej1.sepMax, 0)} mm**. Barras No. 4 (129 mm²): vertical, por área {f(ej1.sv.calculada, 0)} mm → gobierna el máximo, **{f(ej1.sv.adoptada, 0)} mm** (aporta {f(129000 / ej1.sv.adoptada, 0)} mm²/m ≥ {f(ej1.asV, 0)}); horizontal, por área {f(ej1.sh.calculada, 0)} mm → **{f(Math.floor(ej1.sh.adoptada / 10) * 10, 0)} mm** (redondeo a 10 mm).
+
+</Paso>
+<Paso titulo="Si el muro tuviera 300 mm" ref="C.14.3.4">
+
+Como h > 250 mm, el refuerzo de cada dirección va en dos capas. Con la misma cuantía vertical, $A_{s,v}$ = {f(ej1.asV2, 0)} mm²/m: la capa exterior lleva entre {f(ej1.asV2 / 2, 0)} y {f(ej1.asV2 * 2 / 3, 0)} mm²/m, colocada entre {ej1.capas.capaExterior[0]} y {f(ej1.capas.capaExterior[1], 0)} mm de la cara exterior; el resto va a la cara interior, entre {ej1.capas.capaInterior[0]} y {f(ej1.capas.capaInterior[1], 0)} mm de ella.
+
+</Paso>
+<Resultado>
+Muro de **{ej1.h} mm** con barras No. 4: vertical a **{f(ej1.sv.adoptada, 0)} mm** y horizontal a **{f(Math.floor(ej1.sh.adoptada / 10) * 10, 0)} mm**, una capa, más una barra No. 5 (16M) alrededor de cada abertura. Con barras mayores de No. 5 las cuantías suben a 0.0015 y 0.0025.
+</Resultado>
+</Ejemplo>
+
+## C.14.4 — Muros diseñados como elementos en compresión
+
+Con excepción de lo dispuesto en C.14.5, los muros con carga axial o carga axial y flexión se diseñan **como elementos en compresión** con **C.10.2, C.10.3, C.10.10, C.10.11, C.10.14, C.14.2 y C.14.3** (<NormaRef s="C.14.4" pag="C-138" />). Es el camino general: diagrama de interacción, esbeltez y amplificación de momentos del capítulo C.10.
+
+## C.14.5 — Método empírico de diseño
+
+### C.14.5.1 — Cuándo se puede usar
+
+Se permite diseñar con las disposiciones empíricas los muros de **sección rectangular sin vacíos** cuando la **resultante de todas las cargas mayoradas** está dentro del **tercio central** del espesor total del muro (excentricidad $e \le h/6$), y se cumplen C.14.2, C.14.3 y C.14.5 (<NormaRef s="C.14.5.1" pag="C-138" />).
+
+### C.14.5.2 — Resistencia axial de diseño
+
+<Ecuacion num="C.14-1" titulo="Resistencia axial de diseño de un muro (método empírico)">
+
+$$
+\phi P_n = 0.55\,\phi\,f'_c\,A_g\left[1-\left(\frac{k\,\ell_c}{32\,h}\right)^2\right]
+$$
+
+- $\phi$: el de secciones controladas por compresión (C.9.3.2.2): **0.65** (elementos distintos de espiral).
+- $A_g$: área bruta de la sección horizontal del muro que resiste la carga (espesor por longitud efectiva, C.14.2.4); $h$: espesor del muro; $\ell_c$: distancia vertical entre apoyos (notación C.2, longitud del elemento en compresión medida centro a centro de los nudos).
+- $k$: factor de longitud efectiva (tabla siguiente).
+
+</Ecuacion>
+
+(<NormaRef s="C.14.5.2" pag="C-138" />.) El factor $k$:
+
+<TablaNorma numero="C.14.5.2" titulo="Factor de longitud efectiva k" pag="C-138">
+
+| Condición del muro | $k$ |
+|---|:---:|
+| Arriostrado arriba y abajo contra desplazamiento lateral y **restringido contra la rotación** en uno o ambos extremos (superior, inferior o ambos) | 0.8 |
+| Arriostrado arriba y abajo y **no restringido contra la rotación** en ambos extremos | 1.0 |
+| **No arriostrado** contra desplazamiento lateral | 2.0 |
+
+</TablaNorma>
+
+### C.14.5.3 — Espesor mínimo (método empírico)
+
+- **C.14.5.3.1.** El espesor de muros de carga no es menor de **1/25 de la altura o de la longitud del muro, la que sea menor**, ni menor de **100 mm** (<NormaRef s="C.14.5.3.1" pag="C-139" />).
+- **C.14.5.3.2.** El espesor de muros **exteriores de sótanos y cimentaciones** no es menor de **190 mm** (<NormaRef s="C.14.5.3.2" pag="C-139" />).
+
+<Ejemplo numero={2} titulo="Resistencia axial de un muro por el método empírico">
+
+Muro de {ej2.h} mm de espesor, $\ell_c$ = {ej2.lc / 1000} m entre pisos, $f'_c$ = {ej2.fc} MPa. Se analiza una **franja de 1 m** ($A_g$ = 1000·{ej2.h} = {1000 * ej2.h} mm²), con la resultante dentro del tercio central, $\phi$ = 0.65.
+
+<Paso titulo="Verificaciones previas" ref="C.14.5.1, C.14.5.3.1">
+
+Espesor mínimo (muro de 6 m de largo): $\ell_c$/25 = {f(ej2.lc / 25, 0)} mm → {f(ej2.tMin, 0)} mm ≤ {ej2.h} mm ✓. Tercio central: $e \le h/6$ = {f(ej2.tercio, 1)} mm.
+
+</Paso>
+<Paso titulo="Resistencia bruta" ref="C.14-1">
+
+$0.55\,\phi\,f'_c\,A_g$ = 0.55·0.65·{ej2.fc}·{1000 * ej2.h} = **{f(ej2.a.resistenciaBruta / 1000, 0)} kN** por metro.
+
+</Paso>
+<Paso titulo="Factor de esbeltez según el apoyo" ref="C.14-1, C.14.5.2">
+
+$$
+\phi P_n = 0.55\,\phi\,f'_c\,A_g\left[1-\left(\frac{k\,\ell_c}{32\,h}\right)^2\right],\qquad 32h = 6400\ \text{mm}
+$$
+
+| Condición | $k$ | $k\ell_c/(32h)$ | Factor | $\phi P_n$ (kN/m) |
+|---|:---:|:---:|:---:|---:|
+| Arriostrado, restringido a rotación | 0.8 | {f(0.8 * ej2.lc / 6400, 3)} | {f(ej2.a.factorEsbeltez, 3)} | **{f(ej2.a.phiPn / 1000, 0)}** |
+| Arriostrado, sin restricción a rotación | 1.0 | {f(ej2.lc / 6400, 3)} | {f(ej2.b.factorEsbeltez, 3)} | **{f(ej2.b.phiPn / 1000, 0)}** |
+| No arriostrado | 2.0 | {f(2 * ej2.lc / 6400, 3)} | {f(ej2.c.factorEsbeltez, 3)} | **{f(ej2.c.phiPn / 1000, 0)}** |
+
+</Paso>
+<Paso titulo="Longitud efectiva de una carga concentrada" ref="C.14.2.4">
+
+Una viga de 300 mm de apoyo que descarga cada 2.5 m sobre el muro actúa sobre una longitud menor de 2500 mm y 300 + 4·{ej2.h} mm = **{ej2.ancho} mm**.
+
+</Paso>
+<Resultado>
+Con apoyo arriostrado y restringido, el muro resiste **{f(ej2.a.phiPn / 1000, 0)} kN/m**; con rotación libre {f(ej2.b.phiPn / 1000, 0)} kN/m y sin arriostramiento solo **{f(ej2.c.phiPn / 1000, 0)} kN/m**: el factor $k$ = 2.0 reduce la resistencia a una séptima parte. El arriostramiento del muro pesa más que su espesor.
+</Resultado>
+</Ejemplo>
+
+## C.14.6 — Muros no portantes
+
+El espesor de los muros que **no son de carga** no es menor de **100 mm**, ni menor de **1/30 de la distancia mínima entre los elementos que le dan apoyo lateral** (<NormaRef s="C.14.6.1" pag="C-139" />). Por ejemplo, con apoyos laterales a 2.8 m: 2800/30 = {f(2800 / 30, 1)} mm → {f(ej1.noPortante, 0)} mm.
+
+## C.14.7 — Muros empleados como vigas de cimentación
+
+- **C.14.7.1.** Llevan el refuerzo **superior e inferior** que exijan los momentos, según **C.10.2 a C.10.7**, y el diseño por cortante cumple el Capítulo C.11 (<NormaRef s="C.14.7.1" pag="C-139" />).
+- **C.14.7.2.** Las zonas expuestas que sobresalen del terreno cumplen además **C.14.3** (<NormaRef s="C.14.7.2" pag="C-139" />).
+
+## C.14.8 — Diseño alternativo para muros esbeltos
+
+### C.14.8.1 y C.14.8.2 — Cuándo y con qué condiciones
+
+Cuando la **tracción causada por flexión** controla el diseño de un muro **fuera de su plano**, se considera que C.14.8 satisface C.10.10 (esbeltez) (<NormaRef s="C.14.8.1" pag="C-139" />). El muro cumple las seis condiciones de C.14.8.2 (<NormaRef s="C.14.8.2" pag="C-139" />):
+
+| | Condición |
+|---|---|
+| C.14.8.2.1 | El panel se diseña como elemento **simplemente apoyado**, cargado axialmente, con **carga lateral uniforme** fuera del plano, y momentos y deflexiones máximos **a media altura** |
+| C.14.8.2.2 | La sección transversal es **constante** en toda la altura |
+| C.14.8.2.3 | El muro está **controlado por tracción** |
+| C.14.8.2.4 | El refuerzo da $\phi M_n \ge M_{cr}$ (Ec. 14-2), con $M_{cr}$ calculado con el módulo de rotura de C.9-10 |
+| C.14.8.2.5 | Las cargas gravitacionales **concentradas** por encima de la sección de diseño se suponen distribuidas en un ancho igual al ancho del apoyo más un ancho a cada lado que crece con pendiente de **2 vertical : 1 horizontal** hacia la sección de diseño, pero no mayor que la separación de las cargas ni más allá de los bordes del muro |
+| C.14.8.2.6 | El esfuerzo vertical $P_u/A_g$ a media altura **no excede $0.06f'_c$** |
+
+<Ecuacion num="C.14-2" titulo="Resistencia mínima por agrietamiento">
+
+$$
+\phi M_n \ge M_{cr}
+$$
+
+- $M_{cr}$: momento de fisuración con $f_r = 0.62\lambda\sqrt{f'_c}$ (Ec. C.9-10). El PDF imprime este número como «(14-2)», sin la «C.».
+
+</Ecuacion>
+
+### C.14.8.3 — Resistencia a flexión con carga axial a media altura
+
+<Ecuacion num="C.14-3" titulo="Condición de resistencia">
+
+$$
+\phi M_n \ge M_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.14-4" titulo="Momento mayorado a media altura incluyendo PΔ">
+
+$$
+M_u = M_{ua} + P_u\,\Delta_u
+$$
+
+- $M_{ua}$: momento máximo mayorado a media altura debido a cargas laterales y verticales excéntricas, **sin incluir efectos PΔ**.
+
+</Ecuacion>
+
+<Ecuacion num="C.14-5" titulo="Deflexión mayorada a media altura">
+
+$$
+\Delta_u=\frac{5\,M_u\,\ell_c^{2}}{(0.75)\,48\,E_c\,I_{cr}}
+$$
+
+</Ecuacion>
+
+$M_u$ se obtiene **por iteración de las deflexiones** o con la Ecuación C.14-6:
+
+<Ecuacion num="C.14-6" titulo="Mu amplificado (forma cerrada)">
+
+$$
+M_u=\frac{M_{ua}}{1-\dfrac{5\,P_u\,\ell_c^{2}}{(0.75)\,48\,E_c\,I_{cr}}}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.14-7" titulo="Momento de inercia de la sección fisurada">
+
+$$
+I_{cr}=\frac{E_s}{E_c}\left(A_s+\frac{P_u}{f_y}\,\frac{h}{2d}\right)(d-c)^2+\frac{\ell_w\,c^3}{3}
+$$
+
+- El valor de $E_s/E_c$ **no debe tomarse menor que 6**.
+- $A_s$: área de refuerzo longitudinal a tracción en el ancho $\ell_w$; $d$: altura útil; $c$: profundidad del eje neutro; $h$: espesor; $\ell_w$: longitud del muro o del segmento considerado (notación C.2).
+
+</Ecuacion>
+
+(Ecuaciones en <NormaRef s="C.14.8.3" pag="C-139" /> y <NormaRef s="C.14-4" pag="C-140" /> a <NormaRef s="C.14-7" pag="C-140" />.)
+
+### C.14.8.4 — Deflexión en servicio
+
+La **deflexión fuera del plano** $\Delta_s$ debida a cargas de servicio, **incluido el efecto PΔ**, **no debe exceder $\ell_c/150$**. Si $M_a$ (momento máximo a media altura por cargas laterales y verticales excéntricas de servicio, **incluidos los efectos PΔ**) excede $(2/3)M_{cr}$, se usa C.14-8; si no, C.14-9 (<NormaRef s="C.14.8.4" pag="C-140" />):
+
+<Ecuacion num="C.14-8" titulo="Δs cuando Ma excede (2/3)Mcr">
+
+$$
+\Delta_s=\frac{2}{3}\Delta_{cr}+\frac{M_a-\frac{2}{3}M_{cr}}{M_n-\frac{2}{3}M_{cr}}\left(\Delta_n-\frac{2}{3}\Delta_{cr}\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.14-9" titulo="Δs cuando Ma no excede (2/3)Mcr">
+
+$$
+\Delta_s=\left(\frac{M_a}{M_{cr}}\right)\Delta_{cr}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.14-10" titulo="Deflexión en el agrietamiento">
+
+$$
+\Delta_{cr}=\frac{5\,M_{cr}\,\ell_c^{2}}{48\,E_c\,I_g}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.14-11" titulo="Deflexión con la resistencia nominal">
+
+$$
+\Delta_n=\frac{5\,M_n\,\ell_c^{2}}{48\,E_c\,I_{cr}}
+$$
+
+- $I_{cr}$ se calcula con C.14-7 y **$M_a$ se obtiene por iteración** de las deflexiones.
+
+</Ecuacion>
+
+<Ejemplo numero={3} titulo="Un muro esbelto de 200 mm y 4.5 m de altura con flexión fuera del plano">
+
+Franja de 1 m de un muro de **h = 200 mm** y $\ell_c$ = 4.5 m, simplemente apoyado, $f'_c$ = 28 MPa, $f_y$ = 420 MPa, **una capa** de 796 mm²/m (No. 5 cada 250 mm) en el centro ($d$ = 100 mm). Cargas a media altura: $P_u$ = 60 kN/m, $M_{ua}$ = 5.06 kN·m/m (viento mayorado de 2.0 kN/m²); servicio: $P_s$ = 40 kN/m, $M_{aa}$ = 3.54 kN·m/m (sin PΔ). Esfuerzo vertical: $P_u/A_g$ = {f(ej3.r.esfuerzoVertical, 2)} MPa ≤ 0.06$f'_c$ = {f(ej3.r.limiteEsfuerzoVertical, 2)} MPa ✓ (C.14.8.2.6).
+
+<Paso titulo="Propiedades" ref="C.9-10, C.8.5.1">
+
+$E_c$ = 4700$\sqrt{28}$ = {f(ej3.r.ec, 0)} MPa; $E_s/E_c$ = {f(200000 / ej3.r.ec, 2)} (≥ 6 ✓). $I_g$ = 1000·200³/12 = {f(ej3.ig / 1e6, 1)}·10⁶ mm⁴. $f_r$ = 0.62$\sqrt{28}$ = {f(0.62 * Math.sqrt(28), 2)} MPa; $M_{cr}$ = $f_r I_g/(h/2)$ = **{f(ej3.mcr / 1e6, 2)} kN·m/m**.
+
+</Paso>
+<Paso titulo="Resistencia a flexión y control por tracción" ref="C.14.8.2.3, C.14.8.2.4">
+
+(Cálculo del autor con equilibrio de la sección, C.10.2.) $a$ = ($A_s f_y + P_u$)/(0.85 $f'_c$ $\ell_w$) = {f(ej3.r.a, 2)} mm, $c$ = {f(ej3.r.c, 2)} mm, $c/d$ = {f(ej3.r.c / 100, 3)} ≤ 0.375 → controlado por tracción ($\phi$ = 0.90). $M_n$ = {f(ej3.r.mn / 1e6, 2)} kN·m, **$\phi M_n$ = {f(ej3.r.phiMn / 1e6, 2)} kN·m** ≥ $M_{cr}$ = {f(ej3.mcr / 1e6, 2)} ✓ (C.14-2).
+
+</Paso>
+<Paso titulo="Inercia fisurada" ref="C.14-7">
+
+$$
+I_{cr}=\frac{E_s}{E_c}\left(A_s+\frac{P_u}{f_y}\frac{h}{2d}\right)(d-c)^2+\frac{\ell_w c^3}{3}
+$$
+
+$P_u h/(f_y 2d)$ = 60000·200/(420·200) = 142.9 mm²: $I_{cr}$ = **{f(ej3.r.icr / 1e6, 2)}·10⁶ mm⁴**.
+
+</Paso>
+<Paso titulo="Momento y deflexión mayorados" ref="C.14-6, C.14-5, C.14-4, C.14-3">
+
+$$
+M_u=\frac{M_{ua}}{1-\dfrac{5P_u\ell_c^2}{(0.75)\,48\,E_c I_{cr}}}
+$$
+
+Denominador = {f(5.0625e6 / ej3.r.mu, 3)}; $M_u$ = **{f(ej3.r.mu / 1e6, 2)} kN·m/m**. $\Delta_u$ = {f(ej3.r.deltaU, 2)} mm y comprobación $M_{ua} + P_u\Delta_u$ = {f((5.0625e6 + 60000 * ej3.r.deltaU) / 1e6, 2)} kN·m ✓. $\phi M_n$ = {f(ej3.r.phiMn / 1e6, 1)} ≥ $M_u$ = {f(ej3.r.mu / 1e6, 2)} ✓ (C.14-3).
+
+</Paso>
+<Paso titulo="Deflexión de servicio" ref="C.14-9, C.14-10, C.14.8.4">
+
+$\Delta_{cr}$ = 5$M_{cr}\ell_c^2$/(48$E_c I_g$) = {f(ej3.r.deltaCr, 2)} mm; $(2/3)M_{cr}$ = {f(2 * ej3.mcr / 3e6, 2)} kN·m. Con iteración de PΔ: $M_a$ = {f(ej3.r.servicio.ma / 1e6, 2)} kN·m/m < $(2/3)M_{cr}$ → se usa **{ej3.r.servicio.ecuacion}**: $\Delta_s$ = ($M_a/M_{cr}$)$\Delta_{cr}$ = **{f(ej3.r.servicio.deltaS, 2)} mm** ≤ $\ell_c/150$ = {f(ej3.r.servicio.limite, 0)} mm ✓.
+
+</Paso>
+<Resultado>
+El muro cumple: esfuerzo vertical {f(ej3.r.esfuerzoVertical, 2)} MPa ≤ {f(ej3.r.limiteEsfuerzoVertical, 2)} MPa, $\phi M_n$ = {f(ej3.r.phiMn / 1e6, 1)} kN·m/m ≥ $M_u$ = {f(ej3.r.mu / 1e6, 1)} kN·m/m y $\Delta_s$ = {f(ej3.r.servicio.deltaS, 2)} mm ≪ 30 mm. Aquí el muro se agrietaría solo con cargas mucho mayores ($M_{cr}$ = {f(ej3.mcr / 1e6, 1)} kN·m/m), así que gobierna la condición de no fisuración C.14-2, no la resistencia.
+</Resultado>
+</Ejemplo>
+
+## Erratas y observaciones sobre el texto del PDF
+
+<Callout tipo="nota" titulo="Observaciones del autor (no son texto de la norma)">
+- **C.14.3.2:** la cuantía vertical se escribe «$\rho_A$» (por pérdida del símbolo ℓ en la extracción); se transcribe como $\rho_\ell$.
+- **Ecuación «(14-2)»** y la referencia «ecuación (14-7)» en C.14.8.4 omiten el prefijo «C.»; son C.14-2 y C.14-7.
+- **Numeración de C.14-8 a C.14-11:** en el texto extraído las ecuaciones C.14-9, C.14-10 y C.14-11 salen desordenadas; la imagen confirma C.14-8 ($\Delta_s$ con $M_a > (2/3)M_{cr}$), C.14-9 ($\Delta_s = (M_a/M_{cr})\Delta_{cr}$), C.14-10 ($\Delta_{cr}$) y C.14-11 ($\Delta_n$).
+- **C.14.5.2:** $\ell_c$ no se define en el capítulo; se toma la definición de la notación (C.2): longitud del elemento en compresión medida centro a centro de los nudos. $h$ es el espesor del muro.
+- **C.14.8.3:** $c$ (profundidad del eje neutro) y $A_s$ no se calculan en el capítulo; el cálculo de $c$ y de $M_n$ del ejemplo (equilibrio de la sección con el bloque de C.10.2.7) y la iteración de $M_a = M_{aa} + P_s\Delta_s$ son **criterio del autor**.
+- **C.14.2.7:** habla de «dispensadas» (por «dispensar» = eximir).
+- **C.14.5.3.1:** «1/25 de la altura o longitud del muro, la que sea menor»: es el menor de los dos cocientes, y siempre ≥ 100 mm.
+- Las ecuaciones se verificaron contra las imágenes de las páginas C-138 a C-140.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar el método empírico fuera de su alcance**: solo para muros rectangulares macizos con la resultante de las cargas mayoradas dentro del **tercio central** (<NormaRef s="C.14.5.1" pag="C-138" />). Con excentricidades mayores se diseña como columna (C.14.4).
+- **Tomar $k$ = 0.8 sin arriostramiento real**: un muro libre en su cabeza tiene $k$ = 2.0 y pierde casi toda su resistencia (<NormaRef s="C.14.5.2" pag="C-138" />).
+- **Aplicar 0.0012/0.0020 con barras mayores de No. 5** (16M) o con $f_y$ < 420 MPa: corresponden a 0.0015/0.0025 (<NormaRef s="C.14.3.2" pag="C-137" />).
+- **Olvidar las dos capas** en muros de más de 250 mm (salvo sótanos) (<NormaRef s="C.14.3.4" pag="C-138" />) o separar el refuerzo más de 3 veces el espesor ó 450 mm (<NormaRef s="C.14.3.5" pag="C-138" />).
+- **No reforzar los vanos**: faltan las barras No. 5 (16M) alrededor de aberturas, ancladas para $f_y$ (<NormaRef s="C.14.3.7" pag="C-138" />).
+- **Suponer que una carga concentrada trabaja sobre todo el muro**: la longitud efectiva es la menor de la separación de las cargas y el ancho de apoyo + 4h (<NormaRef s="C.14.2.4" pag="C-137" />).
+- **Confundir muro de cortante y muro de carga**: el cortante en el plano va por C.11.9, y los muros sísmicos por C.21.
+- **Usar C.14.8 con esfuerzo vertical > 0.06 $f'_c$**, con sección variable o sin comprobar que el muro está controlado por tracción (<NormaRef s="C.14.8.2" pag="C-139" />).
+- **Olvidar el PΔ** en $M_u$ (C.14-4 a C.14-6) y en $M_a$ (C.14.8.4).
+- **Omitir $\phi M_n \ge M_{cr}$** (C.14-2): un muro esbelto con muy poco refuerzo puede fallar al agrietarse.
+</Callout>
+
+## Resumen en una línea
+
+**Un muro con carga axial se diseña como columna (C.14.4), por el método empírico $\phi P_n = 0.55\phi f'_c A_g[1-(k\ell_c/32h)^2]$ si la resultante está en el tercio central (espesor ≥ $\ell/25$ y 100 mm), o por el método alterno de C.14.8 si es esbelto con flexión fuera del plano; siempre con refuerzo mínimo 0.0012–0.0015 (vertical) y 0.0020–0.0025 (horizontal), separado a ≤ 3h y 450 mm, y en dos capas si h > 250 mm.**

@@ -1,0 +1,353 @@
+---
+codigo: 'C-B'
+tipo: apendice
+titulo: 'Disposiciones alternativas de diseño para flexión y compresión'
+resumen: 'Alternativa al diseño por deformación unitaria εt del cuerpo del Título C: límite de refuerzo ρ ≤ 0.75ρb, redistribución de momentos con 20(1 − (ρ − ρ′)/ρb) %, límites ω ≤ 0.36β1 y 0.24β1 en preesforzado y φ que varía con la carga axial.'
+objetivos:
+  - 'Saber qué numerales del Título C reemplaza el Apéndice C-B y que sus secciones se sustituyen todas juntas'
+  - 'Calcular la cuantía balanceada ρb (Ec. C-B-1), la cuantía máxima 0.75ρb y la redistribución permitida de momentos'
+  - 'Aplicar los índices ω de C-B.18.8 y C-B.18.10.4 a elementos preesforzados continuos'
+  - 'Calcular φ con la alternativa por carga axial (φPn desde 0.10 f′c Ag hasta cero) y compararla con el Apéndice C-C'
+  - 'Comparar los límites de C-B con los del cuerpo (εt ≥ 0.004 en C.10.3.5, εt ≥ 0.0075 en C.8.4)'
+paginasNorma: 'C-227 a C-230'
+paginaPdf: 529
+orden: 25
+calculadoras: []
+nivel: 'avanzado'
+---
+
+import {
+  epsilonTDesdeRho,
+  indiceCombinado,
+  omegaPreesfuerzo,
+  omegaRefuerzo,
+  phiAlternoPorCargaAxial,
+  redistribucionMaximaCB,
+  redistribucionPreesforzado,
+  resistenciaMinimaFisuracion,
+  rhoBalanceada,
+  rhoDesdeEpsilonT,
+  rhoMaxima,
+  rhoMaximaConCompresion,
+  umbralCargaAxial,
+  verificarLimiteFlexionPreesforzado,
+} from '../../lib/nsr10/disposicionesAlternas';
+import { phiPorCargaAxialCC } from '../../lib/nsr10/factoresAlternos';
+import { redistribucionMaxima } from '../../lib/nsr10/analisisConcreto';
+import { beta1 } from '../../lib/nsr10/concreto';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const fc = 28, fy = 420, b = 300, d = 500;
+  const rhoB = rhoBalanceada(fc, fy);
+  const rhoMax = rhoMaxima(fc, fy);
+  const rhoPrima = 0.005;
+  const rhoMaxComp = rhoMaximaConCompresion(fc, fy, rhoPrima);
+  const rhoC10 = rhoDesdeEpsilonT(0.004, fc, fy);
+  const rho = 0.012;
+  const redCB = redistribucionMaximaCB(rho, 0, fc, fy);
+  const epsRho = epsilonTDesdeRho(rho, fc, fy);
+  const redC8 = redistribucionMaxima(epsRho);
+  const rhoRed = rhoDesdeEpsilonT(0.0075, fc, fy);
+  const Mneg = 300;
+  return {
+    fc, fy, b, d, b1: beta1(fc), rhoB, rhoMax, rhoPrima, rhoMaxComp, rhoC10,
+    asMax: rhoMax * b * d, asMaxComp: rhoMaxComp * b * d, asC10: rhoC10 * b * d,
+    epsMax: epsilonTDesdeRho(rhoMax, fc, fy),
+    rho, redCB, epsRho, redC8, rhoRed, razonRed: rhoRed / rhoB,
+    Mneg, MnegRed: Mneg * (1 - redCB.porcentaje / 100),
+    rhoSobre: redistribucionMaximaCB(0.016, 0, fc, fy),
+  };
+})();
+
+export const ej2 = (() => {
+  const fc = 28, fy = 420, ag = 400 * 400;
+  const umbral = umbralCargaAxial(fc, ag);
+  const base = { fc, ag, fy, simetrico: true, relDsMenosDPrimaSobreH: 0.75 };
+  const filas = [0, 112, 224, 336, 448, 600].map((p) => ({
+    p,
+    cb: phiAlternoPorCargaAxial({ ...base, phiPn: p }).phi,
+    cbEsp: phiAlternoPorCargaAxial({ ...base, phiPn: p, tipoEstribo: 'espiral' }).phi,
+    cc: phiPorCargaAxialCC(p, fc, ag),
+  }));
+  const noSim = phiAlternoPorCargaAxial({ ...base, simetrico: false, phiPn: 200, phiPb: 300 });
+  return { fc, fy, ag, umbral, filas, noSim };
+})();
+
+export const ej3 = (() => {
+  const fc = 35, fy = 420, d = 600, dp = 560;
+  const rhoP = 0.003, fps = 1750, rho = 0.004, rhoPrima = 0.001;
+  const wp = omegaPreesfuerzo(rhoP, fps, fc);
+  const w = omegaRefuerzo(rho, fy, fc);
+  const wPrima = omegaRefuerzo(rhoPrima, fy, fc);
+  const indice = indiceCombinado(wp, w, wPrima, d, dp);
+  const lim = verificarLimiteFlexionPreesforzado(indice, fc);
+  const red = redistribucionPreesforzado(indice, fc);
+  const mcr = 480;
+  const grande = redistribucionPreesforzado(0.25, fc);
+  return { fc, fy, d, dp, rhoP, fps, rho, rhoPrima, wp, w, wPrima, indice, lim, red, mcr, minimo: resistenciaMinimaFisuracion(mcr), grande };
+})();
+
+## Idea central del apéndice
+
+El cuerpo del Título C diseña a flexión por **deformación unitaria**: clasifica la sección por $\varepsilon_t$ (compresión, transición, tracción), limita el refuerzo pidiendo $\varepsilon_t \ge 0.004$ (C.10.3.5) y permite redistribuir momentos solo con $\varepsilon_t \ge 0.0075$ (C.8.4). El Apéndice C-B ofrece la **alternativa histórica por cuantías**: se compara el refuerzo con la cuantía balanceada $\rho_b$ (y, en preesforzado, con índices $\omega$) y de ahí salen el máximo de refuerzo, los porcentajes de redistribución y, con el Apéndice C-C, un $\phi$ que puede variar con la carga axial.
+
+<Callout tipo="importante" titulo="Se usa completo o no se usa">
+«Si se usa cualquier sección de este apéndice, **todas** las secciones de este apéndice deben ser sustituidas en el cuerpo del Título C, y todas las demás secciones del cuerpo son aplicables» (<NormaRef s="C-B.1" pag="C-227" />). No se escoge una regla de C-B y las demás del cuerpo: la redistribución, el límite de refuerzo y las disposiciones de preesforzado se cambian como paquete.
+</Callout>
+
+<Callout tipo="nota" titulo="Qué contiene este apéndice y qué no">
+El PDF tiene tres páginas de texto (C-227 a C-229) y una página final con el rótulo «Notas:» vacía (C-230). **No incluye** ejemplos, figuras ni tablas; la única ecuación numerada es la C-B-1. La alternativa del $\phi$ por carga axial no está escrita aquí sino en C.9.3.2.2 y en C-C.9.3.2.2, que la remiten a este apéndice.
+</Callout>
+
+## C-B.1 — Alcance
+
+El Apéndice C-B permite diseñar a flexión y carga axial con sus propias disposiciones. Cuando se usa, reemplaza estos numerales del cuerpo (<NormaRef s="C-B.1" pag="C-227" />):
+
+<TablaNorma numero="C-B.1" titulo="Numerales del Título C que reemplaza el Apéndice C-B" pag="C-227" nota="Resumen del autor del párrafo único de C-B.1.">
+
+| Numerales de C-B | Reemplazan a |
+|---|---|
+| C-B.8.4, C-B.8.4.1, C-B.8.4.2, C-B.8.4.3 | Los numerales de igual numeración del Capítulo C.8 (redistribución de momentos) |
+| C-B.10.3.3 | C.10.3.3, C.10.3.4 y C.10.3.5, **excepto C.10.3.5.1**, que se mantiene |
+| C-B.18.1.3, C-B.18.8.1, C-B.18.8.2, C-B.18.8.3 | Los numerales de igual numeración del Capítulo C.18 |
+| C-B.18.10.4, C-B.18.10.4.1, C-B.18.10.4.2, C-B.18.10.4.3 | C.18.10.4, C.18.10.4.1 y C.18.10.4.2 |
+
+</TablaNorma>
+
+Conviene fijarse en el segundo renglón: **C-B.10.3.3 sustituye las definiciones de sección controlada por compresión y por tracción** (C.10.3.3 y C.10.3.4) y el límite $\varepsilon_t \ge 0.004$ (C.10.3.5). Véase la nota de erratas al final.
+
+## C-B.8.4 — Redistribución de momentos en elementos continuos en flexión no preesforzados
+
+Para elementos **preesforzados** la redistribución se rige por C-B.18.10.4 (más abajo). Para los no preesforzados (<NormaRef s="C-B.8.4" pag="C-227" />):
+
+**C-B.8.4.1.** Salvo que se usen valores aproximados de los momentos, se permite **reducir** los momentos mayorados calculados con la teoría elástica, en las secciones de momento máximo negativo o positivo y en cualquier vano de elementos continuos a flexión, para cualquier disposición de carga, en no más de
+
+$$
+20\left(1-\frac{\rho-\rho'}{\rho_b}\right)\ \text{por ciento}
+$$
+
+**C-B.8.4.2.** La redistribución solo se hace cuando la sección en la que se reduce el momento se ha diseñado de modo que $\rho$ ó $\rho-\rho'$ **no sea mayor que $0.50\rho_b$**, con
+
+<Ecuacion num="C-B-1" titulo="Cuantía balanceada">
+
+$$
+\rho_b=\frac{0.85\,\beta_1 f'_c}{f_y}\left(\frac{600}{600+f_y}\right)
+$$
+
+- $\rho_b$: cuantía de refuerzo que produce **condiciones de deformación balanceada** en la sección sometida a flexión sin carga axial.
+- $\beta_1$: factor del bloque rectangular (C.10.2.7.3); el 600 es $0.003 \times 200\,000$ MPa ($\varepsilon_{cu}\,E_s$), con $f_y$ en MPa.
+- $\rho$: cuantía de refuerzo a tracción, $A_s/(bd)$; $\rho'$: cuantía del refuerzo a compresión, $A'_s/(bd)$.
+
+</Ecuacion>
+
+**C-B.8.4.3.** Los momentos reducidos se usan para calcular los momentos redistribuidos en todas las demás secciones del vano, y debe mantenerse el **equilibrio estático** para cada disposición de carga.
+
+Dos lecturas útiles (del autor): la fórmula da **20 %** si $\rho-\rho'=0$ y **10 %** en el límite $\rho-\rho'=0.50\rho_b$; es decir, **a más refuerzo, menos redistribución**. Y mientras el cuerpo de C.8.4 reduce en $1000\,\varepsilon_t$ por ciento con tope de 20 %, C-B reduce con el cociente $(\rho-\rho')/\rho_b$ y no declara un tope superior (el 20 % ya es el valor con $\rho=\rho'$; si $\rho' > \rho$ la fórmula daría más y la norma no lo discute).
+
+## C-B.10.3 — Principios y requisitos generales
+
+**C-B.10.3.3.** En elementos a flexión y en elementos con flexión y carga axial de compresión, **cuando $\phi P_n$ es menor que la más pequeña entre $0.10f'_cA_g$ y $\phi P_b$**, la cuantía de refuerzo $\rho$ **no debe exceder $0.75\rho_b$**, donde $\rho_b$ es la que produciría condiciones de deformación balanceada en la sección a flexión **sin carga axial**. En elementos con refuerzo de compresión, **la parte de $\rho_b$ equilibrada por el refuerzo de compresión no necesita reducirse por el factor 0.75** (<NormaRef s="C-B.10.3.3" pag="C-227" />).
+
+Para una sección rectangular con refuerzo de compresión que fluye, la lectura usual (del autor, no escrita en la norma) es $\rho_{max}=0.75\rho_b+\rho'$.
+
+<Callout tipo="practica" titulo="Qué pasa con φPn mayor que el umbral">
+El límite $\rho\le0.75\rho_b$ solo rige mientras $\phi P_n$ sea **menor** que $\min(0.10f'_cA_g,\ \phi P_b)$. En columnas con carga axial alta, el límite desaparece: el control lo da la capacidad axial y el diagrama de interacción del Capítulo C.10.
+</Callout>
+
+## C-B.18.1 — Alcance (preesforzado)
+
+**C-B.18.1.3.** Las siguientes disposiciones del Título C **no** se aplican al concreto preesforzado, salvo que se señale específicamente: C.6.4.4, C.7.6.5, C-B.8.4, C.8.12.2, C.8.12.3, C.8.12.4, C.8.13, C-B.10.3.3, C.10.5, C.10.6, C.10.9.1 y C.10.9.2; el Capítulo C.13; y C.14.3, C.14.5 y C.14.6 (<NormaRef s="C-B.18.1.3" pag="C-228" />). Es decir, la redistribución con $\rho$ de C-B.8.4 y el límite $0.75\rho_b$ de C-B.10.3.3 **no** se usan en preesforzado: allí valen los índices $\omega$ de C-B.18.8 y C-B.18.10.4.
+
+## C-B.18.8 — Límites del refuerzo en elementos sometidos a flexión
+
+**C-B.18.8.1.** La cuantía de refuerzo preesforzado y no preesforzado usada para calcular la resistencia a flexión, salvo lo dispuesto en C-B.18.8.2, debe ser tal que
+
+$$
+\omega_p,\qquad\left[\omega_p+\frac{d}{d_p}\left(\omega-\omega'\right)\right],\qquad\text{ó}\qquad\left[\omega_{pw}+\frac{d}{d_p}\left(\omega_w-\omega'_w\right)\right]
+$$
+
+**no sea mayor de $0.36\beta_1$**, salvo lo permitido en C-B.18.8.2 (<NormaRef s="C-B.18.8.1" pag="C-228" />). Las definiciones de la norma:
+
+- $\omega_p=\rho_p f_{ps}/f'_c$.
+- $\omega_w$ y $\omega_{pw}$ se calculan como $\omega$ y $\omega_p$, pero usando $b_w$ en lugar de $b$ al calcular $\rho$ y $\rho_p$, y usando el área de refuerzo o de acero de preesforzado **requerida para desarrollar la resistencia a compresión del alma sola**, en lugar de $A_s$ o $A_{ps}$.
+- $\omega'_w$ se calcula como $\omega'$, usando $b_w$ en lugar de $b$ al calcular $\rho'$.
+- $\omega=\rho f_y/f'_c$ y $\omega'=\rho' f_y/f'_c$ (definiciones de C.18.7.2; C-B no las repite).
+
+**C-B.18.8.2.** Si se usa una cuantía **mayor** que la de C-B.18.8.1, la resistencia de diseño a flexión **no debe exceder** la resistencia a flexión basada en la **fuerza de compresión del par de momento** (<NormaRef s="C-B.18.8.2" pag="C-228" />). Es la regla clásica de las secciones sobrerreforzadas: el momento resistente se calcula con el concreto como par interno, no con el acero.
+
+**C-B.18.8.3.** La cantidad total de refuerzo, preesforzado y no preesforzado, debe bastar para desarrollar una carga mayorada de por lo menos **1.2 veces la carga de fisuración**, calculada con el módulo de rotura $f_r$ de C.9.5.2.3. Se puede omitir para (a) losas en dos direcciones con postensado no adherido y (b) elementos a flexión con resistencia a cortante y a flexión **al menos el doble** de la requerida en C.9.2 (<NormaRef s="C-B.18.8.3" pag="C-228" />).
+
+## C-B.18.10 — Estructuras estáticamente indeterminadas
+
+- **C-B.18.10.1.** Los pórticos y elementos continuos de concreto preesforzado deben diseñarse para un comportamiento satisfactorio en servicio y para una resistencia adecuada.
+- **C-B.18.10.2.** El comportamiento en servicio se determina con un **análisis elástico** que considere las reacciones, momentos, cortantes y fuerzas axiales producidos por el preesforzado, el flujo plástico, la retracción, las variaciones de temperatura, la deformación axial, la restricción de elementos adyacentes y los asentamientos de la cimentación.
+- **C-B.18.10.3.** Los momentos para la resistencia requerida son la **suma** de los momentos por las reacciones inducidas por el preesforzado (**factor de mayoración 1.0**) y los momentos de las cargas mayoradas. Se permite ajustar la suma según C-B.18.10.4 (<NormaRef s="C-B.18.10" pag="C-228" />).
+
+### C-B.18.10.4 — Redistribución de momentos en elementos continuos preesforzados
+
+**C-B.18.10.4.1.** Cuando hay **refuerzo adherido en los apoyos** según C.18.9, se permite que los momentos negativos o positivos de la teoría elástica, para cualquier disposición de carga, sean **aumentados o disminuidos** en no más de (<NormaRef s="C-B.18.10.4.1" pag="C-229" />):
+
+$$
+20\left[1-\frac{\omega_p+\dfrac{d}{d_p}\left(\omega-\omega'\right)}{0.36\,\beta_1}\right]\ \text{por ciento}
+$$
+
+**C-B.18.10.4.2.** La redistribución solo se hace cuando la sección en la que se reduce el momento está diseñada de modo que $\omega_p$, $[\omega_p+(d/d_p)(\omega-\omega')]$ ó $[\omega_{pw}+(d/d_p)(\omega_w-\omega'_w)]$, la que se aplique, **no sea mayor de $0.24\beta_1$** (<NormaRef s="C-B.18.10.4.2" pag="C-229" />).
+
+**C-B.18.10.4.3.** Los momentos reducidos se usan para calcular los redistribuidos en las demás secciones de los vanos y se mantiene el equilibrio estático en cada disposición de carga (<NormaRef s="C-B.18.10.4.3" pag="C-229" />).
+
+## Relación con el cuerpo del Título C
+
+<TablaNorma numero="Comparación C-B frente al cuerpo" titulo="Qué cambia al usar el Apéndice C-B" pag="C-227" nota="Cuadro del autor a partir de C.8.4, C.10.3.3 a C.10.3.5, C.18.8, C.18.10.4 y C-B. No es una tabla de la norma.">
+
+| Tema | Cuerpo del Título C | Apéndice C-B |
+|---|---|---|
+| Límite del refuerzo a flexión (no preesforzado) | $\varepsilon_t \ge 0.004$ en el estado de resistencia nominal (C.10.3.5) | $\rho \le 0.75\rho_b$ si $\phi P_n < \min(0.10f'_cA_g,\ \phi P_b)$ (C-B.10.3.3) |
+| Redistribución (no preesforzado) | Hasta $1000\,\varepsilon_t$ %, tope 20 %, solo con $\varepsilon_t \ge 0.0075$ (C.8.4) | Hasta $20(1-(\rho-\rho')/\rho_b)$ %, solo con $\rho-\rho' \le 0.50\rho_b$ (C-B.8.4) |
+| Límite del refuerzo (preesforzado) | Clasificación por $\varepsilon_t$ con los $\phi$ de C.9.3.2 (C.18.8.1) | Índice $\omega \le 0.36\beta_1$ (C-B.18.8.1) |
+| Redistribución (preesforzado) | Según C.8.4 (C.18.10.4) | Variación hasta $20[1-\text{índice}/(0.36\beta_1)]$ %, solo con índice $\le 0.24\beta_1$ (C-B.18.10.4) |
+| $\phi$ en compresión con poca carga axial | Por $\varepsilon_t$ (transición lineal 0.002 a 0.005 para Grado 420) | Por $\varepsilon_t$ **o** por $\phi P_n$: $\phi$ sube hasta 0.90 al bajar $\phi P_n$ de $0.10f'_cA_g$ (ó $\phi P_b$) a cero |
+
+</TablaNorma>
+
+### φ alternativo según la carga axial
+
+Cuando se usa el Apéndice C-B, C.9.3.2.2 y C-C.9.3.2.2 permiten esta alternativa a la variación por $\varepsilon_t$ (<NormaRef s="C.9.3.2.2" pag="C-68" />, <NormaRef s="C-C.9.3.2.2" pag="C-232" />):
+
+- Elementos con $f_y \le 420$ MPa, refuerzo **simétrico** y $(d-d')/h \ge 0.70$: $\phi$ aumenta **linealmente hasta 0.90** a medida que $\phi P_n$ decrece desde $0.10f'_cA_g$ hasta cero.
+- **Otros** elementos reforzados: igual, pero desde $0.10f'_cA_g$ **o $\phi P_b$, el que sea menor**, hasta cero.
+
+La función `phiPorCargaAxial` de `resistenciaServicio.ts` implementa esta regla con los $\phi$ de compresión de C.9 (0.65 y 0.75); `phiPorCargaAxialCC` (en `factoresAlternos.ts`) la implementa con los de C-C (0.70 y 0.75). Véase el [Apéndice C-C](/titulo-c/apendice-cc).
+
+## Ejemplos resueltos
+
+### Cuantía máxima alternativa y redistribución
+
+<Ejemplo numero={1} titulo="ρ máxima y redistribución de una viga con C-B, frente al cuerpo del Título C">
+Viga rectangular de $b$ = {ej1.b} mm y $d$ = {ej1.d} mm, $f'_c$ = {ej1.fc} MPa y $f_y$ = {ej1.fy} MPa, sin carga axial. Determinar $A_{s,max}$ con C-B y compararla con el límite $\varepsilon_t \ge 0.004$ del cuerpo; luego calcular la redistribución permitida para $\rho$ = {ej1.rho}.
+
+<Paso titulo="Cuantía balanceada" ref="C-B-1">
+
+$$
+\rho_b=\frac{0.85\,\beta_1 f'_c}{f_y}\cdot\frac{600}{600+f_y}=\frac{0.85\times0.85\times28}{420}\cdot\frac{600}{1020}
+$$
+
+Resultado: $\beta_1$ = {ej1.b1}, $\rho_b$ = **{ej1.rhoB.toFixed(5)}**.
+
+</Paso>
+<Paso titulo="Cuantía máxima y área máxima de acero" ref="C-B.10.3.3">
+$\rho_{max}$ = 0.75 $\rho_b$ = **{ej1.rhoMax.toFixed(5)}**, y $A_{s,max}$ = {ej1.rhoMax.toFixed(5)} × {ej1.b} × {ej1.d} = **{f(ej1.asMax, 0)} mm²**. Con refuerzo de compresión $\rho'$ = {ej1.rhoPrima} la parte equilibrada por él no se reduce: $\rho_{max}$ = 0.75 $\rho_b$ + $\rho'$ = {ej1.rhoMaxComp.toFixed(5)} ({f(ej1.asMaxComp, 0)} mm²; lectura del autor).
+</Paso>
+<Paso titulo="Comparación con el cuerpo (εt ≥ 0.004)" ref="C.10.3.5">
+Para una sección rectangular simplemente armada (auxiliar), $\rho = 0.75\rho_b$ corresponde a $\varepsilon_t$ = **{ej1.epsMax.toFixed(4)}**, ligeramente **menor** que 0.004. La cuantía con $\varepsilon_t$ = 0.004 exacta es {ej1.rhoC10.toFixed(5)} ({f(ej1.asC10, 0)} mm²): con $f_y$ = 420 MPa y $f'_c$ = 28 MPa el límite de C-B es {f((ej1.asMax / ej1.asC10 - 1) * 100, 1)} % más permisivo que el de C.10.3.5.
+</Paso>
+<Paso titulo="Redistribución con C-B" ref="C-B.8.4.1, C-B.8.4.2">
+Para $\rho$ = {ej1.rho}: $(\rho-\rho')/\rho_b$ = {ej1.redCB.relacion.toFixed(4)} ≤ 0.50: **se permite redistribuir**, hasta 20 (1 − {ej1.redCB.relacion.toFixed(4)}) = **{f(ej1.redCB.porcentaje, 2)} %**. Con un momento negativo elástico de {ej1.Mneg} kN·m resulta {f(ej1.MnegRed, 1)} kN·m (el positivo se corrige por equilibrio, C-B.8.4.3). Con $\rho$ = 0.016 ya no se permite ($\rho/\rho_b$ = {ej1.rhoSobre.relacion.toFixed(3)} &gt; 0.50): la fórmula daría {f(ej1.rhoSobre.porcentajeFormula, 1)} %, pero la redistribución es 0.
+</Paso>
+<Paso titulo="Misma viga con el cuerpo (C.8.4)" ref="C.8.4.1, C.8.4.2">
+Con $\rho$ = {ej1.rho}, $\varepsilon_t$ = {ej1.epsRho.toFixed(5)} (≥ 0.0075: se permite) y la reducción es 1000 $\varepsilon_t$ = **{f(ej1.redC8.porcentaje, 2)} %** (tope 20 %). El cuerpo exige $\varepsilon_t \ge 0.0075$, lo que equivale a $\rho \le$ {ej1.rhoRed.toFixed(5)} = {ej1.razonRed.toFixed(3)} $\rho_b$, casi el mismo límite 0.50 $\rho_b$ de C-B.
+</Paso>
+<Resultado>
+Para esta viga, C-B limita el refuerzo a {f(ej1.asMax, 0)} mm² (frente a {f(ej1.asC10, 0)} mm² con $\varepsilon_t \ge 0.004$) y con $\rho$ = {ej1.rho} permite redistribuir {f(ej1.redCB.porcentaje, 1)} %, contra {f(ej1.redC8.porcentaje, 1)} % del cuerpo. Las dos vías llegan a límites parecidos pero **no idénticos**; por eso no se mezclan. Los datos son supuestos del autor; las comparaciones de $\varepsilon_t$ son un cálculo auxiliar del autor (bloque rectangular de C.10.2.7).
+</Resultado>
+</Ejemplo>
+
+### φ según la carga axial
+
+<Ejemplo numero={2} titulo="φ de una columna con poca carga axial (alternativa de C-B)">
+Columna de 400 × 400 mm ($A_g$ = {ej2.ag} mm²), $f'_c$ = {ej2.fc} MPa, $f_y$ = {ej2.fy} MPa, refuerzo simétrico con $(d-d')/h$ = 0.75 (cumple las tres condiciones). Calcular $\phi$ para distintos valores de $\phi P_n$ con los factores del Capítulo C.9 y con los del Apéndice C-C.
+
+<Paso titulo="Umbral de carga axial" ref="C.9.3.2.2, C-B.10.3.3">
+$0.10f'_cA_g$ = 0.10 × {ej2.fc} × {ej2.ag} / 1000 = **{f(ej2.umbral, 0)} kN**. Como se cumplen las condiciones, el umbral es ese valor (no hace falta $\phi P_b$).
+</Paso>
+<Paso titulo="φ en función de φPn" ref="C.9.3.2.2, C-C.9.3.2.2">
+
+$$
+\phi=0.90-\left(0.90-\phi_c\right)\frac{\phi P_n}{0.10f'_cA_g}\qquad 0\le\phi P_n\le0.10f'_cA_g
+$$
+
+Con $\phi_c$ = 0.65 (otros elementos, C.9), 0.75 (con espiral) o 0.70 (otros, C-C):
+
+| $\phi P_n$ (kN) | $\phi$ (C.9, estribos) | $\phi$ (C.9, espiral) | $\phi$ (C-C, estribos) |
+|---:|---:|---:|---:|
+| {ej2.filas[0].p} | {ej2.filas[0].cb.toFixed(4)} | {ej2.filas[0].cbEsp.toFixed(4)} | {ej2.filas[0].cc.toFixed(4)} |
+| {ej2.filas[1].p} | {ej2.filas[1].cb.toFixed(4)} | {ej2.filas[1].cbEsp.toFixed(4)} | {ej2.filas[1].cc.toFixed(4)} |
+| {ej2.filas[2].p} | {ej2.filas[2].cb.toFixed(4)} | {ej2.filas[2].cbEsp.toFixed(4)} | {ej2.filas[2].cc.toFixed(4)} |
+| {ej2.filas[3].p} | {ej2.filas[3].cb.toFixed(4)} | {ej2.filas[3].cbEsp.toFixed(4)} | {ej2.filas[3].cc.toFixed(4)} |
+| {ej2.filas[4].p} | {ej2.filas[4].cb.toFixed(4)} | {ej2.filas[4].cbEsp.toFixed(4)} | {ej2.filas[4].cc.toFixed(4)} |
+| {ej2.filas[5].p} | {ej2.filas[5].cb.toFixed(4)} | {ej2.filas[5].cbEsp.toFixed(4)} | {ej2.filas[5].cc.toFixed(4)} |
+
+Para $\phi P_n$ = 224 kN (mitad del umbral): $\phi$ = 0.90 − 0.25 × 0.5 = **{ej2.filas[2].cb.toFixed(3)}** con estribos; 0.90 − 0.15 × 0.5 = **{ej2.filas[2].cbEsp.toFixed(3)}** con espiral; 0.90 − 0.20 × 0.5 = **{ej2.filas[2].cc.toFixed(3)}** con C-C.
+</Paso>
+<Paso titulo="Un elemento que no cumple las condiciones" ref="C.9.3.2.2">
+Si el refuerzo no fuera simétrico, el umbral sería el menor entre {f(ej2.umbral, 0)} kN y $\phi P_b$; con $\phi P_b$ = 300 kN, el umbral baja a **{f(ej2.noSim.umbral, 0)} kN** y con $\phi P_n$ = 200 kN, $\phi$ = 0.90 − 0.25 × 200/300 = **{ej2.noSim.phi.toFixed(4)}**.
+</Paso>
+<Resultado>
+Por encima de {f(ej2.umbral, 0)} kN, $\phi$ es el de compresión (0.65, 0.75 o 0.70); por debajo sube linealmente hasta 0.90 cuando no hay carga axial. Con los factores de C-C el $\phi$ de la columna con estribos es hasta 0.05 mayor que el del Capítulo C.9 (0.05 en el extremo de compresión, 0 sin carga axial). **No** se mezclan: la alternativa con $\phi_c$ = 0.70 solo se usa con las combinaciones de C-C.
+</Resultado>
+</Ejemplo>
+
+### Viga preesforzada continua: índices ω y redistribución
+
+<Ejemplo numero={3} titulo="Índice combinado, límite 0.36β1 y redistribución en preesforzado">
+Viga postensada continua con refuerzo adherido en los apoyos (C.18.9): $f'_c$ = {ej3.fc} MPa ($\beta_1$ = {beta1(ej3.fc).toFixed(2)}), $f_y$ = {ej3.fy} MPa; $d$ = {ej3.d} mm, $d_p$ = {ej3.dp} mm; $\rho_p$ = {ej3.rhoP}, $f_{ps}$ = {ej3.fps} MPa, $\rho$ = {ej3.rho}, $\rho'$ = {ej3.rhoPrima} (valores supuestos).
+
+<Paso titulo="Índices ω" ref="C-B.18.8.1">
+$\omega_p=\rho_pf_{ps}/f'_c$ = **{ej3.wp.toFixed(4)}**; $\omega=\rho f_y/f'_c$ = **{ej3.w.toFixed(4)}**; $\omega'$ = **{ej3.wPrima.toFixed(4)}**.
+</Paso>
+<Paso titulo="Índice combinado" ref="C-B.18.8.1">
+
+$$
+\omega_p+\frac{d}{d_p}\left(\omega-\omega'\right)=0.15+\frac{600}{560}\left(0.048-0.012\right)
+$$
+
+Resultado: **{ej3.indice.toFixed(4)}**.
+
+</Paso>
+<Paso titulo="Límite a flexión" ref="C-B.18.8.1">
+$0.36\beta_1$ = **{ej3.lim.limite.toFixed(4)}**; el índice {ej3.indice.toFixed(4)} es {ej3.lim.cumple ? 'menor: cumple' : 'mayor: no cumple'}.
+</Paso>
+<Paso titulo="Redistribución" ref="C-B.18.10.4.1, C-B.18.10.4.2">
+Límite para redistribuir: $0.24\beta_1$ = **{ej3.red.limiteRedistribucion.toFixed(4)}**; el índice es {ej3.red.permitida ? 'menor: se permite' : 'mayor: no se permite'}. Variación máxima: 20 [1 − {ej3.indice.toFixed(4)}/{ej3.lim.limite.toFixed(4)}] = **{f(ej3.red.porcentaje, 2)} %**, aumentando o disminuyendo los momentos. Con un índice de 0.25 (mayor que {ej3.red.limiteRedistribucion.toFixed(3)}) no se permitiría: la fórmula daría {f(ej3.grande.porcentajeFormula, 1)} % pero la redistribución es 0.
+</Paso>
+<Paso titulo="Resistencia mínima" ref="C-B.18.8.3">
+Si la carga de fisuración corresponde a un momento de {ej3.mcr} kN·m (valor supuesto), la resistencia de diseño debe ser al menos 1.2 × {ej3.mcr} = **{f(ej3.minimo, 0)} kN·m**, salvo las excepciones (a) y (b).
+</Paso>
+<Resultado>
+El índice combinado es {ej3.indice.toFixed(3)}, bajo el límite de flexión ({ej3.lim.limite.toFixed(3)}) y también bajo el de redistribución ({ej3.red.limiteRedistribucion.toFixed(3)}), de modo que se pueden redistribuir hasta {f(ej3.red.porcentaje, 1)} % de los momentos. En una sección con más refuerzo no habría margen.
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="Sobre los números">
+Las funciones usadas están en `src/lib/nsr10/disposicionesAlternas.ts` (Ec. C-B-1, 0.75ρb, redistribución, índices ω) y en `src/lib/nsr10/resistenciaServicio.ts` (`phiPorCargaAxial`), con sus pruebas. Las comparaciones $\rho \leftrightarrow \varepsilon_t$ son cálculos auxiliares del autor para una sección rectangular simplemente armada; la norma no las hace.
+</Callout>
+
+<Detalle titulo="Erratas y rarezas del PDF en este apéndice">
+
+- **Numeración:** C-B.8.4.1 aparece como «C.B.8.4.1», y C-B.18.8.1 a C-B.18.10.4.3 como «C-B18.8.1», «C-B18.10.1», etc. (sin el punto después de «B»). Aquí se citan con la forma normalizada «C-B.18.8.1».
+- **Redacción:** C-B.1 dice «las secciones con las numeración correspondientes»; C-B.18.10.4.2 dice «la que se aplicable». No cambian el sentido.
+- **Símbolo $d_s$:** la regla del $\phi$ con el Apéndice C-B (que figura en C-C.9.3.2.2) escribe $(d_s-d')/h$; $d_s$ no está definido; se interpreta como $d$.
+- **C.10.3.3 y C.10.3.4 reemplazados:** C-B.10.3.3 sustituye las definiciones de sección controlada por compresión (C.10.3.3) y por tracción (C.10.3.4), pero el Apéndice C-C y C.9.3.2 siguen hablando de «secciones controladas por tracción/compresión, como se define en C.10.3.3 / C.10.3.4». Observación del autor: al usar C-B hay que seguir leyendo esas definiciones del cuerpo para clasificar $\phi$.
+- **$f_{ps}$, $d_p$, $\omega_p$:** $f_{ps}$ (esfuerzo en el acero de preesforzado a la resistencia nominal) y $d_p$ (distancia de la fibra extrema comprimida al centroide del acero de preesforzado) están en la nomenclatura C.2.1, no en el apéndice.
+- **Página C-230:** es una página con el rótulo «Notas:» y sin contenido.
+- **Sin ejemplos ni tablas:** el apéndice no los trae; los de esta página son del autor.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar solo parte del apéndice** (por ejemplo, el $0.75\rho_b$ de C-B.10.3.3 con la redistribución $1000\varepsilon_t$ del cuerpo): C-B se aplica completo (C-B.1).
+- **Calcular $\rho_b$ con otro módulo o con 0.003 y $E_s$ distintos**: la Ec. C-B-1 usa el 600 (MPa) fijo, correcto con $E_s$ = 200 000 MPa y $\varepsilon_{cu}$ = 0.003.
+- **Aplicar $\rho \le 0.75\rho_b$ con carga axial alta**: solo rige si $\phi P_n < \min(0.10f'_cA_g,\ \phi P_b)$.
+- **Redistribuir con $\rho-\rho' > 0.50\rho_b$** (o, en preesforzado, con índice mayor de $0.24\beta_1$): la fórmula da un porcentaje, pero la redistribución no se permite.
+- **Redistribuir sin recalcular el equilibrio** de los demás momentos del vano (C-B.8.4.3 y C-B.18.10.4.3).
+- **Olvidar el factor 1.0 del preesforzado** al sumar sus momentos hiperestáticos a los de las cargas mayoradas (C-B.18.10.3).
+- **Usar la alternativa del $\phi$ por carga axial sin las condiciones** ($f_y \le 420$ MPa, refuerzo simétrico, $(d-d')/h \ge 0.70$): si no se cumplen, el umbral es el menor entre $0.10f'_cA_g$ y $\phi P_b$.
+- **Mezclar los $\phi$ de C-C (0.70) con las combinaciones de C.9**: no se permite (C.9.1.3).
+</Callout>
+
+## Resumen en una línea
+
+**Con el Apéndice C-B (todo o nada) el refuerzo se limita a $0.75\rho_b$ (Ec. C-B-1), los momentos se redistribuyen hasta $20(1-(\rho-\rho')/\rho_b)$ % solo si $\rho-\rho' \le 0.50\rho_b$, en preesforzado se usan los índices $\omega \le 0.36\beta_1$ y $0.24\beta_1$, y $\phi$ puede subir a 0.90 al bajar la carga axial.**

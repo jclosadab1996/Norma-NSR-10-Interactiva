@@ -5,13 +5,14 @@
  */
 import { getCollection } from 'astro:content';
 import BaseLayout from './BaseLayout.astro';
+import type { LetraTitulo } from '../data/titulos';
 import CapituloSidebar from '../components/layout/CapituloSidebar.astro';
 
 interface Props {
   title: string;
   description?: string;
-  /** Letra del Título en minúscula: 'a' | 'b'. */
-  titulo?: 'a' | 'b';
+  /** Letra del Título en minúscula: 'a' | 'b' | 'c'. */
+  titulo?: LetraTitulo;
   /** id del capítulo activo (a2, apendice-a4, b6…). */
   actual?: string;
   /** Ancho máximo del contenedor central. */
@@ -19,8 +20,8 @@ interface Props {
 }
 const { title, description, titulo = 'a', actual, ancho = 'prosa' } = Astro.props;
 
-const coleccion = titulo === 'b' ? 'titulo-b' : 'titulo-a';
-const todos = (await getCollection(coleccion)).sort((a, b) => a.data.orden - b.data.orden);
+const coleccion = `titulo-${titulo}` as const;
+const todos = (await getCollection(coleccion)).sort((a, b) => a.data.orden - b.data.orden || a.id.localeCompare(b.id));
 const items = todos.map((e) => ({ id: e.id, codigo: e.data.codigo, titulo: e.data.titulo, tipo: e.data.tipo }));
 ---
 

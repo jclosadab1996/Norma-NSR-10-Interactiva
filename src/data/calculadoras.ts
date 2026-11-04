@@ -1,8 +1,10 @@
+import type { LetraTitulo } from './titulos';
+
 /** Registro de calculadoras interactivas de todos los Títulos (se muestran en el hub y en cada capítulo). */
 export type Calculadora = {
   id: string;
-  /** Título al que pertenece ('a' | 'b'). */
-  titulo: 'a' | 'b';
+  /** Título al que pertenece ('a' | 'b' | 'c'). */
+  titulo: LetraTitulo;
   nombre: string;
   descripcion: string;
   /** Capítulo de la norma donde se origina. */
@@ -157,7 +159,128 @@ export const CALCULADORAS: readonly Calculadora[] = [
     capitulo: 'b6c',
     secciones: 'B.6.5.11 · B.6.5.12',
   },
+  // ── Título C · Concreto estructural ───────────────────────────────────────
+  {
+    id: 'recubrimiento-durabilidad',
+    titulo: 'c',
+    nombre: 'Recubrimiento y durabilidad',
+    descripcion: 'Categoría de exposición → resistencia mínima del concreto, relación agua-material cementante y recubrimiento mínimo.',
+    capitulo: 'c4',
+    secciones: 'C.4 · C.7.7',
+  },
+  {
+    id: 'resistencia-promedio',
+    titulo: 'c',
+    nombre: 'Resistencia promedio requerida f′cr',
+    descripcion: 'f′cr a partir de la desviación estándar de la planta y el número de ensayos (dosificación del concreto).',
+    capitulo: 'c5',
+    secciones: 'C.5.3',
+  },
+  {
+    id: 'detalles-refuerzo',
+    titulo: 'c',
+    nombre: 'Detalles del refuerzo',
+    descripcion: 'Recubrimientos, separación mínima de barras, diámetros de doblez y dimensiones de ganchos estándar.',
+    capitulo: 'c7',
+    secciones: 'C.7.1 · C.7.6 · C.7.7',
+  },
+  {
+    id: 'propiedades-concreto',
+    titulo: 'c',
+    nombre: 'Propiedades del concreto: Ec, fr y β1',
+    descripcion: 'Módulo de elasticidad, módulo de rotura y factor β1 en función de f′c, con gráfica.',
+    capitulo: 'c9',
+    secciones: 'C.8.5 · C.9.5 · C.10.2.7',
+  },
+  {
+    id: 'espesor-minimo',
+    titulo: 'c',
+    nombre: 'Espesor mínimo sin verificar deflexiones',
+    descripcion: 'Altura mínima de vigas y losas en una dirección según el apoyo y el fy del refuerzo.',
+    capitulo: 'c9',
+    secciones: 'C.9.5.2',
+  },
+  {
+    id: 'flexion-viga',
+    titulo: 'c',
+    nombre: 'Flexión de una viga rectangular',
+    descripcion: 'a, c, deformación del acero, φ y φMn de una sección con refuerzo a tracción, con diagrama de deformaciones.',
+    capitulo: 'c10',
+    secciones: 'C.10.2 · C.9.3',
+  },
+  {
+    id: 'columna-interaccion',
+    titulo: 'c',
+    nombre: 'Diagrama de interacción de una columna',
+    descripcion: 'Curva P–M de una columna rectangular con refuerzo distribuido y verificación de una pareja (Pu, Mu).',
+    capitulo: 'c10',
+    secciones: 'C.10.3 · C.10.2',
+  },
+  {
+    id: 'cortante-viga',
+    titulo: 'c',
+    nombre: 'Cortante en vigas',
+    descripcion: 'Vc, Vs, φVn y separación de estribos con los límites de la norma.',
+    capitulo: 'c11',
+    secciones: 'C.11.1 – C.11.4',
+  },
+  {
+    id: 'punzonamiento',
+    titulo: 'c',
+    nombre: 'Cortante en dos direcciones (punzonamiento)',
+    descripcion: 'Resistencia a punzonamiento de losas y zapatas alrededor de una columna.',
+    capitulo: 'c11b',
+    secciones: 'C.11.11',
+  },
+  {
+    id: 'longitud-desarrollo',
+    titulo: 'c',
+    nombre: 'Longitud de desarrollo y empalmes',
+    descripcion: 'Longitud de desarrollo a tracción, de ganchos estándar y de empalmes por traslapo.',
+    capitulo: 'c12',
+    secciones: 'C.12',
+  },
+  {
+    id: 'losa-dos-direcciones',
+    titulo: 'c',
+    nombre: 'Losas en dos direcciones: diseño directo',
+    descripcion: 'Distribución de momentos estáticos total en franjas de columna y centrales por el método de diseño directo.',
+    capitulo: 'c13',
+    secciones: 'C.13.6',
+  },
+  {
+    id: 'zapata-diseno',
+    titulo: 'c',
+    nombre: 'Zapata aislada',
+    descripcion: 'Dimensionamiento por presión de contacto y verificación de cortante y flexión de una zapata cuadrada.',
+    capitulo: 'c15',
+    secciones: 'C.15 · C.11.11',
+  },
+  {
+    id: 'preesforzo-esfuerzos',
+    titulo: 'c',
+    nombre: 'Esfuerzos permisibles en concreto preesforzado',
+    descripcion: 'Esfuerzos admisibles en el concreto y en los tendones, y pérdidas de preesfuerzo.',
+    capitulo: 'c18',
+    secciones: 'C.18',
+  },
+  {
+    id: 'confinamiento-columna',
+    titulo: 'c',
+    nombre: 'Confinamiento de columnas sismo resistentes',
+    descripcion: 'Refuerzo transversal Ash y separación máxima en columnas de pórticos con capacidad de disipación especial.',
+    capitulo: 'c21',
+    secciones: 'C.21.6',
+  },
+  {
+    id: 'anclaje-concreto',
+    titulo: 'c',
+    nombre: 'Resistencia de anclajes al concreto',
+    descripcion: 'Resistencia del concreto al arrancamiento y al desprendimiento lateral de anclajes (Apéndice C-D).',
+    capitulo: 'apendice-cd',
+    secciones: 'C-D',
+  },
 ];
 
 export const calculadoraPorId = (id: string) => CALCULADORAS.find((c) => c.id === id);
-export const calculadorasDe = (titulo: 'a' | 'b') => CALCULADORAS.filter((c) => c.titulo === titulo);
+export const calculadorasDe = (titulo: LetraTitulo) => CALCULADORAS.filter((c) => c.titulo === titulo);

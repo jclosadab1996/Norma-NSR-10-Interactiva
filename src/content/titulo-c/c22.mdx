@@ -1,0 +1,458 @@
+---
+codigo: 'C.22'
+tipo: capitulo
+titulo: 'Concreto estructural simple'
+resumen: 'Elementos de concreto sin refuerzo (muros, zapatas y pedestales): cuándo se permite usarlo, juntas, resistencia a flexión Mn = 0.42 λ √f′c Sm, compresión, cortante, aplastamiento y los límites geométricos de muros, zapatas y pedestales, con φ = 0.60.'
+objetivos:
+  - 'Decidir si un elemento puede hacerse de concreto simple (apoyo continuo, efecto de arco, muros y pedestales; nunca columnas)'
+  - 'Calcular la resistencia a flexión de una zapata o muro con C.22-1 a C.22-3, usando la altura h reducida 50 mm cuando se vacía contra el suelo'
+  - 'Verificar compresión, flexo-compresión y cortante de un muro con el método general y con el método empírico'
+  - 'Comprobar una zapata de concreto simple por flexión, cortante como viga y cortante en dos direcciones, y un pedestal por aplastamiento'
+  - 'Reconocer las restricciones sísmicas del C.22.10 para estructuras DES'
+paginasNorma: 'C-201 a C-206'
+paginaPdf: 503
+orden: 22
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import {
+  alturaEfectivaSimple,
+  moduloSeccionRectangular,
+  momentoNominalTraccion,
+  momentoNominalCompresion,
+  resistenciaFlexionSimple,
+  cargaNominalCompresion,
+  cargaNominalMuroEmpirico,
+  factorEsbeltezSimple,
+  verificarFlexoCompresion,
+  verificarMuroSimple,
+  cortanteNominalViga,
+  cortanteNominalDosDirecciones,
+  resistenciaAplastamiento,
+  verificarZapataCorrida,
+  verificarZapataAislada,
+  verificarPedestal,
+  esbeltezPedestal,
+  espesorMinimoMuroSimple,
+  longitudEfectivaMuro,
+} from '../../lib/nsr10/concretoSimple';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const fc = 21, B = 1000, t = 200, h = 300, qu = 140;
+  const hEf = alturaEfectivaSimple(h, true);
+  const sm = moduloSeccionRectangular(1000, hEf);
+  const mnT = momentoNominalTraccion(fc, sm);
+  const mnC = momentoNominalCompresion(fc, sm);
+  const z = verificarZapataCorrida({ fc, anchoMm: B, espesorMuroMm: t, hMm: h, quKpa: qu });
+  const zDelgada = verificarZapataCorrida({ fc, anchoMm: B, espesorMuroMm: t, hMm: 250, quKpa: qu });
+  const zLiv = verificarZapataCorrida({ fc, anchoMm: B, espesorMuroMm: t, hMm: h, quKpa: qu, lambda: 0.85 });
+  return { fc, B, t, h, qu, hEf, sm, mnT, mnC, z, zDelgada, zLiv, phiMn: resistenciaFlexionSimple(fc, sm), vuelo: (B - t) / 2 };
+})();
+
+export const ej2 = (() => {
+  const fc = 21, h = 200, lc = 3000, pu = 450;
+  const muro = verificarMuroSimple({ fc, hMm: h, puKnPorM: pu, muKnmPorM: 0, lcMm: lc, alturaNoApoyadaMm: lc });
+  const factor = factorEsbeltezSimple(lc, h);
+  const pnEmp = cargaNominalMuroEmpirico(fc, 1000 * h, lc, h);
+  const pnGen = cargaNominalCompresion(fc, 1000 * h, lc, h);
+  const excesivo = verificarMuroSimple({ fc, hMm: h, puKnPorM: 1000, muKnmPorM: 0, lcMm: lc, alturaNoApoyadaMm: lc });
+  const excentrico = verificarMuroSimple({ fc, hMm: h, puKnPorM: 150, muKnmPorM: 18, lcMm: lc, alturaNoApoyadaMm: lc });
+  const ped = verificarPedestal({ fc, a1Mm2: 400 * 400, puKn: 1500 });
+  const pedA2 = verificarPedestal({ fc, a1Mm2: 400 * 400, a2Mm2: 4 * 400 * 400, puKn: 3000 });
+  return { fc, h, lc, pu, muro, factor, pnEmp, pnGen, excesivo, excentrico, ped, pedA2, esb: esbeltezPedestal(1000, 400), bnA2: resistenciaAplastamiento(fc, 400 * 400, 4 * 400 * 400) };
+})();
+
+export const ej3 = (() => {
+  const fc = 21, lado = 1200, c = 300, qu = 200;
+  const z = verificarZapataAislada({ fc, ladoMm: lado, ladoColumnaMm: c, hMm: 350, quKpa: qu });
+  const z2 = verificarZapataAislada({ fc, ladoMm: lado, ladoColumnaMm: c, hMm: 450, quKpa: qu });
+  const hEf = z.hEfMm;
+  const bo = 4 * (c + hEf);
+  const pun = cortanteNominalDosDirecciones(fc, bo, hEf, 1);
+  return { fc, lado, c, qu, z, z2, hEf, bo, pun, vnViga: cortanteNominalViga(fc, lado, hEf), vuelo: (lado - c) / 2 };
+})();
+
+## Idea central del capítulo
+
+El **concreto estructural simple** es concreto **sin refuerzo** (o con refuerzo que **no se cuenta** para la resistencia) usado en elementos que trabajan sobre todo **a compresión**. No tiene la ductilidad ni la capacidad de tracción del concreto reforzado, así que el capítulo **limita dónde puede usarse** y exige **juntas** que lo dividan en piezas que no se vean obligadas a resistir tracción por restricción de movimientos (<NormaRef s="C.22.2" pag="C-201" />, <NormaRef s="C.22.3" pag="C-201" />).
+
+Las ideas que gobiernan todo el capítulo:
+
+- Solo se acepta como **elemento apoyado de forma continua** (sobre el suelo u otro elemento), con **efecto de arco** que garantice compresión, o como **muro o pedestal**. **No se permiten columnas** de concreto simple.
+- Se diseña con relaciones **esfuerzo-deformación lineales** y con $\phi$ = **0.60** (<NormaRef s="C.9.3.5" pag="C-69" />) para flexión, compresión, cortante y aplastamiento: es el $\phi$ más bajo del Título C porque la falla es frágil.
+- Se puede contar la **tracción del concreto** (módulo de rotura reducido, $0.42\lambda\sqrt{f'_c}$), pero **jamás** la del acero ni la tracción a través de juntas o bordes.
+- Si el concreto simple **no alcanza**, no se añade "un poquito de acero": el elemento se diseña como **concreto reforzado** (<NormaRef s="C.22.4.2" pag="C-202" />).
+
+<Callout tipo="importante" titulo="Contra el suelo, 50 mm menos de altura">
+Al calcular flexión, flexo-compresión y cortante, el elemento **vaciado contra el suelo** se calcula con una altura total $h$ **50 mm menor** que la real (<NormaRef s="C.22.4.7" pag="C-202" />). Una zapata de 300 mm resiste como una de 250 mm. Es la fuente más común de errores en este capítulo.
+</Callout>
+
+Este capítulo no tiene calculadora propia: las comprobaciones salen de las funciones de `src/lib/nsr10/concretoSimple.ts`, que usan los ejemplos de abajo.
+
+## C.22.1 — Alcance
+
+- **C.22.1.1:** el capítulo da los requisitos mínimos para diseñar y construir elementos de concreto simple estructural, **vaciados en sitio o prefabricados** (<NormaRef s="C.22.1.1" pag="C-201" />).
+- **C.22.1.2:** salvo conflicto con C.22, también se aplican las secciones **C.1 a C.7.5, C.7.6.1, C.7.6.2, C.7.6.4, C.7.7, C.9.1.3, C.9.2, C.9.3.5**, el **Capítulo C.20**, **C.21.12.2.5** y el **Apéndice C-D** (el PDF repite C.9.2 y C.9.3.5) (<NormaRef s="C.22.1.2" pag="C-201" />).
+- **C.22.1.3:** en **estructuras especiales** (arcos, estructuras subterráneas para servicios públicos, muros de gravedad y muros de protección) las disposiciones de este capítulo **controlan** cuando sean aplicables (<NormaRef s="C.22.1.3" pag="C-201" />).
+
+## C.22.2 — Limitaciones
+
+**C.22.2.1.** El concreto simple estructural se limita a **(a)**, **(b)** o **(c)** (<NormaRef s="C.22.2.1" pag="C-201" />):
+
+- **(a)** elementos **apoyados de manera continua** sobre el suelo o sobre otros elementos estructurales capaces de dar apoyo vertical continuo;
+- **(b)** elementos donde el **efecto de arco** genera compresión bajo **todas** las condiciones de carga;
+- **(c)** **muros y pedestales** (C.22.6 y C.22.8).
+
+**No está permitido el uso de columnas de concreto simple estructural.** Un "pedestal" es un elemento corto (relación altura/lado ≤ 3, ver C.22.8) que **no** es una columna disfrazada.
+
+- **C.22.2.2:** el capítulo **no** controla pilas ni pilotes construidos en sitio y embebidos en el terreno (<NormaRef s="C.22.2.2" pag="C-201" />).
+- **C.22.2.3:** el $f'_c$ del concreto simple no puede ser menor que lo de C.1.1.1 y que lo exigido por la durabilidad del Capítulo C.4 (<NormaRef s="C.22.2.3" pag="C-201" />).
+
+## C.22.3 — Juntas
+
+- **C.22.3.1:** deben proporcionarse **juntas de contracción o de aislamiento** que **dividan** el elemento en piezas **discontinuas a flexión**. El tamaño de cada pieza se escoge para **limitar los esfuerzos** causados por la restricción de los movimientos por flujo plástico, retracción y temperatura (<NormaRef s="C.22.3.1" pag="C-201" />).
+- **C.22.3.2:** para decidir **cuántas juntas** y **dónde**, se atiende a: el clima, la selección y dosificación de materiales, el mezclado, colocación y curado, el grado de restricción al movimiento, los esfuerzos por las cargas y las técnicas de construcción (<NormaRef s="C.22.3.2" pag="C-201" />).
+
+La norma **no da una separación numérica** entre juntas; es criterio del diseñador.
+
+## C.22.4 — Método de diseño
+
+- **C.22.4.1:** las cargas y fuerzas mayoradas se combinan según **C.9.2** (<NormaRef s="C.22.4.1" pag="C-201" />).
+- **C.22.4.2:** si la resistencia requerida **excede** la de diseño, hay que **dar refuerzo** y diseñar el elemento **como concreto reforzado** (<NormaRef s="C.22.4.2" pag="C-202" />).
+- **C.22.4.3:** el diseño por resistencia a flexión y carga axial usa relaciones **esfuerzo-deformación lineales**, en tracción y en compresión (<NormaRef s="C.22.4.3" pag="C-202" />).
+- **C.22.4.4:** se **puede** considerar la resistencia a tracción del concreto si se siguieron las disposiciones de juntas de C.22.3 (<NormaRef s="C.22.4.4" pag="C-202" />).
+- **C.22.4.5:** **no se asigna resistencia** al refuerzo de acero que pudiera estar presente (<NormaRef s="C.22.4.5" pag="C-202" />).
+- **C.22.4.6:** la **tracción no se transmite** a través de bordes exteriores, juntas de construcción, de contracción o de aislamiento; y **no se supone continuidad a flexión por tracción** entre elementos adyacentes de concreto simple (<NormaRef s="C.22.4.6" pag="C-202" />).
+- **C.22.4.7:** se considera la **sección completa** del elemento, **excepto** el concreto construido contra el suelo, donde $h$ se toma **50 mm menor** que la dimensión real (<NormaRef s="C.22.4.7" pag="C-202" />).
+
+## C.22.5 — Diseño por resistencia
+
+### C.22.5.1 — Flexión
+
+<Ecuacion num="C.22-1" titulo="Condición de resistencia a flexión">
+
+$$
+\phi M_n \ge M_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.22-2" titulo="Mn si controla la tracción">
+
+$$
+M_n = 0.42\,\lambda\sqrt{f'_c}\;S_m
+$$
+
+- $f'_c$ en MPa; $S_m$ módulo elástico de la sección (para una sección rectangular $S_m = b h^2/6$, en mm³ → $M_n$ en N·mm).
+- $\lambda$ = 1.0 en concreto de peso normal (factor de C.8.6.1).
+
+</Ecuacion>
+
+<Ecuacion num="C.22-3" titulo="Mn si controla la compresión">
+
+$$
+M_n = 0.85\,f'_c\;S_m
+$$
+
+</Ecuacion>
+
+Con $\phi$ = 0.60, para una **sección simétrica sometida solo a flexión** controla la **tracción** (C.22-2): con $f'_c$ = 21 MPa, $0.42\sqrt{21}$ = 1.92 MPa frente a $0.85 \times 21$ = 17.9 MPa. Por eso la resistencia a flexión del concreto simple es **muy baja** y gobierna casi todo lo que se diseña con este capítulo. *(Observación del autor: 0.42 es del orden de 2/3 del módulo de rotura $0.62\lambda\sqrt{f'_c}$ de C.9-10.)*
+
+### C.22.5.2 — Compresión
+
+<Ecuacion num="C.22-4" titulo="Condición de resistencia a compresión">
+
+$$
+\phi P_n \ge P_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.22-5" titulo="Pn de elementos a compresión">
+
+$$
+P_n = 0.60\,f'_c\left[1-\left(\frac{\ell_c}{32\,h}\right)^{2}\right]A_1
+$$
+
+- $A_1$: área cargada; $h$: espesor (dimensión en el sentido de la excentricidad), reducido según C.22.4.7 si hay vaciado contra el suelo.
+- $\ell_c$: distancia vertical entre apoyos (ver erratas: el PDF no la define).
+
+</Ecuacion>
+
+El término $1-(\ell_c/32h)^2$ es el **efecto de esbeltez**: con $\ell_c/h$ = 10 vale {f(factorEsbeltezSimple(3000, 300), 3)}; con $\ell_c/h$ = 15, {f(factorEsbeltezSimple(4500, 300), 3)}. Aunque cuesta resistencia, no hace falta calcular más porque el capítulo se limita a elementos robustos.
+
+### C.22.5.3 — Flexión y compresión combinadas
+
+En la **cara de compresión**:
+
+<Ecuacion num="C.22-6" titulo="Interacción en la cara de compresión">
+
+$$
+\frac{P_u}{\phi P_n}+\frac{M_u}{\phi M_n}\le 1
+$$
+
+</Ecuacion>
+
+y en la **cara de tracción**:
+
+<Ecuacion num="C.22-7" titulo="Esfuerzo de tracción neto en la cara de tracción">
+
+$$
+\frac{M_u}{S_m}-\frac{P_u}{A_g}\le\phi\,0.42\,\lambda\sqrt{f'_c}
+$$
+
+- $M_u/S_m$: esfuerzo de flexión; $P_u/A_g$: esfuerzo de compresión axial que lo contrarresta.
+
+</Ecuacion>
+
+*(Lectura del autor: en C.22-6 el PDF escribe solo "$M_n$" y "$P_n$"; aquí se toma $M_n$ de C.22-3 —compresión controla en esa cara— y $P_n$ de C.22-5 con $A_1 = A_g$.)*
+
+### C.22.5.4 — Cortante
+
+<Ecuacion num="C.22-8" titulo="Condición de resistencia a cortante">
+
+$$
+\phi V_n \ge V_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.22-9" titulo="Vn como viga (una dirección)">
+
+$$
+V_n = 0.11\,\lambda\sqrt{f'_c}\;b_w\,h
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.22-10" titulo="Vn en dos direcciones (punzonamiento)">
+
+$$
+V_n = 0.11\left(1+\frac{2}{\beta}\right)\lambda\sqrt{f'_c}\;b_o\,h \;\le\; 0.22\,\lambda\sqrt{f'_c}\;b_o\,h
+$$
+
+- $b_o$: perímetro de la sección crítica; $\beta$: relación lado largo / lado corto de la carga concentrada o del área de la reacción.
+
+</Ecuacion>
+
+Como $0.11(1+2/\beta) \ge 0.22$ cuando $\beta \le 2$, el **tope 0.22 gobierna** para áreas cargadas cuadradas o casi cuadradas ($\beta \le 2$); el término con $\beta$ solo manda en áreas muy alargadas ($\beta > 2$) (observación del autor, de álgebra directa).
+
+### C.22.5.5 — Aplastamiento
+
+<Ecuacion num="C.22-11" titulo="Condición de resistencia al aplastamiento">
+
+$$
+\phi B_n \ge B_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.22-12" titulo="Resistencia nominal al aplastamiento">
+
+$$
+B_n = 0.85\,f'_c\,A_1
+$$
+
+- $B_u$: carga de aplastamiento mayorada; $A_1$: área cargada.
+- Si la superficie de apoyo es **más ancha en todos los lados** que el área cargada, $B_n$ se multiplica por $\sqrt{A_2/A_1}$, **sin pasar de 2** ($A_2$ es el área de apoyo mayor).
+
+</Ecuacion>
+
+### C.22.5.6 — Concreto liviano
+
+El factor $\lambda$ del concreto liviano es el de **C.8.6.1** (la norma escribe "8.6.1") salvo que se especifique otro (<NormaRef s="C.22.5.6.1" pag="C-203" />): 0.85 con arena de peso normal, 0.75 en los demás livianos. Afecta C.22-2, C.22-7, C.22-9 y C.22-10.
+
+## C.22.6 — Muros
+
+### Requisitos generales (C.22.6.1 a C.22.6.4)
+
+- **C.22.6.1:** los muros se apoyan de manera **continua** sobre el terreno, zapatas, muros o vigas de cimentación u otros elementos con apoyo vertical continuo (<NormaRef s="C.22.6.1" pag="C-203" />).
+- **C.22.6.2:** se diseñan para las cargas verticales, laterales o de otro tipo que actúen (<NormaRef s="C.22.6.2" pag="C-203" />).
+- **C.22.6.3:** excentricidad correspondiente al **momento máximo** que acompaña la carga axial, **no menor que 0.10 h**. Si la resultante de las cargas mayoradas cae en el **tercio central** del espesor ($e \le h/6$) se diseña con **C.22.5.3 o con el método empírico C.22.6.5**; si no, **solo con C.22.5.3** (<NormaRef s="C.22.6.3" pag="C-203" />).
+- **C.22.6.4:** el cortante se diseña con C.22.5.4 (<NormaRef s="C.22.6.4" pag="C-203" />).
+
+### C.22.6.5 — Método empírico de diseño
+
+**C.22.6.5.1.** Los muros de **sección rectangular sólida** se pueden diseñar con C.22-13 **siempre que** la resultante de **todas** las cargas mayoradas caiga en el tercio central del espesor (<NormaRef s="C.22.6.5.1" pag="C-204" />).
+
+<Ecuacion num="C.22-13" titulo="Resistencia axial del muro (método empírico)">
+
+$$
+\phi P_n \ge P_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.22-14" titulo="Pn empírica del muro">
+
+$$
+P_n = 0.45\,f'_c\,A_g\left[1-\left(\frac{\ell_c}{32\,h}\right)^{2}\right]
+$$
+
+- $A_g$: área bruta del muro (por metro de longitud: $1000\,h$ mm²).
+
+</Ecuacion>
+
+El coeficiente **0.45** (frente al 0.60 de C.22-5) incluye de modo implícito el efecto de la excentricidad dentro del tercio central, por eso es **más conservador** (explicación del autor).
+
+### C.22.6.6 — Limitaciones
+
+- **C.22.6.6.1:** salvo análisis detallado, la longitud horizontal de muro **efectiva** para cada **carga vertical concentrada** no excede la **distancia entre ejes de cargas** ni el **ancho de la zona de apoyo + 4 veces el espesor** (<NormaRef s="C.22.6.6.1" pag="C-204" />).
+- **C.22.6.6.2:** el espesor de muros de **carga** no es menor que **1/24** de la longitud o altura no apoyada (la **menor**) ni que **140 mm** (<NormaRef s="C.22.6.6.2" pag="C-204" />).
+- **C.22.6.6.3:** muros **exteriores de sótano y de cimentación**: **190 mm** como mínimo (<NormaRef s="C.22.6.6.3" pag="C-204" />).
+- **C.22.6.6.4:** los muros se **arriostran** contra el desplazamiento lateral (véanse C.22.3 y C.22.4.7) (<NormaRef s="C.22.6.6.4" pag="C-204" />).
+- **C.22.6.6.5:** al menos **dos barras No. 5 (5/8") ó 16M (16 mm)** alrededor de **todas las aberturas** de ventanas y puertas, prolongadas **600 mm** más allá de las esquinas de la abertura (<NormaRef s="C.22.6.6.5" pag="C-204" />). Son refuerzo de control de fisuración; no cuentan en la resistencia (C.22.4.5).
+
+<Ejemplo numero={1} titulo="Muro de concreto simple a compresión y pedestal bajo una carga concentrada">
+Muro de concreto simple de peso normal ($\lambda$ = 1.0), $f'_c$ = {ej2.fc} MPa, espesor $h$ = {ej2.h} mm, **no** vaciado contra el suelo, con distancia vertical entre apoyos $\ell_c$ = {ej2.lc} mm. Soporta $P_u$ = {ej2.pu} kN por metro de longitud, centrada (sin momento). Después, un pedestal de 400 × 400 mm bajo una carga puntual.
+
+<Paso titulo="Espesor mínimo" ref="C.22.6.6.2">
+Menor entre altura y longitud no apoyadas = {ej2.lc} mm: {ej2.lc}/24 = {f(ej2.lc / 24, 0)} mm, menor que 140 mm, así que el mínimo es **{f(espesorMinimoMuroSimple([ej2.lc]), 0)} mm**. Con {ej2.h} mm **cumple**.
+</Paso>
+<Paso titulo="Excentricidad y tercio central" ref="C.22.6.3">
+Sin momento, $e = \max(0,\,0.10h)$ = **{f(ej2.muro.excentricidadMm, 0)} mm**, menor que $h/6$ = {f(ej2.h / 6, 1)} mm: la resultante está en el **tercio central**, de modo que vale el método empírico.
+</Paso>
+<Paso titulo="Resistencia axial empírica" ref="C.22-14">
+El factor $1-(\ell_c/32h)^2$ con $\ell_c$ = {ej2.lc} mm y $h$ = {ej2.h} mm vale {f(ej2.factor, 4)}. Entonces $P_n = 0.45\,f'_c\,A_g\,[\ldots]$ = 0.45 × {ej2.fc} × {1000 * ej2.h} × {f(ej2.factor, 4)} = **{f(ej2.pnEmp, 1)} kN/m** y $\phi P_n$ = 0.60 × {f(ej2.pnEmp, 1)} = **{f(ej2.muro.empirico.phiPn, 1)} kN/m**, mayor que $P_u$ = {ej2.pu} kN/m: **cumple** (C.22-13).
+</Paso>
+<Paso titulo="Comprobación con el método general" ref="C.22.5.3, C.22-6, C.22-7">
+Con $M_u$ = $P_u \times 0.10h$ = {f(ej2.pu * 0.1 * ej2.h / 1000, 1)} kN·m/m: $P_n$ (C.22-5, $A_1 = A_g$) = {f(ej2.pnGen, 1)} kN/m; razón de C.22-6 = **{f(ej2.muro.flexoCompresion.razonCompresion, 3)}** ≤ 1; tracción de C.22-7: $M_u/S_m - P_u/A_g$ = **{f(ej2.muro.flexoCompresion.esfuerzoTraccion, 3)} MPa** frente al límite $\phi 0.42\sqrt{f'_c}$ = {f(ej2.muro.flexoCompresion.limiteTraccion, 3)} MPa (negativo = toda la sección comprimida: cumple).
+</Paso>
+<Paso titulo="Si la carga fuera mayor" ref="C.22-13">
+Con $P_u$ = 1000 kN/m, $\phi P_n$ = {f(ej2.excesivo.empirico.phiPn, 1)} kN/m **no alcanza** (cumple: {ej2.excesivo.empirico.cumple ? 'sí' : 'no'}) y según C.22.4.2 habría que engrosar el muro, subir $f'_c$ o diseñarlo como **concreto reforzado**.
+</Paso>
+<Paso titulo="Carga excéntrica" ref="C.22.6.3">
+Con $P_u$ = 150 kN/m y $M_u$ = 18 kN·m/m: $e = 18/150$ = {f(ej2.excentrico.excentricidadMm, 0)} mm, mayor que $h/6$ = {f(ej2.h / 6, 1)} mm. La resultante **sale del tercio central** (tercio central: {ej2.excentrico.tercioCentral ? 'sí' : 'no'}); el método empírico **no se puede usar** y se diseña solo con C.22.5.3: tracción {f(ej2.excentrico.flexoCompresion.esfuerzoTraccion, 3)} MPa frente a {f(ej2.excentrico.flexoCompresion.limiteTraccion, 3)} MPa ({ej2.excentrico.flexoCompresion.cumpleTraccion ? 'cumple' : 'no cumple'}).
+</Paso>
+<Paso titulo="Pedestal 400 × 400 mm, altura libre 1000 mm" ref="C.22.8.2, C.22.8.3, C.22-12">
+Esbeltez 1000/400 = **{f(ej2.esb.relacion, 2)}** ≤ 3: cumple. Aplastamiento: $B_n = 0.85\,f'_c\,A_1$ = 0.85 × {ej2.fc} × 160000 = {f(ej2.ped.phiBn / 0.6, 0)} kN y $\phi B_n$ = **{f(ej2.ped.phiBn, 0)} kN**; con $P_u$ = 1500 kN la razón es {f(ej2.ped.razon, 3)}: **cumple**. Si el pedestal apoya sobre una superficie de 800 × 800 mm ($A_2 = 4A_1$), el factor $\sqrt{A_2/A_1}$ = {f(ej2.bnA2.factor, 1)} (tope) y $\phi B_n$ sube a **{f(ej2.pedA2.phiBn, 0)} kN**.
+</Paso>
+<Resultado>
+Muro de 200 mm con $P_u$ = {ej2.pu} kN/m centrada: $\phi P_n$ empírico = **{f(ej2.muro.empirico.phiPn, 1)} kN/m** (cumple). El mismo muro con carga excéntrica fuera del tercio central ya no admite el método empírico. El pedestal resiste 1500 kN con razón {f(ej2.ped.razon, 3)}.
+</Resultado>
+</Ejemplo>
+
+## C.22.7 — Zapatas
+
+### Requisitos generales (C.22.7.1 a C.22.7.5)
+
+- **C.22.7.1:** las zapatas se diseñan para las **cargas mayoradas** y las **reacciones inducidas**, según este Título C y C.22.7.2 a C.22.7.8 (<NormaRef s="C.22.7.1" pag="C-204" />).
+- **C.22.7.2:** el **área de la base** se determina con las fuerzas y momentos **no mayorados** y la capacidad admisible del suelo (mecánica de suelos) (<NormaRef s="C.22.7.2" pag="C-204" />).
+- **C.22.7.3:** **no se usa** concreto simple para zapatas **sobre pilotes** (<NormaRef s="C.22.7.3" pag="C-204" />).
+- **C.22.7.4:** espesor **no menor que 200 mm** (véase C.22.4.7) (<NormaRef s="C.22.7.4" pag="C-204" />). *Observación del autor: como contra el suelo h resta 50 mm, una zapata de 200 mm calcula con 150 mm.*
+- **C.22.7.5:** los **momentos mayorados máximos** se calculan **(a)** en la **cara** de la columna, pedestal o muro; **(b)** a **media distancia entre el eje y el borde del muro** si éste es de albañilería; **(c)** a la **mitad de la distancia entre el borde de la columna y el borde de la platina** de base de acero (<NormaRef s="C.22.7.5" pag="C-204" />).
+
+### C.22.7.6 — Cortante en zapatas
+
+- **C.22.7.6.1:** $V_u$ se calcula según C.22.7.6.2, con sección crítica **en la cara** de la columna, pedestal o muro (con platina de acero, según C.22.7.5(c)) (<NormaRef s="C.22.7.6.1" pag="C-205" />).
+- **C.22.7.6.2:** $\phi V_n$ cerca de cargas concentradas o reacciones lo controla la **más restrictiva** de dos condiciones (<NormaRef s="C.22.7.6.2" pag="C-205" />):
+  - **(a) Acción como viga:** sección crítica a **todo el ancho** de la zapata, a una distancia **$h$ del borde** de la carga o área de reacción; se usa **C.22-9**.
+  - **(b) Acción en dos direcciones:** sección crítica de **perímetro $b_o$ mínimo**, que no necesita estar más cerca que **$h/2$** del perímetro de la carga; se usa **C.22-10**.
+- **C.22.7.7:** columnas circulares o de polígono regular se tratan como **cuadradas de la misma área** para ubicar las secciones críticas (<NormaRef s="C.22.7.7" pag="C-205" />).
+- **C.22.7.8:** las cargas de aplastamiento mayoradas $B_u$ en la **superficie de contacto** columna–zapata no exceden $\phi B_n$ de **cualquiera** de las dos superficies (C.22.5.5) (<NormaRef s="C.22.7.8" pag="C-205" />).
+
+<Ejemplo numero={2} titulo="Resistencia a flexión y cortante de una zapata corrida de concreto simple">
+Zapata corrida bajo un muro de espesor $t$ = {ej1.t} mm, ancho $B$ = {ej1.B} mm y espesor $h$ = {ej1.h} mm, **vaciada contra el suelo**, $f'_c$ = {ej1.fc} MPa, peso normal. La carga mayorada del muro es 140 kN/m, de modo que la presión mayorada sobre el suelo es $q_u$ = {ej1.qu} kPa (uniforme). Se analiza una franja de 1 m. *(El área de base $B$ se habría fijado antes con cargas **no** mayoradas, C.22.7.2.)*
+
+<Paso titulo="Altura de cálculo" ref="C.22.4.7">
+Vaciado contra el suelo: $h_{ef} = h - 50$ = {ej1.h} − 50 = **{ej1.hEf} mm**. El espesor real de {ej1.h} mm cumple el mínimo de 200 mm de C.22.7.4.
+</Paso>
+<Paso titulo="Momento mayorado en la cara del muro" ref="C.22.7.5(a)">
+Vuelo $a = (B - t)/2$ = ({ej1.B} − {ej1.t})/2 = {ej1.vuelo} mm. $M_u = q_u a^2/2$ = {ej1.qu} × {(ej1.vuelo / 1000).toFixed(1)}² / 2 = **{f(ej1.z.muKnm, 2)} kN·m/m**.
+</Paso>
+<Paso titulo="Resistencia a flexión" ref="C.22-2, C.22-1">
+$S_m = b\,h_{ef}^2/6$ = 1000 × {ej1.hEf}² / 6 = **{f(ej1.sm / 1e6, 3)} × 10⁶ mm³**. $M_n = 0.42\sqrt{f'_c}\,S_m$ = 0.42 × {f(Math.sqrt(ej1.fc), 4)} × {f(ej1.sm / 1e6, 3)} × 10⁶ = **{f(ej1.mnT, 2)} kN·m/m** (C.22-2). Con C.22-3 saldría {f(ej1.mnC, 1)} kN·m/m, pero **controla la tracción**. $\phi M_n$ = 0.60 × {f(ej1.mnT, 2)} = **{f(ej1.phiMn, 2)} kN·m/m**, mayor que $M_u$ = {f(ej1.z.muKnm, 2)}: **cumple** (razón {f(ej1.z.muKnm / ej1.z.phiMnKnm, 3)}).
+</Paso>
+<Paso titulo="Cortante como viga" ref="C.22.7.6.2(a), C.22-9">
+Sección crítica a $h_{ef}$ de la cara: $V_u = q_u (a - h_{ef})$ = {ej1.qu} × ({(ej1.vuelo / 1000).toFixed(2)} − {(ej1.hEf / 1000).toFixed(2)}) = **{f(ej1.z.vuViga, 1)} kN/m** *(el autor mide la distancia con la $h$ efectiva; es lo conservador)*. $V_n = 0.11\sqrt{f'_c}\,b_w h_{ef}$ = **{f(ej1.z.phiVnViga / 0.6, 1)} kN/m** y $\phi V_n$ = **{f(ej1.z.phiVnViga, 1)} kN/m**: **cumple** con amplia holgura. En zapatas de concreto simple la **flexión gobierna** sobre el cortante.
+</Paso>
+<Paso titulo="Variantes" ref="C.22.4.7, C.22.5.6">
+Con $h$ = 250 mm ($h_{ef}$ = {ej1.zDelgada.hEfMm} mm): $\phi M_n$ = {f(ej1.zDelgada.phiMnKnm, 2)} kN·m/m, menor que $M_u$: **no cumple** y hay que engrosar o pasar a concreto reforzado (C.22.4.2). Con concreto liviano de $\lambda$ = 0.85 y $h$ = {ej1.h} mm: $\phi M_n$ = {f(ej1.zLiv.phiMnKnm, 2)} kN·m/m ({ej1.zLiv.cumple ? 'cumple' : 'no cumple'}).
+</Paso>
+<Resultado>
+Zapata corrida de {ej1.h} mm (contra el suelo, $h_{ef}$ = {ej1.hEf} mm): $\phi M_n$ = **{f(ej1.z.phiMnKnm, 2)} kN·m/m** ≥ $M_u$ = {f(ej1.z.muKnm, 2)} kN·m/m, y $\phi V_n$ = {f(ej1.z.phiVnViga, 1)} kN/m ≥ $V_u$ = {f(ej1.z.vuViga, 1)} kN/m. **Cumple** (cumple global: {ej1.z.cumple ? 'sí' : 'no'}).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Zapata aislada de concreto simple: cortante en dos direcciones y flexión">
+Zapata aislada cuadrada de {ej3.lado} mm de lado bajo una columna de {ej3.c} × {ej3.c} mm (se apoya en un pedestal), vaciada contra el suelo, $f'_c$ = {ej3.fc} MPa, presión mayorada $q_u$ = {ej3.qu} kPa. Se prueba con $h$ = 350 mm y luego con 450 mm.
+
+<Paso titulo="Altura de cálculo y vuelo" ref="C.22.4.7">
+Con $h$ = 350 mm: $h_{ef}$ = **{ej3.hEf} mm**. Vuelo $(B - c)/2$ = **{ej3.vuelo} mm**.
+</Paso>
+<Paso titulo="Cortante en dos direcciones" ref="C.22.7.6.2(b), C.22-10">
+Sección crítica a $h_{ef}/2$ de la cara: lado = {ej3.c} + {ej3.hEf} = {ej3.c + ej3.hEf} mm; $b_o$ = 4 × {ej3.c + ej3.hEf} = **{ej3.bo} mm**; $\beta$ = 1. $V_u = q_u (B^2 - \text{lado}^2)$ = **{f(ej3.z.vuPunz, 1)} kN**. $V_n$ sin tope = 0.11(1 + 2/1)√f′c $b_o h_{ef}$ = {f(ej3.pun.sinTope, 1)} kN, que **supera el tope** 0.22√f′c $b_o h_{ef}$ = **{f(ej3.pun.tope, 1)} kN** ({ej3.pun.gobiernaTope ? 'gobierna el tope' : 'no gobierna el tope'}); $\phi V_n$ = **{f(ej3.z.phiVnPunz, 1)} kN** ≥ $V_u$: cumple.
+</Paso>
+<Paso titulo="Cortante como viga" ref="C.22.7.6.2(a), C.22-9">
+$V_u = q_u B (a - h_{ef})$ = {f(ej3.z.vuViga, 1)} kN frente a $\phi V_n$ = 0.60 × {f(ej3.vnViga, 1)} = **{f(ej3.z.phiVnViga, 1)} kN**: cumple.
+</Paso>
+<Paso titulo="Flexión en la cara de la columna" ref="C.22.7.5(a), C.22-2">
+$M_u = q_u B a^2/2$ = **{f(ej3.z.muKnm, 1)} kN·m** frente a $\phi M_n$ = **{f(ej3.z.phiMnKnm, 1)} kN·m** (con $S_m = B h_{ef}^2/6$): razón {f(ej3.z.muKnm / ej3.z.phiMnKnm, 2)} — **no cumple**, aunque el cortante pasa con holgura.
+</Paso>
+<Paso titulo="Aumentar el espesor" ref="C.22.4.2">
+Con $h$ = 450 mm ($h_{ef}$ = {ej3.z2.hEfMm} mm): $\phi M_n$ = **{f(ej3.z2.phiMnKnm, 1)} kN·m** ≥ {f(ej3.z2.muKnm, 1)} kN·m y el cortante también cumple ({ej3.z2.cumple ? 'cumple global' : 'no cumple'}). La alternativa es diseñar la zapata como **concreto reforzado** (Capítulo C.15).
+</Paso>
+<Resultado>
+La zapata de 350 mm **falla por flexión** ($\phi M_n$ = {f(ej3.z.phiMnKnm, 1)} kN·m, inferior a $M_u$ = {f(ej3.z.muKnm, 1)} kN·m) aunque el cortante es holgado: en concreto simple el espesor lo dicta la **flexión**. Con 450 mm cumple todo.
+</Resultado>
+</Ejemplo>
+
+## C.22.8 — Pedestales
+
+- **C.22.8.1:** los pedestales se diseñan para las cargas verticales, laterales o de otro tipo que actúen (<NormaRef s="C.22.8.1" pag="C-205" />).
+- **C.22.8.2:** la relación entre **altura no apoyada** y el **promedio de la menor dimensión lateral** no excede **3** (<NormaRef s="C.22.8.2" pag="C-205" />).
+- **C.22.8.3:** la carga axial mayorada máxima $P_u$ **no excede $\phi B_n$** de C.22.5.5 (<NormaRef s="C.22.8.3" pag="C-205" />). Es decir, el pedestal se verifica **solo por aplastamiento**, sin efectos de esbeltez porque la relación 3 ya los acota.
+
+El ejemplo 1 comprueba un pedestal.
+
+## C.22.9 — Elementos prefabricados
+
+- **C.22.9.1:** se consideran **todas las condiciones de carga** desde la fabricación hasta completar la estructura: desencofrado, almacenamiento, transporte y montaje (<NormaRef s="C.22.9.1" pag="C-205" />).
+- **C.22.9.2:** las limitaciones de **C.22.2** aplican **también durante** fabricación, transporte y montaje, no solo en la condición final (<NormaRef s="C.22.9.2" pag="C-205" />).
+- **C.22.9.3:** los elementos prefabricados se **conectan de forma segura** para transferir todas las fuerzas laterales a un sistema estructural capaz de resistirlas (<NormaRef s="C.22.9.3" pag="C-205" />).
+- **C.22.9.4:** se **arriostran y apoyan** adecuadamente durante el montaje hasta completar las conexiones permanentes (<NormaRef s="C.22.9.4" pag="C-205" />).
+
+## C.22.10 — Concreto simple en estructuras resistentes a sismos
+
+**C.22.10.1.** Las estructuras con capacidad de disipación de energía **especial (DES)** **no pueden tener elementos de cimentación de concreto simple**, **excepto** (<NormaRef s="C.22.10.1" pag="C-206" />):
+
+- **(a)** en **viviendas aisladas de una o dos familias, de tres pisos o menos**, con muros de carga de aporticamiento ligero: **zapatas de concreto simple sin refuerzo longitudinal** que soporten muros, y zapatas aisladas de concreto simple;
+- **(b)** en **todas las demás estructuras**: zapatas de concreto simple que soporten **muros de concreto reforzado construidos en obra** o **muros de albañilería reforzada**, **siempre que** tengan refuerzo longitudinal de **no menos de dos barras continuas No. 4 (1/2") ó 12M (12 mm)**, con área **no menor que 0.002 veces la sección bruta** de la zapata, y con continuidad del refuerzo en esquinas e intersecciones;
+- **(c)** en **viviendas aisladas de una o dos familias, de tres pisos o menos**, con muros de carga de aporticamiento ligero: **cimentaciones o muros de cimentación** de concreto simple, si el muro tiene **no menos de 190 mm** de ancho y no contiene **más de 1.2 m de relleno no balanceado**.
+
+El capítulo no impone limitaciones sísmicas para DMO ni DMI. Para una zapata de 0.5 m de ancho y 0.30 m de espesor, el área mínima del caso (b) sería 0.002 × 500 × 300 = 300 mm² (observación del autor, por metro de longitud).
+
+## Erratas y observaciones sobre el texto del PDF
+
+<Callout tipo="nota" titulo="Observaciones del autor (no son texto de la norma)">
+- **ℓc sin definir.** Las ecuaciones C.22-5 y C.22-14 usan $\ell_c$ (en el texto extraído sale como "Ac"; la imagen muestra $\ell_c$), pero el PDF **no define el símbolo**. Aquí se lee como la **distancia vertical entre apoyos** (definición tomada del reglamento ACI 318, no impresa en la NSR-10).
+- **Mn en C.22-6.** El PDF solo escribe "$M_n$" y "$P_n$"; se usan C.22-3 y C.22-5 en la cara de compresión (lectura del autor).
+- **C.22.1.2** repite "C.9.2, C.9.3.5" dos veces y cita "C.21.12.2.5".
+- **C.22.5.6.1** remite a "8.6.1" sin la "C."; se entiende C.8.6.1.
+- **C.22.7.6.1 / C.22.7.6.2(a):** el primero ubica la sección crítica **en la cara** del apoyo, y el segundo, para la acción como viga, a **una distancia $h$ del borde** de la carga. Aquí se usa la distancia $h$ (efectiva) del inciso (a) para cortante como viga y la cara para el momento.
+- **C.22.5.4:** "de la carga concentrado" (concordancia); en C.22.7.6.2(a) hay un salto de línea "C.22- 10".
+- **C.22.10.1(a) y (c)** describen "muros de carga de aporticamiento ligero"; se mantiene el término tal como está impreso.
+- Las ecuaciones C.22-2, C.22-3, C.22-5, C.22-7, C.22-9, C.22-10, C.22-12 y C.22-14 salen sin radicales ni fracciones en el texto extraído; se transcribieron de la **imagen** de las páginas C-202 a C-204.
+- La página C-206 termina con un marcador de fin de capítulo (█).
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Calcular con el espesor real** en elementos vaciados contra el suelo: la altura de cálculo es $h - 50$ mm (<NormaRef s="C.22.4.7" pag="C-202" />).
+- **Contar el acero** como resistencia, o suponer continuidad a flexión por tracción entre piezas contiguas (<NormaRef s="C.22.4.5" pag="C-202" />, <NormaRef s="C.22.4.6" pag="C-202" />).
+- **Usar concreto simple en columnas** o en zapatas **sobre pilotes** (<NormaRef s="C.22.2.1" pag="C-201" />, <NormaRef s="C.22.7.3" pag="C-204" />).
+- **Usar $\phi$ = 0.75 o 0.90** en concreto simple: es **0.60** para todo (<NormaRef s="C.9.3.5" pag="C-69" />).
+- **Aplicar el método empírico de muros** con la resultante **fuera del tercio central** ($e > h/6$) (<NormaRef s="C.22.6.5.1" pag="C-204" />), o con $e$ menor que 0.10 h (<NormaRef s="C.22.6.3" pag="C-203" />).
+- **Olvidar las barras alrededor de las aberturas** (dos No. 5, 600 mm) (<NormaRef s="C.22.6.6.5" pag="C-204" />).
+- **Verificar solo el cortante** de una zapata: en concreto simple casi siempre manda la **flexión** ($0.42\lambda\sqrt{f'_c}\,S_m$).
+- **Omitir las juntas** (C.22.3) y luego contar con la tracción del concreto (C.22.4.4).
+- **Olvidar que el DES prohíbe** las cimentaciones de concreto simple salvo las excepciones de C.22.10.1.
+</Callout>
+
+## Resumen en una línea
+
+**El concreto simple solo se usa en muros, pedestales y elementos continuamente apoyados; se diseña con $\phi$ = 0.60, tracción limitada a $0.42\lambda\sqrt{f'_c}\,S_m$, $h$ reducida 50 mm contra el suelo y, si no alcanza, se pasa a concreto reforzado.**

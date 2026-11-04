@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 380" font-family="Arial, Helvetica, sans-serif" font-size="13">
+<defs>
+<marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#222"/></marker>
+</defs>
+<rect width="640" height="380" fill="#ffffff"/>
+<!-- contorno de la viga -->
+<rect x="70" y="60" width="500" height="220" fill="#f4f4f5" stroke="#222" stroke-width="1.5"/>
+<!-- apoyos -->
+<polygon points="110,280 90,306 130,306" fill="#d4d4d8" stroke="#222" stroke-width="1.2"/>
+<polygon points="530,280 510,306 550,306" fill="#d4d4d8" stroke="#222" stroke-width="1.2"/>
+<line x1="80" y1="306" x2="140" y2="306" stroke="#222" stroke-width="1.5"/>
+<line x1="500" y1="306" x2="560" y2="306" stroke="#222" stroke-width="1.5"/>
+<!-- carga -->
+<line x1="320" y1="14" x2="320" y2="58" stroke="#222" stroke-width="2" marker-end="url(#fl)"/>
+<text x="332" y="30" fill="#222">P<tspan font-size="10" dy="3">u</tspan></text>
+<!-- zonas nodales -->
+<rect x="290" y="60" width="60" height="40" fill="#bfdbfe" fill-opacity="0.8" stroke="#1d4ed8" stroke-dasharray="4 3"/>
+<rect x="86" y="236" width="48" height="44" fill="#fde68a" fill-opacity="0.8" stroke="#b45309" stroke-dasharray="4 3"/>
+<rect x="506" y="236" width="48" height="44" fill="#fde68a" fill-opacity="0.8" stroke="#b45309" stroke-dasharray="4 3"/>
+<!-- puntales (compresion) -->
+<line x1="320" y1="80" x2="110" y2="258" stroke="#1d4ed8" stroke-width="5"/>
+<line x1="320" y1="80" x2="530" y2="258" stroke="#1d4ed8" stroke-width="5"/>
+<!-- tensor (traccion) -->
+<line x1="110" y1="258" x2="530" y2="258" stroke="#dc2626" stroke-width="5"/>
+<!-- nodos -->
+<circle cx="320" cy="80" r="6" fill="#222"/>
+<circle cx="110" cy="258" r="6" fill="#222"/>
+<circle cx="530" cy="258" r="6" fill="#222"/>
+<!-- etiquetas de nodos -->
+<text x="360" y="84" fill="#1d4ed8" font-weight="bold">Nodo superior (CCC, βn = 1.0)</text>
+<text x="146" y="302" fill="#b45309" font-weight="bold">Nodo CCT (βn = 0.80)</text>
+<text x="494" y="302" fill="#b45309" font-weight="bold" text-anchor="end">Nodo CCT (βn = 0.80)</text>
+<!-- etiquetas de elementos -->
+<text x="203" y="158" fill="#1d4ed8" text-anchor="middle" transform="rotate(-40.3 203 158)">puntal (compresión)</text>
+<text x="437" y="158" fill="#1d4ed8" text-anchor="middle" transform="rotate(40.3 437 158)">puntal (compresión)</text>
+<text x="250" y="248" fill="#dc2626">tensor (tracción): refuerzo longitudinal</text>
+<!-- angulo theta -->
+<path d="M165 258 A55 55 0 0 0 150 224" fill="none" stroke="#222" stroke-width="1.3"/>
+<text x="170" y="240" fill="#222">θ ≥ 25°</text>
+<!-- cotas -->
+<line x1="40" y1="80" x2="40" y2="258" stroke="#222" stroke-width="1" marker-start="url(#fl)" marker-end="url(#fl)"/>
+<text x="14" y="174" fill="#222" transform="rotate(-90 22 174)">z</text>
+<line x1="110" y1="336" x2="320" y2="336" stroke="#222" stroke-width="1" marker-start="url(#fl)" marker-end="url(#fl)"/>
+<text x="196" y="352" fill="#222">L/2</text>
+<line x1="320" y1="336" x2="530" y2="336" stroke="#222" stroke-width="1" marker-start="url(#fl)" marker-end="url(#fl)"/>
+<text x="406" y="352" fill="#222">L/2</text>
+<line x1="320" y1="320" x2="320" y2="344" stroke="#222" stroke-width="1"/>
+<line x1="110" y1="320" x2="110" y2="344" stroke="#222" stroke-width="1"/>
+<line x1="530" y1="320" x2="530" y2="344" stroke="#222" stroke-width="1"/>
+</svg>

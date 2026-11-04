@@ -1,0 +1,614 @@
+---
+codigo: 'C.11'
+tipo: capitulo
+titulo: 'Cortante y torsión (I): vigas y torsión'
+resumen: 'Cómo se comprueba y se arma una viga de concreto para cortante y torsión: φVn ≥ Vu, Vc simplificado y detallado (también en preesforzados), refuerzo mínimo Av,min, límites de Vs y separación de estribos, umbral de torsión y diseño de At/s y Aℓ.'
+objetivos:
+  - 'Calcular Vc con las ecuaciones C.11-3 a C.11-8 y comprobar φVn ≥ Vu con estribos (C.11-15)'
+  - 'Aplicar el refuerzo mínimo Av,min, el límite de Vs y la separación máxima de estribos'
+  - 'Reconocer cuándo se puede usar la sección crítica a d del apoyo y cuándo no'
+  - 'Decidir si se puede despreciar la torsión (umbral) y obtener At/s y Aℓ cuando no se puede'
+paginasNorma: 'C.11.1 a C.11.5: C-87 a C-96 (continúa en C.11b)'
+paginaPdf: 389
+orden: 11
+calculadoras: ['cortante-viga']
+nivel: 'avanzado'
+---
+
+import {
+  vcSimplificado, vcDetallado, vsRequerido, vsMaximo, vsUmbralReduccion, separacionRequerida, separacionMaximaEstribos, avMin, verificarCortanteViga,
+} from '../../lib/nsr10/cortante';
+import { disenoTorsionYCortante, torsionMaximaRedistribuida, diametroMinLongitudinalTorsion } from '../../lib/nsr10/torsion';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const fc = 28, fyt = 420, bw = 300, d = 500, h = 550, Vu = 300, Av = 2 * 71; // dos ramas de barra No. 3
+  const Vc = vcSimplificado({ fc, bw, d });
+  const VsReq = vsRequerido(Vu, Vc);
+  const sReq = separacionRequerida({ Vs: VsReq, Av, fyt, d });
+  const sm = separacionMaximaEstribos({ d, fc, bw, Vs: VsReq });
+  const s = Math.floor(Math.min(sReq, sm.s) / 10) * 10;
+  const ver = verificarCortanteViga({ fc, fyt, bw, d, h, Av, s, Vu });
+  const det = vcDetallado({ fc, bw, d, rhoW: 1500 / (bw * d), Vu, Mu: 250 });
+  return {
+    fc, fyt, bw, d, h, Vu, Av, Vc, phiVc: 0.75 * Vc, VsReq, VsMax: vsMaximo(fc, bw, d), umbral: vsUmbralReduccion(fc, bw, d),
+    sReq, sm, s, ver, det, avMin110: avMin({ fc, bw, s, fyt }),
+  };
+})();
+
+export const ej2 = (() => {
+  const fc = 28, b = 300, h = 500, d = 450, Vu = 80, Tu = 12;
+  const Vc = vcSimplificado({ fc, bw: b, d });
+  const r = disenoTorsionYCortante({ b, h, d, recubrimiento: 40, dEstribo: 9.5, fc, fy: 420, fyt: 420, Vu, Tu, Vc });
+  return { fc, b, h, d, Vu, Tu, Vc, r, redistribucion: torsionMaximaRedistribuida({ fc, Acp: r.geo.Acp, pcp: r.geo.pcp }), dmin: diametroMinLongitudinalTorsion(150) };
+})();
+
+## Idea central del capítulo
+
+El concreto es débil a tracción diagonal: antes de que una viga falle por flexión puede fallar por **cortante**, y esa falla es frágil. El Capítulo C.11 entrega la receta para evitarla. La resistencia de cualquier sección se compone de dos aportes, el del **concreto** ($V_c$) y el del **refuerzo transversal** ($V_s$), y se compara con la demanda mayorada $V_u$ mediante $\phi V_n \ge V_u$. La **torsión** se trata con la misma lógica: si el momento torsor es pequeño se desprecia, y si no, se arma con estribos cerrados y barras longitudinales adicionales.
+
+El resto del capítulo son casos especiales con sus propias ecuaciones: **cortante por fricción** (juntas y apoyos), **vigas altas**, **ménsulas**, **muros** y, el más frecuente en edificios y cimentaciones, el **cortante en dos direcciones o punzonamiento** de losas planas y zapatas alrededor de las columnas. Por su extensión, el capítulo se presenta en **dos páginas**: esta (C.11.1 a C.11.5: cortante en vigas y torsión) y la siguiente, [C.11b](/titulo-c/c11b) (C.11.6 a C.11.11: fricción, vigas altas, ménsulas, muros, momentos en columnas, losas y zapatas).
+
+<Callout tipo="importante" titulo="Tres ideas que ordenan todo el capítulo">
+1. $\phi V_n \ge V_u$ con $V_n = V_c + V_s$ y $\phi = 0.75$ (C.9.3.2.3): la misma desigualdad sirve para vigas, muros y losas; solo cambia cómo se calculan $V_c$ y $V_s$.
+2. $\sqrt{f'_c}$ **no se toma mayor de 8.3 MPa** en este capítulo (C.11.1.2): para concretos de más de 69 MPa la resistencia al cortante deja de crecer (salvo la excepción de C.11.1.2.1).
+3. Donde $V_u > \phi V_c$ hacen falta estribos para resistir; donde $V_u > 0.5\,\phi V_c$ hace falta al menos el **refuerzo mínimo** $A_{v,min}$, aunque no se necesite por resistencia.
+</Callout>
+
+## C.11.1 — Resistencia al cortante
+
+### C.11.1.1 — Criterio de diseño
+
+Salvo para elementos diseñados con el Apéndice C-A (puntal-tensor), el diseño de secciones sometidas a cortante parte de (<NormaRef s="C.11.1.1" pag="C-87" />):
+
+<Ecuacion num="C.11-1" titulo="Condición de resistencia">
+
+$$
+\phi V_n \ge V_u
+$$
+
+- $V_u$: fuerza cortante mayorada en la sección considerada.
+- $V_n$: resistencia nominal al cortante.
+- $\phi$: factor de reducción de resistencia; para cortante y torsión es 0.75 (C.9.3.2.3). Con DMO o DES hay excepciones en C.9.3.4 (por ejemplo, 0.60 cuando $V_n$ es menor que el cortante asociado a la resistencia a flexión del elemento).
+
+</Ecuacion>
+
+<Ecuacion num="C.11-2" titulo="Resistencia nominal al cortante">
+
+$$
+V_n = V_c + V_s
+$$
+
+- $V_c$: aporte del concreto, según C.11.2 (no preesforzados), C.11.3 (preesforzados) o C.11.11 (losas y zapatas).
+- $V_s$: aporte del refuerzo de cortante, según C.11.4, C.11.9.9 (muros) o C.11.11 (losas y zapatas).
+
+</Ecuacion>
+
+Al determinar $V_n$ se considera el efecto de **cualquier abertura** en el elemento (C.11.1.1.1). Al determinar $V_c$ se pueden incluir, cuando aplique, la tracción axial por flujo plástico y retracción en elementos restringidos y el efecto de la compresión inclinada por flexión en elementos de altura variable (C.11.1.1.2).
+
+### C.11.1.2 — Límite de √f′c
+
+Los valores de $\sqrt{f'_c}$ usados en el capítulo **no deben exceder 8.3 MPa** (<NormaRef s="C.11.1.2" pag="C-87" />). Hay una excepción (C.11.1.2.1): en vigas de concreto reforzado o preesforzado y en losas nervadas **con refuerzo mínimo en el alma** (C.11.4.6.3, C.11.4.6.4 o C.11.5.5.2) se permiten valores mayores al calcular $V_c$, $V_{ci}$ y $V_{cw}$. En la lib de cálculo de esta web (`raizFcCortante`) el límite se aplica siempre; la excepción está disponible con el parámetro `sinLimiteRaiz`.
+
+### C.11.1.3 — Sección crítica en los apoyos
+
+El cortante máximo de diseño en el apoyo se puede calcular a una distancia $d$ de la cara del apoyo (no preesforzados, C.11.1.3.1) o a $h/2$ (preesforzados, C.11.1.3.2), y las secciones más cercanas al apoyo se diseñan para ese mismo valor, **solo si se cumplen las tres condiciones** (<NormaRef s="C.11.1.3" pag="C-87" />):
+
+| | Condición |
+|---|---|
+| (a) | La reacción del apoyo introduce **compresión** en las zonas extremas del elemento. |
+| (b) | Las cargas se aplican **en o cerca de la cara superior** del elemento. |
+| (c) | **Ninguna carga concentrada** actúa entre la cara del apoyo y la sección crítica. |
+
+<Callout tipo="practica" titulo="Cuándo NO usar la sección a d">
+Una viga apoyada sobre otra viga (carga colgada del alma), una viga con un cortante grande cerca del apoyo producido por una carga puntual, o un voladizo cuya reacción introduce tracción en la zona extrema **no** cumplen (a)–(c): se diseña con el $V_u$ de la cara del apoyo.
+</Callout>
+
+Para elementos de gran altura, losas y zapatas, muros y ménsulas rigen las disposiciones especiales de C.11.7 a C.11.11 (C.11.1.4).
+
+## C.11.2 — Vc en elementos no preesforzados
+
+### C.11.2.1 — Cálculo simplificado
+
+Salvo que se haga el cálculo detallado de C.11.2.2, $V_c$ se obtiene con las tres expresiones siguientes. En todo el capítulo (excepto C.11.6) $\lambda$ es el factor de concreto liviano de C.8.6.1: 1.00 para peso normal, 0.85 liviano con arena de peso normal y 0.75 para los demás livianos (<NormaRef s="C.11.2.1" pag="C-88" />).
+
+<Ecuacion num="C.11-3" titulo="Solo cortante y flexión">
+
+$$
+V_c = 0.17\,\lambda\sqrt{f'_c}\;b_w\,d
+$$
+
+- $f'_c$ en MPa; $b_w$ ancho del alma y $d$ altura efectiva en mm; el resultado sale en N.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-4" titulo="Con compresión axial">
+
+$$
+V_c = 0.17\left(1+\frac{N_u}{14\,A_g}\right)\lambda\sqrt{f'_c}\;b_w\,d
+$$
+
+- $N_u$: fuerza axial mayorada, positiva en compresión. La relación $N_u/A_g$ se expresa en MPa.
+- $A_g$: área bruta de la sección.
+
+</Ecuacion>
+
+Con **tracción axial significativa**, $V_c$ se toma igual a cero salvo que se haga el análisis más detallado de C.11.2.2.3 (C.11.2.1.3).
+
+### C.11.2.2 — Cálculo detallado
+
+La norma permite un método más fino que toma en cuenta la cuantía de acero longitudinal y la relación entre cortante y momento (<NormaRef s="C.11.2.2" pag="C-88" />):
+
+<Ecuacion num="C.11-5" titulo="Cortante y flexión, método detallado">
+
+$$
+V_c = \left(0.16\,\lambda\sqrt{f'_c} + 17\,\rho_w\,\frac{V_u\,d}{M_u}\right)b_w\,d \;\le\; 0.29\,\lambda\sqrt{f'_c}\;b_w\,d
+$$
+
+- $\rho_w = A_s/(b_w d)$: cuantía del refuerzo longitudinal de tracción.
+- $M_u$ ocurre simultáneamente con $V_u$ en la sección considerada, y $V_u d/M_u$ **no se toma mayor que 1.0**.
+
+</Ecuacion>
+
+Para elementos con **compresión axial** se puede usar C.11-5 sustituyendo $M_u$ por $M_m$ (y sin limitar $V_u d/M_u$ a 1.0), con un tope:
+
+<Ecuacion num="C.11-6" titulo="Momento modificado Mm">
+
+$$
+M_m = M_u - N_u\left(\frac{4h-d}{8}\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.11-7" titulo="Tope de Vc con compresión axial">
+
+$$
+V_c \le 0.29\,\lambda\sqrt{f'_c}\;b_w\,d\,\sqrt{1+\frac{0.29\,N_u}{A_g}}
+$$
+
+- $N_u/A_g$ en MPa. Cuando $M_m$ resulta **negativo**, $V_c$ se calcula directamente con esta ecuación.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-8" titulo="Tracción axial significativa">
+
+$$
+V_c = 0.17\left(1+\frac{0.29\,N_u}{A_g}\right)\lambda\sqrt{f'_c}\;b_w\,d \;\ge\; 0
+$$
+
+- $N_u$ es **negativa** en tracción; $N_u/A_g$ en MPa.
+
+</Ecuacion>
+
+### C.11.2.3 — Elementos circulares
+
+El área para calcular $V_c$ es el producto del **diámetro por la altura efectiva** de la sección, y se permite tomar $d = 0.80$ veces el diámetro (<NormaRef s="C.11.2.3" pag="C-89" />). Es decir, $b_w d = 0.8\,D^2$.
+
+<Callout tipo="nota" titulo="Cuánto gana el método detallado">
+Para una viga con $\rho_w$ = 1 % y $V_u d/M_u$ = 0.6 con $f'_c$ = 28 MPa, el método detallado da $V_c$ = {f(ej1.det.Vc)} kN frente a {f(ej1.Vc)} kN del simplificado (≈ {f((ej1.det.Vc / ej1.Vc - 1) * 100, 0)} % más). La ganancia crece con la cuantía y con el cociente $V_u d/M_u$, y se agota con el tope 0.29 $\lambda\sqrt{f'_c}\,b_w d$ (1.7 veces el valor simplificado). Con poca cuantía longitudinal el método detallado puede dar **menos** que el simplificado (comentario del autor): la norma permite el cálculo detallado "a menos que" se prefiera el simplificado, de modo que conviene calcular ambos antes de decidir.
+</Callout>
+
+## C.11.3 — Vc en elementos preesforzados
+
+En esta sección $d$ es la distancia de la fibra extrema en compresión al centroide del refuerzo longitudinal (preesforzado y no preesforzado) en tracción, **sin tomarlo menor que 0.80h** (C.11.3.1, <NormaRef s="C.11.3.1" pag="C-89" />).
+
+### C.11.3.2 — Cálculo simplificado
+
+Para elementos con fuerza de preesforzado efectiva no menor del **40 %** de la resistencia a tracción del refuerzo de flexión (a menos que se haga el cálculo de C.11.3.3):
+
+<Ecuacion num="C.11-9" titulo="Vc de elementos preesforzados, método simplificado">
+
+$$
+V_c = \left(0.05\,\lambda\sqrt{f'_c} + 4.8\,\frac{V_u\,d_p}{M_u}\right)b_w\,d
+$$
+
+- No es necesario tomar $V_c$ menor que $0.17\,\lambda\sqrt{f'_c}\,b_w d$, ni se toma mayor que $0.42\,\lambda\sqrt{f'_c}\,b_w d$ ni que el valor de C.11.3.4 o C.11.3.5.
+- $V_u d_p/M_u$ no se toma mayor que 1.0; $M_u$ ocurre simultáneamente con $V_u$.
+
+</Ecuacion>
+
+### C.11.3.3 — Cálculo detallado: Vci y Vcw
+
+$V_c$ es el **menor** de $V_{ci}$ (cortante por flexión y cortante) y $V_{cw}$ (cortante en el alma) (<NormaRef s="C.11.3.3" pag="C-89" />):
+
+<Ecuacion num="C.11-10" titulo="Vci — fisuración inclinada por flexión y cortante">
+
+$$
+V_{ci} = 0.05\,\lambda\sqrt{f'_c}\;b_w\,d_p + V_d + \frac{V_i\,M_{cre}}{M_{max}}
+$$
+
+- $d_p$ no se toma menor que 0.80h. $M_{max}$ y $V_i$ se calculan con la combinación de carga que produce el máximo momento mayorado en la sección.
+- No es necesario tomar $V_{ci}$ menor que $0.14\,\lambda\sqrt{f'_c}\,b_w d$.
+- $V_d$: cortante por carga muerta no mayorada.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-11" titulo="Momento de fisuración por flexión">
+
+$$
+M_{cre} = \left(\frac{I}{y_t}\right)\left(0.5\,\lambda\sqrt{f'_c} + f_{pe} - f_d\right)
+$$
+
+- $I/y_t$: módulo resistente de la sección; $f_{pe}$: esfuerzo de compresión en la fibra extrema de tracción por preesforzado efectivo; $f_d$: esfuerzo en esa fibra por carga muerta no mayorada.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-12" titulo="Vcw — fisuración inclinada en el alma">
+
+$$
+V_{cw} = \left(0.29\,\lambda\sqrt{f'_c} + 0.3\,f_{pc}\right)b_w\,d_p + V_p
+$$
+
+- $f_{pc}$: esfuerzo de compresión en el centroide por preesforzado efectivo; $V_p$: componente vertical de la fuerza efectiva de preesforzado. $d_p$ no se toma menor que 0.80h.
+
+</Ecuacion>
+
+Alternativamente $V_{cw}$ puede calcularse como el cortante de carga muerta más viva que produce un esfuerzo principal de tracción de $0.33\,\lambda\sqrt{f'_c}$ en el eje centroidal (o en la unión ala-alma si el eje queda en el ala); en elementos compuestos se usa la sección que resiste la carga viva.
+
+### C.11.3.4 y C.11.3.5 — Zonas de transferencia
+
+Si la sección a $h/2$ de la cara del apoyo está más cerca del extremo del elemento que la **longitud de transferencia**, hay que reducir el preesforzado al calcular $V_{cw}$ (C.11.3.4); ese $V_{cw}$ es también el máximo para C.11-9. Lo mismo ocurre en elementos pretensados donde algunos tendones no tienen adherencia hasta el extremo (C.11.3.5). La fuerza de preesforzado se supone variando linealmente de cero a su máximo en la longitud de transferencia, que se toma de **50 diámetros en torones** y **100 diámetros en alambres** (<NormaRef s="C.11.3.4" pag="C-90" />).
+
+## C.11.4 — Resistencia proporcionada por el refuerzo de cortante
+
+### C.11.4.1 — Tipos de refuerzo
+
+<NormaRef s="C.11.4.1" pag="C-90" /> Se permite como refuerzo de cortante: (a) **estribos** perpendiculares al eje; (b) **malla electrosoldada** con alambres perpendiculares al eje; (c) **espirales, estribos circulares y estribos cerrados de confinamiento**. En elementos no preesforzados además: (a) estribos inclinados 45° o más con el refuerzo longitudinal de tracción; (b) barras longitudinales con una parte doblada a 30° o más; (c) combinaciones de estribos y barras dobladas.
+
+### C.11.4.2 a C.11.4.4 — Resistencia del acero, d y anclaje
+
+- $f_y$ y $f_{yt}$ de refuerzo de cortante **no mayores de 420 MPa**, salvo 550 MPa para malla electrosoldada de alambre corrugado (<NormaRef s="C.11.4.2" pag="C-90" />).
+- En elementos preesforzados $d$ se toma como en C.11.3.1, sin ser menor de 0.80h (C.11.4.3).
+- Los estribos y demás barras o alambres de cortante deben **extenderse hasta una distancia $d$** desde la fibra extrema en compresión y **desarrollarse en ambos extremos** según C.12.13 (C.11.4.4).
+
+### C.11.4.5 — Separación máxima
+
+<Ecuacion num="C.11.4.5.1" titulo="Separación máxima de estribos perpendiculares al eje">
+
+$$
+s \le \begin{cases} d/2 & \text{elementos no preesforzados}\\ 0.75\,h & \text{elementos preesforzados}\end{cases}\qquad\text{y}\qquad s\le 600\ \text{mm}
+$$
+
+</Ecuacion>
+
+Si $V_s$ **sobrepasa $0.33\sqrt{f'_c}\,b_w d$**, las separaciones máximas anteriores (y las de C.11.4.5.2) se **reducen a la mitad** (C.11.4.5.3). Los estribos inclinados y las barras dobladas deben estar espaciados de modo que toda línea a 45° que se extienda hacia la reacción desde $d/2$ hasta el refuerzo longitudinal de tracción sea cruzada por al menos una línea de refuerzo de cortante (C.11.4.5.2, <NormaRef s="C.11.4.5" pag="C-90" />).
+
+### C.11.4.6 — Refuerzo mínimo a cortante
+
+Debe colocarse un área mínima $A_{v,min}$ en todo elemento de concreto reforzado sometido a flexión (preesforzado o no) donde **$V_u$ exceda $0.5\,\phi V_c$**, excepto en los casos de la tabla (<NormaRef s="C.11.4.6.1" pag="C-91" />):
+
+<TablaNorma numero="C.11.4.6.1" titulo="Excepciones al refuerzo mínimo de cortante" pag="C-91" nota="Transcrita del texto de la norma y presentada en tabla por el autor. La referencia 'definidas en 8.13' del PDF corresponde a C.8.13.">
+
+| Literal | Elemento exento |
+|:---:|---|
+| (a) | Zapatas y losas sólidas. |
+| (b) | Elementos alveolares con altura total (sin afinado) no mayor de 315 mm y unidades alveolares donde $V_u$ no es mayor de $0.5\,\phi V_{cw}$. |
+| (c) | Losas nervadas de concreto con viguetas definidas en C.8.13. |
+| (d) | Vigas con $h$ no mayor que 250 mm. |
+| (e) | Vigas integrales con losas, con $h$ no mayor de 600 mm y no mayor que el mayor entre 2.5 veces el espesor del ala y 0.5 veces el ancho del alma. |
+| (f) | Vigas de concreto de peso normal reforzado con fibra de acero, $f'_c \le 40$ MPa, $h \le 600$ mm y $V_u \le \phi\,0.17\sqrt{f'_c}\,b_w d$. |
+
+</TablaNorma>
+
+El requisito puede ignorarse si se demuestra con ensayos que $M_n$ y $V_n$ se desarrollan sin refuerzo de cortante, simulando asentamientos diferenciales, flujo plástico, retracción y temperatura (C.11.4.6.2). Cuando se requiere refuerzo de cortante por C.11.4.6.1, o por resistencia con torsión despreciable (C.11.5.1):
+
+<Ecuacion num="C.11-13" titulo="Refuerzo mínimo de cortante">
+
+$$
+A_{v,min} = 0.062\sqrt{f'_c}\;\frac{b_w\,s}{f_{yt}}\qquad\text{pero no menor que}\qquad \frac{0.35\,b_w\,s}{f_{yt}}
+$$
+
+- $A_{v,min}$ en mm² para el espaciamiento $s$ (mm); $b_w$ en mm; $f_{yt}$ y $f'_c$ en MPa.
+- Vale para preesforzados (salvo C.11.4.6.4) y no preesforzados.
+
+</Ecuacion>
+
+Para elementos preesforzados con preesforzado efectivo no menor del 40 % de la resistencia a tracción del refuerzo de flexión, $A_{v,min}$ no debe ser menor que el **menor** valor entre C.11-13 y C.11-14 (C.11.4.6.4):
+
+<Ecuacion num="C.11-14" titulo="Refuerzo mínimo de cortante, preesforzados">
+
+$$
+A_{v,min} = \frac{A_{ps}\,f_{pu}\,s}{80\,f_{yt}\,d}\sqrt{\frac{d}{b_w}}
+$$
+
+- $A_{ps}$: área del acero de preesforzado en tracción; $f_{pu}$: resistencia a tracción especificada del acero de preesforzado.
+
+</Ecuacion>
+
+### C.11.4.7 — Diseño del refuerzo de cortante
+
+Donde $V_u$ excede $\phi V_c$ el refuerzo se proporciona con C.11-1 y C.11-2, calculando $V_s$ así (<NormaRef s="C.11.4.7" pag="C-91" />):
+
+<Ecuacion num="C.11-15" titulo="Vs con refuerzo perpendicular al eje">
+
+$$
+V_s = \frac{A_v\,f_{yt}\,d}{s}
+$$
+
+- $A_v$: área del refuerzo de cortante dentro del espaciamiento $s$ (para un estribo cerrado, **dos ramas**: $A_v = 2A_b$).
+- Con estribos circulares, cerrados de confinamiento o espirales (C.11.4.7.3), $d$ es el de C.11.2.3 y $A_v$ es **dos veces el área de la barra**; $s$ se mide paralelo al refuerzo longitudinal.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-16" titulo="Vs con estribos inclinados">
+
+$$
+V_s = \frac{A_v\,f_{yt}\,(\sin\alpha+\cos\alpha)\,d}{s}
+$$
+
+- $\alpha$: ángulo entre los estribos inclinados y el eje longitudinal del elemento; $s$ se mide paralelo al eje.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-17" titulo="Vs con una barra o grupo de barras dobladas a la misma distancia del apoyo">
+
+$$
+V_s = A_v\,f_y\,\sin\alpha\qquad\text{pero no mayor que}\qquad 0.25\sqrt{f'_c}\;b_w\,d
+$$
+
+- $\alpha$: ángulo entre el refuerzo doblado y el eje longitudinal.
+
+</Ecuacion>
+
+Además: con **series** de barras dobladas a distintas distancias del apoyo se usa C.11-16 (C.11.4.7.6); solo las **tres cuartas partes centrales** de la porción inclinada de una barra doblada cuentan como refuerzo de cortante (C.11.4.7.7); si se combinan varios tipos de refuerzo, los $V_s$ se **suman** (C.11.4.7.8); y en todo caso $V_s$ **no se considera mayor que $0.66\sqrt{f'_c}\,b_w d$** (C.11.4.7.9): si lo supera, hay que agrandar la sección.
+
+<Ejemplo numero={1} titulo="Viga 300 × 550 mm: Vc, Vs y separación de estribos">
+
+Viga con $b_w$ = {ej1.bw} mm, $d$ = {ej1.d} mm, $f'_c$ = {ej1.fc} MPa, estribos de barra No. 3 de dos ramas ($A_v$ = {ej1.Av} mm²), $f_{yt}$ = {ej1.fyt} MPa. El cortante mayorado a una distancia $d$ de la cara del apoyo es $V_u$ = {ej1.Vu} kN (se cumplen las condiciones de C.11.1.3).
+
+<Paso titulo="Vc simplificado" ref="C.11-3">
+
+$$
+V_c = 0.17\,\lambda\sqrt{f'_c}\,b_w d = 0.17\,(1.0)\sqrt{28}\,(300)(500)\ \text{N}
+$$
+
+$V_c$ = **{f(ej1.Vc, 1)} kN** y $\phi V_c$ = 0.75 × {f(ej1.Vc, 1)} = **{f(ej1.phiVc, 1)} kN**. Como $V_u$ = {ej1.Vu} kN es mayor que $\phi V_c$, se necesitan estribos por resistencia.
+
+</Paso>
+<Paso titulo="Vs requerido y verificación de la sección" ref="C.11-1, C.11-2, C.11.4.7.9">
+
+$$
+V_s = \frac{V_u}{\phi} - V_c
+$$
+
+Con $V_u/\phi$ = 300/0.75 = 400.0 kN y $V_c$ = {f(ej1.Vc, 1)} kN, $V_s$ requerido = **{f(ej1.VsReq, 1)} kN**. Límite $0.66\sqrt{f'_c}\,b_w d$ = {f(ej1.VsMax, 1)} kN: **cumple**, la sección es suficiente.
+
+</Paso>
+<Paso titulo="Separación por resistencia y separación máxima" ref="C.11-15, C.11.4.5">
+
+$$
+s = \frac{A_v\,f_{yt}\,d}{V_s} = \frac{142\,(420)\,(500)}{V_s}
+$$
+
+$s$ = **{f(ej1.sReq, 1)} mm**. El umbral $0.33\sqrt{f'_c}\,b_w d$ vale {f(ej1.umbral, 1)} kN y $V_s$ = {f(ej1.VsReq, 1)} kN lo supera: la separación máxima, normalmente $d/2$ = 250 mm, **se reduce a la mitad**: $s_{max}$ = **{f(ej1.sm.s, 0)} mm**. Se adopta $s$ = **{ej1.s} mm**.
+
+</Paso>
+<Paso titulo="Refuerzo mínimo y verificación final" ref="C.11-13, C.11-1">
+
+$A_{v,min}$ para $s$ = {ej1.s} mm es el mayor entre 0.062$\sqrt{28}$(300)({ej1.s})/420 y 0.35(300)({ej1.s})/420, es decir **{f(ej1.avMin110, 1)} mm²**; con $A_v$ = 142 mm² sobra. Con $s$ = {ej1.s} mm: $V_s$ = {f(ej1.ver.Vs, 1)} kN y
+
+$$
+\phi V_n = \phi\,(V_c+V_s)
+$$
+
+$\phi V_n$ = 0.75 × ({f(ej1.ver.Vc, 1)} + {f(ej1.ver.Vs, 1)}) kN.
+
+</Paso>
+<Resultado>
+$\phi V_n$ = **{f(ej1.ver.phiVn, 1)} kN ≥ $V_u$ = {ej1.Vu} kN**: {ej1.ver.cumpleResistencia ? 'cumple' : 'NO cumple'}. Estribos No. 3 de dos ramas **cada {ej1.s} mm** (separación máxima admisible {f(ej1.ver.sMax, 0)} mm). El método detallado de C.11-5 (ρw = 1 %, $M_u$ = 250 kN·m en esa sección) habría dado $V_c$ = {f(ej1.det.Vc, 1)} kN y permitiría abrir un poco la separación.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="cortante-viga" />
+
+## C.11.5 — Diseño para torsión
+
+La torsión aparece en vigas de borde, vigas que reciben losas en voladizo o escaleras y, en general, donde el equilibrio exige un momento torsor. La norma usa un modelo de **tubo de pared delgada** con armadura de estribos cerrados y barras longitudinales adicionales. Se diseña con C.11.5.1 a C.11.5.6 o con el procedimiento alternativo de C.11.5.7 (<NormaRef s="C.11.5" pag="C-92" />).
+
+### C.11.5.1 — Umbral de torsión
+
+Se pueden **despreciar** los efectos de la torsión si $T_u$ es menor que el valor siguiente (<NormaRef s="C.11.5.1" pag="C-92" />):
+
+<Ecuacion num="C.11.5.1(a)" titulo="Umbral, elementos no preesforzados">
+
+$$
+T_u < \phi\,0.083\,\lambda\sqrt{f'_c}\left(\frac{A_{cp}^2}{p_{cp}}\right)
+$$
+
+- $A_{cp}$: área encerrada por el perímetro exterior de la sección de concreto; $p_{cp}$: ese perímetro. Para una sección rectangular $A_{cp} = bh$ y $p_{cp} = 2(b+h)$.
+
+</Ecuacion>
+
+<Ecuacion num="C.11.5.1(b)" titulo="Umbral, elementos preesforzados">
+
+$$
+T_u < \phi\,0.083\,\lambda\sqrt{f'_c}\left(\frac{A_{cp}^2}{p_{cp}}\right)\sqrt{1+\frac{f_{pc}}{0.33\,\lambda\sqrt{f'_c}}}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.11.5.1(c)" titulo="Umbral, no preesforzados con tracción o compresión axial">
+
+$$
+T_u < \phi\,0.083\,\lambda\sqrt{f'_c}\left(\frac{A_{cp}^2}{p_{cp}}\right)\sqrt{1+\frac{N_u}{0.33\,A_g\,\lambda\sqrt{f'_c}}}
+$$
+
+</Ecuacion>
+
+En elementos construidos monolíticamente con una losa, el ala que se incluye para $A_{cp}$ y $p_{cp}$ cumple C.13.2.4; en secciones huecas se usa $A_g$ en lugar de $A_{cp}$. Las alas se pueden despreciar cuando $A_{cp}^2/p_{cp}$ calculado con alas es menor que el de la viga sin ellas (C.11.5.1.1).
+
+### C.11.5.2 — Cálculo del momento torsor mayorado
+
+Si $T_u$ es necesario para el equilibrio y excede el umbral, el elemento se diseña para soportarlo (C.11.5.2.1, <NormaRef s="C.11.5.2" pag="C-93" />). En estructuras **indeterminadas**, donde la fisuración permite redistribuir la torsión, se permite **reducir el $T_u$ máximo** a:
+
+| Caso | Valor máximo de $T_u$ tras redistribuir |
+|---|---|
+| (a) No preesforzados | $\phi\,0.33\,\lambda\sqrt{f'_c}\,\left(A_{cp}^2/p_{cp}\right)$ |
+| (b) Preesforzados | $\phi\,0.33\,\lambda\sqrt{f'_c}\,\left(A_{cp}^2/p_{cp}\right)\sqrt{1+f_{pc}/(0.33\,\lambda\sqrt{f'_c})}$ |
+| (c) No preesforzados con fuerza axial | $\phi\,0.33\,\lambda\sqrt{f'_c}\,\left(A_{cp}^2/p_{cp}\right)\sqrt{1+N_u/(0.33\,A_g\,\lambda\sqrt{f'_c})}$ |
+
+Los momentos y cortantes redistribuidos a los elementos adyacentes deben usarse en su diseño; en secciones huecas $A_{cp}$ no se reemplaza por $A_g$ aquí. A menos que se haga un análisis más exacto, las cargas torsionales de la losa se toman uniformemente distribuidas a lo largo del elemento (C.11.5.2.3). En no preesforzados las secciones a menos de $d$ de la cara del apoyo se diseñan al menos para el $T_u$ calculado a $d$, y en preesforzados a $h/2$; si hay un torque concentrado dentro de esa distancia, la sección crítica es la cara del apoyo (C.11.5.2.4 y C.11.5.2.5).
+
+### C.11.5.3 — Resistencia al momento torsional
+
+**Dimensiones de la sección** (C.11.5.3.1, <NormaRef s="C.11.5.3.1" pag="C-94" />): el cortante y la torsión combinados no deben aplastar la diagonal de concreto.
+
+<Ecuacion num="C.11-18" titulo="Verificación de la sección, secciones sólidas">
+
+$$
+\sqrt{\left(\frac{V_u}{b_w\,d}\right)^2+\left(\frac{T_u\,p_h}{1.7\,A_{oh}^2}\right)^2}\;\le\;\phi\left(\frac{V_c}{b_w\,d}+0.66\sqrt{f'_c}\right)
+$$
+
+- $A_{oh}$: área encerrada por el eje del refuerzo transversal cerrado más externo; $p_h$: perímetro de ese eje.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-19" titulo="Verificación de la sección, secciones huecas">
+
+$$
+\left(\frac{V_u}{b_w\,d}\right)+\left(\frac{T_u\,p_h}{1.7\,A_{oh}^2}\right)\;\le\;\phi\left(\frac{V_c}{b_w\,d}+0.66\sqrt{f'_c}\right)
+$$
+
+</Ecuacion>
+
+En elementos preesforzados $d$ se determina con C.11.4.3. Si el espesor de pared de una sección hueca varía, C.11-19 se evalúa donde el lado izquierdo sea máximo (C.11.5.3.2); si el espesor $t$ es menor que $A_{oh}/p_h$, el segundo término se toma como $T_u/(1.7\,A_{oh}\,t)$ (C.11.5.3.3). $f_y$ y $f_{yt}$ de torsión no pueden exceder 420 MPa (C.11.5.3.4).
+
+**Resistencia por refuerzo.** Donde $T_u$ excede el umbral (el PDF dice "torsión crítica"), la sección se diseña con:
+
+<Ecuacion num="C.11-20" titulo="Condición de resistencia a torsión">
+
+$$
+\phi T_n \ge T_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.11-21" titulo="Resistencia nominal a torsión">
+
+$$
+T_n = \frac{2\,A_o\,A_t\,f_{yt}}{s}\cot\theta
+$$
+
+- $A_t$: área de **una rama** del estribo cerrado de torsión; $s$: separación; $f_{yt}$: fluencia del refuerzo transversal.
+- $A_o$ se determina por análisis; se permite tomar $A_o = 0.85\,A_{oh}$.
+- $\theta$ no se toma menor de 30° ni mayor de 60°. Se puede tomar $\theta$ = **45°** en elementos no preesforzados (o con preesforzado menor que el indicado) y **37.5°** en preesforzados con preesforzado efectivo no menor del 40 % de la resistencia a tracción del refuerzo longitudinal.
+
+</Ecuacion>
+
+<Ecuacion num="C.11-22" titulo="Refuerzo longitudinal adicional por torsión">
+
+$$
+A_\ell = \frac{A_t}{s}\,p_h\left(\frac{f_{yt}}{f_y}\right)\cot^2\theta
+$$
+
+- $\theta$ es el mismo de C.11-21. $A_t/s$ es el calculado con C.11-21 **sin** modificarlo por los mínimos de C.11.5.5.2 o C.11.5.5.3.
+- $f_{yt}$ es del refuerzo transversal cerrado y $f_y$ del longitudinal de torsión.
+
+</Ecuacion>
+
+**Combinación con las demás solicitaciones** (C.11.5.3.8 a C.11.5.3.11): el refuerzo de torsión **se suma** al de cortante, momento y fuerza axial que actúan junto con ella, cumpliendo el requisito más restrictivo de separación y colocación. En la zona de compresión por flexión se puede reducir el refuerzo longitudinal de torsión en $M_u/(0.9\,d\,f_y)$, con $M_u$ simultáneo con $T_u$, sin bajar de los mínimos de C.11.5.5.3 o C.11.5.6.2. En vigas preesforzadas el refuerzo longitudinal total (incluido el preesforzado) debe resistir $M_u$ más una tracción concéntrica adicional $A_\ell f_y$.
+
+### C.11.5.4 — Detalles del refuerzo para torsión
+
+(<NormaRef s="C.11.5.4" pag="C-95" />) Se arma con barras longitudinales o tendones y con uno o más de: (a) **estribos cerrados** perpendiculares al eje, (b) un conjunto cerrado de malla electrosoldada con alambres transversales perpendiculares al eje, o (c) refuerzo en espiral en vigas no preesforzadas. El refuerzo transversal se ancla con un **gancho estándar de 135°** o gancho sísmico alrededor de una barra longitudinal, o según C.12.13.2.1 a C.12.13.2.3 donde el concreto que rodea el anclaje está protegido contra el descascaramiento por un ala o losa. El refuerzo longitudinal se desarrolla en ambos extremos. En secciones huecas, la distancia del eje del refuerzo transversal a la cara interior de la pared no debe ser menor que $0.5\,A_{oh}/p_h$.
+
+### C.11.5.5 — Refuerzo mínimo para torsión
+
+Debe proporcionarse refuerzo mínimo donde $T_u$ supere el umbral (C.11.5.5.1, <NormaRef s="C.11.5.5" pag="C-95" />):
+
+<Ecuacion num="C.11-23" titulo="Área mínima de estribos cerrados">
+
+$$
+\left(A_v+2A_t\right) = 0.062\sqrt{f'_c}\;\frac{b_w\,s}{f_{yt}}\qquad\text{pero no menor que}\qquad\frac{0.35\,b_w\,s}{f_{yt}}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.11-24" titulo="Área mínima total de refuerzo longitudinal por torsión">
+
+$$
+A_{\ell,min} = \frac{0.42\sqrt{f'_c}\,A_{cp}}{f_y} - \left(\frac{A_t}{s}\right)p_h\,\frac{f_{yt}}{f_y}
+$$
+
+- $A_t/s$ no se toma menor que $0.175\,b_w/f_{yt}$.
+
+</Ecuacion>
+
+### C.11.5.6 — Espaciamiento del refuerzo para torsión
+
+(<NormaRef s="C.11.5.6" pag="C-96" />) Los estribos de torsión no deben separarse más que el **menor entre $p_h/8$ y 300 mm**. El refuerzo longitudinal de torsión se distribuye a lo largo del perímetro del estribo cerrado con separación máxima de **300 mm**, dentro de los estribos, con **al menos una barra en cada esquina**, y con diámetro no menor que **0.042 veces la separación entre estribos** ni menor que el No. 3 (3/8") o 10M (10 mm). El refuerzo de torsión se prolonga al menos $(b_t + d)$ más allá del punto donde se requiere por análisis.
+
+### C.11.5.7 — Diseño alternativo
+
+Para secciones sólidas con relación de forma $h/b_t$ de **tres o más** se puede usar otro procedimiento si su bondad se demostró por análisis y por concordancia con ensayos de alcance apropiado; aplican C.11.5.4 y C.11.5.6 (<NormaRef s="C.11.5.7" pag="C-96" />).
+
+<Ejemplo numero={2} titulo="Viga de borde 300 × 500 mm con torsión: umbral, At/s y Aℓ">
+
+Viga de borde con $b$ = {ej2.b} mm, $h$ = {ej2.h} mm, $d$ = {ej2.d} mm, $f'_c$ = {ej2.fc} MPa, $f_y = f_{yt}$ = 420 MPa, recubrimiento libre al estribo 40 mm y estribo No. 3 (9.5 mm). Solicitaciones en la sección crítica: $V_u$ = {ej2.Vu} kN y $T_u$ = {ej2.Tu} kN·m. No hay fuerza axial.
+
+<Paso titulo="Propiedades de la sección" ref="C.11.5.1, C.11.5.3">
+
+$A_{cp}$ = {ej2.r.geo.Acp.toLocaleString('en-US')} mm², $p_{cp}$ = {ej2.r.geo.pcp} mm. Entre ejes de estribo: $x_0$ = {f(ej2.r.geo.x0, 1)} mm y $y_0$ = {f(ej2.r.geo.y0, 1)} mm, de modo que $A_{oh}$ = {f(ej2.r.geo.Aoh, 0)} mm², $p_h$ = {f(ej2.r.geo.ph, 0)} mm y $A_o = 0.85\,A_{oh}$ = {f(ej2.r.geo.Ao, 0)} mm².
+
+</Paso>
+<Paso titulo="¿Se puede despreciar la torsión?" ref="C.11.5.1(a)">
+
+$$
+T_{u,umbral} = \phi\,0.083\,\lambda\sqrt{f'_c}\,\frac{A_{cp}^2}{p_{cp}} = 0.75\,(0.083)\sqrt{28}\,\frac{150000^2}{1600}\ \text{N·mm}
+$$
+
+Umbral = **{f(ej2.r.umbral, 2)} kN·m**. Como $T_u$ = {ej2.Tu} kN·m es mayor, **no se puede despreciar**: hay que diseñar para torsión. (Si la viga estuviera en una estructura indeterminada, $T_u$ podría reducirse por redistribución hasta {f(ej2.redistribucion, 1)} kN·m según C.11.5.2.2, siempre que se dé a los elementos vecinos la redistribución correspondiente.)
+
+</Paso>
+<Paso titulo="Dimensiones de la sección" ref="C.11-18">
+
+Con $V_c$ = {f(ej2.Vc, 1)} kN: lado izquierdo = {f(ej2.r.seccion.izquierdo, 3)} MPa; lado derecho $\phi\,(V_c/(b_w d)+0.66\sqrt{f'_c})$ = {f(ej2.r.seccion.derecho, 3)} MPa. {ej2.r.seccion.cumple ? 'Cumple: la sección es suficiente.' : 'No cumple: hay que agrandar la sección.'}
+
+</Paso>
+<Paso titulo="Estribos: At/s por torsión, Av/s por cortante y mínimos" ref="C.11-20, C.11-21, C.11-15, C.11-23">
+
+Con $\theta$ = 45°: $A_t/s = T_u/(\phi\,2\,A_o f_{yt}\cot\theta)$ = **{f(ej2.r.AtS, 4)} mm²/mm** (por rama). Por cortante, $V_u/\phi$ = {f(ej2.Vu / 0.75, 1)} kN es menor que $V_c$ = {f(ej2.Vc, 1)} kN, así que $A_v/s$ = {f(ej2.r.AvS, 3)} (el concreto resiste el cortante). Requerido: $(A_v+2A_t)/s$ = {f(ej2.r.totalPorS, 3)} mm²/mm; mínimo C.11-23: {f(ej2.r.minimoPorS, 3)} mm²/mm. Separación máxima: el menor entre $p_h/8$ = {f(ej2.r.geo.ph / 8, 0)} mm y 300 mm, o sea **{f(ej2.r.sMax, 0)} mm**. Con estribos No. 3 cada 150 mm: $A_t/s$ = 71/150 = 0.473 mm²/mm ≥ {f(ej2.r.AtS, 3)}: **cumple**.
+
+</Paso>
+<Paso titulo="Refuerzo longitudinal de torsión" ref="C.11-22, C.11-24">
+
+$A_\ell$ = ($A_t/s$) $p_h$ cot²θ = {f(ej2.r.AlReq, 0)} mm². Mínimo C.11-24: 0.42$\sqrt{28}$(150000)/420 − ($A_t/s$)(1242) = **{f(ej2.r.AlMin, 0)} mm²**, que gobierna. Se reparte en el perímetro con separación máxima de 300 mm, una barra en cada esquina y diámetro mínimo {f(ej2.dmin, 1)} mm: por ejemplo **6 barras No. 4** (6 × 129 = 774 mm²) o parte de las barras de flexión ya existentes; en la zona de compresión por flexión se puede reducir según C.11.5.3.9.
+
+</Paso>
+<Resultado>
+Estribos cerrados No. 3 **cada 150 mm** (≤ {f(ej2.r.sMax, 0)} mm) y un refuerzo longitudinal de torsión de al menos **{f(ej2.r.Al, 0)} mm²** repartido en el perímetro, que se **suma** al de flexión.
+</Resultado>
+</Ejemplo>
+
+## Erratas y anomalías de esta parte del PDF
+
+<Callout tipo="atencion" titulo="Lo que encontramos al verificar C.11.1 a C.11.5 contra las imágenes">
+Se contrastaron las ecuaciones C.11-1 a C.11-24 con la imagen de cada página (C-87 a C-96). Las ecuaciones están correctas; las anomalías son de redacción o de referencias cruzadas:
+
+- **C.11.5.1(b)** escribe el esfuerzo de preesforzado como $f_{cp}$, mientras que C.11.5.1.1, C.11.5.2.2(b) y C.11-12 usan $f_{pc}$. Es la misma cantidad (esfuerzo de compresión en el centroide por el preesforzado efectivo); aquí se escribe $f_{pc}$.
+- **C.11.5.3.10(b)** remite a "C.11.6.6.2", que no existe (C.11.6.6 trata de $f_y$ en cortante por fricción). Por contenido parece referirse al **C.11.5.6.2** (separación del refuerzo longitudinal de torsión); es una interpretación del autor.
+- **C.11.5.3.5** habla de "torsión crítica" para el umbral de C.11.5.1.
+- **C.11.4.6.1(c)** dice "viguetas definidas en 8.13": debe leerse C.8.13.
+- **C.11.4.7.3** menciona "una estribo" (concordancia gramatical); no cambia el sentido.
+- El PDF no incluye figuras ni tablas numeradas en C.11; la tabla de excepciones de $A_{v,min}$ es una transcripción de una lista del texto.
+- Las erratas de C.11.6 a C.11.11 están al final de [C.11b](/titulo-c/c11b).
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal en cortante de vigas y torsión">
+- Calcular $V_c$ con $\sqrt{f'_c}$ **sin limitar a 8.3 MPa** en concretos de alta resistencia (C.11.1.2), o con $f'_c$ en lugar de $\sqrt{f'_c}$.
+- Usar **una rama** en $A_v$: un estribo cerrado simple aporta **dos** ramas ($A_v = 2A_b$); y mezclar unidades (N con mm, kN con m).
+- Olvidar que si $V_s > 0.33\sqrt{f'_c}\,b_w d$ la **separación máxima baja a la mitad** ($d/4$ o 300 mm).
+- Dejar de colocar **$A_{v,min}$** donde $V_u > 0.5\,\phi V_c$, aunque no haga falta por resistencia (salvo las excepciones a–f de C.11.4.6.1).
+- Tomar el cortante a una distancia $d$ del apoyo **sin verificar** las condiciones (a), (b) y (c) de C.11.1.3.
+- Despreciar la torsión sin comparar con el **umbral** $\phi\,0.083\,\lambda\sqrt{f'_c}\,A_{cp}^2/p_{cp}$.
+- Diseñar con $A_t$ de **dos ramas** (en C.11-21 es **una** rama), o no **sumar** el refuerzo de torsión al de cortante y flexión.
+- Olvidar el **refuerzo longitudinal** $A_\ell$ de la torsión, su mínimo C.11-24, o el gancho de 135° en los estribos.
+- Usar el $V_c$ simplificado de una viga en un elemento con **tracción axial** (hay que tomar $V_c = 0$ o usar C.11-8).
+</Callout>
+
+## Resumen en una línea
+
+**$\phi V_n = \phi\,(V_c + V_s) \ge V_u$ con $V_c = 0.17\,\lambda\sqrt{f'_c}\,b_w d$ y $V_s = A_v f_{yt} d/s$: separación máxima $d/2$ (la mitad si $V_s > 0.33\sqrt{f'_c}\,b_w d$), $A_{v,min}$ donde $V_u > 0.5\,\phi V_c$, y la torsión se desprecia bajo $\phi\,0.083\,\lambda\sqrt{f'_c}\,A_{cp}^2/p_{cp}$ y, si no, se arma con $A_t/s$ y $A_\ell$.** Sigue en [C.11b](/titulo-c/c11b): fricción, ménsulas, muros y punzonamiento.

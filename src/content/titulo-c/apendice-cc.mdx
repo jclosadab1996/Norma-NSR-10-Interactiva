@@ -1,0 +1,348 @@
+---
+codigo: 'C-C'
+tipo: apendice
+titulo: 'Factores de carga y reducción de la resistencia alternativos'
+resumen: 'El conjunto alternativo de combinaciones de carga (1.4D + 1.7L, 0.75(1.4D + 1.7L) + 1.6W …) y de factores φ (0.90, 0.75, 0.70, 0.85) que la NSR-10 permite en lugar de los de C.9, comparado numéricamente con C.9 y con B.2.4, con la regla de no mezclarlos.'
+objetivos:
+  - 'Escribir y evaluar las Ecuaciones C-C.9-1 a C-C.9-6 y la regla de 1.4F, 1.2 en el gato y W/E con factores 1.3 y 1.4'
+  - 'Conocer los φ de C-C.9.3.2 (0.90, 0.75, 0.70, 0.85) y la variación lineal por εt o por φPn'
+  - 'Comparar C-C con el cuerpo de C.9 y con B.2.4 sin mezclar combinaciones de un conjunto con φ del otro'
+  - 'Reconocer qué solicitaciones resultan más exigentes con cada conjunto'
+paginasNorma: 'C-231 a C-234'
+paginaPdf: 533
+orden: 26
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import { PHI_CC, TABLA_PHI_COMPARADA } from '../../data/apendicesC';
+import {
+  c9IgualAB24,
+  compararConjuntos,
+  phiDeformacionCC,
+  phiPorCargaAxialCC,
+  resistenciaRequeridaCC,
+} from '../../lib/nsr10/factoresAlternos';
+import { phiDetalle, resistenciaRequerida } from '../../lib/nsr10/resistenciaServicio';
+
+export const f = (x, d = 1) => x.toFixed(d);
+export const g = (lista, id, accion) => lista.find((x) => x.id === id && x.accion === accion && !x.variante);
+
+export const NOMBRES = {
+  traccion: 'Flexión controlada por tracción',
+  'compresion-otros': 'Compresión, columna con estribos',
+  'compresion-espiral': 'Compresión, columna con espiral',
+  'cortante-torsion': 'Cortante y torsión',
+  'puntal-tensor': 'Modelo puntal-tensor (C-A)',
+  aplastamiento: 'Aplastamiento en el concreto',
+};
+
+export const ej1 = (() => {
+  const cargas = { D: 40, L: 20 };
+  const lista = resistenciaRequeridaCC(cargas);
+  const sols = ['traccion', 'compresion-otros', 'compresion-espiral', 'cortante-torsion', 'puntal-tensor', 'aplastamiento'];
+  const filas = sols.map((s) => ({ s, nombre: NOMBRES[s], c: compararConjuntos(cargas, s) }));
+  const l9 = resistenciaRequerida(cargas);
+  return { cargas, lista, filas, l9, u91: l9[0].valor, u92: l9[1].valor, c9: filas[0].c };
+})();
+
+export const ej2 = (() => {
+  const cargas = { D: 40, L: 20, E: 30 };
+  const l9 = resistenciaRequerida(cargas);
+  const lcc = resistenciaRequeridaCC(cargas);
+  const cc = compararConjuntos(cargas, 'traccion');
+  const serv = compararConjuntos(cargas, 'traccion', { sismoServicio: true });
+  const sentido = resistenciaRequeridaCC(cargas, { sentidos: 'ambos' }).find((x) => x.id === 'C-C.9-3' && x.variante);
+  const sentido9 = resistenciaRequerida(cargas, { sentidos: 'ambos' }).find((x) => x.id === 'C.9-7' && x.variante);
+  return { cargas, l9, lcc, cc, serv, sentido, sentido9 };
+})();
+
+export const ej3 = (() => {
+  const cargas = { D: 40, L: 20, W: 25 };
+  const l9 = resistenciaRequerida(cargas);
+  const lcc = resistenciaRequeridaCC(cargas);
+  const w13 = resistenciaRequeridaCC(cargas, { viento13: true });
+  const cmp = compararConjuntos(cargas, 'cortante-torsion');
+  const epsT = 0.0035;
+  return {
+    cargas, l9, lcc, w13, cmp, ident: c9IgualAB24(cargas),
+    epsT, phi9: phiDetalle(epsT, 'otro').phi, phiCC: phiDeformacionCC(epsT, 'otro'),
+    phi9e: phiDetalle(epsT, 'espiral').phi, phiCCe: phiDeformacionCC(epsT, 'espiral'),
+    axial9: phiPorCargaAxialCC(224, 28, 160000),
+  };
+})();
+
+## Idea central del apéndice
+
+La NSR-10 trae **dos juegos de reglas de seguridad** para el concreto estructural. El del cuerpo (C.9) usa combinaciones con $1.2D + 1.6L$ y factores $\phi$ de 0.90, 0.75, 0.65 y 0.75. El Apéndice C-C permite usar, en su lugar, el juego **«alternativo»**: combinaciones con $1.4D + 1.7L$ y factores $\phi$ de 0.90, 0.75, **0.70** y **0.85**. Según la nota de C.9.2, la NSR-98 tenía factores de carga y de $\phi$ mayores que los de C.9; el juego de C-C es de ese tipo (inferencia del autor). Sigue siendo válido siempre que se use **completo**.
+
+<Callout tipo="importante" titulo="No se mezclan">
+«No se permite mezclar las combinaciones de mayoración de carga del presente Capítulo [C.9] con los factores de reducción de resistencia del Apéndice C-C» (<NormaRef s="C.9.1.3" pag="C-67" />). Cada conjunto de factores de carga fue calibrado con **su** conjunto de $\phi$. Mezclarlos —por ejemplo, $1.2D + 1.6L$ con $\phi$ = 0.85 en cortante— reduce el margen de seguridad. Véase [el Capítulo C.9](/titulo-c/c9).
+</Callout>
+
+<Callout tipo="nota" titulo="Alcance de este apéndice en el PDF">
+Son **tres páginas** de texto (C-231 a C-233) más una página final con el rótulo «Notas:» sin contenido (C-234). No trae tablas ni figuras: las tablas de esta página son del autor y están marcadas.
+</Callout>
+
+## C-C.9.1 — Alcance
+
+Se permite diseñar el concreto estructural con las combinaciones de carga y los factores de reducción de resistencia de este apéndice. Cuando se usa (<NormaRef s="C-C.9.1" pag="C-231" />):
+
+- **C-C.9.2.1 a C-C.9.2.7** reemplazan a **C.9.2.1 a C.9.2.5** (resistencia requerida);
+- **C-C.9.3.1 a C-C.9.3.5** reemplazan a **C.9.3.1 a C.9.3.5** (factores $\phi$).
+
+Todo lo demás de C.9 (C.9.4, límite de $f_y$; C.9.5, deflexiones) sigue vigente.
+
+## C-C.9.2 — Resistencia requerida
+
+### C-C.9.2.1 — Cargas muerta y viva
+
+<Ecuacion num="C-C.9-1" titulo="Carga muerta y viva">
+
+$$
+U = 1.4D + 1.7L
+$$
+
+La resistencia requerida $U$ para resistir la carga muerta $D$ y la viva $L$ no debe ser menor que este valor (<NormaRef s="C-C.9.2.1" pag="C-231" />).
+
+</Ecuacion>
+
+### C-C.9.2.2 — Con viento o sismo
+
+Para estructuras que también resisten viento $W$ o efectos de sismo $E$, $U$ no debe ser menor que el **mayor** valor de las Ecs. C-C.9-1, C-C.9-2 y C-C.9-3 (<NormaRef s="C-C.9.2.2" pag="C-231" />):
+
+<Ecuacion num="C-C.9-2" titulo="Cargas gravitacionales con viento o sismo">
+
+$$
+U = 0.75\left(1.4D + 1.7L\right) + \left(1.6W\ \text{ó}\ 1.0E\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C-C.9-3" titulo="Cargas permanentes reducidas con viento o sismo (volcamiento, tracción neta)">
+
+$$
+U = 0.9D + \left(1.6W\ \text{ó}\ 1.0E\right)
+$$
+
+</Ecuacion>
+
+- Cuando $W$ **no** se ha reducido por el factor de direccionalidad, se permite **1.3W** en lugar de 1.6W en C-C.9-2 y C-C.9-3.
+- Cuando $E$ se basa en fuerzas sísmicas al **nivel de servicio**, se usa **1.4E** en lugar de 1.0E en C-C.9-2 y C-C.9-3.
+
+### C-C.9.2.3 — Empuje del suelo, agua o materiales (H)
+
+Para estructuras que resisten $H$, $U$ no debe ser menor que el mayor valor de C-C.9-1 y (<NormaRef s="C-C.9.2.3" pag="C-231" />):
+
+<Ecuacion num="C-C.9-4" titulo="Con empuje lateral">
+
+$$
+U = 1.4D + 1.7L + 1.7H
+$$
+
+Cuando $D$ o $L$ **reducen** el efecto de $H$, se sustituye 1.4D por **0.9D** y se usa **L = 0** para obtener la mayor resistencia requerida.
+
+</Ecuacion>
+
+### C-C.9.2.4 y C-C.9.2.5 — Fluidos e impacto
+
+- **C-C.9.2.4 (fluidos $F$).** Con densidades bien definidas, el factor de carga de $F$ es **1.4** y $F$ se **añade a todas las combinaciones que incluyan la carga viva $L$** (<NormaRef s="C-C.9.2.4" pag="C-231" />). El texto no dice si en C-C.9-2 la suma va dentro o fuera del grupo 0.75(…); aquí se toma fuera (lectura del autor).
+- **C-C.9.2.5 (impacto).** Si el diseño considera la resistencia a efectos de impacto, se incluyen con $L$ (<NormaRef s="C-C.9.2.5" pag="C-231" />).
+
+### C-C.9.2.6 — Asentamientos, flujo plástico, retracción y temperatura (T)
+
+Cuando los efectos de asentamientos diferenciales, flujo plástico, retracción, expansión de concretos de retracción compensada o variaciones de temperatura, $T$, sean significativos, $U$ no debe ser menor que el mayor valor de (<NormaRef s="C-C.9.2.6" pag="C-231" />):
+
+<Ecuacion num="C-C.9-5" titulo="Efectos de largo plazo con L">
+
+$$
+U = 0.75\left(1.4D + 1.4T + 1.7L\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C-C.9-6" titulo="Efectos de largo plazo sin L">
+
+$$
+U = 1.4\left(D + T\right)
+$$
+
+</Ecuacion>
+
+La estimación de esos efectos debe basarse en una **evaluación realista** de lo que ocurre durante el servicio de la estructura.
+
+### C-C.9.2.7 — Zonas de anclaje de postensado
+
+Se usa un factor **1.2** sobre la fuerza máxima del gato de preesforzado (<NormaRef s="C-C.9.2.7" pag="C-232" />). Es el mismo factor de C.9.2.4 del cuerpo.
+
+<TablaNorma numero="Resumen de C-C.9.2" titulo="Combinaciones del Apéndice C-C frente a las del Capítulo C.9" pag="C-231" nota="Cuadro del autor. Las columnas de C.9 son las Ecuaciones C.9-1 a C.9-7 (idénticas a B.2.4-1 a B.2.4-7). 'Lr ó G ó Le' = carga viva de cubierta, granizo o empozamiento.">
+
+| Situación | Apéndice C-C | Capítulo C.9 (y B.2.4) |
+|---|---|---|
+| Cargas muerta y viva | C-C.9-1: $1.4D + 1.7L$ | C.9-1: $1.4(D+F)$; C.9-2: $1.2(D+F+T)+1.6(L+H)+0.5(L_r\ \text{ó}\ G\ \text{ó}\ L_e)$ |
+| Cubierta (viva de cubierta, granizo, empozamiento) | No aparecen en el apéndice | C.9-2 a C.9-4 |
+| Con viento | C-C.9-2: $0.75(1.4D+1.7L)+1.6W$ | C.9-3: $1.2D+1.6(L_r…)+(1.0L\ \text{ó}\ 0.8W)$; C.9-4: $1.2D+1.6W+1.0L+0.5(L_r…)$ |
+| Con sismo | C-C.9-2: $0.75(1.4D+1.7L)+1.0E$ | C.9-5: $1.2D+1.0E+1.0L$ |
+| Cargas permanentes con $W$ ó $E$ | C-C.9-3: $0.9D + (1.6W\ \text{ó}\ 1.0E)$ | C.9-6: $0.9D+1.6W+1.6H$; C.9-7: $0.9D+1.0E+1.6H$ |
+| Empuje $H$ | C-C.9-4: $1.4D+1.7L+1.7H$ (con $0.9D$ y $L=0$ si reducen $H$) | $1.6H$ en C.9-2, C.9-6 y C.9-7; $H=0$ si neutraliza $W$ ó $E$ |
+| Fluidos $F$ | $1.4F$ en las combinaciones con $L$ | C.9-1: $1.4F$; C.9-2: $1.2F$ |
+| Temperatura, retracción $T$ | C-C.9-5 y C-C.9-6 | C.9-2: $1.2T$ |
+| Reducción de $L$ a 0.5 | No existe | C.9.2.1(a), salvo estacionamientos, reunión pública y $L_0 > 4.8$ kN/m² |
+| Viento 1.3W / sismo 1.4E | Sí (C-C.9.2.2) | Sí (C.9.2.1(b) y (c)) |
+
+</TablaNorma>
+
+## C-C.9.3 — Resistencia de diseño
+
+**C-C.9.3.1.** La resistencia de diseño de un elemento, sus conexiones y sus secciones en flexión, carga axial, cortante y torsión es la **resistencia nominal** calculada con los requisitos y suposiciones del Título C, **multiplicada por el $\phi$** de C-C.9.3.2, C-C.9.3.4 y C-C.9.3.5 (<NormaRef s="C-C.9.3.1" pag="C-232" />).
+
+### C-C.9.3.2 — Factores de reducción de resistencia φ
+
+<TablaNorma numero="C-C.9.3.2.1 a C-C.9.3.2.7" titulo="Factores φ del Apéndice C-C frente a los de C.9.3" pag="C-232" nota="Columna φ de C-C transcrita del PDF (C-232 a C-233) y verificada contra la imagen; la columna de C.9 es de C.9.3.2 a C.9.3.5 (C-68 y C-69). Las filas en negrita son las que cambian.">
+
+| Numeral C-C | Solicitación | $\phi$ C-C | $\phi$ C.9 |
+|---|---|---:|---:|
+| C-C.9.3.2.1 | Secciones controladas por tracción (C.10.3.4) | 0.90 | 0.90 |
+| C-C.9.3.2.2(a) | Controladas por compresión: refuerzo en espiral (C.10.9.3) | 0.75 | 0.75 |
+| **C-C.9.3.2.2(b)** | **Controladas por compresión: otros elementos reforzados** | **0.70** | **0.65** |
+| **C-C.9.3.2.3** | **Cortante y torsión** | **0.85** | **0.75** |
+| **C-C.9.3.2.4** | **Aplastamiento en el concreto** (excepto anclajes de postensado y puntal-tensor) | **0.70** | **0.65** |
+| C-C.9.3.2.5 | Zonas de anclaje de postensado | 0.85 | 0.85 |
+| **C-C.9.3.2.6** | **Modelos puntal-tensor (Apéndice C-A)**: puntales, tensores, zonas nodales y áreas de aplastamiento | **0.85** | **0.75** |
+| **C-C.9.3.2.7** | **Flexión sin carga axial en elementos preesforzados donde el embebido del torón es menor que la longitud de desarrollo (C.12.9.1.1)** | **0.85** | **0.75 hasta el fin de la transferencia, luego lineal hasta 0.90** |
+| C-C.9.3.4(a) | DMO o DES: cortante si $V_n$ < cortante asociado a $M_n$ | 0.60 | 0.60 |
+| C-C.9.3.4(c) | DMO o DES: nudos y vigas de acople reforzadas en diagonal, cortante | 0.85 | 0.85 |
+| **C-C.9.3.5** | **Concreto estructural simple (Capítulo C.22)**: flexión, compresión, cortante y aplastamiento | **0.65** | **0.60** |
+
+</TablaNorma>
+
+**Zona de transición.** Para secciones con $\varepsilon_t$ entre el límite controlado por compresión y 0.005, **$\phi$ crece linealmente** desde el valor de compresión (0.75 con espiral, **0.70** en otros) hasta 0.90 al aumentar $\varepsilon_t$ (<NormaRef s="C-C.9.3.2.2" pag="C-232" />). El límite controlado por compresión es el de C.10.3.3 (0.002 para Grado 420).
+
+<Ecuacion num="C-C.9.3.2.2 (forma explícita)" titulo="φ en la zona de transición (expresión del autor)">
+
+$$
+\phi=\phi_c+\left(0.90-\phi_c\right)\frac{\varepsilon_t-\varepsilon_{cl}}{0.005-\varepsilon_{cl}}\qquad \varepsilon_{cl}\le\varepsilon_t\le 0.005
+$$
+
+- $\phi_c$ = 0.75 (espiral) ó 0.70 (otros); $\varepsilon_{cl}$ = 0.002 para Grado 420.
+- La norma lo expresa con palabras; la forma explícita es del autor.
+
+</Ecuacion>
+
+**Alternativa por carga axial con el Apéndice C-B.** Para elementos con $f_y \le 420$ MPa, refuerzo simétrico y $(d_s-d')/h \ge 0.70$, $\phi$ aumenta linealmente hasta 0.90 a medida que $\phi P_n$ decrece desde $0.10f'_cA_g$ hasta cero; para los demás elementos reforzados, desde $0.10f'_cA_g$ **o $\phi P_b$, el que sea menor**, hasta cero. Véase [el Apéndice C-B](/titulo-c/apendice-cb).
+
+### C-C.9.3.3 a C-C.9.3.5
+
+- **C-C.9.3.3.** Las longitudes de desarrollo del Capítulo C.12 **no llevan factor $\phi$** (<NormaRef s="C-C.9.3.3" pag="C-232" />).
+- **C-C.9.3.4.** Para estructuras con capacidad de disipación de energía **moderada (DMO)** o **especial (DES)** que resisten sismo con muros estructurales (vaciados en sitio o prefabricados) o pórticos resistentes a momento, $\phi$ se modifica (<NormaRef s="C-C.9.3.4" pag="C-232" />):
+  - **(a)** $\phi$ para **cortante = 0.60** en cualquier elemento diseñado para resistir $E$ si su resistencia nominal a cortante es **menor** que el cortante asociado a su resistencia nominal a flexión (con las cargas axiales mayoradas más críticas, incluyendo $E$);
+  - **(b)** en **diafragmas**, $\phi$ de cortante no excede el mínimo $\phi$ de cortante usado para los elementos verticales del sistema primario;
+  - **(c)** en **nudos y vigas de acople reforzadas en diagonal**, $\phi$ de cortante = **0.85**.
+- **C-C.9.3.5.** En el Capítulo C.22, $\phi$ = **0.65** para flexión, compresión, cortante y aplastamiento en concreto estructural simple (<NormaRef s="C-C.9.3.5" pag="C-233" />); en el cuerpo (C.9.3.5) es 0.60.
+
+## Comparación con B.2.4
+
+Las combinaciones de carga del cuerpo de C.9 son **las mismas siete de B.2.4** del Título B (C.9-1 a C.9-7 = B.2.4-1 a B.2.4-7; <NormaRef s="B.2.4" pag="B-6" />). Por tanto, usar C.9 equivale a usar B.2.4. El Apéndice C-C **no** es una variante de B.2.4: es el juego anterior, con otros coeficientes. Véase [el Capítulo B.2](/titulo-b/b2).
+
+## Ejemplos resueltos
+
+### Cargas gravitacionales: ¿qué conjunto exige más?
+
+<Ejemplo numero={1} titulo="Resistencia nominal requerida con C.9 y con C-C (carga muerta 40, viva 20)">
+Un efecto lineal de cargas (por ejemplo, un momento por metro, en kN·m/m) vale $D$ = {ej1.cargas.D} y $L$ = {ej1.cargas.L}, sin viento, sismo ni otras cargas. Comparar la resistencia nominal que exige cada conjunto, con el $\phi$ que le corresponde, para distintas solicitaciones.
+
+<Paso titulo="Resistencia requerida con el cuerpo (C.9)" ref="C.9-1 a C.9-7">
+C.9-1: 1.4 × {ej1.cargas.D} = {f(ej1.l9[0].valor, 1)}; C.9-2: 1.2 × {ej1.cargas.D} + 1.6 × {ej1.cargas.L} = **{f(ej1.u92, 1)}** (gobierna). Las demás (C.9-3 a C.9-7) quedan por debajo. $U_{C.9}$ = {f(ej1.c9.uC9, 1)} ({ej1.c9.ecuacionC9}).
+</Paso>
+<Paso titulo="Resistencia requerida con C-C" ref="C-C.9-1">
+C-C.9-1: 1.4 × {ej1.cargas.D} + 1.7 × {ej1.cargas.L} = {ej1.cargas.D * 1.4} + {ej1.cargas.L * 1.7} = **{f(ej1.c9.uCC, 1)}**. Es la única ecuación aplicable (no hay $W$, $E$, $H$ ni $T$). $U_{C-C}$ = {f(ej1.c9.uCC, 1)}, {f((ej1.c9.uCC / ej1.c9.uC9 - 1) * 100, 1)} % mayor que con C.9.
+</Paso>
+<Paso titulo="Resistencia nominal necesaria R = U/φ" ref="C.9.3.2, C-C.9.3.2">
+
+| Solicitación | $\phi$ C.9 | $\phi$ C-C | $R_n$ C.9 | $R_n$ C-C | $R_{n,CC}/R_{n,9}$ | Más exigente |
+|---|---:|---:|---:|---:|---:|---|
+| {ej1.filas[0].nombre} | {ej1.filas[0].c.phiC9.toFixed(2)} | {ej1.filas[0].c.phiCC.toFixed(2)} | {f(ej1.filas[0].c.reqC9, 1)} | {f(ej1.filas[0].c.reqCC, 1)} | {f(ej1.filas[0].c.razon, 3)} | {ej1.filas[0].c.masExigente} |
+| {ej1.filas[1].nombre} | {ej1.filas[1].c.phiC9.toFixed(2)} | {ej1.filas[1].c.phiCC.toFixed(2)} | {f(ej1.filas[1].c.reqC9, 1)} | {f(ej1.filas[1].c.reqCC, 1)} | {f(ej1.filas[1].c.razon, 3)} | {ej1.filas[1].c.masExigente} |
+| {ej1.filas[2].nombre} | {ej1.filas[2].c.phiC9.toFixed(2)} | {ej1.filas[2].c.phiCC.toFixed(2)} | {f(ej1.filas[2].c.reqC9, 1)} | {f(ej1.filas[2].c.reqCC, 1)} | {f(ej1.filas[2].c.razon, 3)} | {ej1.filas[2].c.masExigente} |
+| {ej1.filas[3].nombre} | {ej1.filas[3].c.phiC9.toFixed(2)} | {ej1.filas[3].c.phiCC.toFixed(2)} | {f(ej1.filas[3].c.reqC9, 1)} | {f(ej1.filas[3].c.reqCC, 1)} | {f(ej1.filas[3].c.razon, 3)} | {ej1.filas[3].c.masExigente} |
+| {ej1.filas[4].nombre} | {ej1.filas[4].c.phiC9.toFixed(2)} | {ej1.filas[4].c.phiCC.toFixed(2)} | {f(ej1.filas[4].c.reqC9, 1)} | {f(ej1.filas[4].c.reqCC, 1)} | {f(ej1.filas[4].c.razon, 3)} | {ej1.filas[4].c.masExigente} |
+| {ej1.filas[5].nombre} | {ej1.filas[5].c.phiC9.toFixed(2)} | {ej1.filas[5].c.phiCC.toFixed(2)} | {f(ej1.filas[5].c.reqC9, 1)} | {f(ej1.filas[5].c.reqCC, 1)} | {f(ej1.filas[5].c.razon, 3)} | {ej1.filas[5].c.masExigente} |
+
+Por ejemplo, en flexión con $\phi$ = 0.90 en ambos: 80/0.90 = {f(ej1.filas[0].c.reqC9, 1)} contra 90/0.90 = {f(ej1.filas[0].c.reqCC, 1)}. En cortante: 80/0.75 = {f(ej1.filas[3].c.reqC9, 1)} contra 90/0.85 = {f(ej1.filas[3].c.reqCC, 1)}.
+</Paso>
+<Resultado>
+Con L/D = 0.5, C-C exige **más** resistencia nominal en flexión y en compresión con espiral (×{f(ej1.filas[0].c.razon, 3)}, porque el $\phi$ es el mismo y $U_{C-C}/U_{C.9}$ = {f(ej1.c9.uCC / ej1.c9.uC9, 3)}), más en columnas con estribos y en aplastamiento (×{f(ej1.filas[1].c.razon, 3)}) y **apenas menos** en cortante y en puntal-tensor (×{f(ej1.filas[3].c.razon, 3)}). Ningún conjunto es siempre más exigente: el resultado cambia con la solicitación y con L/D. Por eso la norma no permite mezclarlos. Las cargas son supuestos del autor.
+</Resultado>
+</Ejemplo>
+
+### Gravedad con sismo y viento
+
+<Ejemplo numero={2} titulo="Con sismo: C-C.9-2 frente a C.9-5">
+Con los mismos $D$ = 40 y $L$ = 20 se añade un sismo a nivel de resistencia $E$ = {ej2.cargas.E} (mismo tipo de efecto y unidades). Evaluar ambos conjuntos.
+
+<Paso titulo="C.9 (cuerpo)" ref="C.9-5, C.9-7">
+C.9-5: 1.2 × 40 + 1.0 × {ej2.cargas.E} + 1.0 × 20 = **{f(ej2.cc.uC9, 1)}** (gobierna, {ej2.cc.ecuacionC9}). C.9-7 (cargas permanentes reducidas): 0.9 × 40 + {ej2.cargas.E} = {f(g(ej2.l9, 'C.9-7').valor, 1)}; con el sentido contrario del sismo: {f(ej2.sentido9.valor, 1)}.
+</Paso>
+<Paso titulo="C-C" ref="C-C.9-2, C-C.9-3">
+C-C.9-2 con E: 0.75 (1.4 × 40 + 1.7 × 20) + 1.0 × {ej2.cargas.E} = 0.75 × 90 + {ej2.cargas.E} = **{f(ej2.cc.uCC, 1)}** (gobierna, {ej2.cc.ecuacionCC}). C-C.9-3: 0.9 × 40 + {ej2.cargas.E} = {f(g(ej2.lcc, 'C-C.9-3', 'E').valor, 1)}; con sentido contrario: {f(ej2.sentido.valor, 1)}. C-C.9-1 (solo gravedad) da 90.
+</Paso>
+<Paso titulo="Comparación" ref="C.9.1.3">
+Con $\phi$ = 0.90 en flexión: $R_n$ = {f(ej2.cc.reqC9, 2)} (C.9) contra {f(ej2.cc.reqCC, 2)} (C-C), cociente {f(ej2.cc.razon, 4)}: prácticamente idénticos. Si el sismo está a nivel de servicio (1.4E): C.9-5 da {f(ej2.serv.uC9, 1)} y C-C.9-2 da {f(ej2.serv.uCC, 1)}.
+</Paso>
+<Resultado>
+Con sismo, ambos conjuntos dan resistencias requeridas casi iguales ({f(ej2.cc.uC9, 1)} contra {f(ej2.cc.uCC, 1)}). La diferencia entre los dos juegos se concentra en las **cargas gravitacionales** (ejemplo 1), no en las combinaciones con sismo. Los datos son supuestos del autor.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Con viento y φ en la zona de transición">
+Con $D$ = 40, $L$ = 20 y $W$ = {ej3.cargas.W}: comparar la resistencia requerida y el $\phi$ de una sección con $\varepsilon_t$ = {ej3.epsT} (Grado 420).
+
+<Paso titulo="Resistencia requerida" ref="C.9-3, C.9-4, C-C.9-2">
+C.9-3: 1.2 × 40 + (1.0 × 20 ó 0.8 × {ej3.cargas.W}) = {f(g(ej3.l9, 'C.9-3').valor, 1)} (cubierta no hay); C.9-4: 1.2 × 40 + 1.6 × {ej3.cargas.W} + 1.0 × 20 = **{f(g(ej3.l9, 'C.9-4').valor, 1)}**.
+
+C-C.9-2 con W: 0.75 × 90 + 1.6 × {ej3.cargas.W} = 67.5 + 40 = **{f(g(ej3.lcc, 'C-C.9-2', 'W').valor, 1)}**; con 1.3W (viento sin reducir por direccionalidad): 67.5 + 32.5 = **{f(g(ej3.w13, 'C-C.9-2', 'W').valor, 1)}**.
+</Paso>
+<Paso titulo="φ en la transición (εt = 0.0035)" ref="C.9.3.2.2, C-C.9.3.2.2">
+Con C.9: $\phi$ = 0.65 + 0.25 × (0.0035 − 0.002)/0.003 = **{ej3.phi9.toFixed(3)}** (estribos), **{ej3.phi9e.toFixed(3)}** (espiral). Con C-C: $\phi$ = 0.70 + 0.20 × 0.5 = **{ej3.phiCC.toFixed(3)}** y 0.75 + 0.15 × 0.5 = **{ej3.phiCCe.toFixed(3)}**. Con la alternativa por carga axial de C-B y $\phi P_n$ = 224 kN (umbral 448 kN, columna 400 × 400): $\phi$ = 0.90 − 0.20 × 0.5 = **{ej3.axial9.toFixed(3)}**.
+</Paso>
+<Paso titulo="Identidad con B.2.4" ref="B.2.4">
+Las siete combinaciones de C.9 dan, para estas cargas, los mismos valores que B.2.4-1 a B.2.4-7: **{ej3.ident ? 'coinciden' : 'no coinciden'}** (verificado con la función `c9IgualAB24`).
+</Paso>
+<Resultado>
+Con viento, C-C.9-2 ({f(g(ej3.lcc, 'C-C.9-2', 'W').valor, 1)}) y C.9-4 ({f(g(ej3.l9, 'C.9-4').valor, 1)}) difieren en {f(Math.abs(g(ej3.lcc, 'C-C.9-2', 'W').valor - g(ej3.l9, 'C.9-4').valor), 1)} unidades; en cortante, el cociente de resistencias nominales requeridas es {f(ej3.cmp.razon, 3)}. El $\phi$ de la transición es más alto con C-C porque su extremo de compresión (0.70) es mayor que el del cuerpo (0.65). Los datos son supuestos del autor.
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="Sobre los números">
+Las funciones usadas están en `src/lib/nsr10/factoresAlternos.ts` (Ecs. C-C.9-1 a C-C.9-6, φ de C-C, comparación con C.9 y verificación de la identidad con B.2.4) y en `src/data/apendicesC.ts` (tabla comparada de φ), con sus pruebas. La comparación $U/\phi$ es un criterio **auxiliar** del autor para visualizar las diferencias; la norma no la propone y exige usar cada conjunto completo.
+</Callout>
+
+<Detalle titulo="Erratas y rarezas del PDF en este apéndice">
+
+- **Numeración de los títulos:** «C.C.9.2», «C.C.9.2.1», «C.C.9.2.2» aparecen con punto entre las dos C; las ecuaciones y el resto del texto usan «C-C.9.n». Aquí se citan todas como «C-C».
+- **C-C.9.1 dice «Apéndice C»** donde se entiende «Apéndice C-C»: la frase «los factores de combinación de carga y de reducción de resistencia del Apéndice C» se refiere a este mismo apéndice.
+- **C-C.9.2.2 y las combinaciones con $H$:** C-C.9-4 solo combina $H$ con $D$ y $L$; el texto no da combinaciones de $H$ con $W$ o $E$ (como C.9-6 y C.9-7).
+- **Cargas de cubierta:** C-C no menciona $L_r$, $G$ ni $L_e$ (carga viva de cubierta, granizo, empozamiento). Observación del autor: al usar C-C esas cargas no tienen coeficiente propio; en la práctica se tratan como parte de $L$ (criterio del diseñador, no de la norma).
+- **Símbolo $d_s$:** la regla del $\phi$ por carga axial (C-C.9.3.2.2) escribe $(d_s-d')/h$ sin definir $d_s$.
+- **Remisiones a numerales de C.10:** C-C.9.3.2.1 y C-C.9.3.2.2 remiten a C.10.3.4 y C.10.3.3, que el Apéndice C-B reemplaza cuando se usa; véase la observación en [el Apéndice C-B](/titulo-c/apendice-cb).
+- **Concreto simple:** C-C.9.3.5 da φ = 0.65 y C.9.3.5 da φ = 0.60.
+- **Página C-234:** rótulo «Notas:» sin contenido.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Mezclar conjuntos**: combinaciones de C.9 con $\phi$ de C-C, o al revés (<NormaRef s="C.9.1.3" pag="C-67" />).
+- **Usar $\phi$ = 0.85 en cortante con $1.2D + 1.6L$**: el 0.85 es del juego que usa $1.4D + 1.7L$.
+- **Aplicar la reducción de $L$ a 0.5** (C.9.2.1(a)): C-C no la trae.
+- **Olvidar el $1.4F$** en las combinaciones con $L$, o el factor 1.2 en el gato de postensado (C-C.9.2.4, C-C.9.2.7).
+- **Usar 0.9D sin $L$ = 0** en C-C.9-4 cuando $D$ o $L$ reducen el efecto de $H$.
+- **Usar 1.0E con un sismo de servicio**: debe ser 1.4E; y 1.3W solo si $W$ no se redujo por direccionalidad.
+- **Pensar que C-C es siempre más conservador**: depende de la solicitación y de L/D (ejemplo 1).
+- **Aplicar el $\phi$ de 0.70 de compresión en la transición** sin comprobar que el elemento cumple las condiciones de C-C.9.3.2.2.
+</Callout>
+
+## Resumen en una línea
+
+**El Apéndice C-C permite diseñar con $U = 1.4D + 1.7L$ (y sus variantes con $W$, $E$, $H$, $F$, $T$) y $\phi$ de 0.90, 0.75, 0.70 y 0.85, pero solo como paquete completo: nunca mezclado con las combinaciones de C.9 (= B.2.4) ni con sus $\phi$.**

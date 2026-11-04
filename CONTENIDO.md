@@ -97,3 +97,19 @@ Gestor de paquetes: **pnpm** (`pnpm exec vitest run`, `pnpm exec astro build`; n
 - **Calculadoras de B** (ya registradas en `src/data/calculadoras.ts` y en `CalculadoraEmbed.astro`; hay *stubs* en `src/components/calc/`): cada agente **reemplaza el contenido del archivo stub que le corresponde** (mismo nombre, `export default function`), **sin editar** `calculadoras.ts`, `CalculadoraEmbed.astro` ni otros archivos compartidos. Reutiliza `components/calc/ui.tsx` (`useNum`, `Campo`, `Valor`, `Grupo`, `Aviso`, `PieCalc`…) y `components/ui/chart.tsx` + Recharts. Sigue el patrón de `EspectroDiseno.tsx` / `FuerzaHorizontal.tsx`.
 - Los ejemplos y las calculadoras deben compartir las mismas funciones de `src/lib/nsr10`.
 - No inventes valores: si una tabla o figura no se puede leer con certeza en la imagen, dilo en el reporte y no la incluyas como dato.
+
+---
+
+# Título C (Concreto estructural) — diferencias respecto a A y B
+
+Mismas reglas que el Título B (pnpm; stubs de calculadoras; no editar archivos compartidos). Específico de C:
+
+- **Colección** `src/content/titulo-c/`. Ids: `c1`…`c23` (codigo `C.n`, `tipo: capitulo`, `orden: n`) y apéndices `apendice-ca`…`apendice-cg` (codigo `C-A`…`C-G`, `tipo: apendice`, `orden` 24…30). Nombre de archivo = id (`c10.mdx`, `apendice-cd.mdx`).
+- **Páginas:** página PDF = impresa "C-n" + **302** (C-1 = PDF 303). `paginaPdf` y los `pag="C-n"` usan estas reglas. Los apéndices siguen la numeración C-n (p. ej. Apéndice C-A empieza en C-223).
+- **Texto por página:** `.cache/texto-c/pNNN.txt` (PDF 303–564). Imágenes: `.../python.exe scripts/render-paginas.py <pág> [<fin>] --zoom 2`. Figuras: `scripts/recortar-figura.py <pág> <nombre> --titulo c --bbox …` → `public/img/titulo-c/` y `<Figura src="/img/titulo-c/….png" …/>`.
+- **Mapa de páginas (PDF):** C.1 303–306 · C.2 307–326 · C.3 327–336 · C.4 337–340 · C.5 341–348 · C.6 349–352 · C.7 353–362 · C.8 363–368 · C.9 369–376 · C.10 377–388 · C.11 389–408 · C.12 409–420 · C.13 421–438 · C.14 439–442 · C.15 443–448 · C.16 449–452 · C.17 453–454 · C.18 455–468 · C.19 469–472 · C.20 473–476 · C.21 477–502 · C.22 503–508 · C.23 509–524 · C-A 525–528 · C-B 529–532 · C-C 533–536 · C-D 537–550 · C-E 551–552 · C-F 553–560 · C-G 561–564.
+- **Unidades:** el Título C usa SI (MPa, kN, m, mm). `f′c` se escribe `f'_c` en MDX/KaTeX como `f'_c`; los radicales de las ecuaciones **salen perdidos del texto extraído** (p. ej. `0.17λ fc′bwd` es `0.17 λ √f′c · b_w d`): verifica siempre contra la imagen. Los términos con `√f′c` deben respetar los límites del PDF (p. ej. √f′c ≤ 8.3 MPa en C.11.1.2).
+- **Base compartida (no editar):** `src/lib/nsr10/concreto.ts` exporta `ES_ACERO_MPA`, `beta1(fc)`, `moduloElasticidad(fc, wc?)`, `moduloRotura(fc, lambda?)`, `lambdaConcreto(tipo)`, `lambdaPorHendimiento(fct, fc)`, `raizFcCortante(fc)`. Impórtalo en vez de reescribir esas ecuaciones. Si necesitas un helper común nuevo, ponlo en tu propio módulo `src/lib/nsr10/<tema>.ts`.
+- **Calculadoras de C** (ya registradas en `src/data/calculadoras.ts` y en `CalculadoraEmbed.astro`; *stubs* en `src/components/calc/`; el agente dueño reemplaza el stub): `RecubrimientoDurabilidad` (c4), `ResistenciaPromedio` (c5), `DetallesRefuerzo` (c7), `PropiedadesConcreto` y `EspesorMinimo` (c9), `FlexionViga` y `ColumnaInteraccion` (c10), `CortanteViga` y `Punzonamiento` (c11), `LongitudDesarrollo` (c12), `LosaDosDirecciones` (c13), `ZapataDiseno` (c15), `PreesforzoEsfuerzos` (c18), `ConfinamientoColumna` (c21), `AnclajeConcreto` (apendice-cd). Si el PDF no permite construir una con seguridad, no la inventes: deja el stub y repórtalo.
+- **Sidebar:** la columna de código es angosta; los códigos `C.10`, `C-A` caben.
+- **Verificación:** `pnpm exec vitest run <tus tests>` y `pnpm exec astro build --outDir .cache/build-<tu-id>` (outDir propio). Errores en archivos de otros: ignóralos o reintenta.

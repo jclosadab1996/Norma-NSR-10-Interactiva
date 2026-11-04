@@ -1,0 +1,790 @@
+---
+codigo: 'C.13'
+tipo: capitulo
+titulo: 'Sistemas de losa en una y dos direcciones'
+resumen: 'Definiciones de franjas, ábacos y vigas; refuerzo y aberturas; transferencia de momento a la columna; análisis aproximado de losas en una dirección; método de diseño directo (Mo, reparto, franjas de columna y centrales, vigas), pórtico equivalente, métodos plásticos y losas sobre vigas rígidas con las Tablas C.13.9-1 a C.13.9-4.'
+objetivos:
+  - 'Distinguir losas en una y en dos direcciones y definir franjas de columna y centrales, ábacos y vigas incluidas'
+  - 'Verificar las limitaciones del método de diseño directo y calcular Mo (Ec. C.13-4) con su distribución a momentos positivos, negativos y franjas'
+  - 'Interpolar los porcentajes de franja de columna con ℓ2/ℓ1, αf1ℓ2/ℓ1 y βt, y hallar el reparto a vigas y franjas centrales'
+  - 'Calcular la fracción γf del momento no balanceado que pasa por flexión entre losa y columna (Ec. C.13-1)'
+  - 'Usar las Tablas C.13.9-1 a C.13.9-4 para losas apoyadas en vigas rígidas o muros'
+paginasNorma: 'C-119 a C-136'
+paginaPdf: 421
+orden: 13
+calculadoras: ['losa-dos-direcciones']
+nivel: 'avanzado'
+---
+
+import {
+  disenoDirectoPanel,
+  verificarLimitesDisenoDirecto,
+  momentoEstaticoTotal,
+  gammaF,
+  gammaFAumentado,
+  momentosC139,
+  coeficientesC139,
+  momentoUnaDireccion,
+  pctFranjaColumnaNegInterior,
+  pctFranjaColumnaPositivo,
+  pctFranjaColumnaNegExterior,
+  fraccionDeVigas,
+  constanteTorsion,
+  momentoColumnaInterior,
+  cortantePrimerApoyoInterior,
+  cortanteDemasApoyos,
+  puedeUsarCoeficientesUnaDireccion,
+  alfaF,
+  betaT,
+} from '../../lib/nsr10/losasConcreto';
+import { espesorMinimoDosDirecciones } from '../../lib/nsr10/resistenciaServicio';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const D = 7.0, L = 3.0, l1 = 7.0, l2 = 6.0, c = 0.5;
+  const qu = 1.2 * D + 1.6 * L;
+  const ln = l1 - c;
+  const lim = verificarLimitesDisenoDirecto({ vanosDireccion1: 4, vanosDireccion2: 3, luzMayor: l1, luzMenor: l2, lucesContiguas: [7, 7, 7], desalineamientoFraccion: 0, D, L });
+  const r = disenoDirectoPanel({ qu, l1, l2, ln, vano: 'interior', alfaF1: 0 });
+  const qDu = 1.2 * D, qLu = 1.6 * L;
+  const mCol = momentoColumnaInterior({ qDu, qLu, l2, ln, qDuP: qDu, l2P: l2, lnP: 5.5 });
+  const h = espesorMinimoDosDirecciones({ lnMm: ln * 1000, beta: 1.0, alfaFm: 0, fy: 420, abaco: 'sin-abaco', panel: 'interior' });
+  return { D, L, l1, l2, c, qu, ln, lim, r, qDu, qLu, mCol, h, lnMin: 0.65 * l1 };
+})();
+
+export const ej2 = (() => {
+  const l1 = 5.0, l2 = 6.0, ln = 4.5, qu = 15, alfa1 = 0.5, bt = 1.0;
+  const l2l1 = l2 / l1;
+  const aL = alfa1 * l2l1;
+  const r = disenoDirectoPanel({ qu, l1, l2, ln, vano: 'losa-con-vigas', alfaF1: alfa1, betaT: bt });
+  const neg0 = pctFranjaColumnaNegInterior(l2l1, 0);
+  const neg1 = pctFranjaColumnaNegInterior(l2l1, 1);
+  const pos0 = pctFranjaColumnaPositivo(l2l1, 0);
+  const pos1 = pctFranjaColumnaPositivo(l2l1, 1);
+  const ext0 = pctFranjaColumnaNegExterior(l2l1, 0, bt);
+  const ext1 = pctFranjaColumnaNegExterior(l2l1, 1, bt);
+  return { l1, l2, ln, qu, alfa1, bt, l2l1, aL, r, neg0, neg1, pos0, pos1, ext0, ext1, viga: fraccionDeVigas(aL) };
+})();
+
+export const ej3 = (() => {
+  const malo = verificarLimitesDisenoDirecto({ vanosDireccion1: 3, vanosDireccion2: 2, luzMayor: 9, luzMenor: 4, lucesContiguas: [9, 5.5, 7], desalineamientoFraccion: 0.12, D: 4.0, L: 10.0, vigas: { alfaF1: 6, alfaF2: 1, l1: 6, l2: 6 } });
+  const bueno = verificarLimitesDisenoDirecto({ vanosDireccion1: 3, vanosDireccion2: 3, luzMayor: 8, luzMenor: 6, lucesContiguas: [8, 7, 7.5], desalineamientoFraccion: 0.05, D: 6.0, L: 4.0, vigas: { alfaF1: 1.2, alfaF2: 1.0, l1: 8, l2: 6 } });
+  return { malo, bueno };
+})();
+
+export const ej4 = (() => {
+  const c1 = 500, c2 = 500, d = 180;
+  const b1 = c1 + d, b2 = c2 + d;
+  const gf = gammaF(b1, b2);
+  const Mu = 80;
+  const aum = gammaFAumentado({ b1, b2, caso: 'interior-o-borde-perpendicular', VuSobrePhiVc: 0.35, epsilonT: 0.012 });
+  const noAum = gammaFAumentado({ b1, b2, caso: 'interior-o-borde-perpendicular', VuSobrePhiVc: 0.6, epsilonT: 0.012 });
+  const h = 220;
+  return { c1, c2, d, b1, b2, gf, Mu, aum, noAum, bEf: c2 + 3 * h, h };
+})();
+
+export const ej5 = (() => {
+  const lna = 4.0, lnb = 5.0, qDu = 1.2 * 6.0, qLu = 1.6 * 3.0;
+  const r = momentosC139({ caso: 4, lna, lnb, qDu, qLu });
+  const co = coeficientesC139('negativo', 4, 0.8);
+  const cd = coeficientesC139('positivo-D', 4, 0.8);
+  const cl = coeficientesC139('positivo-L', 4, 0.8);
+  const rep = coeficientesC139('reparto', 4, 0.8);
+  const interp = coeficientesC139('negativo', 4, 0.825);
+  return { lna, lnb, qDu, qLu, qu: qDu + qLu, r, co, cd, cl, rep, interp };
+})();
+
+export const unaDir = (() => {
+  const wu = 14, ln = 4;
+  const c = { pos11: momentoUnaDireccion(wu, ln, 11), pos14: momentoUnaDireccion(wu, ln, 14), pos16: momentoUnaDireccion(wu, ln, 16), neg9: momentoUnaDireccion(wu, ln, 9), neg10: momentoUnaDireccion(wu, ln, 10), neg11: momentoUnaDireccion(wu, ln, 11) };
+  return { wu, ln, ...c, v1: cortantePrimerApoyoInterior(wu, ln), v2: cortanteDemasApoyos(wu, ln), puede: puedeUsarCoeficientesUnaDireccion({ vanos: 3, lucesLibres: [4, 4.4], L: 3, D: 5 }) };
+})();
+
+export const torsion = (() => {
+  const C = constanteTorsion([{ x: 300, y: 500 }]);
+  const Ecb = 24000, Ecs = 24000, Is = (6000 * 220 ** 3) / 12;
+  return { C, Is, bt: betaT(Ecb, C, Ecs, Is), a: alfaF(Ecb, (300 * 500 ** 3) / 12, Ecs, Is) };
+})();
+
+## Idea central del capítulo
+
+El Capítulo C.13 enseña **cómo se reparten los momentos de una losa entre sus franjas, sus vigas y sus columnas**. Una losa apoyada solo en dos bordes (o con relación de luces mayor que 2) trabaja en **una dirección** y se analiza como una viga ancha; una losa apoyada en columnas y vigas en las dos direcciones trabaja en **dos direcciones** y necesita un método que reparta el momento estático total del vano. La norma da dos métodos de análisis para cargas gravitacionales, el **método de diseño directo** (C.13.6) y el del **pórtico equivalente** (C.13.7), además de métodos plásticos (C.13.8) y un método de coeficientes para losas sobre vigas rígidas o muros (C.13.9).
+
+- **Franjas:** la franja de columna ocupa 0.25 ℓ a cada lado del eje de columnas; el resto es franja central (<NormaRef s="C.13.2.1" pag="C-120" />).
+- **Momento estático:** en cada vano $M_o = q_u \ell_2 \ell_n^2/8$ (Ec. C.13-4) se reparte en momento negativo y positivo y luego a franjas, vigas y centrales con tablas.
+- **Transferencia a la columna:** una fracción $\gamma_f$ del momento no balanceado pasa por flexión; el resto por excentricidad de cortante (<NormaRef s="C.13.5.3" pag="C-122" />).
+
+<Callout tipo="importante" titulo="El método directo tiene límites; el pórtico equivalente casi no">
+El método de diseño directo solo se permite si se cumplen **todas** las limitaciones de C.13.6.1 (tres vanos continuos, paneles rectangulares con relación ≤ 2, carga viva ≤ 2 veces la muerta, etc.). Si alguna falla, se usa el pórtico equivalente (C.13.7) u otro análisis que cumpla equilibrio y compatibilidad (<NormaRef s="C.13.6.1" pag="C-124" />, <NormaRef s="C.13.5.1" pag="C-122" />).
+</Callout>
+
+## C.13.1 — Alcance
+
+El capítulo se aplica al diseño de losas reforzadas para flexión en una o dos direcciones, con o sin vigas entre apoyos, **macizas o nervadas** (con aligeramientos permanentes o removibles, con o sin loseta inferior) (<NormaRef s="C.13.1.1" pag="C-119" />, <NormaRef s="C.13.1.3" pag="C-119" />).
+
+- **Apoyo efectivo (C.13.1.2):** $c_1$, $c_2$ y $\ell_n$ se basan en un área de apoyo efectiva: la intersección de la cara inferior de la losa (o del ábaco o descolgado) con el mayor cono, pirámide o cuña dentro de la columna y su capitel o ménsula, con superficies a **no más de 45°** del eje de la columna (<NormaRef s="C.13.1.2" pag="C-119" />).
+- **Espesor mínimo (C.13.1.4):** el de C.9.5 (Tablas C.9.5(a) y C.9.5(c), Ecs. C.9-12 y C.9-13), ya tratados en el Capítulo C.9 (<NormaRef s="C.13.1.4" pag="C-119" />).
+- **Losa nervada en dos direcciones sobre columnas (incluido el reticular celulado):** debe tener **capiteles o ampliaciones** alrededor de las columnas de al menos **1/6 de la luz** medida centro a centro en cada dirección (<NormaRef s="C.13.1.5" pag="C-119" />).
+- **Losa en una dirección (C.13.1.6):** cuando (1) tiene dos bordes libres y vigas o muros en los otros dos, (2) es un panel aproximadamente rectangular apoyado en los cuatro lados con **luz larga/luz corta mayor que 2**, o (3) es nervada con los nervios principalmente en una dirección (<NormaRef s="C.13.1.6" pag="C-119" />).
+- **Análisis (C.13.1.7):** vale cualquier método del Capítulo C.8 o de este capítulo; con un método aproximado **no se permite redistribuir momentos inelásticamente** (C.8.4 y C.18), salvo que se diga expresamente (<NormaRef s="C.13.1.7" pag="C-119" />).
+- **Prefabricados (C.13.1.8):** se permiten elementos prefabricados que cumplan C.16 y C.17 (<NormaRef s="C.13.1.8" pag="C-119" />).
+- **Sismo (C.13.1.9, que aparece dos veces en el PDF y C.13.1.10):** si la losa forma parte del sistema sísmico (diafragmas), debe cumplir este capítulo, el C.21 y el Título A. El uso como **sistema principal de resistencia sísmica** de sistemas losa-columna (macizos o nervados, donde la losa cumple la función de viga) y del **reticular celulado** debe cumplir las zonas de amenaza y las alturas máximas del Título A; para el análisis ante cargas horizontales se usan los requisitos de este capítulo (<NormaRef s="C.13.1.9" pag="C-119" />, <NormaRef s="C.13.1.10" pag="C-120" />).
+- **Nervaduras (C.13.1.11 y C.13.1.12):** la construcción con nervaduras cumple C.8.13. Si se excede la separación máxima entre nervaduras de C.8.13, o si hay **menos de 4 nervaduras** en la dirección considerada dentro del panel, las nervaduras se consideran **elementos aislados** y no se rigen por este capítulo; la losa entre nervios se diseña como losa en una o dos direcciones (<NormaRef s="C.13.1.12" pag="C-120" />).
+
+## C.13.2 — Generalidades
+
+<Ecuacion num="C.13.2.1 (definición)" titulo="Franja de columna">
+
+$$
+\text{ancho a cada lado del eje de columna} = \min(0.25\,\ell_2,\ 0.25\,\ell_1)
+$$
+
+- Las franjas de columna **incluyen las vigas**, si las hay. Una **franja central** es la limitada por dos franjas de columna (<NormaRef s="C.13.2.1" pag="C-120" />, <NormaRef s="C.13.2.2" pag="C-120" />).
+
+</Ecuacion>
+
+- **Panel de losa (C.13.2.3):** limitado por los ejes de las columnas, vigas o muros de sus bordes (<NormaRef s="C.13.2.3" pag="C-120" />).
+- **Viga en elementos monolíticos o totalmente compuestos (C.13.2.4):** incluye la parte de losa a cada lado, a una distancia igual a la proyección de la viga hacia arriba o hacia abajo de la losa (la mayor), pero **no más de 4 veces el espesor de la losa** (<NormaRef s="C.13.2.4" pag="C-120" />).
+- **Ábaco (C.13.2.5):** si se usa para reducir el refuerzo negativo sobre la columna o el espesor mínimo, debe (a) **proyectarse bajo la losa al menos 1/4 del espesor** de la losa adyacente y (b) **extenderse desde el eje de apoyo 1/6 de la luz** en cada dirección (<NormaRef s="C.13.2.5" pag="C-120" />).
+- **Descolgado para cortante (13.2.6):** debe proyectarse bajo la losa y extenderse desde la cara de la columna una distancia horizontal mínima igual al espesor de la proyección (<NormaRef s="C.13.2.6" pag="C-120" />).
+
+## C.13.3 — Refuerzo de la losa
+
+- **C.13.3.1:** el refuerzo en cada dirección de losas en dos direcciones se determina con los momentos en las secciones críticas, pero **no menos que el de retracción y temperatura** de C.7.12.2.1 (ρ = 0.0020 para barras Grado 280 o 350; 0.0018 para Grado 420 o malla; no menos de 0.0014) (<NormaRef s="C.13.3.1" pag="C-120" />).
+- **C.13.3.2:** separación en las secciones críticas **≤ 2 veces el espesor** de la losa (excepto porciones nervadas o celulares); sobre espacios celulares se coloca refuerzo según C.7.12 (<NormaRef s="C.13.3.2" pag="C-120" />).
+- **C.13.3.3:** el refuerzo **positivo** perpendicular a un borde discontinuo llega hasta el borde y se embebe (recto o con gancho) **al menos 150 mm** en vigas, muros o columnas perimetrales (<NormaRef s="C.13.3.3" pag="C-120" />).
+- **C.13.3.4:** el refuerzo **negativo** perpendicular a un borde discontinuo se dobla, forma ganchos o se ancla en vigas, muros o columnas del borde para desarrollar su tracción en la cara del apoyo (Capítulo C.12) (<NormaRef s="C.13.3.4" pag="C-120" />).
+- **C.13.3.5:** sin viga o muro en el borde discontinuo, o con voladizo, el refuerzo se puede anclar **dentro de la losa** (<NormaRef s="C.13.3.5" pag="C-120" />).
+
+### C.13.3.6 — Refuerzo en esquinas exteriores
+
+Se exige en las esquinas exteriores de losas apoyadas en muros de borde o donde una o más vigas de borde tengan **αf mayor de 1.0**, arriba y abajo (<NormaRef s="C.13.3.6" pag="C-121" />):
+
+- **(.1)** debe resistir un momento igual al **momento positivo máximo por unidad de ancho** del panel;
+- **(.2)** el momento actúa alrededor de un eje **perpendicular a la diagonal** (arriba) y **paralelo a la diagonal** (abajo);
+- **(.3)** se coloca desde la esquina a una distancia en cada dirección de **1/5 de la luz mayor**;
+- **(.4)** paralelo a la diagonal arriba y perpendicular a ella abajo, o alternativamente en **dos capas paralelas a los bordes** arriba y abajo.
+
+### C.13.3.7 y C.13.3.8 — Ábacos y losas sin vigas
+
+- **C.13.3.7:** si el ábaco reduce el refuerzo negativo sobre la columna en una losa plana, sus dimensiones cumplen C.13.2.5. Para calcular el refuerzo, **el espesor del ábaco bajo la losa no se toma mayor que 1/4 de la distancia desde el extremo del ábaco a la cara de la columna o capitel** (<NormaRef s="C.13.3.7" pag="C-121" />).
+- **C.13.3.8.1:** el refuerzo en losas sin vigas tiene las extensiones mínimas de la Fig. C.13.3.8 (más abajo) (<NormaRef s="C.13.3.8.1" pag="C-122" />).
+- **C.13.3.8.2:** con luces adyacentes desiguales, la prolongación del refuerzo negativo más allá del borde del apoyo se basa en la **luz mayor** (<NormaRef s="C.13.3.8.2" pag="C-122" />).
+- **C.13.3.8.3:** se permiten barras dobladas solo cuando la relación altura/luz permita dobleces de **45° o menos** (<NormaRef s="C.13.3.8.3" pag="C-122" />).
+- **C.13.3.8.4:** en pórticos donde la losa es elemento principal ante cargas laterales, las longitudes se determinan por análisis, no menores que las de la figura (<NormaRef s="C.13.3.8.4" pag="C-122" />).
+- **C.13.3.8.5:** todas las barras inferiores de la franja de columna en cada dirección son **continuas o con empalmes Clase B**, mecánicos o soldados (C.12.14.3), ubicados como indica la figura. **Al menos dos barras inferiores** de la franja de columna, en cada dirección, pasan por la región circunscrita por el refuerzo longitudinal de la columna y se anclan en los apoyos exteriores (<NormaRef s="C.13.3.8.5" pag="C-122" />).
+- **C.13.3.8.6:** con cabezas de cortante o construcción izada (lift-slab), al menos dos barras inferiores adheridas por dirección pasan por las cabezas de cortante o collares tan cerca de la columna como se pueda, continuas o con empalmes **Clase A**; en columnas exteriores se anclan en las cabezas o collares (<NormaRef s="C.13.3.8.6" pag="C-122" />).
+
+<Figura src="/img/titulo-c/figura-c13-3-8-extensiones-refuerzo.png" alt="Figura C.13.3.8 de la NSR-10: extensiones mínimas del refuerzo en losas sin viga, con y sin ábacos, para franjas de columna y centrales" numero="Fig. C.13.3.8" pie="Extensiones mínimas del refuerzo en losas sin viga (recorte de la página del PDF). Arriba en la franja de columna: 50 % del refuerzo del apoyo llega a 0.20 ℓn y el resto a 0.30 ℓn sin ábaco o 0.33 ℓn con ábaco; abajo en la franja central: 50 % continuo, el resto termina a máximo 0.15 ℓn del apoyo interior. Véase C.12.11.1 para las extensiones dentro de los apoyos." pag="C-121" />
+
+## C.13.4 — Aberturas en los sistemas de losas
+
+- **C.13.4.1:** se permiten aberturas de cualquier tamaño si el **análisis demuestra** que la resistencia de diseño es al menos la requerida (C.9.2 y C.9.3) y se cumplen todas las condiciones de funcionamiento, incluidas las deflexiones (<NormaRef s="C.13.4.1" pag="C-122" />).
+- **C.13.4.2 (alternativa sin análisis especial, losas sin vigas):**
+  - **(.1)** en la zona común de **dos franjas centrales** que se cruzan: aberturas de cualquier tamaño, manteniendo el refuerzo total requerido;
+  - **(.2)** en la zona común de **dos franjas de columna**: aberturas de **no más de 1/8 del ancho de la franja de columna** de cualquiera de los vanos; el refuerzo interrumpido se agrega a los lados de la abertura;
+  - **(.3)** en la zona común de una franja de columna y una central: se puede interrumpir **no más de 1/4 del refuerzo** de cada franja, agregándolo a los lados;
+  - **(.4)** deben cumplirse los requisitos de cortante de C.11.11.6 (<NormaRef s="C.13.4.2" pag="C-122" />).
+
+## C.13.5 — Procedimientos de diseño
+
+### C.13.5.1 y C.13.5.2 — Procedimiento general
+
+Se permite cualquier procedimiento que cumpla **equilibrio y compatibilidad geométrica**, si la resistencia de diseño en cada sección es al menos la requerida (C.9.2 y C.9.3) y se cumplen las condiciones de funcionamiento, incluidas las deflexiones (<NormaRef s="C.13.5.1" pag="C-122" />).
+
+- **C.13.5.1.1:** para cargas gravitacionales, la losa, las vigas y las columnas o muros que formen pórticos ortogonales se diseñan con el **método de diseño directo (C.13.6)** o el del **pórtico equivalente (C.13.7)** (<NormaRef s="C.13.5.1.1" pag="C-123" />).
+- **C.13.5.1.2 y .3:** para cargas laterales el análisis considera la **fisuración y el refuerzo** en la rigidez; se pueden combinar los resultados gravitacionales y laterales (<NormaRef s="C.13.5.1.2" pag="C-123" />).
+- **C.13.5.2:** la losa y las vigas se diseñan para los **momentos mayorados dominantes** en cada sección (<NormaRef s="C.13.5.2" pag="C-123" />).
+
+### C.13.5.3 — Transferencia de momento entre losa y columna
+
+Cuando carga gravitacional, viento, sismo u otras fuerzas laterales causen transferencia de momento entre losa y columna, una fracción del momento no balanceado se transmite por **flexión** y la restante por **excentricidad de cortante** (C.11.11.7) (<NormaRef s="C.13.5.3" pag="C-123" />, <NormaRef s="C.13.5.3.1" pag="C-123" />).
+
+<Ecuacion num="C.13-1" titulo="Fracción del momento no balanceado transmitida por flexión">
+
+$$
+\gamma_f=\frac{1}{1+(2/3)\sqrt{b_1/b_2}}
+$$
+
+- La fracción $\gamma_f M_u$ se considera transmitida por flexión sobre una franja de losa de **ancho efectivo** comprendido entre ejes a **1.5 h** (h del espesor de la losa o del ábaco) fuera de las caras opuestas de la columna o capitel (<NormaRef s="C.13.5.3.2" pag="C-123" />).
+- $M_u$: momento mayorado transmitido; $b_1$ y $b_2$: dimensiones de la sección crítica de cortante (C.11.11.1.2) medidas en la dirección del vano y perpendicular a él.
+
+</Ecuacion>
+
+**Aumentos permitidos de $\gamma_f$ (C.13.5.3.3)**, solo en losas **no preesforzadas**, con $V_c$ de C.11.11.2.1 (<NormaRef s="C.13.5.3.3" pag="C-123" />):
+
+<TablaNorma numero="C.13.5.3.3" titulo="Valores aumentados de γf" pag="C-123" nota="Resumen del autor del texto de C.13.5.3.3(a) y (b).">
+
+| Caso | Condición | γf permitido |
+|---|---|---|
+| (a) Columna de borde, momento alrededor de un eje **paralelo al borde** | Vu en el borde de apoyo ≤ 0.75 φVc (en una esquina de apoyo, ≤ 0.5 φVc) | 1.0 |
+| (b) Apoyos interiores y columnas de borde con momento alrededor de un eje **perpendicular al borde** | Vu en el apoyo ≤ 0.4 φVc **y** εt ≥ 0.010 en el ancho efectivo | hasta 1.25 γf (Ec. C.13-1), sin pasar de 1.0 |
+
+</TablaNorma>
+
+- **C.13.5.3.4:** el refuerzo sobre la columna se concentra (separación más cercana o refuerzo adicional) para resistir el momento en el ancho efectivo de la losa (<NormaRef s="C.13.5.3.4" pag="C-123" />).
+- **C.13.5.4:** la transmisión de carga de la losa a muros y columnas por **cortante y torsión** cumple el Capítulo C.11 (<NormaRef s="C.13.5.4" pag="C-123" />).
+
+<Ejemplo numero={1} titulo="Momento no balanceado transmitido a una columna interior">
+Columna interior de 500 × 500 mm en una losa plana con altura útil $d$ = {ej4.d} mm y espesor $h$ = {ej4.h} mm. El momento mayorado no balanceado en la columna es $M_u$ = {ej4.Mu} kN·m.
+
+<Paso titulo="Dimensiones de la sección crítica de cortante" ref="C.11.11.1.2">
+La sección crítica está a $d/2$ de la cara de la columna: $b_1 = c_1 + d$ = {ej4.c1} + {ej4.d} = **{ej4.b1} mm** y $b_2 = c_2 + d$ = **{ej4.b2} mm** (columna interior).
+</Paso>
+<Paso titulo="Fracción por flexión" ref="C.13-1">
+$\gamma_f = 1/[1 + (2/3)\sqrt{b_1/b_2}]$ = 1/(1 + 0.6667·1) = **{f(ej4.gf, 3)}**. Por flexión pasan $\gamma_f M_u$ = {f(ej4.gf * ej4.Mu, 1)} kN·m y por excentricidad de cortante el resto: $(1-\gamma_f) M_u$ = {f((1 - ej4.gf) * ej4.Mu, 1)} kN·m (C.13.5.3.1; $\gamma_v = 1-\gamma_f$ en C.11.11.7).
+</Paso>
+<Paso titulo="Ancho efectivo de losa" ref="C.13.5.3.2">
+El refuerzo que resiste $\gamma_f M_u$ se concentra en un ancho $c_2 + 3h$ = {ej4.c2} + 3 × {ej4.h} = **{ej4.bEf} mm** (1.5 h a cada lado de la columna).
+</Paso>
+<Paso titulo="¿Se puede aumentar γf?" ref="C.13.5.3.3(b)">
+Con $V_u = 0.35\,\phi V_c$ (≤ 0.4) y $\varepsilon_t$ = 0.012 (≥ 0.010) se permite 1.25 γf = **{f(ej4.aum.gammaF, 3)}** (aumentado: {ej4.aum.aumentado ? 'sí' : 'no'}), con lo que la flexión toma {f(ej4.aum.gammaF * ej4.Mu, 1)} kN·m. Con $V_u = 0.60\,\phi V_c$ no se permite y se queda en {f(ej4.noAum.gammaF, 3)} (aumentado: {ej4.noAum.aumentado ? 'sí' : 'no'}).
+</Paso>
+<Resultado>
+$\gamma_f$ = **{f(ej4.gf, 3)}** con la Ec. C.13-1; en este caso la flexión toma {f(ej4.gf * ej4.Mu, 1)} kN·m en un ancho efectivo de {ej4.bEf} mm, y el cortante excéntrico {f((1 - ej4.gf) * ej4.Mu, 1)} kN·m. Con las condiciones de C.13.5.3.3(b) pasa a {f(ej4.aum.gammaF, 2)} y el cortante excéntrico baja a {f((1 - ej4.aum.gammaF) * ej4.Mu, 1)} kN·m.
+</Resultado>
+</Ejemplo>
+
+### C.13.5.5 — Análisis aproximado de losas en una dirección
+
+- **C.13.5.5.1:** las losas en una dirección, macizas o aligeradas, **monolíticas con sus apoyos**, se pueden analizar como **continuas sobre apoyos simples**, con luces iguales a las luces libres y despreciando el ancho de las vigas y su torsión (<NormaRef s="C.13.5.5.1" pag="C-123" />).
+- **C.13.5.5.2:** si la rigidez torsional de la viga extrema o de los apoyos intermedios influye en la distribución, se tiene en cuenta (C.8 o los valores de C.13.5.5.3) (<NormaRef s="C.13.5.5.2" pag="C-123" />).
+- **C.13.5.5.3:** momentos y cortantes aproximados, si (a) hay **dos o más vanos**, (b) los vanos son aproximadamente iguales (el mayor no excede en más de **20 %** al menor), (c) las cargas son uniformes, (d) $L \le 3D$ (sin mayorar) y (e) los elementos son prismáticos. Para los momentos negativos, $\ell_n$ es el **promedio** de las luces libres adyacentes (<NormaRef s="C.13.5.5.3" pag="C-124" />).
+
+<TablaNorma numero="C.13.5.5.3" titulo="Momentos y cortantes aproximados en losas en una dirección" pag="C-124" nota="Transcripción de la lista de C-124. wu en kN/m, ℓn en m. Los signos ± no se muestran en el PDF; los positivos están en el vano y los negativos en la cara del apoyo.">
+
+| Sección | Momento o cortante |
+|---|---|
+| **Momento positivo** — vanos extremos, extremo discontinuo no restringido | wu ℓn² / 11 |
+| Vanos extremos, extremo discontinuo monolítico con el apoyo | wu ℓn² / 14 |
+| Vanos interiores | wu ℓn² / 16 |
+| **Momento negativo en la cara exterior del primer apoyo interior** — dos vanos | wu ℓn² / 9 |
+| — más de dos vanos | wu ℓn² / 10 |
+| Momento negativo en las demás caras de apoyos interiores | wu ℓn² / 11 |
+| Momento negativo en la cara de todos los apoyos para losas con luces que no exceden de 3 m, y vigas con ΣEI de columnas / EI de la viga mayor que 8 en cada extremo | wu ℓn² / 12 |
+| Momento negativo en la cara interior de apoyos exteriores (elementos monolíticos con sus apoyos) — cuando el apoyo es una viga de borde | wu ℓn² / 24 |
+| — cuando el apoyo es una columna | wu ℓn² / 16 |
+| **Cortante** en elementos extremos en la cara del primer apoyo interior | 1.15 wu ℓn / 2 |
+| Cortante en la cara de todos los demás apoyos | wu ℓn / 2 |
+
+</TablaNorma>
+
+Con $w_u$ = {unaDir.wu} kN/m y $\ell_n$ = {unaDir.ln} m, por ejemplo: positivo de vano extremo no restringido $w_u\ell_n^2/11$ = {f(unaDir.pos11, 2)} kN·m; monolítico $w_u\ell_n^2/14$ = {f(unaDir.pos14, 2)}; interior $w_u\ell_n^2/16$ = {f(unaDir.pos16, 2)}; negativo en el primer apoyo interior con dos vanos {f(unaDir.neg9, 2)} y con más de dos vanos {f(unaDir.neg10, 2)}; demás apoyos {f(unaDir.neg11, 2)} kN·m; cortantes {f(unaDir.v1, 2)} y {f(unaDir.v2, 2)} kN. Las condiciones (a) a (e) con vanos libres de 4.0 y 4.4 m, $L$ = 3 y $D$ = 5: {unaDir.puede.cumple ? 'se cumplen' : 'no se cumplen'}.
+
+## C.13.6 — Método de diseño directo
+
+### C.13.6.1 — Limitaciones
+
+Los sistemas de losas que cumplan C.13.6.1.1 a C.13.6.1.8 se pueden diseñar por este método (<NormaRef s="C.13.6.1" pag="C-124" />):
+
+<TablaNorma numero="C.13.6.1" titulo="Limitaciones del método de diseño directo" pag="C-125" nota="Resumen del autor de C.13.6.1.1 a C.13.6.1.8.">
+
+| Numeral | Limitación |
+|---|---|
+| C.13.6.1.1 | Mínimo de **tres vanos continuos** en cada dirección |
+| C.13.6.1.2 | Paneles rectangulares con relación luz mayor/luz menor (centro a centro de apoyos) **no mayor de 2** |
+| C.13.6.1.3 | Luces contiguas (centro a centro) no difieren de la luz mayor en más de **un tercio** |
+| C.13.6.1.4 | Columnas desalineadas **hasta 10 %** de la luz (en la dirección del desalineamiento) respecto de cualquier eje que pase por el centro de columnas sucesivas |
+| C.13.6.1.5 | Solo cargas **gravitacionales** uniformes en todo el panel; carga viva no mayorada **≤ 2 veces** la muerta no mayorada |
+| C.13.6.1.6 | Panel con vigas en todos los lados: Ec. C.13-2 en las dos direcciones perpendiculares |
+| C.13.6.1.7 | No se aplica la redistribución de momentos de C.8.4 (véase C.13.6.7) |
+| C.13.6.1.8 | Se permiten variaciones si el análisis demuestra que se satisfacen los requisitos de C.13.5.1 |
+
+</TablaNorma>
+
+<Ecuacion num="C.13-2" titulo="Relación de rigideces de vigas en paneles con vigas en todos los lados">
+
+$$
+0.2\le\frac{\alpha_{f1}\,\ell_2^{2}}{\alpha_{f2}\,\ell_1^{2}}\le 5.0
+$$
+
+- $\alpha_{f1}$ y $\alpha_{f2}$ se calculan con la Ec. C.13-3 en las dos direcciones (<NormaRef s="C.13.6.1.6" pag="C-125" />).
+
+</Ecuacion>
+
+<Ecuacion num="C.13-3" titulo="Relación de rigideces viga/losa">
+
+$$
+\alpha_f=\frac{E_{cb}\,I_b}{E_{cs}\,I_s}
+$$
+
+- $E_{cb}$, $E_{cs}$: módulos de elasticidad del concreto de la viga y de la losa; $I_b$: inercia de la viga (con el ala de C.13.2.4); $I_s$: inercia de la losa $\ell_2 h^3/12$ (esta expresión de $I_s$ es del autor).
+
+</Ecuacion>
+
+### C.13.6.2 — Momento estático mayorado total del vano
+
+El momento estático total $M_o$ de un vano se determina en una franja limitada lateralmente por el eje central de los paneles adyacentes al eje que une los apoyos (<NormaRef s="C.13.6.2.1" pag="C-125" />). La **suma absoluta del momento positivo y del promedio de los momentos negativos**, en cada dirección, no debe ser menor que:
+
+<Ecuacion num="C.13-4" titulo="Momento estático mayorado total del vano">
+
+$$
+M_o=\frac{q_u\,\ell_2\,\ell_n^{2}}{8}
+$$
+
+- $q_u$: carga mayorada por unidad de área; $\ell_n$: luz libre en la dirección de los momentos; $\ell_2$: luz transversal (<NormaRef s="C.13.6.2.2" pag="C-125" />).
+
+</Ecuacion>
+
+- **C.13.6.2.3:** si las luces transversales a ambos lados del eje no son iguales, $\ell_2$ es el **promedio** de las adyacentes (<NormaRef s="C.13.6.2.3" pag="C-125" />).
+- **C.13.6.2.4:** en un vano adyacente y paralelo a un borde, la distancia del borde al eje central del panel sustituye a $\ell_2$ (<NormaRef s="C.13.6.2.4" pag="C-125" />).
+- **C.13.6.2.5:** $\ell_n$ se mide cara a cara de columnas, capiteles, ménsulas o muros y **no se toma menor que 0.65 ℓ1**; los apoyos circulares o poligonales regulares se tratan como cuadrados de igual área (<NormaRef s="C.13.6.2.5" pag="C-125" />).
+
+### C.13.6.3 — Momentos mayorados negativos y positivos
+
+- **C.13.6.3.1:** los momentos negativos se determinan en el **borde de los apoyos** rectangulares; los apoyos circulares o poligonales se tratan como cuadrados de igual área (<NormaRef s="C.13.6.3.1" pag="C-126" />).
+- **C.13.6.3.2 — vano interior:** momento negativo mayorado **0.65 Mo** y positivo **0.35 Mo** (<NormaRef s="C.13.6.3.2" pag="C-126" />).
+- **C.13.6.3.3 — vano final:**
+
+<TablaNorma numero="C.13.6.3.3" titulo="Distribución del momento estático total Mo en un vano final" pag="C-126" nota="Fracciones de Mo. Columnas (1) a (5) como en el PDF. Verificación del autor: positivo + promedio de negativos = 1.0 (1.005 en la columna 1 por redondeo de la norma).">
+
+| Momento | (1) Borde exterior no restringido | (2) Losa con vigas entre todos los apoyos | (3) Losa sin vigas entre apoyos interiores, sin viga de borde | (4) Losa sin vigas entre apoyos interiores, con viga de borde | (5) Borde exterior totalmente restringido |
+|---|---:|---:|---:|---:|---:|
+| Negativo mayorado interior | 0.75 | 0.70 | 0.70 | 0.70 | 0.65 |
+| Positivo mayorado | 0.63 | 0.57 | 0.52 | 0.50 | 0.35 |
+| Negativo mayorado exterior | 0 | 0.16 | 0.26 | 0.30 | 0.65 |
+
+</TablaNorma>
+
+- **C.13.6.3.4:** las secciones sometidas a momento negativo se diseñan para el **mayor de los dos momentos negativos interiores** de los vanos con un apoyo común, a menos que se distribuya el momento no balanceado según rigideces (<NormaRef s="C.13.6.3.4" pag="C-126" />).
+- **C.13.6.3.5:** las vigas de borde o los bordes de la losa resisten **por torsión** su parte de los momentos exteriores negativos (<NormaRef s="C.13.6.3.5" pag="C-126" />).
+- **C.13.6.3.6:** el momento por carga gravitacional transmitido entre la losa y una columna de borde (C.13.5.3.1) es **0.3 Mo** (<NormaRef s="C.13.6.3.6" pag="C-126" />).
+
+### C.13.6.4 — Momentos mayorados en franjas de columna
+
+Las franjas de columna resisten los siguientes **porcentajes** de los momentos, con **interpolación lineal** entre los valores dados. En las tablas, $\ell_2/\ell_1$ varía entre 0.5 y 2.0 y $\alpha_{f1}\ell_2/\ell_1$ entre 0 y ≥ 1.0; la tabla de C.13.6.4.2 añade $\beta_t$ entre 0 y ≥ 2.5.
+
+<TablaNorma numero="C.13.6.4.1" titulo="% del momento negativo interior que toma la franja de columna" pag="C-126">
+
+| ℓ2/ℓ1 | 0.5 | 1.0 | 2.0 |
+|---|---:|---:|---:|
+| (αf1 ℓ2/ℓ1) = 0 | 75 | 75 | 75 |
+| (αf1 ℓ2/ℓ1) ≥ 1.0 | 90 | 75 | 45 |
+
+</TablaNorma>
+
+<TablaNorma numero="C.13.6.4.2" titulo="% del momento negativo exterior que toma la franja de columna" pag="C-127" nota="Se interpola linealmente con βt (Ec. C.13-5), ℓ2/ℓ1 y αf1ℓ2/ℓ1.">
+
+| ℓ2/ℓ1 | | 0.5 | 1.0 | 2.0 |
+|---|---|---:|---:|---:|
+| (αf1 ℓ2/ℓ1) = 0 | βt = 0 | 100 | 100 | 100 |
+| (αf1 ℓ2/ℓ1) = 0 | βt ≥ 2.5 | 75 | 75 | 75 |
+| (αf1 ℓ2/ℓ1) ≥ 1.0 | βt = 0 | 100 | 100 | 100 |
+| (αf1 ℓ2/ℓ1) ≥ 1.0 | βt ≥ 2.5 | 90 | 75 | 45 |
+
+</TablaNorma>
+
+<Ecuacion num="C.13-5" titulo="Rigidez torsional de la viga de borde">
+
+$$
+\beta_t=\frac{E_{cb}\,C}{2\,E_{cs}\,I_s}
+$$
+
+- $C$: constante de la sección transversal a torsión (Ec. C.13-6); $I_s$: inercia de la losa de ancho $\ell_2$.
+
+</Ecuacion>
+
+<Ecuacion num="C.13-6" titulo="Constante de torsión de la sección transversal">
+
+$$
+C=\sum\left(1-0.63\,\frac{x}{y}\right)\frac{x^{3}y}{3}
+$$
+
+- $x$ y $y$: lado menor y mayor de cada rectángulo de la sección. Para secciones en T o L, se divide la sección en rectángulos como en C.13.2.4 y se suman los valores de $C$ (<NormaRef s="C.13.6.4.2" pag="C-127" />).
+
+</Ecuacion>
+
+Por ejemplo, una viga de borde de 300 × 500 mm tiene $C = (1-0.63\cdot 300/500)(300^3 \cdot 500/3)$ = **{f(torsion.C / 1e9, 3)} × 10⁹ mm⁴**; con una losa de $\ell_2$ = 6 m y $h$ = 220 mm ($I_s$ = {f(torsion.Is / 1e9, 2)} × 10⁹ mm⁴) y el mismo concreto, $\beta_t$ = **{f(torsion.bt, 2)}** y $\alpha_f$ = **{f(torsion.a, 2)}** (el $I_b$ de 300 × 500 mm es 3.125 × 10⁹ mm⁴).
+
+- **C.13.6.4.3:** si los apoyos son columnas o muros que se extienden una distancia **igual o mayor que 0.75 ℓ2**, los momentos negativos se consideran **uniformemente distribuidos** a lo largo de $\ell_2$ (<NormaRef s="C.13.6.4.3" pag="C-127" />).
+
+<TablaNorma numero="C.13.6.4.4" titulo="% del momento positivo que toma la franja de columna" pag="C-127">
+
+| ℓ2/ℓ1 | 0.5 | 1.0 | 2.0 |
+|---|---:|---:|---:|
+| (αf1 ℓ2/ℓ1) = 0 | 60 | 60 | 60 |
+| (αf1 ℓ2/ℓ1) ≥ 1.0 | 90 | 75 | 45 |
+
+</TablaNorma>
+
+- **C.13.6.4.5:** en losas con vigas entre apoyos, la losa de la franja de columna resiste la parte del momento de la franja de columna que **no resisten las vigas** (<NormaRef s="C.13.6.4.5" pag="C-127" />).
+
+### C.13.6.5 — Momentos mayorados en vigas
+
+- **C.13.6.5.1:** las vigas entre apoyos resisten el **85 %** de los momentos de la franja de columna si $\alpha_{f1}\ell_2/\ell_1 \ge 1.0$ (<NormaRef s="C.13.6.5.1" pag="C-127" />).
+- **C.13.6.5.2:** para valores entre 1.0 y 0, la proporción se obtiene por **interpolación lineal entre 85 % y 0 %** (<NormaRef s="C.13.6.5.2" pag="C-127" />).
+- **C.13.6.5.3:** además de los momentos por cargas uniformes, las vigas resisten los causados por **cargas concentradas o lineales** aplicadas directamente sobre ellas, incluido el peso del alma que sobresale de la losa (<NormaRef s="C.13.6.5.3" pag="C-127" />).
+
+### C.13.6.6 — Momentos mayorados en franjas centrales
+
+- **C.13.6.6.1 y .2:** la fracción de los momentos positivo y negativo **no resistida por las franjas de columna** se asigna proporcionalmente a cada mitad de franja central; cada franja central resiste la **suma** de los momentos de sus dos mitades (<NormaRef s="C.13.6.6.1" pag="C-127" />, <NormaRef s="C.13.6.6.2" pag="C-127" />).
+- **C.13.6.6.3:** una franja central adyacente y paralela a un borde apoyado en un muro resiste el **doble** del momento asignado a la mitad de franja central correspondiente al primer eje de apoyos interiores (<NormaRef s="C.13.6.6.3" pag="C-128" />).
+
+### C.13.6.7 — Modificación de los momentos mayorados
+
+Los momentos mayorados positivos y negativos se pueden modificar **hasta en 10 %**, siempre que el momento estático total $M_o$ del panel en esa dirección **no sea menor** que el de la Ec. C.13-4 (<NormaRef s="C.13.6.7" pag="C-128" />).
+
+### C.13.6.8 — Cortante mayorado en sistemas de losas con vigas
+
+- **C.13.6.8.1:** las vigas con $\alpha_{f1}\ell_2/\ell_1 \ge 1.0$ resisten el cortante de las cargas mayoradas en **áreas aferentes** limitadas por líneas a **45°** desde las esquinas del panel y por los ejes centrales de los paneles adyacentes paralelos a los lados largos (<NormaRef s="C.13.6.8.1" pag="C-128" />).
+- **C.13.6.8.2:** con $\alpha_{f1}\ell_2/\ell_1 < 1.0$ se interpola linealmente suponiendo que la viga **no toma carga** para $\alpha_{f1} = 0$ (<NormaRef s="C.13.6.8.2" pag="C-128" />).
+- **C.13.6.8.3 a .5:** además, las vigas resisten las cargas aplicadas directamente sobre ellas; el cortante de la losa se puede calcular suponiendo que la carga va a las vigas según .1 o .2, pero debe resistirse el **cortante total** del panel; la resistencia cumple el Capítulo C.11 (<NormaRef s="C.13.6.8.3" pag="C-128" />).
+
+### C.13.6.9 — Momentos mayorados en columnas y muros
+
+- **C.13.6.9.1:** las columnas y muros monolíticos con la losa resisten los momentos producidos por las cargas mayoradas sobre el sistema de losas (<NormaRef s="C.13.6.9.1" pag="C-128" />).
+- **C.13.6.9.2:** en un apoyo interior, los elementos de apoyo arriba y abajo de la losa resisten el momento de la Ec. C.13-7 **en proporción directa a sus rigideces**, a menos que se haga un análisis general (<NormaRef s="C.13.6.9.2" pag="C-128" />).
+
+<Ecuacion num="C.13-7" titulo="Momento mayorado a transmitir a las columnas de un apoyo interior">
+
+$$
+M=0.07\left[\left(q_{Du}+0.5\,q_{Lu}\right)\ell_2\,\ell_n^{2}-q'_{Du}\,\ell'_2\left(\ell'_n\right)^{2}\right]
+$$
+
+- $q_{Du}$, $q_{Lu}$: cargas muerta y viva mayoradas por unidad de área; $q'_{Du}$, $\ell'_2$ y $\ell'_n$ se refieren a la **luz más corta** (<NormaRef s="C.13.6.9.2" pag="C-128" />).
+
+</Ecuacion>
+
+<CalculadoraEmbed id="losa-dos-direcciones" />
+
+<Ejemplo numero={2} titulo="M₀ y distribución de momentos en un panel interior (losa plana)">
+Losa plana de entrepiso (sin vigas ni ábacos) con un panel interior de $\ell_1$ = {ej1.l1} m en la dirección de análisis y $\ell_2$ = {ej1.l2} m, columnas de {ej1.c * 1000} mm. Cargas de servicio $D$ = {ej1.D} kN/m² (incluye el peso propio) y $L$ = {ej1.L} kN/m². Hay cuatro vanos en la dirección de análisis y tres en la otra.
+
+<Paso titulo="Carga mayorada y luz libre" ref="C.9-2, C.13.6.2.5">
+$q_u = 1.2D + 1.6L$ = 1.2({ej1.D}) + 1.6({ej1.L}) = **{f(ej1.qu, 1)} kN/m²**. $\ell_n = \ell_1 - c$ = {ej1.l1} − {ej1.c} = **{f(ej1.ln, 2)} m**, que supera el mínimo 0.65 ℓ1 = {f(ej1.lnMin, 2)} m.
+</Paso>
+<Paso titulo="Limitaciones" ref="C.13.6.1">
+Tres o más vanos en cada dirección ✓; $\ell_2/\ell_1$ = {f(ej1.l2 / ej1.l1, 3)} ≤ 2 ✓; luces iguales ✓; $L/D$ = {f(ej1.L / ej1.D, 2)} ≤ 2 ✓. Resultado: {ej1.lim.cumple ? 'el método de diseño directo es aplicable' : 'no se cumplen las limitaciones'}.
+</Paso>
+<Paso titulo="Momento estático total" ref="C.13-4">
+$M_o = q_u \ell_2 \ell_n^2 / 8$ = {f(ej1.qu, 1)}·{ej1.l2}·{f(ej1.ln, 2)}²/8 = **{f(ej1.r.Mo, 1)} kN·m**.
+</Paso>
+<Paso titulo="Distribución en vano interior" ref="C.13.6.3.2">
+Negativo = 0.65 Mo = **{f(ej1.r.total.negInterior, 1)} kN·m** en cada apoyo; positivo = 0.35 Mo = **{f(ej1.r.total.positivo, 1)} kN·m**.
+</Paso>
+<Paso titulo="Porcentajes a la franja de columna" ref="C.13.6.4.1, C.13.6.4.4">
+Sin vigas $\alpha_{f1}$ = 0, de modo que la fila (αf1ℓ2/ℓ1) = 0 de las tablas rige para cualquier $\ell_2/\ell_1$ (= {f(ej1.r.l2l1, 3)}): **{f(ej1.r.pct.negInterior, 0)} %** del negativo y **{f(ej1.r.pct.positivo, 0)} %** del positivo van a la franja de columna.
+</Paso>
+<Paso titulo="Momentos en franjas" ref="C.13.6.4, C.13.6.6">
+La franja de columna mide 2 × 0.25 × min(ℓ1, ℓ2) = **{f(ej1.r.anchoColumna, 2)} m** (la central también {f(ej1.r.anchoCentral, 2)} m, por el autor):
+
+| Sección | Total | Franja de columna | Franjas centrales |
+|---|---:|---:|---:|
+| Negativo en cada apoyo | {f(ej1.r.total.negInterior, 1)} | {f(ej1.r.franjaColumna.negInterior, 1)} kN·m ({f(ej1.r.franjaColumna.negInterior / ej1.r.anchoColumna, 1)} kN·m/m) | {f(ej1.r.franjaCentral.negInterior, 1)} kN·m ({f(ej1.r.franjaCentral.negInterior / ej1.r.anchoCentral, 1)} kN·m/m) |
+| Positivo | {f(ej1.r.total.positivo, 1)} | {f(ej1.r.franjaColumna.positivo, 1)} kN·m ({f(ej1.r.franjaColumna.positivo / ej1.r.anchoColumna, 1)} kN·m/m) | {f(ej1.r.franjaCentral.positivo, 1)} kN·m ({f(ej1.r.franjaCentral.positivo / ej1.r.anchoCentral, 1)} kN·m/m) |
+
+</Paso>
+<Paso titulo="Momento en la columna" ref="C.13-7">
+Con $q_{Du}$ = 1.2({ej1.D}) = {f(ej1.qDu, 1)} y $q_{Lu}$ = 1.6({ej1.L}) = {f(ej1.qLu, 1)} kN/m², y suponiendo un vano adyacente más corto con $\ell'_n$ = 5.5 m y $\ell'_2$ = {ej1.l2} m: $M = 0.07[(q_{Du}+0.5q_{Lu})\ell_2\ell_n^2 - q'_{Du}\ell'_2(\ell'_n)^2]$ = **{f(ej1.mCol, 1)} kN·m**, que se reparte entre las columnas de arriba y de abajo en proporción a sus rigideces.
+</Paso>
+<Paso titulo="Verificación del espesor (C.9)" ref="C.9.5.3.2">
+Para esta losa plana sin ábacos y $f_y$ = 420 MPa, $h_{min} = \ell_n/33$ = {f(ej1.h.hMm, 0)} mm (panel interior); se adopta un espesor mayor o igual (C.13.1.4).
+</Paso>
+<Resultado>
+$M_o$ = **{f(ej1.r.Mo, 1)} kN·m**; negativo **{f(ej1.r.total.negInterior, 1)} kN·m** y positivo **{f(ej1.r.total.positivo, 1)} kN·m**; la franja de columna toma el {f(ej1.r.pct.negInterior, 0)} % del negativo ({f(ej1.r.franjaColumna.negInterior, 1)} kN·m) y el {f(ej1.r.pct.positivo, 0)} % del positivo ({f(ej1.r.franjaColumna.positivo, 1)} kN·m); el resto va a las franjas centrales.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Porcentajes a la franja de columna por interpolación en las tablas (vano final con vigas)">
+Vano final de una losa con vigas en todos los apoyos (columna (2) de C.13.6.3.3): $\ell_1$ = {ej2.l1} m, $\ell_2$ = {ej2.l2} m, $\ell_n$ = {ej2.ln} m, $q_u$ = {ej2.qu} kN/m². Las vigas tienen $\alpha_{f1}$ = {ej2.alfa1} y la viga de borde $\beta_t$ = {ej2.bt}.
+
+<Paso titulo="Parámetros de las tablas" ref="C.13.6.4">
+$\ell_2/\ell_1$ = {ej2.l2}/{ej2.l1} = **{f(ej2.l2l1, 2)}** (entre 1.0 y 2.0) y $\alpha_{f1}\ell_2/\ell_1$ = {ej2.alfa1} × {f(ej2.l2l1, 2)} = **{f(ej2.aL, 2)}** (entre 0 y 1.0).
+</Paso>
+<Paso titulo="Negativo interior" ref="C.13.6.4.1">
+Fila αf1ℓ2/ℓ1 = 0: **{f(ej2.neg0, 1)} %** (75 en toda la fila). Fila ≥ 1.0 con ℓ2/ℓ1 = {f(ej2.l2l1, 2)}: 75 + (45 − 75)(1.2 − 1.0)/(2.0 − 1.0) = **{f(ej2.neg1, 1)} %**. Entre las filas, con {f(ej2.aL, 2)}: {f(ej2.neg0, 1)} + ({f(ej2.neg1, 1)} − {f(ej2.neg0, 1)})({f(ej2.aL, 2)}) = **{f(ej2.r.pct.negInterior, 1)} %**.
+</Paso>
+<Paso titulo="Positivo" ref="C.13.6.4.4">
+Fila 0: {f(ej2.pos0, 1)} %; fila ≥ 1.0: 75 + (45 − 75)(0.2) = {f(ej2.pos1, 1)} %; con {f(ej2.aL, 2)}: **{f(ej2.r.pct.positivo, 1)} %**.
+</Paso>
+<Paso titulo="Negativo exterior (con βt = 1.0)" ref="C.13.6.4.2">
+Fila 0: entre βt = 0 (100 %) y βt ≥ 2.5 (75 %): 100 − 25(1.0/2.5) = {f(ej2.ext0, 1)} %. Fila ≥ 1.0 con ℓ2/ℓ1 = {f(ej2.l2l1, 2)}: 100 − (100 − 69)(0.4) = {f(ej2.ext1, 1)} %. Con {f(ej2.aL, 2)}: **{f(ej2.r.pct.negExterior, 1)} %**.
+</Paso>
+<Paso titulo="Momentos totales del vano final" ref="C.13-4, C.13.6.3.3 col. (2)">
+$M_o$ = {ej2.qu}·{ej2.l2}·{ej2.ln}²/8 = **{f(ej2.r.Mo, 1)} kN·m**. Negativo interior 0.70 Mo = {f(ej2.r.total.negInterior, 1)}; positivo 0.57 Mo = {f(ej2.r.total.positivo, 1)}; negativo exterior 0.16 Mo = {f(ej2.r.total.negExterior, 1)} kN·m.
+</Paso>
+<Paso titulo="Franja de columna, vigas y losa" ref="C.13.6.5, C.13.6.4.5">
+Las vigas toman 85 % × {f(ej2.aL, 2)} = **{f(ej2.viga * 100, 1)} %** del momento de la franja de columna. Por ejemplo, en el negativo interior la franja de columna resiste {f(ej2.r.franjaColumna.negInterior, 1)} kN·m: la viga {f(ej2.r.vigas.momentos.negInterior, 1)} y la losa de esa franja {f(ej2.r.losaEnFranjaColumna.negInterior, 1)} kN·m; las franjas centrales {f(ej2.r.franjaCentral.negInterior, 1)} kN·m.
+</Paso>
+<Resultado>
+Porcentajes a la franja de columna: negativo interior **{f(ej2.r.pct.negInterior, 1)} %**, positivo **{f(ej2.r.pct.positivo, 1)} %**, negativo exterior **{f(ej2.r.pct.negExterior, 1)} %**; las vigas absorben {f(ej2.viga * 100, 1)} % de esos momentos de franja de columna.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={4} titulo="Verificación de las limitaciones del método de diseño directo">
+Se comparan dos disposiciones con el mismo método (<NormaRef s="C.13.6.1" pag="C-125" />).
+
+<Paso titulo="Disposición A: no cumple" ref="C.13.6.1">
+Dos vanos en una dirección, panel de 9 × 4 m (relación 2.25), luces contiguas de 9, 5.5 y 7 m, columnas desalineadas 12 % de la luz, $D$ = 4.0 y $L$ = 10.0 kN/m², vigas con $\alpha_{f1}\ell_2^2/(\alpha_{f2}\ell_1^2)$ = 6.
+
+| Numeral | Limitación | Cumple |
+|---|---|---|
+| C.13.6.1.1 | Mínimo de tres vanos continuos en cada dirección | {ej3.malo.chequeos[0].cumple ? 'sí' : 'no'} |
+| C.13.6.1.2 | Relación luz mayor/menor del panel ≤ 2 | {ej3.malo.chequeos[1].cumple ? 'sí' : 'no'} |
+| C.13.6.1.3 | Luces contiguas no difieren de la luz mayor en más de 1/3 | {ej3.malo.chequeos[2].cumple ? 'sí' : 'no'} |
+| C.13.6.1.4 | Desalineamiento de columnas ≤ 10 % de la luz | {ej3.malo.chequeos[3].cumple ? 'sí' : 'no'} |
+| C.13.6.1.5 | Solo cargas gravitacionales uniformes y L ≤ 2D | {ej3.malo.chequeos[4].cumple ? 'sí' : 'no'} |
+| C.13.6.1.6 | Ec. C.13-2 en las dos direcciones | {ej3.malo.chequeos[5].cumple ? 'sí' : 'no'} |
+
+</Paso>
+<Paso titulo="Disposición B: cumple" ref="C.13.6.1">
+Tres vanos por dirección, panel de 8 × 6 m (1.33), luces contiguas 8, 7 y 7.5 m (diferencia (8 − 7)/8 = 0.125 ≤ 1/3), desalineamiento 5 %, $D$ = 6 y $L$ = 4 kN/m² ($L/D$ = 0.67), vigas con $\alpha_{f1}$ = 1.2, $\alpha_{f2}$ = 1.0 ($\alpha_{f1}\ell_2^2/(\alpha_{f2}\ell_1^2)$ = {f(1.2 * 36 / (1.0 * 64), 3)}, dentro de 0.2 a 5.0).
+</Paso>
+<Resultado>
+La disposición A no puede analizarse con el método directo (incumple {ej3.malo.chequeos.filter((c) => !c.cumple).length} de {ej3.malo.chequeos.length} limitaciones) y requiere pórtico equivalente (C.13.7) o un análisis que cumpla C.13.5.1. La disposición B {ej3.bueno.cumple ? 'cumple todas' : 'no cumple todas'}.
+</Resultado>
+</Ejemplo>
+
+## C.13.7 — Método del pórtico equivalente
+
+El diseño por este método se basa en las suposiciones de C.13.7.2 a C.13.7.6; todas las secciones de losas y apoyos se diseñan para los momentos y cortantes así obtenidos (<NormaRef s="C.13.7.1" pag="C-128" />). Con **capiteles metálicos** se puede considerar su contribución a rigidez y resistencia (C.13.7.1.1); se pueden **despreciar las deformaciones axiales y por cortante** (C.13.7.1.2).
+
+### C.13.7.2 — Pórtico equivalente
+
+- La estructura se considera formada por **pórticos equivalentes** a lo largo de los ejes de columnas en ambas direcciones y en toda la estructura (<NormaRef s="C.13.7.2.1" pag="C-129" />).
+- Cada pórtico es una fila de columnas o apoyos y **franjas viga-losa** limitadas lateralmente por el eje central del panel a cada lado del eje de columnas (<NormaRef s="C.13.7.2.2" pag="C-129" />).
+- Columnas y franjas viga-losa están unidas por **elementos torsionales** transversales a la dirección del vano, hasta los ejes centrales de los paneles adyacentes (<NormaRef s="C.13.7.2.3" pag="C-129" />); los pórticos junto a un borde llegan hasta el borde y el eje del panel adyacente (C.13.7.2.4).
+- Cada pórtico se puede analizar como un todo o, para cargas gravitacionales, **piso por piso con los extremos lejanos de las columnas empotrados**; con vigas-losa analizadas por separado se puede suponer empotramiento en cualquier apoyo a dos vanos del considerado, si la losa continúa (<NormaRef s="C.13.7.2.5" pag="C-129" />, <NormaRef s="C.13.7.2.6" pag="C-129" />).
+
+### C.13.7.3 a C.13.7.5 — Rigideces
+
+- **Vigas-losa (C.13.7.3):** la inercia fuera del nudo o capitel se calcula con el **área bruta** de concreto; se considera la variación de la inercia a lo largo del eje; del centro de la columna a su cara, ménsula o capitel la inercia se toma igual a la de la cara dividida por $(1-c_2/\ell_2)^2$, con $c_2$ y $\ell_2$ medidos transversalmente al vano (<NormaRef s="C.13.7.3" pag="C-129" />).
+- **Columnas (C.13.7.4):** inercia con área bruta fuera de nudos o capiteles, considerando su variación; **infinita** en el nudo, de la parte superior a la inferior del sistema viga-losa (<NormaRef s="C.13.7.4" pag="C-129" />).
+- **Elementos torsionales (C.13.7.5):** sección constante en toda la longitud, la mayor de: (a) la porción de losa con ancho igual al de la columna, ménsula o capitel en la dirección del vano; (b) en sistemas monolíticos o compuestos, (a) más la parte de la viga transversal arriba y abajo de la losa; (c) la viga transversal de C.13.2.4. Si hay vigas en la dirección del vano, la rigidez torsional se **multiplica por la relación entre la inercia de la losa con la viga y la de la losa sin ella** (<NormaRef s="C.13.7.5" pag="C-130" />).
+
+### C.13.7.6 — Disposición de la carga viva
+
+- **C.13.7.6.1:** si se conoce la disposición de la carga, se analiza para ella.
+- **C.13.7.6.2:** si $L \le 3D/4$ (sin mayorar) o todos los paneles se cargan a la vez, se permite suponer los momentos máximos con la **carga viva mayorada total** en todo el sistema.
+- **C.13.7.6.3:** en otros casos, el momento positivo máximo cerca del centro del panel ocurre con **3/4 de la carga viva mayorada** sobre el panel y paneles alternos; el negativo máximo en un apoyo, con 3/4 de la carga viva mayorada solo en los paneles adyacentes.
+- **C.13.7.6.4:** los momentos no se toman menores que los de la carga viva total mayorada en todos los paneles (<NormaRef s="C.13.7.6" pag="C-130" />).
+
+### C.13.7.7 — Momentos mayorados
+
+- **Apoyos interiores (C.13.7.7.1):** la sección crítica del momento negativo (franja de columna y centrales) está en el **borde del apoyo**, pero a **no más de 0.175 ℓ1** del centro de la columna.
+- **Apoyos exteriores con ménsulas o capiteles (C.13.7.7.2):** la sección crítica en el vano perpendicular a un borde está a una distancia del borde del apoyo no mayor de **1/2 de la proyección** de la ménsula o capitel.
+- **C.13.7.7.3:** apoyos circulares o poligonales regulares como cuadrados de igual área.
+- **C.13.7.7.4:** si el sistema cumple las limitaciones de C.13.6.1, los momentos calculados se pueden **reducir** de modo que la suma de positivos y promedio de negativos no exceda el valor de la Ec. C.13-4.
+- **C.13.7.7.5:** los momentos en las secciones críticas se pueden distribuir a franjas de columna, vigas y franjas centrales con C.13.6.4, C.13.6.5 y C.13.6.6 si se cumple C.13.6.1.6 (<NormaRef s="C.13.7.7" pag="C-130" />).
+
+## C.13.8 — Métodos plásticos de análisis y diseño
+
+- **C.13.8.1:** se pueden usar métodos plásticos en una o dos direcciones: **líneas de fluencia** (frontera superior, cinemático) y **franjas** (frontera inferior, estático). Solo si $\varepsilon_t$ neta a tracción es **menor de 0.0075** (C.13.8.1.1) (<NormaRef s="C.13.8.1" pag="C-130" />).
+- **C.13.8.2:** la relación entre momentos negativo y positivo del panel debe poder resistirse en el panel adyacente, y los momentos negativos sobre un apoyo de dos paneles deben ser **iguales**, salvo C.13.8.3 (<NormaRef s="C.13.8.2" pag="C-130" />).
+- **C.13.8.3:** si resultan diferentes, se modifica la relación en uno o ambos paneles para igualarlos o se absorbe la diferencia por **torsión** del apoyo. Con diferencias **menores del 25 %** se puede usar el **promedio**, ajustando los positivos en el sentido de la corrección (C.13.8.3.1) (<NormaRef s="C.13.8.3" pag="C-131" />).
+- **C.13.8.4:** los apoyos se dimensionan para las cargas delimitadas por las líneas de fluencia (<NormaRef s="C.13.8.4" pag="C-131" />).
+- **C.13.8.5:** con líneas de fluencia, **todo el refuerzo positivo llega a los apoyos**, salvo que el recorte se considere en el análisis (<NormaRef s="C.13.8.5" pag="C-131" />).
+
+## C.13.9 — Losas en dos direcciones apoyadas sobre muros o vigas rígidas
+
+El procedimiento solo aplica a paneles apoyados en sus **cuatro bordes** sobre muros o vigas rígidas ante deflexiones verticales (<NormaRef s="C.13.9.1" pag="C-131" />).
+
+- **Viga rígida (C.13.9.1.1):** parámetro $\alpha_f \ge 2$, o en losas macizas altura de viga **≥ 3 veces** el espesor de la losa. **Losas nervadas (C.13.9.1.2):** al menos **cinco** nervaduras en cada dirección.
+- **C.13.9.2:** los paneles se dividen en franjas de columna y centrales (C.13.2.1 y C.13.2.2).
+- **C.13.9.3:** si $m = \ell_{na}/\ell_{nb}$ del panel es **menor de 0.5**, la losa se considera en una dirección (C.13.5.5), pero el refuerzo negativo paralelo a la luz larga corresponde a un panel con $m$ = 0.5.
+- **C.13.9.4:** borde con viga suficientemente rígida a torsión = apoyo continuo; con rigidez torsional despreciable = apoyo no continuo, y el momento negativo de diseño en el borde es **1/3 del positivo de diseño**.
+- **C.13.9.5:** secciones críticas: momentos negativos en los bordes de los paneles en las caras de los apoyos; positivo en los centros de los paneles.
+- **C.13.9.6:** los momentos de diseño en la franja central se calculan con las Tablas C.13.9-1 a C.13.9-3 y las ecuaciones:
+
+<Ecuacion num="C.13-8" titulo="Momento en la franja central, dirección de la luz corta">
+
+$$
+M_{as}=C_{a,j}\;q_j\;\ell_{na}^{2}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.13-9" titulo="Momento en la franja central, dirección de la luz larga">
+
+$$
+M_{bs}=C_{b,j}\;q_j\;\ell_{nb}^{2}
+$$
+
+- $q_j$ es $q_{Lu}$, $q_{Du}$ ó $q_u$ según la tabla (C.13.9-3, C.13.9-2 ó C.13.9-1) (<NormaRef s="C.13.9.6" pag="C-131" />).
+
+</Ecuacion>
+
+- **C.13.9.7:** los momentos en la franja de columna **bajan gradualmente** de su valor total ($M_{as}$ ó $M_{bs}$) en el límite de la franja central a **1/3** de ese valor en el borde del panel (<NormaRef s="C.13.9.7" pag="C-132" />).
+- **C.13.9.8:** si el momento negativo en un lado del apoyo es **menor del 80 %** del del otro lado, la diferencia se distribuye en proporción a la rigidez a flexión relativa de las losas (<NormaRef s="C.13.9.8" pag="C-132" />).
+- **C.13.9.9 y C.13.9.10:** el cortante en la losa y las cargas sobre las vigas de apoyo se calculan con las proporciones de la **Tabla C.13.9-4** (carga uniforme sobre la longitud de la viga). En ningún caso la carga sobre la viga que salva la luz corta es menor que la del área limitada por la viga y dos líneas a **45°** desde las esquinas del panel; su carga equivalente uniforme es $q_u\,\ell_{na}/3$ (C.13.9.10.1) (<NormaRef s="C.13.9.9" pag="C-132" />).
+
+### Casos de la Tabla C.13.9 y definiciones
+
+$m = \ell_{na}/\ell_{nb}$ es la relación entre la luz libre corta ($\ell_{na}$) y la larga ($\ell_{nb}$). Los **9 casos** de las tablas dependen de qué bordes del panel son continuos (achurados en la figura: la losa continúa a través del apoyo o está restringida a momento) y cuáles solo tienen apoyo vertical (sin achurar, con restricción a momento despreciable).
+
+<Figura src="/img/titulo-c/figura-c13-9-casos-bordes.png" alt="Encabezado de la Tabla C.13.9-1 con los nueve casos de bordes continuos (achurados) y discontinuos" numero="Casos de la Tabla C.13.9" pie="Encabezado de la Tabla C.13.9-1 (recorte). Caso 1: ningún borde continuo; caso 2: los cuatro continuos; caso 3: los dos bordes cortos; caso 4: un borde corto y uno largo adyacentes; caso 5: los dos largos; caso 6: un borde largo; caso 7: un borde corto; caso 8: dos cortos y un largo; caso 9: dos largos y un corto. El lado horizontal es ℓnb y el vertical ℓna." pag="C-133" />
+
+<Callout tipo="nota" titulo="Lectura de los casos (del autor)">
+La descripción por palabras de cada caso es una **lectura del autor** de los diagramas achurados del PDF (el texto de la norma no los describe). Se comprobó con dos criterios: las celdas vacías de la Tabla C.13.9-1 coinciden con los bordes sin continuidad, y para cada dirección la suma «positivo (D) + mitad del negativo» y los repartos de la Tabla C.13.9-4 son coherentes (p. ej. en el caso 3, $C_{b,neg}$ = 0.076 y $q_b$ = 0.83: la dirección con los dos bordes continuos recibe la mayor parte de la carga).
+</Callout>
+
+<TablaNorma numero="Tabla C.13.9-1" titulo="Coeficientes para momento negativo en la losa" pag="C-133" nota="En C.13-8 y C.13-9 se usa qj = qu. Una celda con — está vacía en el PDF (no hay momento negativo en esa dirección). Transcripción verificada contra la imagen de la página.">
+
+| m = ℓna/ℓnb | Coef. | Caso 1 | Caso 2 | Caso 3 | Caso 4 | Caso 5 | Caso 6 | Caso 7 | Caso 8 | Caso 9 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1.00 | Ca,neg | — | 0.045 | — | 0.050 | 0.075 | 0.071 | — | 0.033 | 0.061 |
+| | Cb,neg | — | 0.045 | 0.076 | 0.050 | — | — | 0.071 | 0.061 | 0.033 |
+| 0.95 | Ca,neg | — | 0.050 | — | 0.055 | 0.079 | 0.075 | — | 0.038 | 0.065 |
+| | Cb,neg | — | 0.041 | 0.072 | 0.045 | — | — | 0.067 | 0.056 | 0.029 |
+| 0.90 | Ca,neg | — | 0.055 | — | 0.060 | 0.080 | 0.079 | — | 0.043 | 0.068 |
+| | Cb,neg | — | 0.037 | 0.070 | 0.040 | — | — | 0.062 | 0.052 | 0.025 |
+| 0.85 | Ca,neg | — | 0.060 | — | 0.066 | 0.082 | 0.083 | — | 0.049 | 0.072 |
+| | Cb,neg | — | 0.031 | 0.065 | 0.034 | — | — | 0.057 | 0.046 | 0.021 |
+| 0.80 | Ca,neg | — | 0.065 | — | 0.071 | 0.083 | 0.086 | — | 0.055 | 0.075 |
+| | Cb,neg | — | 0.027 | 0.061 | 0.029 | — | — | 0.051 | 0.041 | 0.017 |
+| 0.75 | Ca,neg | — | 0.069 | — | 0.076 | 0.085 | 0.088 | — | 0.061 | 0.078 |
+| | Cb,neg | — | 0.022 | 0.056 | 0.024 | — | — | 0.044 | 0.036 | 0.014 |
+| 0.70 | Ca,neg | — | 0.074 | — | 0.081 | 0.086 | 0.091 | — | 0.068 | 0.081 |
+| | Cb,neg | — | 0.017 | 0.050 | 0.019 | — | — | 0.038 | 0.029 | 0.011 |
+| 0.65 | Ca,neg | — | 0.077 | — | 0.085 | 0.087 | 0.093 | — | 0.074 | 0.083 |
+| | Cb,neg | — | 0.014 | 0.043 | 0.015 | — | — | 0.031 | 0.024 | 0.008 |
+| 0.60 | Ca,neg | — | 0.081 | — | 0.089 | 0.088 | 0.095 | — | 0.080 | 0.085 |
+| | Cb,neg | — | 0.010 | 0.035 | 0.011 | — | — | 0.024 | 0.018 | 0.006 |
+| 0.55 | Ca,neg | — | 0.084 | — | 0.092 | 0.089 | 0.096 | — | 0.085 | 0.086 |
+| | Cb,neg | — | 0.007 | 0.028 | 0.008 | — | — | 0.019 | 0.014 | 0.005 |
+| 0.50 | Ca,neg | — | 0.086 | — | 0.094 | 0.090 | 0.097 | — | 0.089 | 0.088 |
+| | Cb,neg | — | 0.006 | 0.022 | 0.006 | — | — | 0.014 | 0.010 | 0.003 |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla C.13.9-2" titulo="Coeficientes para momento positivo de carga muerta en la losa" pag="C-134" nota="En C.13-8 y C.13-9 se usa qj = qDu. Transcripción verificada contra la imagen de la página.">
+
+| m = ℓna/ℓnb | Coef. | Caso 1 | Caso 2 | Caso 3 | Caso 4 | Caso 5 | Caso 6 | Caso 7 | Caso 8 | Caso 9 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1.00 | Ca,D-pos | 0.036 | 0.018 | 0.018 | 0.027 | 0.027 | 0.033 | 0.027 | 0.020 | 0.023 |
+| | Cb,D-pos | 0.036 | 0.018 | 0.027 | 0.027 | 0.018 | 0.027 | 0.033 | 0.023 | 0.020 |
+| 0.95 | Ca,D-pos | 0.040 | 0.020 | 0.021 | 0.030 | 0.028 | 0.036 | 0.031 | 0.022 | 0.024 |
+| | Cb,D-pos | 0.033 | 0.016 | 0.025 | 0.024 | 0.015 | 0.024 | 0.031 | 0.021 | 0.017 |
+| 0.90 | Ca,D-pos | 0.045 | 0.022 | 0.025 | 0.033 | 0.029 | 0.039 | 0.035 | 0.025 | 0.026 |
+| | Cb,D-pos | 0.029 | 0.014 | 0.024 | 0.022 | 0.013 | 0.021 | 0.028 | 0.019 | 0.015 |
+| 0.85 | Ca,D-pos | 0.050 | 0.024 | 0.029 | 0.036 | 0.031 | 0.042 | 0.040 | 0.029 | 0.028 |
+| | Cb,D-pos | 0.026 | 0.012 | 0.022 | 0.019 | 0.011 | 0.017 | 0.025 | 0.017 | 0.013 |
+| 0.80 | Ca,D-pos | 0.056 | 0.026 | 0.034 | 0.039 | 0.032 | 0.045 | 0.045 | 0.032 | 0.029 |
+| | Cb,D-pos | 0.023 | 0.011 | 0.020 | 0.016 | 0.009 | 0.015 | 0.022 | 0.015 | 0.010 |
+| 0.75 | Ca,D-pos | 0.061 | 0.028 | 0.040 | 0.043 | 0.033 | 0.048 | 0.051 | 0.036 | 0.031 |
+| | Cb,D-pos | 0.019 | 0.009 | 0.018 | 0.013 | 0.007 | 0.012 | 0.020 | 0.013 | 0.007 |
+| 0.70 | Ca,D-pos | 0.068 | 0.030 | 0.046 | 0.046 | 0.035 | 0.051 | 0.058 | 0.040 | 0.033 |
+| | Cb,D-pos | 0.016 | 0.007 | 0.016 | 0.011 | 0.005 | 0.009 | 0.017 | 0.011 | 0.006 |
+| 0.65 | Ca,D-pos | 0.074 | 0.032 | 0.054 | 0.050 | 0.036 | 0.054 | 0.065 | 0.044 | 0.034 |
+| | Cb,D-pos | 0.013 | 0.006 | 0.014 | 0.009 | 0.004 | 0.007 | 0.014 | 0.009 | 0.005 |
+| 0.60 | Ca,D-pos | 0.081 | 0.034 | 0.062 | 0.053 | 0.037 | 0.056 | 0.073 | 0.048 | 0.036 |
+| | Cb,D-pos | 0.010 | 0.004 | 0.011 | 0.007 | 0.003 | 0.006 | 0.012 | 0.007 | 0.004 |
+| 0.55 | Ca,D-pos | 0.088 | 0.035 | 0.071 | 0.056 | 0.038 | 0.058 | 0.081 | 0.052 | 0.037 |
+| | Cb,D-pos | 0.008 | 0.003 | 0.009 | 0.005 | 0.002 | 0.004 | 0.009 | 0.005 | 0.003 |
+| 0.50 | Ca,D-pos | 0.095 | 0.037 | 0.080 | 0.059 | 0.039 | 0.061 | 0.089 | 0.056 | 0.038 |
+| | Cb,D-pos | 0.006 | 0.002 | 0.007 | 0.004 | 0.001 | 0.003 | 0.007 | 0.004 | 0.002 |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla C.13.9-3" titulo="Coeficientes para momento positivo de carga viva en la losa" pag="C-135" nota="En C.13-8 y C.13-9 se usa qj = qLu. Transcripción verificada contra la imagen de la página.">
+
+| m = ℓna/ℓnb | Coef. | Caso 1 | Caso 2 | Caso 3 | Caso 4 | Caso 5 | Caso 6 | Caso 7 | Caso 8 | Caso 9 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1.00 | Ca,L-pos | 0.036 | 0.027 | 0.027 | 0.032 | 0.032 | 0.035 | 0.032 | 0.028 | 0.030 |
+| | Cb,L-pos | 0.036 | 0.027 | 0.032 | 0.032 | 0.027 | 0.032 | 0.035 | 0.030 | 0.028 |
+| 0.95 | Ca,L-pos | 0.040 | 0.030 | 0.031 | 0.035 | 0.034 | 0.038 | 0.036 | 0.031 | 0.032 |
+| | Cb,L-pos | 0.033 | 0.025 | 0.029 | 0.029 | 0.024 | 0.029 | 0.032 | 0.027 | 0.025 |
+| 0.90 | Ca,L-pos | 0.045 | 0.034 | 0.035 | 0.039 | 0.037 | 0.042 | 0.040 | 0.035 | 0.036 |
+| | Cb,L-pos | 0.029 | 0.022 | 0.027 | 0.026 | 0.021 | 0.025 | 0.029 | 0.024 | 0.022 |
+| 0.85 | Ca,L-pos | 0.050 | 0.037 | 0.040 | 0.043 | 0.041 | 0.046 | 0.045 | 0.040 | 0.039 |
+| | Cb,L-pos | 0.026 | 0.019 | 0.024 | 0.023 | 0.019 | 0.022 | 0.026 | 0.022 | 0.020 |
+| 0.80 | Ca,L-pos | 0.056 | 0.041 | 0.045 | 0.048 | 0.044 | 0.051 | 0.051 | 0.044 | 0.042 |
+| | Cb,L-pos | 0.023 | 0.017 | 0.022 | 0.020 | 0.016 | 0.019 | 0.023 | 0.019 | 0.017 |
+| 0.75 | Ca,L-pos | 0.061 | 0.045 | 0.051 | 0.052 | 0.047 | 0.055 | 0.056 | 0.049 | 0.046 |
+| | Cb,L-pos | 0.019 | 0.014 | 0.019 | 0.016 | 0.013 | 0.016 | 0.020 | 0.016 | 0.013 |
+| 0.70 | Ca,L-pos | 0.068 | 0.049 | 0.057 | 0.057 | 0.051 | 0.060 | 0.063 | 0.054 | 0.050 |
+| | Cb,L-pos | 0.016 | 0.012 | 0.016 | 0.014 | 0.011 | 0.013 | 0.017 | 0.014 | 0.011 |
+| 0.65 | Ca,L-pos | 0.074 | 0.053 | 0.064 | 0.062 | 0.055 | 0.064 | 0.070 | 0.059 | 0.054 |
+| | Cb,L-pos | 0.013 | 0.010 | 0.014 | 0.011 | 0.009 | 0.010 | 0.014 | 0.011 | 0.009 |
+| 0.60 | Ca,L-pos | 0.081 | 0.058 | 0.071 | 0.067 | 0.059 | 0.068 | 0.077 | 0.065 | 0.059 |
+| | Cb,L-pos | 0.010 | 0.007 | 0.011 | 0.009 | 0.007 | 0.008 | 0.011 | 0.009 | 0.007 |
+| 0.55 | Ca,L-pos | 0.088 | 0.062 | 0.080 | 0.072 | 0.063 | 0.073 | 0.085 | 0.070 | 0.063 |
+| | Cb,L-pos | 0.008 | 0.006 | 0.009 | 0.007 | 0.005 | 0.006 | 0.009 | 0.007 | 0.006 |
+| 0.50 | Ca,L-pos | 0.095 | 0.066 | 0.088 | 0.077 | 0.067 | 0.078 | 0.092 | 0.076 | 0.067 |
+| | Cb,L-pos | 0.006 | 0.004 | 0.007 | 0.005 | 0.004 | 0.005 | 0.007 | 0.005 | 0.004 |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla C.13.9-4" titulo="Relación de la carga qu en las direcciones ℓna y ℓnb para determinar el cortante de la losa en el apoyo y la carga en los apoyos" pag="C-136" nota="qa + qb = 1 (±0.01 por redondeo). Transcripción verificada contra la imagen de la página.">
+
+| m = ℓna/ℓnb | Coef. | Caso 1 | Caso 2 | Caso 3 | Caso 4 | Caso 5 | Caso 6 | Caso 7 | Caso 8 | Caso 9 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1.00 | qa | 0.50 | 0.50 | 0.17 | 0.50 | 0.83 | 0.71 | 0.29 | 0.33 | 0.67 |
+| | qb | 0.50 | 0.50 | 0.83 | 0.50 | 0.17 | 0.29 | 0.71 | 0.67 | 0.33 |
+| 0.95 | qa | 0.55 | 0.55 | 0.20 | 0.55 | 0.86 | 0.75 | 0.33 | 0.38 | 0.71 |
+| | qb | 0.45 | 0.45 | 0.80 | 0.45 | 0.14 | 0.25 | 0.67 | 0.62 | 0.29 |
+| 0.90 | qa | 0.60 | 0.60 | 0.23 | 0.60 | 0.88 | 0.79 | 0.38 | 0.43 | 0.75 |
+| | qb | 0.40 | 0.40 | 0.77 | 0.40 | 0.12 | 0.21 | 0.62 | 0.57 | 0.25 |
+| 0.85 | qa | 0.66 | 0.66 | 0.28 | 0.66 | 0.90 | 0.83 | 0.43 | 0.49 | 0.79 |
+| | qb | 0.34 | 0.34 | 0.72 | 0.34 | 0.10 | 0.17 | 0.57 | 0.51 | 0.21 |
+| 0.80 | qa | 0.71 | 0.71 | 0.33 | 0.71 | 0.92 | 0.86 | 0.49 | 0.55 | 0.83 |
+| | qb | 0.29 | 0.29 | 0.67 | 0.29 | 0.08 | 0.14 | 0.51 | 0.45 | 0.17 |
+| 0.75 | qa | 0.76 | 0.76 | 0.39 | 0.76 | 0.94 | 0.88 | 0.56 | 0.61 | 0.86 |
+| | qb | 0.24 | 0.24 | 0.61 | 0.24 | 0.06 | 0.12 | 0.44 | 0.39 | 0.14 |
+| 0.70 | qa | 0.81 | 0.81 | 0.45 | 0.81 | 0.95 | 0.91 | 0.62 | 0.68 | 0.89 |
+| | qb | 0.19 | 0.19 | 0.55 | 0.19 | 0.05 | 0.09 | 0.38 | 0.32 | 0.11 |
+| 0.65 | qa | 0.85 | 0.85 | 0.53 | 0.85 | 0.96 | 0.93 | 0.69 | 0.74 | 0.92 |
+| | qb | 0.15 | 0.15 | 0.47 | 0.15 | 0.04 | 0.07 | 0.31 | 0.26 | 0.08 |
+| 0.60 | qa | 0.89 | 0.89 | 0.61 | 0.89 | 0.97 | 0.95 | 0.76 | 0.80 | 0.94 |
+| | qb | 0.11 | 0.11 | 0.39 | 0.11 | 0.03 | 0.05 | 0.24 | 0.20 | 0.06 |
+| 0.55 | qa | 0.92 | 0.92 | 0.69 | 0.92 | 0.98 | 0.96 | 0.81 | 0.85 | 0.95 |
+| | qb | 0.08 | 0.08 | 0.31 | 0.08 | 0.02 | 0.04 | 0.19 | 0.15 | 0.05 |
+| 0.50 | qa | 0.94 | 0.94 | 0.76 | 0.94 | 0.99 | 0.97 | 0.86 | 0.89 | 0.97 |
+| | qb | 0.06 | 0.06 | 0.24 | 0.06 | 0.01 | 0.03 | 0.14 | 0.11 | 0.03 |
+
+</TablaNorma>
+
+<Ejemplo numero={5} titulo="Momentos de una losa sobre vigas rígidas por el método de coeficientes (caso 4)">
+Panel de esquina (caso 4: un borde corto y uno largo continuos) con luces libres $\ell_{na}$ = {ej5.lna} m y $\ell_{nb}$ = {ej5.lnb} m, apoyado en vigas rígidas ($\alpha_f \ge 2$). Cargas mayoradas $q_{Du} = 1.2(6.0)$ = {f(ej5.qDu, 1)} kN/m² y $q_{Lu} = 1.6(3.0)$ = {f(ej5.qLu, 1)} kN/m²; $q_u$ = {f(ej5.qu, 1)} kN/m².
+
+<Paso titulo="Relación m y coeficientes" ref="C.13.9.6">
+$m = 4.0/5.0$ = **0.80** (fila de las tablas). Caso 4, m = 0.80: $C_{a,neg}$ = {f(ej5.co.a, 3)}, $C_{b,neg}$ = {f(ej5.co.b, 3)}; $C_{a,D}$ = {f(ej5.cd.a, 3)}, $C_{b,D}$ = {f(ej5.cd.b, 3)}; $C_{a,L}$ = {f(ej5.cl.a, 3)}, $C_{b,L}$ = {f(ej5.cl.b, 3)}.
+</Paso>
+<Paso titulo="Momentos negativos" ref="C.13-8, C.13-9">
+$M_{as,neg} = C_{a,neg}\,q_u\,\ell_{na}^2$ = {f(ej5.co.a, 3)}·{f(ej5.qu, 1)}·{ej5.lna}² = **{f(ej5.r.negativoA, 2)} kN·m/m**; $M_{bs,neg}$ = {f(ej5.co.b, 3)}·{f(ej5.qu, 1)}·{ej5.lnb}² = **{f(ej5.r.negativoB, 2)} kN·m/m**.
+</Paso>
+<Paso titulo="Momentos positivos" ref="C.13-8, C.13-9">
+Suma de carga muerta y viva: $M_{as,pos} = C_{a,D}\,q_{Du}\ell_{na}^2 + C_{a,L}\,q_{Lu}\ell_{na}^2$ = **{f(ej5.r.positivoA, 2)} kN·m/m** y $M_{bs,pos}$ = **{f(ej5.r.positivoB, 2)} kN·m/m** (la suma de las dos tablas es la lectura usual del autor).
+</Paso>
+<Paso titulo="Cargas a las vigas" ref="Tabla C.13.9-4">
+Con $m$ = 0.80, caso 4: $q_a$ = {f(ej5.rep.a, 2)} y $q_b$ = {f(ej5.rep.b, 2)} de $q_u$. La carga mínima de la viga que salva la luz corta es $q_u\ell_{na}/3$ = {f(ej5.qu * ej5.lna / 3, 1)} kN/m (C.13.9.10.1).
+</Paso>
+<Paso titulo="Valores intermedios de m" ref="Tabla C.13.9-1">
+La norma tabula m en pasos de 0.05; para $m$ = 0.825 se interpola linealmente (práctica del autor): $C_{a,neg}$ = {f(ej5.interp.a, 4)}.
+</Paso>
+<Resultado>
+Franja central: $M_{as,neg}$ = {f(ej5.r.negativoA, 2)}, $M_{bs,neg}$ = {f(ej5.r.negativoB, 2)}, $M_{as,pos}$ = {f(ej5.r.positivoA, 2)} y $M_{bs,pos}$ = {f(ej5.r.positivoB, 2)} kN·m/m. En las franjas de columna estos valores bajan gradualmente hasta 1/3 en el borde del panel (C.13.9.7).
+</Resultado>
+</Ejemplo>
+
+## Erratas y observaciones sobre el texto del PDF
+
+<Callout tipo="nota" titulo="Observaciones del autor (no son texto de la norma)">
+- **C.13.1.9** aparece **dos veces** (una sobre diafragmas y otra sobre sistemas losa-columna como sistema principal de resistencia sísmica); aquí se tratan juntas.
+- Varias remisiones carecen de la «C.»: «9.5» en C.13.1.4, «13.2.6», «15.4.4.1» y «8.4» en C.13.6.1.7; se entienden C.9.5, C.13.2.6, C.15.4.4.1 y C.8.4. En C.13.1.11 «se C.8.13» debe leer «de C.8.13».
+- En el PDF el símbolo ℓ sale como «A» en el texto extraído; todas las ecuaciones se verificaron contra la imagen de las páginas C-123 a C-128.
+- La Fig. C.13.3.8 (C-121) aparece **antes** del texto C.13.3.8 (C-122).
+- Las celdas vacías de la Tabla C.13.9-1 son intencionales (dirección sin momento negativo); la numeración de los 9 casos y su significado solo se aprecia en los diagramas achurados del PDF.
+- **C.13.9.3** usa $m$ sin definirlo; se define en el encabezado de las tablas ($m = \ell_{na}/\ell_{nb}$).
+- En C.13.5.5.3 el PDF presenta los momentos como lista de renglones con puntos guía; aquí se pasó a tabla.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Aplicar el método directo sin verificar C.13.6.1:** tres vanos, relación ≤ 2, $L \le 2D$ y solo cargas gravitacionales uniformes (<NormaRef s="C.13.6.1" pag="C-124" />).
+- **Usar $\ell_n$ menor que 0.65 ℓ1** o medirla de eje a eje en vez de cara a cara (<NormaRef s="C.13.6.2.5" pag="C-125" />).
+- **Confundir $\ell_1$ y $\ell_2$:** $M_o$ usa $\ell_2$ transversal; el porcentaje a franja de columna usa $\ell_2/\ell_1$ y $\alpha_{f1}\ell_2/\ell_1$.
+- **Olvidar que el reparto del vano final depende de las condiciones de borde** (tabla de C.13.6.3.3): el negativo exterior va de 0 (borde no restringido) a 0.65 Mo (totalmente restringido).
+- **No extrapolar las tablas de franjas:** valen para ℓ2/ℓ1 entre 0.5 y 2.0 e interpolación lineal; con $\alpha_{f1}\ell_2/\ell_1 \ge 1$ se usa la fila ≥ 1.0 (<NormaRef s="C.13.6.4.1" pag="C-126" />).
+- **Dar a las vigas el 85 % sin escalar** cuando $\alpha_{f1}\ell_2/\ell_1 < 1.0$: se interpola entre 85 % y 0 (<NormaRef s="C.13.6.5.2" pag="C-127" />).
+- **Transmitir todo el momento no balanceado por flexión:** solo $\gamma_f M_u$ (Ec. C.13-1); el resto va por excentricidad de cortante (<NormaRef s="C.13.5.3" pag="C-123" />).
+- **Redistribuir momentos** en sistemas diseñados por el método directo (<NormaRef s="C.13.6.1.7" pag="C-125" />); solo se permite la modificación de 10 % de C.13.6.7.
+- **Omitir las barras inferiores continuas** (al menos dos por dirección a través de la columna) que dan integridad ante punzonamiento (<NormaRef s="C.13.3.8.5" pag="C-122" />).
+- **Leer mal los casos de la Tabla C.13.9:** achurado = continuo; $C_a$ corresponde a $\ell_{na}$ (luz corta) y $C_b$ a $\ell_{nb}$.
+</Callout>
+
+## Resumen en una línea
+
+**En una losa en dos direcciones se calcula $M_o = q_u\ell_2\ell_n^2/8$ en cada vano (Ec. C.13-4), se reparte en negativo y positivo con 0.65/0.35 o con la tabla de C.13.6.3.3, y se asigna a franja de columna, vigas y franjas centrales con los porcentajes interpolados de C.13.6.4 y C.13.6.5, siempre que se cumplan las limitaciones de C.13.6.1; el momento no balanceado pasa a la columna por $\gamma_f$ de flexión y el resto por cortante.**

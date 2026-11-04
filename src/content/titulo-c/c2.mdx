@@ -1,0 +1,580 @@
+---
+codigo: 'C.2'
+tipo: capitulo
+titulo: 'Notación y definiciones'
+resumen: 'Cómo leer los símbolos del Título C (áreas en mm², fuerzas en N, momentos en N·mm, esfuerzos en MPa) y las definiciones de uso general: concreto, refuerzo, elementos, preesforzado y grados DMI, DMO y DES.'
+objetivos:
+  - 'Leer cualquier símbolo del Título C con su unidad y el capítulo donde se usa'
+  - 'Distinguir cargas (D, L, E…), resistencias requeridas (Mu, Vu), nominales (Mn, Vn) y de diseño (φMn)'
+  - 'Diferenciar columna de pedestal, estribo de gancho suplementario, y pretensado de postensado'
+  - 'Clasificar las secciones por deformación unitaria: controladas por compresión, de transición o controladas por tracción'
+  - 'Cambiar de unidades (MPa, kgf/cm², psi; kN a N) sin errores en las ecuaciones no homogéneas'
+paginasNorma: 'C-5 a C-24'
+paginaPdf: 307
+orden: 2
+calculadoras: []
+nivel: 'basico'
+---
+
+import { cuantia, kNAN, kNmANmm, columnaOPedestal, tipoSeccion, terminoRaizFc, esfuerzoDesdeMpa } from '../../lib/nsr10/concretoGenerales';
+import { moduloElasticidad, ES_ACERO_MPA } from '../../lib/nsr10/concreto';
+
+export const ej1 = (() => {
+  const bw = 300, h = 550, recubrimientoCentroide = 50;
+  const d = h - recubrimientoCentroide;
+  const As = 1200;
+  const Mu = 150, Vu = 120;
+  const fc = 21;
+  return {
+    bw, h, d, As,
+    rho: cuantia(As, bw, d),
+    MuNmm: kNmANmm(Mu),
+    VuN: kNAN(Vu),
+    esfuerzo: kNAN(Vu) / (bw * d),
+    fc,
+    raizFc: Math.sqrt(fc),
+    Ec: moduloElasticidad(fc),
+    Es: ES_ACERO_MPA,
+  };
+})();
+
+export const ej2 = (() => {
+  const fc = 21;
+  const filas = ['raiz', '0.313', '0.083', '0.17'].map((id) => {
+    const si = terminoRaizFc(fc, id, 'SI');
+    const mks = terminoRaizFc(fc, id, 'mks');
+    const ing = terminoRaizFc(fc, id, 'ingles');
+    return {
+      id,
+      si: si.valorMpa,
+      mks: mks.valorEnSistema,
+      mksMpa: mks.valorMpa,
+      ing: ing.valorEnSistema,
+      ingMpa: ing.valorMpa,
+      difMks: (100 * (mks.valorMpa - si.valorMpa)) / si.valorMpa,
+      difIng: (100 * (ing.valorMpa - si.valorMpa)) / si.valorMpa,
+    };
+  });
+  return { fc, filas, fcMks: esfuerzoDesdeMpa(fc, 'mks'), fcPsi: esfuerzoDesdeMpa(fc, 'ingles'), raiz: filas[0], c017: filas[3] };
+})();
+
+export const ej3 = (() => {
+  return {
+    a: columnaOPedestal(3000, 400),
+    b: columnaOPedestal(1000, 400),
+    c: columnaOPedestal(1200, 400),
+    t1: tipoSeccion(0.0060, 0.002),
+    t2: tipoSeccion(0.0035, 0.002),
+    t3: tipoSeccion(0.0015, 0.002),
+  };
+})();
+
+## Idea central del capítulo
+
+El Capítulo C.2 es el **diccionario** del Título C. Tiene dos partes:
+
+- **C.2.1 — Notación:** la lista alfabética de **todos los símbolos** (unas 12 páginas, C-5 a C-16) con su significado, su **unidad** y los capítulos donde se usa. Es la clave para leer cualquier ecuación del Título.
+- **C.2.2 — Definiciones:** los términos de **uso general** (concreto, refuerzo, estribos, muros, pórticos, preesforzado…). Las definiciones especializadas están en el capítulo donde se usan.
+
+La lista completa de símbolos y definiciones está en el [glosario del Título C](/titulo-c/glosario). Aquí se **explica cómo leerlas**, agrupadas por temas, y se destacan las que más errores de diseño producen.
+
+<Callout tipo="importante" titulo="La regla de unidades que gobierna toda la notación">
+En la notación del Título C (<NormaRef s="C.2.1" pag="C-5" />): **longitudes y espesores en mm, áreas en mm², fuerzas en N, momentos en N·mm, esfuerzos y módulos en MPa**. Hay unas pocas excepciones visibles en la lista, como la densidad $w_c$ en kg/m³, el índice de rigidez $EI$ en N·mm², el módulo $S_m$ en mm³ y la longitud $\ell_{px}$ del preesforzado, que se da en **metros** (<NormaRef s="C.2.1" pag="C-10" />).
+</Callout>
+
+## C.2.1 — Notación del Título C del Reglamento NSR-10
+
+La norma advierte que **los términos de la lista se utilizan en el Título C** (<NormaRef s="C.2.1" pag="C-5" />). Cada línea tiene la forma:
+
+> **símbolo = definición, unidad, capítulos o apéndices donde se usa**
+
+Por ejemplo: «$f'_c$ = resistencia especificada a la compresión del concreto, MPa, Capítulos C.4, C.5, C.8-12, …» (<NormaRef s="C.2.1" pag="C-8" />). Tres convenciones ayudan a leer rápido (observaciones nuestras, deducidas de la lista):
+
+1. **Subíndices que se repiten:** $n$ = **nominal** ($M_n$, $V_n$, $P_n$), $u$ = **mayorado o requerido** ($M_u$, $V_u$, $P_u$), $c$ = concreto ($V_c$, $E_c$) o columna, $s$ = acero o refuerzo ($A_s$, $V_s$, $E_s$), $w$ = alma (*web*) o muro, $p$ = preesforzado ($A_{ps}$, $f_{pu}$), $b$ = barra o balanceado, $t$ = tracción o transversal, $y$ = fluencia.
+2. **Mayúsculas de cargas:** $D, L, L_r, L_e, G, H, F, T, W, E$ representan **cargas, o los momentos y fuerzas internas correspondientes**; son las mismas del Título B.
+3. **El apóstrofo y la raíz:** $f'_c$ es la resistencia en MPa; cuando aparece bajo un radical ($\sqrt{f'_c}$) se toma **solo la raíz del valor numérico**, y el resultado queda en MPa (definición de $f'_c$ en C.2.2, <NormaRef s="C.2.2" pag="C-23" />).
+
+### Geometría de la sección y del elemento
+
+<TablaNorma numero="C.2.1 (extracto)" titulo="Dimensiones y propiedades geométricas" pag="C-5 a C-12" nota="Transcritas de la lista de notación y verificadas contra la imagen. La lista completa está en el glosario.">
+
+| Símbolo | Significado | Unidad | Capítulo |
+|---|---|---|---|
+| $a$ | Profundidad del **bloque rectangular equivalente** de esfuerzos | mm | C.10 |
+| $b$ | Ancho de la cara en compresión del elemento | mm | C.10, Ap. C-B |
+| $b_w$ | Ancho del **alma** o diámetro de la sección circular | mm | C.10–12, C.21, C.22 |
+| $b_o$ | Perímetro de la **sección crítica para cortante** en losas y zapatas | mm | C.11, C.22 |
+| $d$ | Distancia de la fibra extrema en compresión al **centroide del refuerzo longitudinal en tracción** (altura útil) | mm | C.7, C.9–12, C.14, C.17, C.18, C.21 |
+| $d'$ | Distancia de la fibra extrema en compresión al centroide del refuerzo longitudinal **en compresión** | mm | C.9, C.18 |
+| $d_t$ | Distancia de la fibra extrema en compresión al centroide de la **fila extrema** de acero longitudinal en tracción | mm | C.9, C.10 |
+| $d_b$ | Diámetro nominal de una barra, alambre o torón de preesforzado | mm | C.7, C.12, C.21 |
+| $h$ | Espesor total o altura de un elemento | mm | C.9–12, C.14, C.17, C.18, C.20–22 |
+| $c$ | Distancia de la fibra extrema en compresión al **eje neutro** | mm | C.9, C.10, C.14, C.21 |
+| $c_c$ | **Recubrimiento libre** del refuerzo | mm | C.10 |
+| $A_g$ | Área bruta de la sección de concreto (en secciones con vacíos no incluye el área de los vacíos) | mm² | C.9–11, C.14–16, C.21, C.22 |
+| $A_{cp}$, $p_{cp}$ | Área y **perímetro exterior** de la sección de concreto (torsión) | mm², mm | C.11 |
+| $I_g$, $I_{cr}$, $I_e$ | Inercia de la sección **bruta**, **fisurada transformada** y **efectiva** (deflexiones) | mm⁴ | C.9, C.10, C.14 |
+| $r$ | Radio de giro de la sección de un elemento en compresión | mm | C.10 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Tres «distancias» que se confunden: d, d' y dt">
+$d$ llega al **centroide de todo el refuerzo en tracción**; $d_t$ llega a la **fila más lejana** (la más baja, en una viga); $d'$ llega al refuerzo en compresión. $d_t \ge d$ cuando hay varias capas. La deformación unitaria $\varepsilon_t$ que clasifica la sección se mide en la fila extrema, es decir, en $d_t$ (<NormaRef s="C.2.1" pag="C-7" />).
+</Callout>
+
+### Materiales y resistencias
+
+| Símbolo | Significado | Unidad | Capítulo |
+|---|---|---|---|
+| $f'_c$ | Resistencia **especificada** a la compresión del concreto | MPa | C.4, C.5, C.8–12, C.14, C.18, C.19, C.21, C.22 |
+| $f'_{cr}$ | Resistencia **promedio** requerida, base de la **dosificación** | MPa | C.5 |
+| $f'_{ci}$ | $f'_c$ en el momento del preesforzado inicial | MPa | C.7, C.18 |
+| $f_{ct}$ | Resistencia promedio a la **tracción por hendimiento** del concreto liviano | MPa | C.5, C.9, C.11, C.12, C.22 |
+| $f_r$ | **Módulo de ruptura** del concreto | MPa | C.9, C.14, C.18 |
+| $f_y$ | Resistencia especificada a la **fluencia** del refuerzo | MPa | C.3, C.7, C.9–12, C.14, C.17–19, C.21 |
+| $f_{yt}$ | $f_y$ del refuerzo **transversal** | MPa | C.10–12, C.21 |
+| $f_{pu}$, $f_{py}$ | Resistencias a la tracción y a la fluencia del **acero de preesforzado** | MPa | C.11, C.18 |
+| $f_{ps}$, $f_{se}$ | Esfuerzo en el acero de preesfuerzo a la resistencia nominal a flexión y **esfuerzo efectivo** (después de todas las pérdidas) | MPa | C.12, C.18 |
+| $E_c$, $E_s$, $E_p$ | Módulos de elasticidad del concreto, del refuerzo y del acero de preesfuerzo | MPa | C.8–10, C.14, C.19 |
+| $w_c$ | **Densidad** del concreto de peso normal o de equilibrio del liviano | kg/m³ | C.8, C.9 |
+| $\lambda$ | Factor por **concreto liviano** (propiedades mecánicas reducidas respecto del normal) | — | C.9, C.11, C.12, C.19, C.21, C.22 |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-8" />, <NormaRef s="C.2.1" pag="C-9" />, <NormaRef s="C.2.1" pag="C-13" /> y <NormaRef s="C.2.1" pag="C-15" />.)
+
+### Refuerzo y cuantías
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $A_s$ | Área de refuerzo longitudinal **no preesforzado a tracción** | mm² |
+| $A'_s$ | Área del refuerzo **a compresión** | mm² |
+| $A_{s,min}$ | Área **mínima** de refuerzo de flexión (C.10.5) | mm² |
+| $A_{ps}$ | Área de acero preesforzado en la zona de tracción por flexión | mm² |
+| $A_v$, $A_{v,min}$ | Área de refuerzo de **cortante** con espaciamiento $s$ y su mínimo | mm² |
+| $A_b$ | Área de una barra o alambre individual | mm² |
+| $s$ | Espaciamiento centro a centro de refuerzo, tendones, alambres o anclajes | mm |
+| $\rho$ | **Cuantía** del refuerzo $A_s$ evaluada sobre el área $b\,d$ | — |
+| $\rho'$ | Cuantía del refuerzo $A'_s$ sobre $b\,d$ | — |
+| $\rho_b$ | Cuantía de $A_s$ que produce condiciones **balanceadas** de deformación unitaria | — |
+| $\rho_w$ | Cuantía de $A_s$ evaluada sobre $b_w d$ | — |
+| $\rho_s$ | Relación entre el volumen de refuerzo en **espiral** y el del núcleo confinado | — |
+| $\rho_\ell$, $\rho_t$ | Relación entre el área de refuerzo **longitudinal** (o **transversal**) distribuido y el área bruta de concreto perpendicular a ese refuerzo | — |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-5" />, <NormaRef s="C.2.1" pag="C-6" />, <NormaRef s="C.2.1" pag="C-12" /> y <NormaRef s="C.2.1" pag="C-15" />.)
+
+### Cargas y solicitaciones: de la carga a la resistencia de diseño
+
+Esta es la cadena que más se usa en el Título C. Cada eslabón tiene su símbolo:
+
+| Concepto | Símbolos | Significado según C.2.1 / C.2.2 |
+|---|---|---|
+| **Cargas** | $D$, $L$, $L_r$, $L_e$, $G$, $H$, $F$, $T$, $W$, $E$ | Cargas muertas, vivas, vivas de cubierta, de empozamiento, de granizo, de suelo y agua, de fluidos, efectos de temperatura y retracción, de viento y de sismo (o los momentos y fuerzas internas correspondientes) |
+| **Resistencia requerida** | $U$ | Resistencia para resistir las cargas **mayoradas** o los momentos y fuerzas correspondientes (C.9) |
+| **Solicitaciones mayoradas** | $M_u$, $V_u$, $P_u$, $N_u$, $T_u$ | Momento, cortante, axial (positivo en compresión, negativo en tracción), axial normal a la sección y torsión **mayorados** en la sección |
+| **Resistencia nominal** | $M_n$, $V_n$, $P_n$, $T_n$ | Capacidad calculada con las hipótesis del método de resistencia **antes** de aplicar $\phi$ |
+| **Factor de reducción** | $\phi$ | Coeficiente que multiplica la resistencia nominal (C.9.3) |
+| **Resistencia de diseño** | $\phi M_n$, $\phi V_n$, $\phi P_n$ | Resistencia nominal por $\phi$: debe cubrir la requerida |
+| **Componentes de $V_n$** | $V_c$, $V_s$, $V_p$ | Aporte del concreto, del refuerzo de cortante y componente vertical de la fuerza efectiva de preesforzado |
+
+<Callout tipo="practica" titulo="La desigualdad de fondo del método de la resistencia">
+En lenguaje de la notación: **resistencia de diseño ≥ resistencia requerida**, por ejemplo $\phi M_n \ge M_u$ y $\phi V_n \ge V_u$. Las definiciones de «resistencia nominal», «resistencia de diseño» y «resistencia requerida» están en C.2.2 (<NormaRef s="C.2.2" pag="C-23" />). Las combinaciones de carga que producen $U$ están en el Capítulo C.9 y se apoyan en el [Capítulo B.2](/titulo-b/b2) del Título B. La desigualdad es una síntesis nuestra de esas definiciones.
+</Callout>
+
+### Cortante y torsión
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $V_c$, $V_s$, $V_n$, $V_u$ | Resistencia nominal al cortante del concreto, del refuerzo, nominal total y cortante mayorado | N |
+| $V_{ci}$, $V_{cw}$ | Resistencia del concreto cuando la fisuración diagonal resulta de **cortante y momento** ($V_{ci}$) o de **esfuerzos principales altos de tracción en el alma** ($V_{cw}$) | N |
+| $v_n$ | **Esfuerzo** resistente nominal de cortante | MPa |
+| $A_{oh}$, $p_h$ | Área y perímetro encerrados por el eje del estribo cerrado más externo dispuesto para torsión | mm², mm |
+| $A_t$ | Área de una rama de un estribo cerrado que resiste la torsión con espaciamiento $s$ | mm² |
+| $A_\ell$, $A_{\ell,min}$ | Refuerzo **longitudinal** para torsión y su mínimo (C.11.5.5.3) | mm² |
+| $T_n$, $T_u$ | Resistencia nominal y torsión mayorada | N·mm |
+| $b_o$ | Perímetro de la sección crítica en losas y zapatas (**punzonamiento**) | mm |
+| $\alpha_s$, $\beta$, $\gamma_v$ | Constante para $V_c$ en losas y zapatas; relación lado largo/corto; factor para el momento no balanceado por excentricidad del cortante en conexiones losa-columna | — |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-5" />, <NormaRef s="C.2.1" pag="C-6" />, <NormaRef s="C.2.1" pag="C-13" /> y <NormaRef s="C.2.1" pag="C-14" />.)
+
+### Columnas, esbeltez y estabilidad (Capítulo C.10)
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $P_o$ | Resistencia axial nominal para excentricidad **cero** | N |
+| $P_b$ | Resistencia axial nominal en condición de deformación unitaria **balanceada** | N |
+| $P_{n,max}$ | Máximo valor permitido de $P_n$ (C.10.3.6) | N |
+| $M_1$, $M_2$ | Menor y mayor momento mayorado en los extremos del elemento en compresión; $M_2$ siempre positivo | N·mm |
+| $M_{ns}$, $M_s$ (subíndices) | $ns$ = cargas que **no** causan desplazamiento lateral apreciable; $s$ = que **sí** lo causan (análisis elástico de primer orden) | N·mm |
+| $\delta$, $\delta_s$ | Factor de amplificación del momento por curvatura entre extremos y por desplazamiento lateral en pórticos no arriostrados | — |
+| $Q$ | **Índice de estabilidad** de un piso (C.10.10.5.2) | — |
+| $k$ | Factor de longitud efectiva de elementos en compresión | — |
+| $\ell_u$ | Longitud sin soporte lateral de un elemento en compresión | mm |
+| $EI$ | Rigidez a la flexión de un elemento en compresión (C.10.10.6) | N·mm² |
+| $\beta_{dns}$, $\beta_{ds}$ | Relaciones para reducir la rigidez de columnas por cargas axiales o laterales **permanentes** | — |
+| $P_c$ | Carga crítica de pandeo | N |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-7" />, <NormaRef s="C.2.1" pag="C-8" />, <NormaRef s="C.2.1" pag="C-9" />, <NormaRef s="C.2.1" pag="C-10" />, <NormaRef s="C.2.1" pag="C-11" />, <NormaRef s="C.2.1" pag="C-12" /> y <NormaRef s="C.2.1" pag="C-14" />.)
+
+### Losas y cimentaciones (Capítulos C.13 y C.15)
+
+| Símbolo | Significado |
+|---|---|
+| $\ell_1$, $\ell_2$ | Luces centro a centro en la dirección de los momentos y en la perpendicular (mm) |
+| $\ell_n$, $\ell_{na}$, $\ell_{nb}$ | Luz libre entre caras de apoyos; en dirección corta y larga de losas en dos direcciones (C.13.9) |
+| $c_1$, $c_2$ | Dimensiones de la columna (o capitel o ménsula) en la dirección de la luz y en la perpendicular |
+| $\alpha_f$, $\alpha_{fm}$ | Rigidez a flexión de la viga respecto a la de la franja de losa; valor promedio en los bordes de un panel |
+| $\beta_t$ | Rigidez a torsión de la viga de borde respecto a la de una franja de losa |
+| $\gamma_f$ | Factor del momento no balanceado transmitido por flexión en conexiones losa-columna |
+| $M_o$ | Momento estático total mayorado |
+| $\gamma_s$ | Factor para repartir el refuerzo en la banda central de una **zapata** (C.15.4.4.2) |
+| $d_{pile}$ | Diámetro del pilote medido en la base de la zapata |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-7" />, <NormaRef s="C.2.1" pag="C-10" />, <NormaRef s="C.2.1" pag="C-11" />, <NormaRef s="C.2.1" pag="C-13" /> y <NormaRef s="C.2.1" pag="C-14" />.)
+
+### Desarrollo y empalme del refuerzo (Capítulo C.12)
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $\ell_d$ | **Longitud de desarrollo** en tracción de barras corrugadas, alambres corrugados, mallas o torones | mm |
+| $\ell_{dc}$ | Longitud de desarrollo en **compresión** de barras y alambres corrugados | mm |
+| $\ell_{dh}$ | Longitud de desarrollo en tracción de barras con **gancho estándar**, medida desde la sección crítica hasta el extremo exterior del gancho | mm |
+| $\ell_{dt}$ | Longitud de desarrollo de barras corrugadas **con cabeza** | mm |
+| $\psi_t$, $\psi_e$, $\psi_s$ | Factores de modificación por **localización** del refuerzo, por **revestimiento** y por **tamaño** de la barra (C.12.2.4) | — |
+| $c_b$ | Menor de la distancia al borde o la mitad de la separación entre barras | mm |
+| $K_{tr}$ | Índice de refuerzo transversal (C.12.2.3) | — |
+| $\ell_a$ | Longitud de anclaje adicional más allá del centro del apoyo o punto de inflexión | mm |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-7" />, <NormaRef s="C.2.1" pag="C-9" />, <NormaRef s="C.2.1" pag="C-10" />, <NormaRef s="C.2.1" pag="C-15" /> y <NormaRef s="C.2.1" pag="C-16" />.)
+
+### Preesforzado (Capítulo C.18)
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $f_{se}$ | **Esfuerzo efectivo** en el acero (después de todas las pérdidas) | MPa |
+| $f_{dc}$ | Esfuerzo de **descompresión**: esfuerzo en el acero cuando el esfuerzo en el concreto a su nivel es cero | MPa |
+| $f_{pe}$, $f_{pc}$ | Esfuerzo de compresión en el concreto debido solo al preesfuerzo efectivo, y resultante en el centroide de la sección | MPa |
+| $P_{pj}$, $P_{px}$, $P_{pu}$ | Fuerza de preesforzado en el extremo del gato, a una distancia $\ell_{px}$ del gato y mayorada en el anclaje | N |
+| $K$, $\mu_p$ | Coeficientes de fricción por desviación accidental (por metro de tendón) y por curvatura | — |
+| $\alpha_{px}$ | Cambio angular total de la trayectoria del tendón desde el gato hasta el punto bajo consideración | rad |
+| $\ell_{px}$ | Distancia desde el extremo del gato al punto bajo consideración | **m** |
+| $\Delta f_{ps}$ | Esfuerzo bajo cargas de servicio menos el esfuerzo de descompresión | MPa |
+| $\omega_p$ | Índice de acero de preesfuerzo (Ap. C-B) | — |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-8" />, <NormaRef s="C.2.1" pag="C-9" />, <NormaRef s="C.2.1" pag="C-10" />, <NormaRef s="C.2.1" pag="C-12" />, <NormaRef s="C.2.1" pag="C-14" />, <NormaRef s="C.2.1" pag="C-15" /> y <NormaRef s="C.2.1" pag="C-16" />.)
+
+### Diseño sismo resistente (Capítulo C.21)
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $M_{pr}$ | **Resistencia probable** a flexión: con esfuerzo en tracción de al menos $1.25 f_y$ y $\phi$ = 1.0 | N·mm |
+| $V_e$ | Fuerza cortante de diseño correspondiente al desarrollo de la resistencia **probable** a momento del elemento | N |
+| $M_{nb}$, $M_{nc}$ | Resistencias nominales a flexión de las vigas y de las columnas que llegan a un nudo | N·mm |
+| $\ell_o$ | Longitud desde la cara del nudo en la que se coloca **refuerzo transversal especial** | mm |
+| $s_o$ | Espaciamiento del refuerzo transversal dentro de $\ell_o$ | mm |
+| $A_{sh}$, $b_c$ | Área total de refuerzo transversal (con ganchos suplementarios) dentro del espaciamiento $s$ y perpendicular a $b_c$; dimensión del núcleo entre bordes externos del refuerzo transversal | mm², mm |
+| $h_x$ | Espaciamiento horizontal máximo, centro a centro, entre ganchos suplementarios o ramas de estribos de confinamiento | mm |
+| $A_j$ | Área efectiva de la sección transversal del **nudo** | mm² |
+| $A_{cv}$, $A_{cw}$ | Áreas de concreto que resisten cortante en un muro (alma × longitud) y en un machón o viga de acople | mm² |
+| $\delta_u$, $\Delta_o$ | Desplazamiento de diseño y deriva medida en un piso (análisis elástico de primer orden) | mm |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-5" />, <NormaRef s="C.2.1" pag="C-6" />, <NormaRef s="C.2.1" pag="C-9" />, <NormaRef s="C.2.1" pag="C-10" />, <NormaRef s="C.2.1" pag="C-11" />, <NormaRef s="C.2.1" pag="C-12" />, <NormaRef s="C.2.1" pag="C-13" /> y <NormaRef s="C.2.1" pag="C-14" />.)
+
+### Anclajes (Apéndice C-D) y modelos puntal-tensor (Apéndice C-A)
+
+Son las familias más numerosas del final de la lista. Se reconocen por el subíndice:
+
+- **Anclajes (C-D):** $N_{\cdots}$ para tracción y $V_{\cdots}$ para cortante; $N_b$, $N_{cb}$, $N_{cbg}$ (arrancamiento del concreto, un anclaje o un grupo), $N_p$ y $N_{pn}$ (extracción por deslizamiento), $N_{sa}$ y $V_{sa}$ (resistencia del acero), $N_{sb}$ (desprendimiento lateral), $V_{cp}$ (desprendimiento por cabeceo), $h_{ef}$ (profundidad efectiva de embebido), $c_{a1}$, $c_{a2}$ (distancias al borde), $A_{N_c}$ y $A_{V_c}$ (áreas proyectadas de falla) y los factores $\psi_{\cdots}$ de modificación (<NormaRef s="C.2.1" pag="C-5" />, <NormaRef s="C.2.1" pag="C-6" />, <NormaRef s="C.2.1" pag="C-9" />, <NormaRef s="C.2.1" pag="C-11" />, <NormaRef s="C.2.1" pag="C-12" />, <NormaRef s="C.2.1" pag="C-13" /> y <NormaRef s="C.2.1" pag="C-15" />).
+- **Puntal-tensor (C-A):** $F_n$, $F_{ns}$, $F_{nt}$, $F_{nn}$ (resistencias nominales de puntal, tensor o zona de nodo y de una cara de nodo), $F_u$ (fuerza mayorada), $A_{cs}$ (área del extremo de un puntal), $A_{nz}$, $\beta_s$ y $\beta_n$ (factores de la resistencia efectiva a compresión), $\theta$ (ángulo del puntal con la cuerda de tracción) (<NormaRef s="C.2.1" pag="C-5" />, <NormaRef s="C.2.1" pag="C-9" /> y <NormaRef s="C.2.1" pag="C-14" />).
+
+### Letras griegas más usadas
+
+| Símbolo | Significado |
+|---|---|
+| $\phi$ | **Factor de reducción de resistencia** (C.9.3) |
+| $\varepsilon_t$ | **Deformación unitaria neta de tracción** en el acero extremo a la resistencia nominal, sin contar preesforzado efectivo, flujo plástico, retracción ni temperatura |
+| $\beta_1$ | Relación entre la profundidad del bloque equivalente y la del eje neutro: $a = \beta_1 c$ (C.10.2.7.3) |
+| $\lambda$ | Factor de concreto liviano; $\lambda_\Delta$ = factor para deflexiones adicionales de largo plazo (C.9.5.2.5) |
+| $\xi$ | Factor dependiente del tiempo para cargas sostenidas (C.9.5.2.5) |
+| $\mu$ | Coeficiente de fricción (C.11.6.4.3) |
+| $\omega$, $\omega'$, $\omega_p$ | Índices de refuerzo a tracción, a compresión y de acero de preesfuerzo (Ap. C-B) |
+
+(Fuente: <NormaRef s="C.2.1" pag="C-14" />, <NormaRef s="C.2.1" pag="C-15" /> y <NormaRef s="C.2.1" pag="C-16" />.)
+
+<Callout tipo="atencion" titulo="Erratas y rarezas menores de la lista (observadas en el PDF)">
+- En la definición de $\mu$ el PDF dice «Capítulos 1 C.1, C.21» (error tipográfico por «C.11.6.4.3» o similar): léase como remisión a los Capítulos C.11 y C.21 (<NormaRef s="C.2.1" pag="C-15" />).
+- Varias remisiones internas aparecen sin el prefijo «C.» (p. ej. «Capítulo 5», «Capítulo 22»), herencia del texto original: se refieren a los capítulos C.5, C.22, etc.
+- $I_b$ aparece en el PDF con un símbolo parecido a «$l_b$» (letra ele): es el **momento de inercia** de la viga, con unidades de mm⁴ (<NormaRef s="C.2.1" pag="C-9" />).
+- Las definiciones de $\ell_{px}$ se dan en **metros**, a diferencia del resto de longitudes (mm).
+</Callout>
+
+<Detalle titulo="Cómo encontrar rápido un símbolo en el glosario completo">
+
+El glosario del Título C reúne todos los símbolos de C.2.1 y todas las definiciones de C.2.2 con buscador. Para ubicar un símbolo: busca por el **nombre** (p. ej. «recubrimiento») o por el **símbolo**; la última columna indica los capítulos donde la norma lo usa. Si el símbolo es de un apéndice (C-A a C-D), recuerda que esos apéndices son opcionales o complementarios y se citan con la forma «C-D.5.2.1».
+
+→ <a href="/titulo-c/glosario">Ir al glosario completo del Título C</a>
+
+</Detalle>
+
+## C.2.2 — Definiciones
+
+La norma define **los términos de uso general** en el Título C; las **definiciones especializadas** aparecen en los capítulos correspondientes (<NormaRef s="C.2.2" pag="C-16" />). Ocupan unas 9 páginas (C-16 a C-24), en orden alfabético y con su equivalente en inglés. Aquí se agrupan por temas, con la definición esencial de las más importantes. Para la lista íntegra: <a href="/titulo-c/glosario">glosario del Título C</a>.
+
+### Concreto y sus componentes
+
+| Término | Definición (resumen fiel) | Pág. |
+|---|---|---|
+| **Concreto** (*concrete*) | Mezcla de **cemento pórtland o cualquier otro cemento hidráulico**, agregado fino, agregado grueso y agua, con o sin aditivos | C-17 |
+| **Concreto estructural** | Todo concreto usado con propósitos estructurales, incluyendo **concreto simple y reforzado** | C-18 |
+| **Concreto simple** | Concreto estructural **sin refuerzo o con menos refuerzo que el mínimo** especificado para concreto reforzado | C-18 |
+| **Concreto reforzado** | Concreto estructural reforzado con **no menos de la cantidad mínima** de acero de preesforzado o refuerzo no preesforzado especificada en los Capítulos C.1 a C.21 y Apéndices C-A a C-C | C-18 |
+| **Concreto preesforzado** | Concreto estructural con **esfuerzos internos** introducidos para reducir los esfuerzos potenciales de tracción causados por las cargas | C-18 |
+| **Concreto prefabricado** | Elemento construido en un lugar **diferente de su ubicación final** en la estructura | C-18 |
+| **Concreto de peso normal** | Agregados según NTC 174 (ASTM C33) | C-18 |
+| **Concreto liviano** | Con agregado liviano y **densidad de equilibrio entre 1440 y 1840 kg/m³** (NTC 4022, ASTM C567). Si no cumple estrictamente el Título C, solo se emplea con autorización de la Comisión Asesora Permanente | C-18 |
+| **Concreto completamente liviano** | Agregados fino y grueso livianos (NTC 4045, ASTM C330) | C-18 |
+| **Concreto liviano de arena de peso normal** | Agregado fino de peso normal (NTC 174) y grueso liviano (NTC 4045) | C-18 |
+| **Concreto reforzado con fibras de acero** | Contiene fibras de acero dispersas, orientadas aleatoriamente | C-18 |
+| **Agregado liviano** | Cumple NTC 4045 (ASTM C330) y tiene densidad suelta y seca de **1120 kg/m³ o menos** | C-16 |
+| **Aditivo** | Material distinto de agua, agregados o cemento hidráulico, que se añade antes o durante el mezclado para modificar propiedades | C-16 |
+| **Materiales cementantes** | Los especificados en el Capítulo C.3 (cemento pórtland, hidráulicos adicionados, expansivos, o combinados con cenizas volantes, puzolanas, humo de sílice o escoria granulada de alto horno) | C-21 |
+| **Densidad de equilibrio** | Densidad del concreto liviano tras exponerlo a humedad relativa de **50 ± 5 %** y **23 ± 2 °C** hasta densidad constante | C-18 |
+| **Asentamiento (*slump*)** | Resultado del ensayo de **manejabilidad** de una mezcla de concreto | C-17 |
+| **Curado** | Proceso por el que el concreto endurece y adquiere resistencia una vez colocado | C-18 |
+
+<Callout tipo="importante" titulo="Densidades: tres números que no hay que confundir">
+**1120 kg/m³** (agregado liviano, suelto y seco) · **1440 a 1840 kg/m³** (concreto liviano en equilibrio) · el concreto de peso normal se define por agregados NTC 174, no por un rango (el rango $1440 \le w_c \le 2560$ kg/m³ aparece en la ecuación de $E_c$ de C.8.5.1, <NormaRef s="C-F" pag="C-251" />). Fuente de los dos primeros: <NormaRef s="C.2.2" pag="C-16" /> y <NormaRef s="C.2.2" pag="C-18" />.
+</Callout>
+
+### Resistencias, cargas y método de diseño
+
+| Término | Definición (resumen fiel) | Pág. |
+|---|---|---|
+| **Resistencia especificada a la compresión ($f'_c$)** | La usada en el diseño, evaluada según el Capítulo 5, en **MPa**. Bajo un radical solo indica la raíz del valor numérico (resultado en MPa) | C-23 |
+| **Resistencia a la fluencia** | Resistencia mínima especificada o punto de fluencia del refuerzo, determinada **en tracción** con las normas ASTM aplicables modificadas por C.3.5 | C-23 |
+| **Resistencia a la tracción por hendimiento ($f_{ct}$)** | Determinada según NTC 1907 (ASTM C496M) como describe NTC 4045 (C.5.1.4) | C-23 |
+| **Resistencia nominal** | De un elemento o sección calculada con las disposiciones e hipótesis del método de resistencia **antes de aplicar $\phi$** (C.9.3.1) | C-23 |
+| **Resistencia de diseño** | Resistencia nominal **multiplicada por $\phi$** (C.9.3) | C-23 |
+| **Resistencia requerida** | La que debe tener un elemento o sección para resistir las **cargas mayoradas** y sus fuerzas internas combinadas (C.9.1.1) | C-23 |
+| **Factor de reducción de resistencia ($\phi$)** | También «coeficiente de reducción de resistencia»: multiplica la resistencia nominal para convertirla en de diseño (véase B.2.1) | C-20 |
+| **Factor de carga** | También «coeficiente de carga»: cubre las desviaciones entre cargas reales y nominales, las incertidumbres del análisis y la probabilidad de que coincidan varias cargas extremas | C-20 |
+| **Carga de servicio, muerta, viva** | Las especificadas por el **Título B, sin factores de carga** | C-17 |
+| **Carga mayorada** | La carga multiplicada por los factores de carga, usada para diseñar con el método de resistencia (C.8.1.1 y C.9.2) | C-17 |
+| **Combinaciones de carga de diseño** | Combinación de cargas y fuerzas mayoradas dadas en C.9.2 | C-17 |
+| **Esfuerzo** | Fuerza por unidad de área | C-19 |
+| **Módulo de elasticidad** | Relación entre el esfuerzo normal y la deformación unitaria, para esfuerzos menores que el límite de proporcionalidad (C.8.5) | C-21 |
+| **Fuerzas sísmicas** | Las prescritas por el **Título A** | C-20 |
+
+### Refuerzo y detalles
+
+| Término | Definición (resumen fiel) | Pág. |
+|---|---|---|
+| **Refuerzo** | Material de C.3.5, **excluyendo el acero de preesforzado** salvo que se incluya explícitamente | C-22 |
+| **Refuerzo corrugado** | Barras corrugadas, mallas de barras, alambre corrugado y refuerzo electrosoldado que cumplan C.3.5.3 | C-23 |
+| **Refuerzo liso** | El que no cumple la definición de corrugado (C.3.5.4) | C-23 |
+| **Alambre** | Acero NTC 1907 (ASTM A496) o NTC 4002 (ASTM A82) de **diámetro menor que No. 2 (1/4") ó 6M (6 mm)**; uso limitado a (a) mallas electrosoldadas, (b) refuerzo de retracción y temperatura en elementos muy delgados y (c) refuerzo de flexión en elementos que no son del sistema sismo resistente y cuyo espesor impide barras | C-16 |
+| **Refuerzo electrosoldado de alambre** | Alambres lisos o corrugados en hojas o rollos (NTC 4002/1907; NTC 1925/2310) | C-23 |
+| **Refuerzo transversal** | El que resiste **cortante y torsión**, evita el pandeo del refuerzo principal en elementos a compresión y produce **confinamiento** | C-23 |
+| **Refuerzo en espiral** | Refuerzo continuo enrollado en forma de hélice cilíndrica | C-23 |
+| **Refuerzo de retracción y temperatura** | En losas, el destinado a resistir esfuerzos por temperatura o retracción de fraguado | C-23 |
+| **Estribo (*stirrup*)** | Refuerzo para resistir **cortante y torsión**; barras, alambres o refuerzo electrosoldado, sin dobleces o doblados en L, U o rectángulo, perpendicular o inclinado al refuerzo longitudinal | C-19 |
+| **Estribo (*tie*)** | Barra o alambre doblado que **abraza el refuerzo longitudinal** (círculo, rectángulo u otra forma poligonal sin esquinas reentrantes) | C-20 |
+| **Estribo cerrado de confinamiento (*hoop*)** | Estribo cerrado o enrollado continuo; puede constituirse de varios elementos con **ganchos sísmicos** en sus extremos | C-20 |
+| **Gancho estándar** | Doblez en el extremo de una barra que cumple el Capítulo C.7 | C-20 |
+| **Gancho sísmico** | En estribos o ganchos suplementarios: doblez **mayor de 135°** (no menor de 90° en estribos circulares), con extensión de **6$d_b$ (no menor de 75 mm)** que abrace el refuerzo longitudinal | C-20 |
+| **Gancho suplementario (*crosstie*)** | Barra continua No. 3 (3/8") ó 10M (10 mm) o mayor, con gancho sísmico en los extremos (en uno se permite 90° con extensión mínima de 6$d_b$); mismo diámetro y $f_y$ que los estribos de confinamiento | C-20 |
+| **Recubrimiento especificado** | Distancia entre la superficie externa del refuerzo embebido y la superficie externa más cercana del concreto, indicada en planos o especificaciones | C-22 |
+| **Altura útil de la sección ($d$)** | Distancia de la fibra extrema en compresión al centroide del refuerzo longitudinal en tracción | C-16 |
+| **Longitud de desarrollo** | Longitud embebida del refuerzo (incluyendo torones) necesaria para desarrollar su **resistencia de diseño** en una sección crítica (C.9.3.3) | C-21 |
+| **Longitud de desarrollo con gancho estándar** | Distancia más corta entre la sección crítica y una tangente a la cara exterior del gancho de 90° o 180° | C-21 |
+| **Longitud embebida** | Longitud del refuerzo embebido que se extiende más allá de una sección crítica | C-21 |
+
+### Elementos estructurales y juntas
+
+| Término | Definición (resumen fiel) | Pág. |
+|---|---|---|
+| **Viga** (*beam, girder*) | Elemento horizontal o casi horizontal, de **dimensión longitudinal mayor que las otras dos**, con solicitación principal de **momento flector**, con o sin axiales, cortantes y torsiones | C-24 |
+| **Vigueta o nervadura** | Elemento de una losa nervada que trabaja principalmente a flexión | C-24 |
+| **Columna** | Elemento con relación **altura / menor dimensión lateral mayor que 3**, usado principalmente para resistir compresión axial. En sección variable, la menor dimensión es el promedio de las dimensiones superior e inferior del lado menor | C-17 |
+| **Pedestal** | Igual relación, **menor o igual a 3**, para soportar cargas axiales en compresión | C-22 |
+| **Muro** | Elemento, generalmente vertical, para encerrar o separar espacios | C-21 |
+| **Muro estructural** | Muro diseñado para resistir **combinaciones de cortantes, momentos y fuerzas axiales**; un muro de cortante es un muro estructural | C-21 |
+| **Ábaco** | Proyección **debajo de la losa** para reducir el refuerzo negativo sobre una columna o el espesor mínimo, y aumentar la resistencia a cortante (C.13.2.5, C.13.3.7) | C-16 |
+| **Descolgado para cortante** | Proyección bajo una losa para aumentar su resistencia a cortante (C.13.2.6) | C-19 |
+| **Cimentación** | Conjunto de elementos que transmiten las cargas de la estructura al suelo o roca de apoyo | C-17 |
+| **Nudo** | Parte de la estructura común a los elementos que se intersectan | C-21 |
+| **Diafragma estructural** | Elemento (losa de piso o cubierta) que transmite fuerzas **en su plano** a los elementos verticales del sistema sismo resistente | C-19 |
+| **Elemento colector** | Elemento a tracción o compresión axial que transmite fuerzas sísmicas entre el diafragma y los elementos verticales | C-19 |
+| **Elemento de borde** | Zona a lo largo de los bordes de muros y diafragmas con refuerzo longitudinal y transversal (C.21.9.6 o C.21.11.7.5) | C-19 |
+| **Conexión dúctil / fuerte** | Dúctil: **fluye** con los desplazamientos de diseño para sismo. Fuerte: se mantiene **elástica** mientras los elementos conectados fluyen | C-18 |
+| **Cercha estructural** | Entramado de elementos de concreto reforzado sometido principalmente a fuerzas axiales | C-17 |
+| **Elementos compuestos sometidos a flexión** | Prefabricados o construidos en obra, fabricados en etapas separadas pero interconectados para responder como unidad | C-19 |
+| **Junta de construcción** | Interrupción de la colocación del concreto, temporal, de construcción o permanente | C-20 |
+| **Junta de contracción** | Muesca para crear un plano de debilidad y regular la ubicación del agrietamiento por variaciones dimensionales | C-20 |
+| **Junta de expansión (*isolation joint*)** | Separación entre partes adyacentes que permite movimientos relativos en tres direcciones; se interrumpe parte o todo el refuerzo adherido | C-20, C-21 |
+
+### Sistema sismo resistente: DMI, DMO y DES
+
+| Término | Definición (resumen fiel) | Pág. |
+|---|---|---|
+| **Capacidad de disipación de energía** | Capacidad de un sistema, elemento o sección de trabajar en el rango **inelástico sin perder resistencia**, medida por la energía que disipa en ciclos histeréticos. Del sistema completo se cuantifica con el coeficiente $R$. Se clasifica en **especial (DES), moderada (DMO) y mínima (DMI)** | C-17 |
+| **Sistema de resistencia ante fuerzas sísmicas** | Porción de la estructura diseñada para resistir las fuerzas sísmicas exigidas por el Título A | C-24 |
+| **Pórtico resistente a momento** | Elementos y nudos que resisten fuerzas por flexión, cortante y fuerza axial | C-22 |
+| **Pórtico ordinario (DMI)** | Prefabricado o en sitio; cumple C.1 a C.18 y C.21.2 | C-22 |
+| **Pórtico intermedio (DMO)** | En sitio; cumple C.21.3 más lo del pórtico ordinario DMI | C-22 |
+| **Pórtico especial (DES)** | En sitio: C.21.1.3 a C.21.1.7 y C.21.5 a C.21.7; prefabricado: C.21.1.3 a C.21.1.7 y C.21.5; además lo del pórtico ordinario | C-22 |
+| **Muro estructural ordinario de concreto reforzado (DMI)** | Cumple los Capítulos C.1 a C.18 | C-21 |
+| **Muro estructural intermedio (DMO)** | C.1 a C.18 más C.21.4 | C-21 |
+| **Muro estructural especial (DES)** | C.21.1.3 a C.21.1.7, C.21.9 y C.21.10, además de lo del muro ordinario DMI | C-21 |
+| **Muro estructural ordinario de concreto simple** | Sin capacidad de disipación de energía; cumple el Capítulo C.22 | C-21 |
+| **Región de articulación plástica** | Longitud del elemento donde se busca la **fluencia a flexión**, extendiéndose al menos una distancia $h$ desde la sección crítica | C-23 |
+| **Región confinada** | Parte del elemento confinada con refuerzo transversal que cumple los requisitos especiales de C.21 | C-23 |
+| **Desplazamiento de diseño** | Desplazamiento lateral total esperado para el sismo de diseño (Título A) | C-19 |
+| **Deriva de piso de diseño** | Diferencia relativa de desplazamiento de diseño entre la parte superior e inferior de un piso, dividida por la altura del piso | C-18 |
+| **Base de la estructura** | Nivel al cual se supone que los movimientos horizontales del suelo se imparten a la edificación; no necesariamente coincide con el nivel del terreno | C-17 |
+
+<Callout tipo="nota" titulo="Si lo ves en un plano: DMI, DMO y DES">
+Las tres siglas son la **capacidad de disipación de energía** de C.1.1.10 (<NormaRef s="C.1.1.10.1" pag="C-2" />): **mínima**, **moderada** y **especial**. El Título A las asigna según el sistema y la zona de amenaza ([Capítulo A.3](/titulo-a/a3)); el Capítulo C.21 dice qué detalles hay que añadir. Véase [C.1](/titulo-c/c1).
+</Callout>
+
+### Concreto preesforzado
+
+| Término | Definición (resumen fiel) | Pág. |
+|---|---|---|
+| **Acero de preesforzado** | Elemento de acero de alta resistencia (alambre, barra, torón o tendón) para aplicar fuerzas de preesforzado | C-16 |
+| **Pretensado** | El acero se tensiona **antes** de colocar el concreto | C-22 |
+| **Postensado** | El acero se tensiona **después** de que el concreto ha endurecido | C-22 |
+| **Torón** | Cable de **siete alambres** de acero de alta resistencia trenzados (NTC 2010, ASTM A416) | C-24 |
+| **Tendón** | En pretensado, el acero preesforzado; en postensado, el **conjunto** de anclajes, acero y envoltura (no adherido) o ductos inyectados (adherido) | C-24 |
+| **Tendón adherido / no adherido** | Adherido: el acero está unido al concreto, directamente o con mortero. No adherido: se impide la adherencia y la fuerza pasa al concreto solo en los anclajes | C-24 |
+| **Preesforzado efectivo** | Esfuerzo en el acero después de que han ocurrido **todas las pérdidas** | C-22 |
+| **Fuerza del gato de tensionamiento** | Fuerza temporal que ejerce el gato al tensionar | C-20 |
+| **Fricción por curvatura / por desviación involuntaria** | Fricción por la curvatura especificada del trazado del tendón; fricción por una desviación no intencional del ducto (*wobble*) | C-20 |
+| **Dispositivo de anclaje** | En postensado, transfiere la fuerza del acero al concreto (existen dispositivos básicos para un torón, para varios torones y especiales) | C-19 |
+| **Ducto de postensado** | Ducto liso o corrugado para colocar el acero (C.18.17) | C-19 |
+| **Envoltura para tendones no adheridos** | Material que encapsula el acero para impedir la adherencia, proteger de la corrosión y contener la grasa inhibidora | C-19 |
+| **Longitud de transferencia** | Longitud embebida del torón requerida para transferir el preesfuerzo efectivo al concreto | C-21 |
+| **Transferencia** | Operación de pasar los esfuerzos del acero desde los gatos o el banco de tensionamiento al concreto | C-24 |
+| **Zona de anclaje** | En postensados, porción por donde la fuerza concentrada se transfiere y se distribuye a toda la sección; su extensión es igual a la mayor dimensión de la sección | C-24 |
+| **Zona de tracción precomprimida** | Porción donde ocurriría tracción por flexión si no existiera preesfuerzo, con propiedades de la sección bruta bajo carga muerta y viva no mayoradas | C-24 |
+
+### Deformación unitaria y tipo de sección
+
+Las tres definiciones siguientes se usan para fijar el factor $\phi$ (Capítulo C.9) y se apoyan en la deformación unitaria neta de tracción $\varepsilon_t$:
+
+| Término | Definición | Pág. |
+|---|---|---|
+| **Acero extremo en tracción** | Refuerzo (preesforzado o no) **más alejado** de la fibra extrema en compresión | C-16 |
+| **Deformación unitaria neta de tracción** | Deformación de tracción cuando se alcanza la resistencia nominal, **excluyendo** las debidas a preesforzado efectivo, flujo plástico, retracción y temperatura | C-18 |
+| **Límite de deformación controlada por compresión** | Deformación neta de tracción **bajo condiciones de deformación balanceada** (C.10.3.3) | C-21 |
+| **Sección controlada por compresión** | $\varepsilon_t$ en el acero extremo a la resistencia nominal **menor o igual** al límite anterior | C-23 |
+| **Sección controlada por tracción** | $\varepsilon_t$ en el estado de resistencia nominal **mayor o igual que 0.005** | C-23 |
+
+<Callout tipo="nota" titulo="Dato de otro capítulo (C.10.3.3 y C.10.3.4, C-76)">
+Para refuerzo **Grado 420** y para todos los refuerzos preesforzados se permite fijar el límite de deformación controlada por compresión en **0.002**. Las secciones con $\varepsilon_t$ entre ese límite y 0.005 forman una **región de transición**. Este dato no está en C.2; se cita aquí para completar la definición (<NormaRef s="C.10.3.3" pag="C-76" />).
+</Callout>
+
+### Obra, documentos y responsables
+
+| Término | Definición (resumen fiel) | Pág. |
+|---|---|---|
+| **Autoridad competente** | Funcionario o autoridad que administra y hace cumplir la NSR-10, o su representante autorizado | C-17 |
+| **Profesional facultado para diseñar** | Quien está facultado para ejercer el diseño estructural según la Ley 400 de 1997 y es el responsable del diseño estructural | C-22 |
+| **Supervisor técnico** | Remite a C.1.3 (<NormaRef s="C.1.3" pag="C-3" />) | C-24 |
+| **Documentos contractuales** | Planos y especificaciones del proyecto necesarios para la obra | C-19 |
+| **Memoria de cálculos** | Justificación técnica de dimensiones, refuerzos y especificaciones, tal como se presentan en los planos | C-21 |
+| **Obra** | Toda la construcción o partes identificables separadamente según los documentos contractuales | C-22 |
+| **Cimbra / encofrados y formaletas** | Estructura provisional para colocar refuerzo y concreto y sostenerlos hasta que alcance resistencia; moldes con la forma de los elementos | C-17, C-19 |
+| **Puntales** | Apoyos verticales o inclinados que soportan el peso del encofrado, del concreto y las cargas de construcción | C-22 |
+| **Puntales de reapuntalamiento (*reshores*)** | Puntales colocados bajo una losa después de retirar los originales, para que la losa soporte su peso y las cargas de construcción antes | C-22 |
+| **Asentamiento (*settlement*)** | Hundimiento de la estructura por compresión y deformación del suelo o roca de cimentación | C-17 |
+
+<Callout tipo="atencion" titulo="Dos «asentamientos» y dos «prefabricados» en C.2.2">
+«Asentamiento» aparece con dos significados distintos: el **hundimiento** de la estructura (*settlement*) y el **ensayo de manejabilidad** del concreto fresco (*slump*) (<NormaRef s="C.2.2" pag="C-17" />). Además, «concreto prefabricado» y «prefabricado» están definidos por separado, con el mismo sentido (<NormaRef s="C.2.2" pag="C-18" /> y <NormaRef s="C.2.2" pag="C-22" />). La norma también usa «Cimbra (*Shores*)» y «Puntales (*Shores*)» con la misma palabra inglesa.
+</Callout>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Leer la notación de una viga y pasar de kN a N">
+Una viga rectangular de concreto tiene $b_w$ = {ej1.bw} mm, altura $h$ = {ej1.h} mm y refuerzo longitudinal en tracción de $A_s$ = {ej1.As} mm², con el centroide del refuerzo a 50 mm de la cara inferior (dato supuesto). La resistencia especificada es $f'_c$ = {ej1.fc} MPa. Las solicitaciones **mayoradas** del análisis son $M_u$ = 150 kN·m y $V_u$ = 120 kN. Se quiere expresar cada dato **con el símbolo, la unidad y el valor** que pide la notación de C.2.1, antes de entrar a una ecuación de diseño.
+
+<Paso titulo="Altura útil d" ref="C.2.2 «Altura útil de la sección», C.2.1 d">
+$d$ es la distancia de la fibra extrema en compresión (cara superior) al centroide del refuerzo en tracción: $d = h - 50$ mm = **{ej1.d} mm**. Con una sola capa, $d_t$ = $d$.
+</Paso>
+<Paso titulo="Cuantía ρ" ref="C.2.1 ρ y ρw (C-15)">
+$\rho = \dfrac{A_s}{b\,d}$ (o $\rho_w$ con $b_w$): $\rho = \dfrac{1200}{300 \times 500}$ = **{ej1.rho.toFixed(4)}** (es decir, {(ej1.rho * 100).toFixed(2)} %). Es un número sin unidades.
+</Paso>
+<Paso titulo="Unidades de Mu y Vu" ref="C.2.1 Mu (C-11), Vu (C-13)">
+Mu va en N·mm y Vu en N: $M_u$ = 150 kN·m × 10⁶ = **{ej1.MuNmm.toExponential(2)} N·mm**; $V_u$ = 120 kN × 10³ = **{ej1.VuN} N**.
+</Paso>
+<Paso titulo="Un esfuerzo de referencia en MPa" ref="C.2.1 (esfuerzos en MPa)">
+Con fuerzas en N y dimensiones en mm el resultado sale en N/mm² = MPa: $V_u/(b_w d)$ = {ej1.VuN} / (300 × 500) = **{ej1.esfuerzo.toFixed(2)} MPa**. (Es solo un esfuerzo nominal de referencia, **no** una verificación de cortante.)
+</Paso>
+<Paso titulo="Raíz de f′c y módulo de elasticidad" ref="C.2.2 f′c; C.8.5.1 vía Apéndice C-F (C-251)">
+Bajo el radical se toma solo el número: $\sqrt{f'_c}$ = √{ej1.fc} = **{ej1.raizFc.toFixed(3)} MPa**. Con la expresión de concreto de peso normal de C.8.5.1, que aparece en el Apéndice C-F como $E_c = 4700\sqrt{f'_c}$, el módulo es $E_c$ ≈ **{Math.round(ej1.Ec)} MPa**, frente a $E_s$ = {ej1.Es} MPa del acero.
+</Paso>
+<Resultado>
+$d$ = {ej1.d} mm · $\rho$ = {ej1.rho.toFixed(4)} · $M_u$ = {ej1.MuNmm.toExponential(2)} N·mm · $V_u$ = {ej1.VuN} N · $\sqrt{f'_c}$ = {ej1.raizFc.toFixed(2)} MPa. Con esos datos ya pueden entrar a las ecuaciones de los Capítulos C.10 y C.11 sin conflictos de unidades.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Cambio de unidades: f′c = 21 MPa en tres sistemas">
+La Tabla del Apéndice C-F (<NormaRef s="C-F" pag="C-251" />) da, para cada término con $\sqrt{f'_c}$, un **coeficiente distinto en cada sistema** porque $f'_c$ se expresa en MPa, kgf/cm² o psi. Verifiquemos con $f'_c$ = {ej2.fc} MPa que las tres versiones representan **la misma cantidad**.
+
+<Paso titulo="f′c en cada sistema" ref="Apéndice C-F, primera filas">
+Con 1 MPa = 10 kgf/cm² = 142.2 psi: $f'_c$ = {ej2.fc} MPa = **{ej2.fcMks} kgf/cm²** = {ej2.fcPsi.toFixed(0)} psi (la tabla redondea a 3 000 psi).
+</Paso>
+<Paso titulo="Evaluar cada término en su sistema y devolverlo a MPa" ref="Apéndice C-F">
+
+| Cantidad | SI (MPa) | mks (kgf/cm²) | mks → MPa | Inglés (psi) | inglés → MPa | Dif. mks | Dif. inglés |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| $\sqrt{f'_c}$ vs. $3.18\sqrt{f'_c}$ vs. $12\sqrt{f'_c}$ | {ej2.filas[0].si.toFixed(3)} | {ej2.filas[0].mks.toFixed(2)} | {ej2.filas[0].mksMpa.toFixed(3)} | {ej2.filas[0].ing.toFixed(1)} | {ej2.filas[0].ingMpa.toFixed(3)} | {ej2.filas[0].difMks.toFixed(1)} % | {ej2.filas[0].difIng.toFixed(1)} % |
+| $0.313\sqrt{f'_c}$ vs. $\sqrt{f'_c}$ vs. $3.77\sqrt{f'_c}$ | {ej2.filas[1].si.toFixed(3)} | {ej2.filas[1].mks.toFixed(2)} | {ej2.filas[1].mksMpa.toFixed(3)} | {ej2.filas[1].ing.toFixed(1)} | {ej2.filas[1].ingMpa.toFixed(3)} | {ej2.filas[1].difMks.toFixed(1)} % | {ej2.filas[1].difIng.toFixed(1)} % |
+| $0.083\sqrt{f'_c}$ vs. $0.27\sqrt{f'_c}$ vs. $\sqrt{f'_c}$ | {ej2.filas[2].si.toFixed(3)} | {ej2.filas[2].mks.toFixed(2)} | {ej2.filas[2].mksMpa.toFixed(3)} | {ej2.filas[2].ing.toFixed(1)} | {ej2.filas[2].ingMpa.toFixed(3)} | {ej2.filas[2].difMks.toFixed(1)} % | {ej2.filas[2].difIng.toFixed(1)} % |
+| $0.17\sqrt{f'_c}$ vs. $0.53\sqrt{f'_c}$ vs. $2\sqrt{f'_c}$ | {ej2.filas[3].si.toFixed(3)} | {ej2.filas[3].mks.toFixed(2)} | {ej2.filas[3].mksMpa.toFixed(3)} | {ej2.filas[3].ing.toFixed(1)} | {ej2.filas[3].ingMpa.toFixed(3)} | {ej2.filas[3].difMks.toFixed(1)} % | {ej2.filas[3].difIng.toFixed(1)} % |
+
+</Paso>
+<Paso titulo="Interpretar las diferencias">
+Para $0.17\sqrt{f'_c}$: {ej2.c017.si.toFixed(3)} MPa en SI, {ej2.c017.mksMpa.toFixed(3)} MPa por la versión mks ({ej2.c017.difMks.toFixed(1)} %) y {ej2.c017.ingMpa.toFixed(3)} MPa por la inglesa ({ej2.c017.difIng.toFixed(1)} %). Las diferencias vienen del **redondeo de los coeficientes** de la tabla (0.53, 2, 142.2…); son pequeñas, pero explican por qué **un diseño hecho en kgf/cm² no coincide exactamente con el hecho en MPa**.
+</Paso>
+<Resultado>
+Los tres sistemas representan la misma cantidad dentro de unas décimas de punto porcentual a un par de puntos. **Regla práctica (nuestra):** convierte los **datos** a SI desde el principio y usa solo los coeficientes de MPa; no mezcles el coeficiente de un sistema con unidades de otro.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Aplicar definiciones: columna o pedestal, y tipo de sección">
+**Parte A.** Tres elementos de sección cuadrada de 400 mm: uno de 3 000 mm de altura, otro de 1 000 mm y otro de 1 200 mm. Según C.2.2: columna si altura / menor dimensión lateral **> 3**; pedestal si **≤ 3**.
+
+<Paso titulo="Relación altura / menor dimensión" ref="C.2.2 «Columna», «Pedestal»">
+- 3 000 / 400 = 7.5 → **{ej3.a}**.
+- 1 000 / 400 = 2.5 → **{ej3.b}**.
+- 1 200 / 400 = 3.0 → **{ej3.c}** (la igualdad cae en «menor o igual a 3»).
+</Paso>
+**Parte B.** Una viga con refuerzo Grado 420 tiene, a la resistencia nominal, deformaciones unitarias netas de tracción en el acero extremo $\varepsilon_t$ de 0.0060, 0.0035 y 0.0015 en tres alternativas de armado.
+
+<Paso titulo="Clasificar la sección" ref="C.2.2 «Sección controlada por tracción / compresión»; C.10.3.3 y C.10.3.4">
+Con el límite de compresión de 0.002 (Grado 420, C.10.3.3):
+- $\varepsilon_t$ = 0.0060 ≥ 0.005 → **{ej3.t1}**.
+- $\varepsilon_t$ = 0.0035, entre 0.002 y 0.005 → **{ej3.t2}**.
+- $\varepsilon_t$ = 0.0015 ≤ 0.002 → **{ej3.t3}**.
+</Paso>
+<Resultado>
+Parte A: solo el primer elemento es **columna**; los otros dos son **pedestales**. Parte B: las tres secciones son, en ese orden, controlada por tracción, de transición y controlada por compresión. Estas clasificaciones intervienen en la elección del factor $\phi$ del Capítulo C.9 (la relación con $\phi$ es explicación nuestra; las definiciones son de C.2.2).
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores frecuentes al usar la notación y las definiciones">
+- **Confundir $d$ con $h$** al calcular cuantías o cortante: $d$ llega al centroide del acero en tracción, no a la cara inferior (<NormaRef s="C.2.1" pag="C-9" />).
+- **Mezclar $M_u$ (kN·m) con fórmulas en N·mm**: el Título C espera N·mm; olvidar el 10⁶ produce errores de un millón de veces (<NormaRef s="C.2.1" pag="C-11" />).
+- **Usar $f'_c$ en kgf/cm² con el coeficiente de MPa** (o al revés): por ejemplo, $0.17\sqrt{f'_c}$ solo vale con $f'_c$ en MPa; en kgf/cm² el coeficiente es 0.53 (<NormaRef s="C-F" pag="C-251" />).
+- **Tomar $\sqrt{f'_c}$ como «raíz de la unidad»**: bajo el radical se usa solo el número y el resultado queda en MPa (<NormaRef s="C.2.2" pag="C-23" />).
+- **Llamar «columna» a todo elemento vertical**: la definición exige relación altura / menor dimensión mayor que 3; con 3 o menos es pedestal (<NormaRef s="C.2.2" pag="C-17" /> y <NormaRef s="C.2.2" pag="C-22" />).
+- **Confundir estribo (*stirrup*) con estribo (*tie*) y con gancho suplementario (*crosstie*)**: el primero resiste cortante y torsión, el segundo abraza el refuerzo longitudinal, y el gancho suplementario es una barra con ganchos sísmicos que se suma al estribo de confinamiento (<NormaRef s="C.2.2" pag="C-19" /> y <NormaRef s="C.2.2" pag="C-20" />).
+- **Aplicar el gancho de 90° a todos los estribos de confinamiento**: el gancho sísmico exige doblez mayor de 135° (excepto 90° en estribos circulares) y extensión de 6$d_b$ no menor de 75 mm (<NormaRef s="C.2.2" pag="C-20" />).
+- **Ignorar que $\phi$ y las resistencias nominales no son lo mismo**: hay que comparar $\phi M_n$ (de diseño) con $M_u$ (requerida), no $M_n$ con $M_u$ (<NormaRef s="C.2.2" pag="C-23" />).
+- **Usar el nombre de un símbolo sin leer su apéndice**: muchos símbolos ($N_b$, $F_n$, $\psi_{c,N}$…) pertenecen a los Apéndices C-A y C-D y solo valen con los métodos de esos apéndices.
+</Callout>
+
+## Resumen en una línea
+
+**C.2 es el diccionario del Título C: cada símbolo trae unidad (mm, N, N·mm, MPa) y capítulo de uso, y las definiciones de uso general fijan lo que son columna, estribo, DMI/DMO/DES, concreto reforzado o preesforzado; consulta el glosario para la lista completa.**

@@ -1,0 +1,226 @@
+---
+codigo: 'C.6'
+tipo: capitulo
+titulo: 'Cimbras y encofrados, embebidos y juntas de construcción'
+resumen: 'Qué debe cumplir la cimbra, cómo y cuándo se retiran puntales y reapuntalamientos, qué se puede embeber en el concreto (tuberías, ductos, aluminio) y dónde y cómo se hacen las juntas de construcción.'
+objetivos:
+  - 'Enumerar los requisitos de diseño de cimbras y encofrados y los factores que los gobiernan'
+  - 'Explicar el procedimiento exigido para descimbrar, retirar puntales y reapuntalar, y quién debe documentarlo'
+  - 'Verificar tuberías y ductos embebidos en losas, vigas y columnas con los límites de C.6.3'
+  - 'Ubicar juntas de construcción en entrepisos y preparar su superficie'
+paginasNorma: 'C-47 a C-49'
+paginaPdf: 349
+orden: 6
+calculadoras: []
+nivel: 'basico'
+---
+
+export const ej1 = (() => {
+  const vano = 7.5; // m
+  const ini = vano / 3;
+  const fin = (2 * vano) / 3;
+  const bViga = 0.4; // m
+  const desplazamiento = 2 * bViga;
+  const D = 6.0;
+  const L = 2.0;
+  return { vano, ini, fin, bViga, desplazamiento, D, L, limite: D + L };
+})();
+
+export const ej2 = (() => {
+  const h = 150; // mm, espesor de la losa
+  const dTubo = 32; // mm
+  const maxDim = h / 3;
+  const sMin = 3 * dTubo;
+  const recInterior = 20;
+  const recIntemperie = 40;
+  const lado = 400; // mm, columna
+  const areaCol = lado * lado;
+  const maxDuctos = 0.04 * areaCol;
+  const Ac = 1000 * h; // mm² por metro de ancho de losa
+  const asNormal = 0.002 * Ac;
+  return { h, dTubo, maxDim, sMin, recInterior, recIntemperie, lado, areaCol, maxDuctos, Ac, asNormal };
+})();
+
+## Idea central del capítulo
+
+El concreto se vacía dentro de un molde y casi todo lo que la estructura vale depende de que ese molde (la **cimbra** o **encofrado**) sea rígido, hermético y se retire en el momento correcto. El Capítulo C.6 reúne cuatro asuntos de **construcción** que condicionan el diseño:
+
+1. **Cimbras y encofrados** (C.6.1): qué deben lograr y qué cargas debe resistir el sistema.
+2. **Descimbrado, puntales y reapuntalamiento** (C.6.2): el constructor debe tener un *procedimiento y programación* por escrito, respaldado por análisis y ensayos de resistencia.
+3. **Embebidos** (C.6.3): tuberías, ductos e insertos dentro del concreto, con límites de tamaño, separación, recubrimiento y refuerzo.
+4. **Juntas de construcción** (C.6.4): dónde ponerlas, cómo limpiarlas y qué hacer para transferir cortante.
+
+<Callout tipo="importante" titulo="Es un capítulo de obra, pero con cifras de diseño">
+No contiene ecuaciones de resistencia, pero sí límites numéricos que el diseñador debe conocer y escribir en los planos y especificaciones: 4 % del área de la columna para ductos, 1/3 del espesor para tuberías, 3 diámetros de separación, 40 mm y 20 mm de recubrimiento para tuberías, cuantía de 0.002 normal a la tubería y juntas en el tercio central del vano.
+</Callout>
+
+El capítulo ocupa solo tres páginas del PDF (C-47 a C-49, PDF 349 a 351); la página C-50 está en blanco (“NOTAS”).
+
+## C.6.1 — Diseño de cimbras y encofrados
+
+La norma fija seis exigencias para las cimbras y encofrados (<NormaRef s="C.6.1" pag="C-47" />):
+
+| Numeral | Exigencia |
+|---|---|
+| C.6.1.1 | Obtener una estructura con la **forma, niveles y dimensiones** de los planos y especificaciones |
+| C.6.1.2 | Ser **esencialmente y suficientemente herméticos** para impedir la fuga del mortero |
+| C.6.1.3 | Estar **arriostrados o amarrados** entre sí para conservar posición y forma |
+| C.6.1.4 | Que ellos y sus apoyos **no dañen la estructura previamente construida** |
+| C.6.1.5 | Considerar (a) velocidad y método de colocación del concreto; (b) cargas de construcción verticales, horizontales y de impacto; (c) requisitos especiales para cáscaras, losas plegadas, domos, concreto arquitectónico y similares |
+| C.6.1.6 | En elementos **preesforzados**, permitir los desplazamientos del elemento al aplicar el preesfuerzo sin causar daños |
+
+<Callout tipo="practica">
+La velocidad de colocación importa porque el concreto fresco empuja el encofrado como un líquido: llenar muy rápido una columna o un muro alto multiplica la presión lateral. Esa presión y el peso del concreto, más las cargas de personal, equipo e impacto (*cargas de construcción*, C.6.1.5(b)), son las que se usan para diseñar el encofrado. La norma no da una fórmula de presión; es responsabilidad del constructor (comentario propio, no es texto de la norma).
+</Callout>
+
+## C.6.2 — Descimbrado, puntales y reapuntalamiento
+
+### C.6.2.1 — Descimbrado
+
+La cimbra debe retirarse **sin afectar negativamente** la seguridad o el funcionamiento de la estructura, y el concreto que queda expuesto debe tener **resistencia suficiente para no dañarse** durante la operación (<NormaRef s="C.6.2.1" pag="C-47" />).
+
+### C.6.2.2 — Retiro de puntales y reapuntalamiento
+
+Los requisitos C.6.2.2.1 a C.6.2.2.3 se aplican a **vigas y losas**, excepto las construidas sobre el terreno (<NormaRef s="C.6.2.2" pag="C-47" />).
+
+**C.6.2.2.1 — Procedimiento previo.** Antes de iniciar la construcción, el constructor debe **definir un procedimiento y una programación** para quitar apuntalamientos e instalar reapuntalamientos, y para **calcular las cargas** que se transfieren a la estructura en el proceso. Además:
+
+- (a) El análisis estructural y los datos de resistencia del concreto usados en la planificación deben **entregarse a la autoridad competente cuando ésta lo requiera**.
+- (b) Solo se pueden apoyar cargas de construcción sobre la estructura, o descimbrar cualquier parte, cuando la estructura **en su estado de avance**, junto con la cimbra y los apuntalamientos que aún existan, tenga **resistencia suficiente** para soportar con seguridad su peso propio y las cargas colocadas.
+- (c) Esa resistencia debe demostrarse con un **análisis estructural** que considere las cargas propuestas, la resistencia del sistema de encofrado y cimbra y la resistencia del concreto. La resistencia del concreto debe basarse en **ensayos de probetas curadas en obra** (<NormaRef s="C.6.2.2.1" pag="C-47" /> y <NormaRef s="C.6.2.2.1" pag="C-48" />) o, con aprobación de la autoridad competente, en otros procedimientos para evaluar la resistencia.
+
+**C.6.2.2.2 — Límite de cargas de construcción.** No se pueden soportar sobre la estructura sin cimbra cargas de construcción que **excedan la suma de las cargas muertas más vivas** del diseño, salvo que un análisis estructural demuestre resistencia suficiente (<NormaRef s="C.6.2.2.2" pag="C-48" />).
+
+**C.6.2.2.3 — Preesforzado.** Las cimbras de elementos preesforzados no se retiran hasta que se haya aplicado suficiente preesfuerzo para que el elemento soporte su **peso propio y las cargas de construcción** previstas (<NormaRef s="C.6.2.2.3" pag="C-48" />).
+
+<Callout tipo="atencion" titulo="La norma no da plazos en días">
+C.6.2 no contiene una tabla de «días de desencofrado». El criterio es de **resistencia demostrada** (análisis + probetas curadas en obra), no de tiempo. Cualquier plazo típico (por ejemplo, «7 días») es una práctica de obra que debe sustentarse con ensayos; no es un requisito de la NSR-10.
+</Callout>
+
+## C.6.3 — Embebidos en el concreto
+
+### C.6.3.1 a C.6.3.3 — Principios generales
+
+- **C.6.3.1.** Con aprobación del profesional facultado para diseñar se puede embeber cualquier material que **no sea perjudicial** para el concreto y cumpla los límites de 6.3, siempre que **no se considere que reemplaza estructuralmente** al concreto desplazado, salvo lo previsto en C.6.3.6 (<NormaRef s="C.6.3.1" pag="C-48" />).
+- **C.6.3.2.** Todo embebido de **aluminio** debe protegerse o recubrirse para evitar la reacción concreto-aluminio o la acción electrolítica entre aluminio y acero (<NormaRef s="C.6.3.2" pag="C-48" />).
+- **C.6.3.3.** Ductos, tuberías e insertos que **atraviesan** losas, muros o vigas no deben debilitar significativamente la estructura (<NormaRef s="C.6.3.3" pag="C-48" />).
+
+### C.6.3.4 — Ductos en columnas
+
+Los ductos y tuberías con sus conexiones embebidos en una **columna** no deben ocupar más del **4 %** del área de la sección transversal usada para calcular su resistencia, o la requerida para protección contra el fuego (<NormaRef s="C.6.3.4" pag="C-48" />).
+
+### C.6.3.5 — Tuberías embebidas en losas, muros y vigas
+
+Salvo que los planos de ductos y tuberías hayan sido aprobados por el profesional facultado para diseñar, las tuberías **embebidas** (no las que solo atraviesan) deben cumplir (<NormaRef s="C.6.3.5" pag="C-48" />):
+
+| Numeral | Límite |
+|---|---|
+| C.6.3.5.1 | Dimensiones exteriores **no mayores que 1/3** del espesor total de la losa, muro o viga |
+| C.6.3.5.2 | Separación **no menor de 3 veces** su diámetro o ancho, medida centro a centro |
+| C.6.3.5.3 | No afectar significativamente la resistencia del elemento |
+
+### C.6.3.6 — Cuándo el embebido sustituye al concreto en compresión
+
+Los ductos, tuberías e insertos pueden considerarse sustitutos estructurales del concreto desplazado **en compresión** si cumplen simultáneamente (<NormaRef s="C.6.3.6" pag="C-48" />):
+
+1. **C.6.3.6.1** — No están expuestos a corrosión ni a otra causa de deterioro.
+2. **C.6.3.6.2** — Son de acero o hierro, sin revestimiento o galvanizados, de espesor no menor que el del tubo de acero calibre estándar número 40.
+3. **C.6.3.6.3** — Tienen diámetro interior nominal no mayor de **50 mm** y están separados al menos **3 diámetros** centro a centro.
+
+### C.6.3.7 a C.6.3.12 — Fluidos, ubicación, recubrimiento y refuerzo
+
+- **C.6.3.7.** Las tuberías y conexiones deben diseñarse para resistir los efectos del **fluido, presión y temperatura** a los que estarán sometidas.
+- **C.6.3.8.** Ningún líquido, gas o vapor, **excepto agua** a no más de **32 °C** y **0.35 MPa**, debe circular por las tuberías hasta que el concreto haya alcanzado su **resistencia de diseño**.
+- **C.6.3.9.** En **losas macizas** las tuberías van **entre las capas de refuerzo superior e inferior**, salvo que se requieran para irradiar calor o fundir nieve.
+- **C.6.3.10.** El recubrimiento de concreto para tuberías, conductos y conexiones no debe ser menor de **40 mm** en superficies expuestas a la intemperie o en contacto con el suelo, ni menos de **20 mm** en las demás (<NormaRef s="C.6.3.10" pag="C-49" />).
+- **C.6.3.11.** Debe colocarse refuerzo **normal a la tubería** con área no menor de **0.002 veces el área de la sección de concreto** (<NormaRef s="C.6.3.11" pag="C-49" />).
+- **C.6.3.12.** Las tuberías y ductos se fabrican e instalan de modo que **no haya que cortar, doblar ni desplazar** el refuerzo de su posición apropiada.
+
+<Ejemplo numero={1} titulo="Tuberías y ductos embebidos en una losa y en una columna">
+Una losa maciza de {ej2.h} mm de espesor lleva una tubería de PVC de {ej2.dTubo} mm de diámetro exterior embebida (que no solo la atraviesa). Una columna de {ej2.lado} × {ej2.lado} mm recibe ductos eléctricos. Verificar los límites de C.6.3 y el refuerzo normal a la tubería, por metro de ancho de losa.
+
+<Paso titulo="Dimensión máxima de la tubería en la losa" ref="C.6.3.5.1">
+Máximo 1/3 del espesor: {ej2.h} / 3 = **{ej2.maxDim.toFixed(0)} mm**. La tubería de {ej2.dTubo} mm cumple.
+</Paso>
+<Paso titulo="Separación entre tuberías paralelas" ref="C.6.3.5.2">
+Centro a centro no menor de 3 diámetros: 3 × {ej2.dTubo} = **{ej2.sMin} mm**. Quedan {ej2.sMin - ej2.dTubo} mm libres entre tuberías vecinas.
+</Paso>
+<Paso titulo="Ubicación y recubrimiento" ref="C.6.3.9, C.6.3.10">
+Va entre las capas de refuerzo superior e inferior. El recubrimiento de concreto sobre la tubería debe ser al menos **{ej2.recInterior} mm** en una losa de entrepiso interior (o **{ej2.recIntemperie} mm** si queda expuesta a la intemperie o en contacto con el suelo).
+</Paso>
+<Paso titulo="Refuerzo normal a la tubería" ref="C.6.3.11">
+$A_s \ge 0.002\, A_c$, con $A_c$ = 1000 × {ej2.h} = {ej2.Ac.toLocaleString('en-US')} mm² por metro de losa: $A_s \ge$ **{ej2.asNormal.toFixed(0)} mm²/m** perpendicular al eje de la tubería.
+</Paso>
+<Paso titulo="Ductos en la columna" ref="C.6.3.4">
+Área de la sección: {ej2.lado} × {ej2.lado} = {ej2.areaCol.toLocaleString('en-US')} mm². Máximo 4 %: **{ej2.maxDuctos.toFixed(0)} mm²** para ductos y conexiones.
+</Paso>
+<Resultado>
+Tubería de {ej2.dTubo} mm: admisible en la losa de {ej2.h} mm (máx. {ej2.maxDim.toFixed(0)} mm), con separación mínima de {ej2.sMin} mm, recubrimiento de {ej2.recInterior} mm y al menos {ej2.asNormal.toFixed(0)} mm²/m de refuerzo normal. En la columna, los ductos no pueden pasar de {ej2.maxDuctos.toFixed(0)} mm².
+</Resultado>
+</Ejemplo>
+
+## C.6.4 — Juntas de construcción
+
+Las juntas de construcción son las interrupciones de la colocación del concreto. La norma pide (<NormaRef s="C.6.4" pag="C-49" />):
+
+| Numeral | Requisito |
+|---|---|
+| C.6.4.1 | Superficie **limpia y libre de lechada** |
+| C.6.4.2 | Inmediatamente antes de la nueva etapa, **mojar** todas las juntas y **eliminar el agua apozada** |
+| C.6.4.3 | Hacerlas y ubicarlas de modo que **no perjudiquen la resistencia**; prever la **transferencia de cortante y otras fuerzas** (véase C.11.6.9) |
+| C.6.4.4 | En entrepisos, dentro del **tercio central** del vano de losas, vigas y vigas principales |
+| C.6.4.5 | En vigas principales, desplazadas **al menos 2 veces el ancho** de las vigas que las intersectan |
+| C.6.4.6 | Vigas, vigas principales o losas apoyadas en columnas o muros **no se construyen** hasta que el concreto del apoyo vertical **haya dejado de ser plástico** |
+| C.6.4.7 | Vigas, vigas principales, capiteles, descolgados para cortante y ábacos se construyen **monolíticamente** con la losa, salvo indicación en planos o especificaciones |
+
+<Callout tipo="nota" titulo="Por qué el tercio central">
+En el tercio central de un vano con cargas gravitacionales el cortante es bajo (cerca del centro de un vano cargado uniformemente es nulo), de modo que la junta está en la zona donde menos trabaja a corte. Es una explicación de ingeniería (propia); el texto de la norma solo da el requisito de ubicación.
+</Callout>
+
+<Ejemplo numero={2} titulo="Caso práctico: juntas de construcción y descimbrado de un entrepiso">
+Se fundirá en dos etapas un entrepiso con vigas de 7.5 m de luz. Una viga principal de 0.40 m de ancho recibe a las vigas secundarias. El diseño usa D = {ej1.D.toFixed(1)} kN/m² y L = {ej1.L.toFixed(1)} kN/m². Definir dónde puede quedar la junta, qué hacer antes de la segunda etapa y cuáles son las condiciones para descimbrar.
+
+<Paso titulo="Ubicación de la junta en el vano" ref="C.6.4.4">
+Tercio central del vano de {ej1.vano.toFixed(1)} m: entre {ej1.ini.toFixed(2)} m y {ej1.fin.toFixed(2)} m medidos desde un apoyo.
+</Paso>
+<Paso titulo="Desplazamiento respecto a la viga secundaria" ref="C.6.4.5">
+Si la junta cae en la viga principal, se desplaza como mínimo 2 × {ej1.bViga.toFixed(2)} = **{ej1.desplazamiento.toFixed(2)} m** de las vigas que la intersectan.
+</Paso>
+<Paso titulo="Preparación antes de colocar la segunda etapa" ref="C.6.4.1, C.6.4.2, C.6.4.3">
+Limpiar la superficie y retirar la lechada; mojar la junta y evacuar el agua apozada; verificar con el diseñador el refuerzo que atraviesa la junta y el tratamiento de la superficie para transferir cortante (C.11.6.9).
+</Paso>
+<Paso titulo="Apoyos verticales" ref="C.6.4.6">
+Las vigas y la losa no se vacían hasta que el concreto de columnas y muros haya dejado de ser plástico.
+</Paso>
+<Paso titulo="Descimbrado" ref="C.6.2.2.1, C.6.2.2.2">
+Antes de la obra, el constructor debe tener el procedimiento y la programación de retiro de puntales y reapuntalamiento, con el análisis de cargas transferidas. Las cargas de construcción sobre la estructura sin cimbra no pueden exceder D + L = {ej1.D.toFixed(1)} + {ej1.L.toFixed(1)} = **{ej1.limite.toFixed(1)} kN/m²**, salvo que un análisis demuestre resistencia suficiente. La decisión de retirar puntales se basa en el análisis y en los ensayos de probetas curadas en obra, no en un número de días.
+</Paso>
+<Resultado>
+Junta entre {ej1.ini.toFixed(2)} y {ej1.fin.toFixed(2)} m del apoyo, desplazada {ej1.desplazamiento.toFixed(2)} m de las vigas que intersecan; descimbrado solo con análisis, probetas curadas en obra y cargas de construcción no mayores de {ej1.limite.toFixed(1)} kN/m². Los datos numéricos del ejemplo son supuestos propios; los límites son de la norma.
+</Resultado>
+</Ejemplo>
+
+<Detalle titulo="Quién firma qué (resumen propio)">
+
+- **Constructor:** define y mantiene el procedimiento de descimbrado y reapuntalamiento y entrega el análisis y las resistencias a la autoridad competente cuando lo pida (C.6.2.2.1).
+- **Profesional facultado para diseñar:** aprueba los materiales embebidos (C.6.3.1) y los planos de tuberías y ductos (C.6.3.5); define cómo se transfiere el cortante por las juntas (C.6.4.3).
+- **Autoridad competente:** puede requerir el análisis y los datos de resistencia, y aprobar métodos alternativos de evaluar la resistencia del concreto.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Retirar puntales «por días»** en lugar de por resistencia demostrada con probetas curadas **en obra** (C.6.2.2.1).
+- **Apilar material o equipo** sobre una losa recién descimbrada por encima de D + L sin análisis (C.6.2.2.2).
+- **Embeber tuberías gruesas** sin comprobar el límite de 1/3 del espesor ni la separación de 3 diámetros (C.6.3.5).
+- **Poner ductos en columnas** hasta superar el 4 % de la sección (C.6.3.4) o cortar estribos para pasarlos (C.6.3.12).
+- **Dejar aluminio sin proteger** en contacto con el concreto y el acero (C.6.3.2).
+- **Poner líquidos o vapores a circular** antes de que el concreto alcance la resistencia de diseño (C.6.3.8).
+- **Colocar la junta en el apoyo** o en el tercio extremo del vano, o sin lavar la lechada (C.6.4.1, C.6.4.4).
+- **Fundir la viga o losa sobre la columna aún plástica** (C.6.4.6).
+</Callout>
+
+## Resumen en una línea
+
+**La cimbra debe ser hermética, arriostrada y no dañar lo ya construido; solo se retira con un procedimiento y un análisis que demuestren resistencia (probetas curadas en obra), los embebidos se limitan a 1/3 del espesor, 3 diámetros de separación y 4 % de la columna, y las juntas van limpias, mojadas y en el tercio central del vano.**

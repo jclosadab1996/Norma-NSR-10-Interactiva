@@ -1,0 +1,790 @@
+---
+codigo: 'C-D'
+tipo: apendice
+titulo: 'Anclaje al concreto'
+resumen: 'Cómo se verifica un anclaje o grupo de anclajes en concreto: resistencia del acero, arrancamiento del concreto (cono de falla, ANc/ANco y factores ψ), extracción por deslizamiento, desprendimiento lateral, cortante, cabeceo, interacción tracción-cortante y distancias mínimas; con ecuaciones C-D-1 a C-D-32 y ejemplos numéricos.'
+objetivos:
+  - 'Identificar los siete modos de falla de un anclaje y calcular la resistencia nominal de cada uno'
+  - 'Calcular Nb, ANco, ANc y los factores ψ para un anclaje individual y para un grupo de 2×2'
+  - 'Elegir φ según la categoría del anclaje, la condición A/B y las combinaciones de carga'
+  - 'Verificar la interacción tracción-cortante con C-D.7 y las distancias mínimas de C-D.8'
+  - 'Reconocer qué anclajes y aplicaciones quedan fuera del apéndice'
+paginasNorma: 'C-235 a C-248'
+paginaPdf: 537
+orden: 27
+calculadoras: ['anclaje-concreto']
+nivel: 'avanzado'
+---
+
+import {
+  areaNco,
+  arrancamientoCortante,
+  arrancamientoTraccion,
+  futaEfectiva,
+  interaccionTraccionCortante,
+  NpCabeza,
+  psiCpN,
+  resistenciaAceroCortante,
+  resistenciaAceroTraccion,
+  resistenciaBasicaArrancamiento,
+  resistenciaBasicaCortante,
+  resistenciaCortanteAnclaje,
+  resistenciaTraccionAnclaje,
+} from '../../lib/nsr10/anclajes';
+
+export const f = (x, d = 1) => x.toFixed(d);
+export const LEJOS = Infinity;
+
+export const ej1 = (() => {
+  const Ase = 245, futa = 400, fya = 250;
+  const un = resistenciaAceroTraccion(1, Ase, futa, fya);
+  const cuatro = resistenciaAceroTraccion(4, Ase, futa, fya);
+  const lim = futaEfectiva(500, 250);
+  return { Ase, futa, fya, un, cuatro, lim, phi: 0.75, phiN: 0.75 * cuatro, lim2: Math.min(1.9 * fya, 860) };
+})();
+
+export const ej2 = (() => {
+  const fc = 28, hef = 200;
+  const Nb = resistenciaBasicaArrancamiento(fc, hef, 10);
+  const geo = (g) => ({ nx: 1, ny: 1, sx: 0, sy: 0, cIzq: LEJOS, cDer: LEJOS, cSup: LEJOS, cInf: LEJOS, ...g });
+  const base = { fc, hef, tipo: 'preinstalado', fisurado: true };
+  const a = arrancamientoTraccion({ ...base, geometria: geo({}) });
+  const b = arrancamientoTraccion({ ...base, geometria: geo({ cIzq: 150 }) });
+  const g22 = { nx: 2, ny: 2, sx: 150, sy: 150, cIzq: LEJOS, cDer: LEJOS, cSup: LEJOS, cInf: LEJOS };
+  const c = arrancamientoTraccion({ ...base, geometria: g22 });
+  const d = arrancamientoTraccion({ ...base, geometria: { ...g22, cIzq: 150 } });
+  const e = arrancamientoTraccion({ ...base, geometria: { ...g22, cIzq: 150 }, eNx: 50 });
+  // Postinstalado de torque controlado, concreto no fisurado, borde a 100 mm
+  const p = arrancamientoTraccion({ fc, hef: 100, tipo: 'post-torque', fisurado: false, geometria: geo({ cIzq: 100 }) });
+  return { fc, hef, Nb, Anco: areaNco(hef), a, b, c, d, e, p, phiA: 0.75, phiB: 0.7 };
+})();
+
+export const ej3 = (() => {
+  const geometria = { nx: 1, ny: 1, sx: 0, sy: 0, cIzq: LEJOS, cDer: LEJOS, cSup: LEJOS, cInf: 150 };
+  const ent = {
+    tipo: 'preinstalado', combinaciones: 'C.9.2', fc: 28, da: 20, hef: 200, Ase: 245, futa: 400, fya: 250,
+    aceroDuctil: true, geometria, fisurado: true, refuerzoSuplementario: false, Abrg: 1500, ha: 300,
+  };
+  const tr = resistenciaTraccionAnclaje(ent);
+  const cor = resistenciaCortanteAnclaje(ent);
+  const vb = resistenciaBasicaCortante({ le: 200, da: 20, fc: 28, ca1: 150 });
+  const Vsa = resistenciaAceroCortante({ n: 1, Ase: 245, futa: 400, fya: 250, tipo: 'tornillo' });
+  const ok = interaccionTraccionCortante(40, tr.phiNn, 16, cor.phiVn);
+  const mal = interaccionTraccionCortante(40, tr.phiNn, 18, cor.phiVn);
+  const v = (k) => cor.modos.find((m) => m.clave === k);
+  const n = (k) => tr.modos.find((m) => m.clave === k);
+  const delgado = arrancamientoCortante({ fc: 28, da: 20, hef: 200, ca1: 150, ca2Menos: LEJOS, ca2Mas: LEJOS, ha: 150, nParalelo: 1, sParalelo: 0, nTotal: 1, fisurado: true });
+  return { tr, cor, vb, Vsa, ok, mal, v, n, Np: NpCabeza(1500, 28), delgado };
+})();
+
+export const ejPsi = {
+  a: psiCpN({ aplica: true, caMin: 100, cac: 400, hef: 100 }),
+  b: psiCpN({ aplica: true, caMin: 200, cac: 400, hef: 100 }),
+};
+
+## Idea central del apéndice
+
+Un **anclaje** es un dispositivo de acero (perno con cabeza, tornillo con gancho, anclaje de expansión o con sobreperforación) que transmite fuerzas entre un elemento de acero —una platina de base, una fijación— y el concreto. El Apéndice C-D enseña a verificarlo así: se calcula, **por separado, la resistencia de cada modo de falla posible** (el acero se rompe, el concreto se desprende en forma de cono, el anclaje se desliza fuera, el borde estalla lateralmente, el anclaje «cabecea» hacia atrás del cortante), se multiplica cada una por su φ y se toma **la menor** (<NormaRef s="C-D.4.1.2" pag="C-238" />). Esa resistencia de diseño debe igualar o superar la carga mayorada:
+
+<Ecuacion num="C-D-1 y C-D-2" titulo="Condición de diseño del anclaje">
+
+$$
+\phi N_n \ge N_{ua}
+\qquad\qquad
+\phi V_n \ge V_{ua}
+$$
+
+- $N_{ua}$, $V_{ua}$: fuerzas mayoradas de tracción y cortante sobre el anclaje o grupo (<NormaRef s="C-D.4.1.1" pag="C-238" />).
+- $\phi N_n$, $\phi V_n$: **la menor** de las resistencias de diseño de todos los modos de falla pertinentes (<NormaRef s="C-D.4.1.2" pag="C-238" />).
+
+</Ecuacion>
+
+<Callout tipo="importante" titulo="La filosofía: que falle primero el acero dúctil">
+Los modos del concreto (arrancamiento, deslizamiento, desprendimiento) son **frágiles**; el alargamiento del acero dúctil avisa antes del colapso. Por eso, en zonas de capacidad de disipación moderada (DMO) y especial (DES), el apéndice exige que **controle un elemento de acero dúctil** (<NormaRef s="C-D.3.3.4" pag="C-237" />) y, en general, penaliza con φ menor los modos del concreto sin refuerzo suplementario.
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este apéndice (autoría del proyecto)">
+Las calculadoras y los ejemplos usan `src/lib/nsr10/anclajes.ts` y las constantes de `src/data/anclajes.ts`. Todo lo marcado como **«autoría del proyecto»** (algoritmos, lectura de casos límite, unión de intervalos para ANc) **no es texto de la norma**. Unidades: mm, MPa, kN. Este apéndice del PDF **no incluye figuras** (las figuras de áreas proyectadas del ACI 318 están solo en su comentario): la calculadora al final dibuja la planta con el área ANc.
+</Callout>
+
+## C-D.1 — Definiciones
+
+El apéndice define estos términos (<NormaRef s="C-D.1" pag="C-235" />); los esenciales:
+
+| Término | Idea (resumen) |
+|---|---|
+| **Anclaje** | Dispositivo de acero preinstalado o postinstalado que transmite fuerzas al concreto: tornillos y pernos con cabeza, tornillos con gancho (J o L), anclajes de expansión o con sobreperforación |
+| **Anclaje preinstalado** (*cast-in*) | Tornillo con cabeza, perno con cabeza o tornillo con gancho puesto **antes** de fundir el concreto |
+| **Anclaje postinstalado** | Instalado en concreto endurecido; los de expansión y los de sobreperforación son ejemplos |
+| **Anclaje de expansión** | Postinstalado que transfiere carga por apoyo directo o fricción; de **torsión controlada** o de **desplazamiento controlado** |
+| **Anclaje con sobreperforación en su base** (*undercut*) | Postinstalado que desarrolla su tracción por trabazón en un ensanchamiento del taladro |
+| **Perno con cabeza** (*headed stud*) | Anclaje que cumple AWS D1.1, soldado a una platina antes de fundir |
+| **Tornillo con gancho** | Preinstalado anclado por el doblez a 90° (L) o 180° (J), con $e_h$ mínimo mayor que $3d_a$ |
+| **Profundidad efectiva de embebido** $h_{ef}$ | Profundidad total por la que el anclaje transfiere fuerza; en preinstalados con cabeza, desde la **superficie de apoyo de la cabeza** |
+| **Distancia al borde** | Del borde de la superficie de concreto al **centro** del anclaje más cercano |
+| **Área proyectada** | Área en la superficie libre que representa la base mayor de la superficie de falla rectilínea supuesta |
+| **Grupo de anclajes** | Anclajes de aproximadamente igual $h_{ef}$ con cada uno espaciado de otro a una distancia relacionada con $3h_{ef}$ (tracción) o $3c_{a1}$ (cortante); solo se incluyen los susceptibles al modo bajo estudio (ver erratas) |
+| **Refuerzo suplementario** | Refuerzo que restringe el prisma de falla pero **no** está diseñado para tomar toda la carga |
+| **Refuerzo del anclaje** | Refuerzo que transmite **toda** la fuerza de diseño del anclaje al elemento (C-D.5.2.9, C-D.6.2.9) |
+| **Elemento dúctil de acero** | Alargamiento medido en tracción **mayor al 14 %** y reducción de área **de al menos 30 %**; los que cumplen NTC 4034 (ASTM A307) se consideran dúctiles |
+| **Elemento frágil de acero** | Alargamiento menor al 14 %, reducción de área menor al 30 %, o ambos |
+| **Percentil del 5 %** | 90 % de confianza de que hay 95 % de probabilidad de que la resistencia real exceda la nominal |
+| **Fijación** (*attachment*) | Dispositivo estructural externo a la superficie del concreto que transmite o recibe fuerzas de los anclajes |
+| **Camisa de espaciamiento / de expansión** | Camisa que envuelve la parte central sin expandirse / parte externa del anclaje que se expande contra el taladro |
+| **Insertos especiales** | Anclajes preinstalados prediseñados (izaje, conexiones ranuradas); **no** están cubiertos por el apéndice |
+
+Los cuatro **modos de falla del concreto** se definen así: *resistencia al arrancamiento del concreto* (un volumen que rodea al anclaje se desprende), *extracción por deslizamiento* (el anclaje sale sin romper un volumen sustancial), *desprendimiento por cabeceo* (en anclajes cortos y rígidos, el concreto se descascara detrás del anclaje, opuesto al cortante) y *desprendimiento lateral* (en anclajes profundos con poco recubrimiento lateral, la cara lateral estalla sin arrancamiento superior).
+
+## C-D.2 — Alcance
+
+- <NormaRef s="C-D.2.1" pag="C-236" />: el apéndice da requisitos para anclajes que transmiten cargas por **tracción, cortante o combinación** entre (a) elementos estructurales conectados o (b) aditamentos y elementos estructurales relacionados con la seguridad. Los niveles de seguridad están orientados a la **vida útil**, no a situaciones transitorias de construcción o manejo.
+- <NormaRef s="C-D.2.2" pag="C-236" />: cubre anclajes preinstalados y postinstalados. **No incluye** insertos especiales, tornillos pasantes, anclajes múltiples conectados a **una sola platina en el extremo embebido**, anclajes pegados o inyectados con mortero, ni anclajes directos (clavos o pernos neumáticos o de pólvora). El refuerzo que forme parte del anclaje se diseña con el resto del Título C.
+- <NormaRef s="C-D.2.3" pag="C-236" />: se incluyen pernos y tornillos con cabeza con geometría que ha demostrado una extracción por deslizamiento en concreto no fisurado **igual o superior a $1.4N_p$** (con $N_p$ de la Ec. C-D-15) y tornillos con gancho con resistencia **igual o superior a $1.4N_p$** sin contar la fricción ($N_p$ de la Ec. C-D-16). Los postinstalados deben cumplir los ensayos de calificación del **ACI 355.2**.
+- <NormaRef s="C-D.2.4" pag="C-237" />: **no** se cubren aplicaciones con predominio de ciclos de **fatiga fuertes** o de **carga de impacto**.
+
+## C-D.3 — Requisitos generales
+
+- <NormaRef s="C-D.3.1" pag="C-237" />: se diseña para los efectos críticos de las cargas mayoradas obtenidos con **análisis elástico**; el plástico solo cuando la resistencia nominal la controla un elemento dúctil de acero y se considera la compatibilidad de deformaciones.
+- <NormaRef s="C-D.3.2" pag="C-237" />: la resistencia de diseño debe igualar o exceder la mayorada con las combinaciones de **C.9.2** o del **Apéndice C-C** (C-C.9.2).
+- <NormaRef s="C-D.3.4" pag="C-237" />: λ para concreto liviano según C.8.6.1 (el PDF escribe «8.6.1»).
+- <NormaRef s="C-D.3.5" pag="C-237" />: $f'_c$ **no mayor de 70 MPa** para preinstalados y **55 MPa** para postinstalados; con $f'_c > 55$ MPa los postinstalados requieren ensayos.
+
+### C-D.3.3 — Fuerzas sísmicas en DMO y DES
+
+<NormaRef s="C-D.3.3" pag="C-237" /> exige, cuando el diseño incluye fuerzas sísmicas en estructuras DMO o DES:
+
+| Numeral | Requisito |
+|---|---|
+| <NormaRef s="C-D.3.3.1" pag="C-237" /> | El apéndice **no se aplica** en **zonas de articulación plástica** de estructuras sometidas a sismo |
+| <NormaRef s="C-D.3.3.2" pag="C-237" /> | Los postinstalados estructurales deben estar calificados para **concreto agrietado** y cumplir los **ensayos de simulación sísmica** del ACI 355.2; $N_p$ y $V_{sa}$ se basan en esos ensayos |
+| <NormaRef s="C-D.3.3.3" pag="C-237" /> | La resistencia de diseño de los modos del **concreto** se toma como $0.75\phi N_n$ y $0.75\phi V_n$, suponiendo concreto agrietado salvo que se demuestre lo contrario |
+| <NormaRef s="C-D.3.3.4" pag="C-237" /> | Los anclajes se diseñan para que **controle la resistencia del acero** de un elemento dúctil (C-D.5.1 y C-D.6.1), salvo C-D.3.3.5 o C-D.3.3.6 |
+| <NormaRef s="C-D.3.3.5" pag="C-237" /> | Alternativa: la **fijación** que conecta el anclaje llega a **fluencia dúctil** con fuerzas de anclaje no mayores que la resistencia de C-D.3.3.3 |
+| <NormaRef s="C-D.3.3.6" pag="C-237" /> | Alternativa a las dos anteriores: tomar la resistencia de diseño como **0.4** veces la de C-D.3.3.3; **0.5** para el anclaje de muros de carga de aporticamiento ligero |
+
+## C-D.4 — Requisitos generales para la resistencia de los anclajes
+
+### C-D.4.1 — Modos de falla que deben verificarse
+
+El diseño se basa en modelos de cálculo que cumplan C-D.4.2 o en resultados de ensayo (percentil del 5 %) para los siete modos de la lista (<NormaRef s="C-D.4.1" pag="C-238" />):
+
+| Modo | Símbolo | Numeral | Ecuaciones |
+|---|---|---|---|
+| Acero del anclaje en tracción | $N_{sa}$ | C-D.5.1 | C-D-3 |
+| Acero del anclaje en cortante | $V_{sa}$ | C-D.6.1 | C-D-19, C-D-20 |
+| Arrancamiento del concreto en tracción | $N_{cb}$, $N_{cbg}$ | C-D.5.2 | C-D-4, C-D-5 |
+| Arrancamiento del concreto en cortante | $V_{cb}$, $V_{cbg}$ | C-D.6.2 | C-D-21, C-D-22 |
+| Extracción por deslizamiento en tracción | $N_{pn}$ | C-D.5.3 | C-D-14 |
+| Desprendimiento lateral en tracción | $N_{sb}$, $N_{sbg}$ | C-D.5.4 | C-D-17, C-D-18 |
+| Desprendimiento por cabeceo en cortante | $V_{cp}$, $V_{cpg}$ | C-D.6.3 | C-D-30, C-D-31 |
+
+Además deben cumplirse las distancias al borde, espaciamientos y espesores de **C-D.8** para evitar el hendimiento.
+
+- <NormaRef s="C-D.4.1.2" pag="C-238" />: $\phi N_n$ es la menor de $\phi N_{sa}$, $\phi\,n\,N_{pn}$ (el PDF escribe «φnNpn»), $\phi N_{sb}$ o $\phi N_{sbg}$, y $\phi N_{cb}$ o $\phi N_{cbg}$. $\phi V_n$ es la menor de $\phi V_{sa}$, $\phi V_{cb}$ o $\phi V_{cbg}$, y $\phi V_{cp}$ o $\phi V_{cpg}$.
+- <NormaRef s="C-D.4.1.3" pag="C-238" />: con $N_{ua}$ y $V_{ua}$ simultáneos se considera la **interacción** de C-D.4.3 (C-D.7).
+
+### C-D.4.2 y C-D.4.3 — Modelos de diseño e interacción
+
+- <NormaRef s="C-D.4.2" pag="C-238" />: la resistencia nominal debe basarse en modelos que concuerden sustancialmente con **ensayos de amplio alcance**, con materiales compatibles; se toma el **percentil de 5 %** de la resistencia básica y se consideran los efectos de tamaño, número de anclajes, espaciamiento reducido, proximidad a bordes, espesor, excentricidad y presencia o ausencia de fisuración.
+- <NormaRef s="C-D.4.2.1" pag="C-238" />: se puede incluir el efecto del refuerzo que restringe el arrancamiento; con **refuerzo del anclaje** (C-D.5.2.9, C-D.6.2.9) no se requieren cálculos de arrancamiento del concreto.
+- <NormaRef s="C-D.4.2.2" pag="C-238" />: para $d_a \le 50$ mm y $h_{ef} \le 635$ mm, las exigencias para prevenir el arrancamiento se consideran satisfechas si se cumplen los procedimientos de C-D.5.2 y C-D.6.2.
+- <NormaRef s="C-D.4.3" pag="C-239" />: tracción y cortante simultáneos requieren una expresión de interacción que concuerde con ensayos; **C-D.7 se considera que la satisface**.
+
+### C-D.4.4 — Factores de reducción φ con las combinaciones de C.9.2
+
+<TablaNorma numero="C-D.4.4" titulo="φ de anclajes en concreto (combinaciones de C.9.2)" pag="C-239" nota="Condición A: hay refuerzo suplementario (salvo para extracción por deslizamiento o cabeceo). Condición B: no hay refuerzo suplementario, o controla la extracción por deslizamiento o el cabeceo.">
+
+| Modo que controla | Carga | Condición A | Condición B |
+|---|---|---:|---:|
+| Elemento de acero **dúctil** | Tracción | 0.75 | 0.75 |
+| Elemento de acero **dúctil** | Cortante | 0.65 | 0.65 |
+| Elemento de acero **frágil** | Tracción | 0.65 | 0.65 |
+| Elemento de acero **frágil** | Cortante | 0.60 | 0.60 |
+| Concreto (arrancamiento, desprendimiento lateral, extracción o cabeceo) | Cortante | 0.75 | 0.70 |
+| Concreto — pernos y tornillos con cabeza o gancho preinstalados | Tracción | 0.75 | 0.70 |
+| Concreto — postinstalado **Categoría 1** (baja sensibilidad a la instalación, confiabilidad alta) | Tracción | 0.75 | 0.65 |
+| Concreto — postinstalado **Categoría 2** (sensibilidad media, confiabilidad mediana) | Tracción | 0.65 | 0.55 |
+| Concreto — postinstalado **Categoría 3** (alta sensibilidad, confiabilidad baja) | Tracción | 0.55 | 0.45 |
+
+</TablaNorma>
+
+En las filas del acero la norma da un solo valor (las condiciones A y B solo distinguen modos del concreto; las repito en ambas columnas para facilitar la lectura — arreglo del proyecto).
+
+### C-D.4.5 — Factores φ con las combinaciones del Apéndice C-C
+
+<TablaNorma numero="C-D.4.5" titulo="φ de anclajes en concreto (combinaciones del Apéndice C)" pag="C-239 y C-240" nota="Mismas condiciones A y B que en C-D.4.4.">
+
+| Modo que controla | Carga | Condición A | Condición B |
+|---|---|---:|---:|
+| Elemento de acero **dúctil** | Tracción | 0.80 | 0.80 |
+| Elemento de acero **dúctil** | Cortante | 0.75 | 0.75 |
+| Elemento de acero **frágil** | Tracción | 0.70 | 0.70 |
+| Elemento de acero **frágil** | Cortante | 0.65 | 0.65 |
+| Concreto | Cortante | 0.85 | 0.75 |
+| Concreto — conectores, pernos con cabeza o con gancho embebidos | Tracción | 0.85 | 0.75 |
+| Concreto — postinstalado Categoría 1 | Tracción | 0.85 | 0.75 |
+| Concreto — postinstalado Categoría 2 | Tracción | 0.75 | 0.65 |
+| Concreto — postinstalado Categoría 3 | Tracción | 0.65 | 0.55 |
+
+</TablaNorma>
+
+<Callout tipo="practica" titulo="Cómo se escoge la condición">
+Hay **condición A** solo si existe refuerzo suplementario **y** el modo analizado es arrancamiento o desprendimiento lateral. Para **extracción por deslizamiento** o **cabeceo** siempre rige la condición **B**, aun con refuerzo suplementario. La función `phiConcreto` implementa esa regla.
+</Callout>
+
+## C-D.5 — Requisitos de diseño para cargas de tracción
+
+### C-D.5.1 — Resistencia del acero del anclaje en tracción
+
+<NormaRef s="C-D.5.1.1" pag="C-240" />: $N_{sa}$ se evalúa por cálculo con las propiedades del material y las dimensiones del anclaje.
+
+<Ecuacion num="C-D-3" titulo="Resistencia del acero en tracción">
+
+$$
+N_{sa} = n\, A_{se,N}\, f_{uta}
+$$
+
+- $n$: número de anclajes del grupo; $A_{se,N}$: área transversal efectiva del anclaje en tracción (mm²) (<NormaRef s="C-D.5.1.2" pag="C-240" />).
+- $f_{uta}$ **no debe tomarse mayor** que el menor entre $1.9\,f_{ya}$ y **860 MPa**. $f_{ya}$ es la fluencia especificada del acero del anclaje.
+
+</Ecuacion>
+
+### C-D.5.2 — Resistencia al arrancamiento del concreto en tracción
+
+Es el modo típico del concreto: una masa en forma de **cono o pirámide invertida** se desprende. La norma lo aproxima con una figura rectilínea y proyecta su base sobre la superficie libre (el área proyectada).
+
+<Ecuacion num="C-D-4" titulo="Arrancamiento de un anclaje individual en tracción">
+
+$$
+N_{cb} = \frac{A_{Nc}}{A_{Nco}}\; \psi_{ed,N}\; \psi_{c,N}\; \psi_{cp,N}\; N_b
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C-D-5" titulo="Arrancamiento de un grupo de anclajes en tracción">
+
+$$
+N_{cbg} = \frac{A_{Nc}}{A_{Nco}}\; \psi_{ec,N}\; \psi_{ed,N}\; \psi_{c,N}\; \psi_{cp,N}\; N_b
+$$
+
+- Los factores $\psi_{ec,N}$, $\psi_{ed,N}$, $\psi_{c,N}$ y $\psi_{cp,N}$ están en C-D.5.2.4 a C-D.5.2.7 (<NormaRef s="C-D.5.2.1" pag="C-240" />).
+- $A_{Nc}$: área proyectada de la superficie de falla del anclaje o del grupo, aproximada por la **base de la figura rectilínea** que resulta de proyectar la superficie de falla **$1.5h_{ef}$** hacia afuera desde la línea del eje del anclaje o, en un grupo, desde una línea a través de una fila de anclajes adyacentes. **$A_{Nc}$ no debe exceder $nA_{Nco}$**, con $n$ el número de anclajes **en tracción** del grupo.
+- $A_{Nco}$: área proyectada de un anclaje con distancia al borde igual o mayor que $1.5h_{ef}$ (<NormaRef s="C-D.5.2.1" pag="C-241" />).
+
+</Ecuacion>
+
+<Ecuacion num="C-D-6" titulo="Área proyectada de un anclaje (sin bordes cercanos)">
+
+$$
+A_{Nco} = 9\,h_{ef}^{2}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C-D-7" titulo="Resistencia básica al arrancamiento (concreto fisurado)">
+
+$$
+N_b = k_c\,\lambda\,\sqrt{f'_c}\;h_{ef}^{1.5}
+$$
+
+- $k_c = 10$ para anclajes **preinstalados** y $k_c = 7$ para **postinstalados** (<NormaRef s="C-D.5.2.2" pag="C-241" />). En postinstalados $k_c$ puede **subir sobre 7** con ensayos específicos del producto (ACI 355.2), **sin exceder 10**.
+- Con $f'_c$ en MPa, $h_{ef}$ en mm, el resultado queda en **N**.
+
+</Ecuacion>
+
+<Ecuacion num="C-D-8" titulo="Alternativa para pernos con cabeza preinstalados, 280 ≤ hef ≤ 635 mm">
+
+$$
+N_b = 3.9\,\lambda\,\sqrt{f'_c}\;h_{ef}^{5/3}
+$$
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Por qué la Ec. C-D-8">
+Los ensayos muestran que, para embebidos grandes, $h_{ef}^{1.5}$ subestima la resistencia; el exponente 5/3 es la correlación de la norma para pernos con cabeza profundos. Con $h_{ef} = 300$ mm, $f'_c = 28$ MPa y λ = 1, Ec. C-D-7 da {f(resistenciaBasicaArrancamiento(28, 300, 10), 1)} kN y la C-D-8 da 277.4 kN (cálculo del proyecto).
+</Callout>
+
+<NormaRef s="C-D.5.2.3" pag="C-241" />: donde los anclajes están a **menos de $1.5h_{ef}$ de tres o más bordes**, el $h_{ef}$ de las Ecs. C-D-4 a C-D-11 es el **mayor** entre $c_{a,\text{máx}}/1.5$ y **un tercio del espaciamiento máximo** entre anclajes del grupo.
+
+#### C-D.5.2.4 — Excentricidad en grupos
+
+<Ecuacion num="C-D-9" titulo="Factor por carga excéntrica">
+
+$$
+\psi_{ec,N} = \frac{1}{1 + \dfrac{2e'_N}{3h_{ef}}} \;\le\; 1.0
+$$
+
+- $e'_N$: excentricidad de la carga de tracción resultante respecto al centroide de los anclajes **en tracción** (<NormaRef s="C-D.5.2.4" pag="C-241" />). Si solo algunos anclajes están en tracción, solo ellos entran en $e'_N$ y en $N_{cbg}$.
+- Con excentricidades alrededor de **dos ejes**, $\psi_{ec,N}$ se calcula por eje y se usa el **producto**.
+
+</Ecuacion>
+
+#### C-D.5.2.5 — Efecto del borde
+
+<Ecuacion num="C-D-10 y C-D-11" titulo="Factor por borde">
+
+$$
+\psi_{ed,N} = 1 \quad \text{si } c_{a,\text{mín}} \ge 1.5h_{ef}
+\qquad\qquad
+\psi_{ed,N} = 0.7 + 0.3\,\frac{c_{a,\text{mín}}}{1.5\,h_{ef}} \quad \text{si } c_{a,\text{mín}} < 1.5h_{ef}
+$$
+
+- $c_{a,\text{mín}}$: la menor distancia al borde de los anclajes (<NormaRef s="C-D.5.2.5" pag="C-241" />). El factor va de 0.7 (anclaje en el borde) a 1.0.
+
+</Ecuacion>
+
+#### C-D.5.2.6 — Fisuración (ψc,N)
+
+<TablaNorma numero="C-D.5.2.6" titulo="Factor ψc,N por fisuración" pag="C-242">
+
+| Situación | $\psi_{c,N}$ |
+|---|---:|
+| Análisis indica **fisuración** a cargas de servicio (preinstalados o postinstalados) | 1.0 |
+| Sin fisuración, anclajes **preinstalados** | 1.25 |
+| Sin fisuración, **postinstalados** con $k_c = 7$ | 1.4 |
+| $k_c$ tomado del informe ACI 355.2, anclaje calificado para concreto fisurado y no fisurado | según el informe |
+| $k_c$ del informe ACI 355.2, anclaje calificado **solo para no fisurado** | 1.0 |
+
+</TablaNorma>
+
+Con fisuración, los postinstalados deben calificarse para concreto fisurado (ACI 355.2), y la fisuración se **controla con refuerzo de flexión distribuido** (el PDF cita «10.6.4», es decir C.10.6.4) o un control equivalente con refuerzo de confinamiento.
+
+#### C-D.5.2.7 — Hendimiento en postinstalados (ψcp,N)
+
+<Ecuacion num="C-D-12 y C-D-13" titulo="Factor para postinstalados en concreto no fisurado sin refuerzo suplementario">
+
+$$
+\psi_{cp,N} = 1.0 \quad \text{si } c_{a,\text{mín}} \ge c_{ac}
+\qquad\qquad
+\psi_{cp,N} = \frac{c_{a,\text{mín}}}{c_{ac}} \quad \text{si } c_{a,\text{mín}} < c_{ac}
+$$
+
+- $\psi_{cp,N}$ de la Ec. C-D-13 **no debe tomarse menor que $1.5h_{ef}/c_{ac}$**; $c_{ac}$ es la distancia crítica de C-D.8.6 (<NormaRef s="C-D.5.2.7" pag="C-242" />).
+- **Para todos los demás casos**, incluidos los preinstalados, $\psi_{cp,N} = 1.0$.
+
+</Ecuacion>
+
+#### C-D.5.2.8 y C-D.5.2.9 — Platinas añadidas y refuerzo del anclaje
+
+- <NormaRef s="C-D.5.2.8" pag="C-242" />: con una **platina o arandela** adicional en la cabeza, el área proyectada se calcula proyectando $1.5h_{ef}$ desde el **perímetro efectivo** de la platina; ese perímetro no excede el de una sección proyectada hacia afuera **más del espesor** de la platina desde el borde exterior de la cabeza.
+- <NormaRef s="C-D.5.2.9" pag="C-242" />: con **refuerzo del anclaje** desarrollado «de acuerdo al Capítulo C.21» a ambos lados de la superficie de arrancamiento, se puede usar su resistencia de diseño en lugar de la del concreto, con **φ = 0.75** (ver erratas: la cita probable es C.12).
+
+### C-D.5.3 — Extracción por deslizamiento
+
+<Ecuacion num="C-D-14" titulo="Extracción por deslizamiento">
+
+$$
+N_{pn} = \psi_{c,P}\, N_p
+$$
+
+- $\psi_{c,P} = 1.4$ si el análisis indica **no fisuración** a cargas de servicio; **1.0** si indica fisuración (<NormaRef s="C-D.5.3.6" pag="C-243" />).
+
+</Ecuacion>
+
+- <NormaRef s="C-D.5.3.2" pag="C-243" />: en **postinstalados de expansión y con sobreperforación**, $N_p$ debe basarse en **ensayos** (percentil 5 %, ACI 355.2); **no se permite calcularlo**.
+- <NormaRef s="C-D.5.3.3" pag="C-243" />: en pernos y tornillos con cabeza individuales se evalúa con C-D.5.3.4; en tornillos con extremo L o J, con C-D.5.3.5; o con ensayos sin el beneficio de la fricción.
+
+<Ecuacion num="C-D-15" titulo="Np de perno o tornillo con cabeza">
+
+$$
+N_p = 8\,A_{brg}\,f'_c
+$$
+
+- $A_{brg}$: área neta de apoyo de la cabeza del perno o tornillo (<NormaRef s="C-D.5.3.4" pag="C-243" />).
+
+</Ecuacion>
+
+<Ecuacion num="C-D-16" titulo="Np de tornillo con gancho (L o J)">
+
+$$
+N_p = 0.9\,f'_c\,e_h\,d_a \qquad 3d_a \le e_h \le 4.5d_a
+$$
+
+- $e_h$: distancia del interior del tornillo al extremo exterior del gancho (<NormaRef s="C-D.5.3.5" pag="C-243" />).
+
+</Ecuacion>
+
+### C-D.5.4 — Desprendimiento lateral del concreto (anclajes con cabeza)
+
+Aparece en anclajes con cabeza **profundos y cercanos a un borde**: el borde estalla lateralmente al nivel de la cabeza sin arrancamiento superior.
+
+<Ecuacion num="C-D-17" titulo="Desprendimiento lateral de un anclaje individual">
+
+$$
+N_{sb} = 13\,c_{a1}\sqrt{A_{brg}}\;\lambda\sqrt{f'_c} \qquad (h_{ef} > 2.5\,c_{a1})
+$$
+
+- Si $c_{a2} < 3c_{a1}$, $N_{sb}$ se multiplica por **$(1 + c_{a2}/c_{a1})/4$**, con $1.0 \le c_{a2}/c_{a1} \le 3.0$ (<NormaRef s="C-D.5.4.1" pag="C-243" />).
+
+</Ecuacion>
+
+<Ecuacion num="C-D-18" titulo="Desprendimiento lateral de un grupo">
+
+$$
+N_{sbg} = \left(1 + \frac{s}{6\,c_{a1}}\right) N_{sb} \qquad (h_{ef} > 2.5\,c_{a1},\ s < 6\,c_{a1})
+$$
+
+- $s$: separación de los anclajes **exteriores** a lo largo del borde; $N_{sb}$ de la Ec. C-D-17 **sin** la modificación por distancia perpendicular al borde (<NormaRef s="C-D.5.4.2" pag="C-243" />).
+
+</Ecuacion>
+
+## C-D.6 — Requisitos de diseño para solicitaciones de cortante
+
+### C-D.6.1 — Resistencia del acero en cortante
+
+<NormaRef s="C-D.6.1.1" pag="C-244" />: $V_{sa}$ se evalúa con las propiedades del material y las dimensiones del anclaje. Según <NormaRef s="C-D.6.1.2" pag="C-244" />, $V_{sa}$ no excede:
+
+<Ecuacion num="C-D-19" titulo="Vsa de conectores preinstalados (pernos soldados)">
+
+$$
+V_{sa} = n\,A_{se,V}\,f_{uta}
+$$
+
+- $f_{uta}$ no mayor que el menor entre $1.9f_{ya}$ y 860 MPa.
+
+</Ecuacion>
+
+<Ecuacion num="C-D-20" titulo="Vsa de tornillos con cabeza o gancho preinstalados y postinstalados cuya camisa no cruza el plano de corte">
+
+$$
+V_{sa} = n\,(0.6)\,A_{se,V}\,f_{uta}
+$$
+
+- Para **postinstalados con camisas que cruzan el plano de corte**, $V_{sa}$ se basa en ensayos ACI 355.2; alternativamente se permite la Ec. C-D-20.
+- <NormaRef s="C-D.6.1.3" pag="C-244" />: con **platinas de apoyo inyectadas con mortero**, las resistencias de C-D.6.1.2 se multiplican por **0.80**.
+
+</Ecuacion>
+
+### C-D.6.2 — Arrancamiento del concreto en cortante
+
+<Ecuacion num="C-D-21" titulo="Arrancamiento por cortante (anclaje individual, cortante perpendicular al borde)">
+
+$$
+V_{cb} = \frac{A_{Vc}}{A_{Vco}}\; \psi_{ed,V}\; \psi_{c,V}\; \psi_{h,V}\; V_b
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C-D-22" titulo="Arrancamiento por cortante (grupo, cortante perpendicular al borde)">
+
+$$
+V_{cbg} = \frac{A_{Vc}}{A_{Vco}}\; \psi_{ec,V}\; \psi_{ed,V}\; \psi_{c,V}\; \psi_{h,V}\; V_b
+$$
+
+</Ecuacion>
+
+- <NormaRef s="C-D.6.2.1" pag="C-244" /> (c): para **cortante paralelo a un borde**, $V_{cb}$ o $V_{cbg}$ puede ser **el doble** del valor de las Ecs. C-D-21/22 calculado como si el cortante fuera perpendicular al borde, con $\psi_{ed,V} = 1.0$. (d): para anclajes en una **esquina** se determina la resistencia para **cada borde** y se usa el **mínimo**.
+- $A_{Vc}$: área proyectada de la superficie de falla sobre la cara lateral del elemento; se permite evaluarla como la **base de medio tronco de pirámide** cuya cima está en el eje de la fila crítica, con $c_{a1}$ la distancia del borde a ese eje. **$A_{Vc} \le nA_{Vco}$** (<NormaRef s="C-D.6.2.1" pag="C-245" />).
+- $A_{Vco}$: área proyectada de un anclaje en un elemento alto con distancia al borde (perpendicular a la fuerza) igual o mayor que $1.5c_{a1}$: base de una media pirámide de **$3c_{a1}$ de lado paralelo al borde y $1.5c_{a1}$ de profundidad**:
+
+<Ecuacion num="C-D-23" titulo="Área proyectada de un anclaje en cortante">
+
+$$
+A_{Vco} = 4.5\,(c_{a1})^{2}
+$$
+
+</Ecuacion>
+
+Si los anclajes están a **distintas distancias del borde** y **soldados** a la fijación de modo que se reparta la fuerza, se puede evaluar la resistencia con la distancia del borde a la fila **más alejada**, suponiendo que **toda** la fuerza cortante la resiste esa fila (<NormaRef s="C-D.6.2.1" pag="C-245" />).
+
+<Ecuacion num="C-D-24" titulo="Resistencia básica al arrancamiento por cortante (concreto fisurado)">
+
+$$
+V_b = 0.6\left(\frac{\ell_e}{d_a}\right)^{0.2}\sqrt{d_a}\;\lambda\sqrt{f'_c}\;(c_{a1})^{1.5}
+$$
+
+- $\ell_e$: longitud de apoyo del anclaje en cortante (<NormaRef s="C-D.6.2.2" pag="C-245" />): $\ell_e = h_{ef}$ para anclajes de **rigidez constante** en toda la longitud (con cabeza, o postinstalados con camisa tubular en todo el embebido); $\ell_e = 2d_a$ para anclajes de **expansión de torque controlado con camisa distanciadora** separada de la de expansión; $\ell_e \le 8d_a$ en los demás casos.
+- Con $f'_c$ en MPa, $d_a$ y $c_{a1}$ en mm, queda en **N**.
+
+</Ecuacion>
+
+<Ecuacion num="C-D-25" titulo="Vb de pernos con cabeza soldados continuamente a un aditamento">
+
+$$
+V_b = 0.66\left(\frac{\ell_e}{d_a}\right)^{0.2}\sqrt{d_a}\;\lambda\sqrt{f'_c}\;(c_{a1})^{1.5}
+$$
+
+- Aplica a pernos o tornillos con cabeza o gancho **preinstalados soldados** en forma continua a aditamentos de acero de espesor mínimo igual al **mayor** entre 10 mm y la **mitad del diámetro** del anclaje (<NormaRef s="C-D.6.2.3" pag="C-245" />), siempre que: (a) en grupos, se use la fila **más alejada del borde**; (b) $s \ge 65$ mm; y (c) haya **refuerzo suplementario en las esquinas** si $c_{a2} \le 1.5h_{ef}$.
+
+</Ecuacion>
+
+<NormaRef s="C-D.6.2.4" pag="C-246" />: con anclajes influenciados por **tres o más bordes**, el $c_{a1}$ de las Ecs. C-D-23 a C-D-29 no excede el **mayor** entre $c_{a2}/1.5$ (en cualquier dirección), $h_a/1.5$ y **un tercio del espaciamiento máximo** del grupo.
+
+<Ecuacion num="C-D-26" titulo="Factor por cortante excéntrico en un grupo">
+
+$$
+\psi_{ec,V} = \frac{1}{1 + \dfrac{2e'_V}{3c_{a1}}} \;\le\; 1.0
+$$
+
+- Si solo algunos anclajes se cargan en cortante en la misma dirección, solo esos entran en $e'_V$ y en $V_{cbg}$ (<NormaRef s="C-D.6.2.5" pag="C-246" />).
+
+</Ecuacion>
+
+<Ecuacion num="C-D-27 y C-D-28" titulo="Factor por efecto del borde en cortante">
+
+$$
+\psi_{ed,V} = 1.0 \quad \text{si } c_{a2} \ge 1.5c_{a1}
+\qquad\qquad
+\psi_{ed,V} = 0.7 + 0.3\,\frac{c_{a2}}{1.5\,c_{a1}} \quad \text{si } c_{a2} < 1.5c_{a1}
+$$
+
+- $c_{a2}$: la menor distancia al borde en la dirección **perpendicular** a $c_{a1}$ (<NormaRef s="C-D.6.2.6" pag="C-246" />).
+
+</Ecuacion>
+
+<TablaNorma numero="C-D.6.2.7" titulo="Factor ψc,V por fisuración" pag="C-246">
+
+| Situación | $\psi_{c,V}$ |
+|---|---:|
+| Sin fisuración a cargas de servicio | 1.4 |
+| Fisurado, sin refuerzo suplementario o con refuerzo de borde **menor** que una barra No. 4 (12M) | 1.0 |
+| Fisurado, con barras **No. 4 (½″) o 12M (12 mm), o mayores**, entre el anclaje y el borde | 1.2 |
+| Fisurado, con barra No. 4/12M o mayor entre el anclaje y el borde **y confinada por estribos a no más de 100 mm** | 1.4 |
+
+</TablaNorma>
+
+<Ecuacion num="C-D-29" titulo="Factor por espesor reducido">
+
+$$
+\psi_{h,V} = \sqrt{\frac{1.5\,c_{a1}}{h_a}} \;\ge\; 1.0 \qquad (h_a < 1.5c_{a1})
+$$
+
+- $h_a$: espesor del elemento medido paralelamente al eje del anclaje (<NormaRef s="C-D.6.2.8" pag="C-246" />). Un espesor pequeño **aumenta** el factor (compensa la reducción de $A_{Vc}$ por la profundidad $\min(1.5c_{a1}, h_a)$).
+
+</Ecuacion>
+
+<NormaRef s="C-D.6.2.9" pag="C-247" />: con **refuerzo del anclaje** desarrollado según el Capítulo C.12 a ambos lados de la superficie de ruptura (o que encierra al anclaje y se desarrolla más allá), se puede usar su resistencia de diseño en lugar de la del concreto, con **φ = 0.75**.
+
+### C-D.6.3 — Desprendimiento por cabeceo
+
+En anclajes **cortos y rígidos**, el cortante hace que el anclaje gire y arranque un trozo de concreto **detrás** de él.
+
+<Ecuacion num="C-D-30 y C-D-31" titulo="Cabeceo de un anclaje y de un grupo">
+
+$$
+V_{cp} = k_{cp}\,N_{cb}
+\qquad\qquad
+V_{cpg} = k_{cp}\,N_{cbg}
+$$
+
+- $k_{cp} = 1.0$ para $h_{ef} < 65$ mm y $k_{cp} = 2.0$ para $h_{ef} \ge 65$ mm; $N_{cb}$ y $N_{cbg}$ de las Ecs. C-D-4 y C-D-5 (<NormaRef s="C-D.6.3.1" pag="C-247" />).
+
+</Ecuacion>
+
+## C-D.7 — Interacción de las fuerzas de tracción y cortante
+
+A menos que se determine según C-D.4.3, los anclajes con $N_{ua}$ y $V_{ua}$ simultáneos se diseñan con C-D.7.1 a C-D.7.3, con $\phi N_n$ y $\phi V_n$ de C-D.4.1.2 (<NormaRef s="C-D.7" pag="C-247" />):
+
+| Caso | Condición | Verificación |
+|---|---|---|
+| <NormaRef s="C-D.7.1" pag="C-247" /> | $V_{ua} \le 0.2\,\phi V_n$ | Basta $\phi N_n \ge N_{ua}$ (resistencia total en tracción) |
+| <NormaRef s="C-D.7.2" pag="C-247" /> | $N_{ua} \le 0.2\,\phi N_n$ | Basta $\phi V_n \ge V_{ua}$ (resistencia total en cortante) |
+| <NormaRef s="C-D.7.3" pag="C-247" /> | $V_{ua} > 0.2\,\phi V_n$ **y** $N_{ua} > 0.2\,\phi N_n$ | Ec. C-D-32 |
+
+<Ecuacion num="C-D-32" titulo="Interacción tracción-cortante">
+
+$$
+\frac{N_{ua}}{\phi N_n} + \frac{V_{ua}}{\phi V_n} \le 1.2
+$$
+
+</Ecuacion>
+
+## C-D.8 — Distancias al borde, espaciamientos y espesores para evitar el hendimiento
+
+Los mínimos de C-D.8.1 a C-D.8.6 aplican **a menos que se coloque refuerzo suplementario** para controlar el hendimiento; se permiten valores menores para productos específicos con ensayos ACI 355.2 (<NormaRef s="C-D.8" pag="C-247" />).
+
+<TablaNorma numero="C-D.8" titulo="Mínimos de separación, distancia al borde, hef y distancia crítica" pag="C-247 y C-248" nota="da: diámetro del anclaje. Valores por defecto en ausencia de ensayos específicos ACI 355.2.">
+
+| Numeral | Concepto | Valor mínimo |
+|---|---|---|
+| <NormaRef s="C-D.8.1" pag="C-247" /> | Separación centro a centro, preinstalados **sin torsión** | $4d_a$ |
+| <NormaRef s="C-D.8.1" pag="C-247" /> | Separación, preinstalados y postinstalados **sometidos a torsión** | $6d_a$ |
+| <NormaRef s="C-D.8.2" pag="C-248" /> | Borde, anclajes con cabeza preinstalados **sin torsión** | Recubrimiento mínimo de C.7.7 |
+| <NormaRef s="C-D.8.2" pag="C-248" /> | Borde, anclajes con cabeza preinstalados **torsionados** | $6d_a$ |
+| <NormaRef s="C-D.8.3" pag="C-248" /> | Borde, postinstalados | Mayor entre el recubrimiento de C.7.7 y el del producto (ACI 355.2); nunca menos de **2.0 veces el tamaño máximo del agregado** |
+| <NormaRef s="C-D.8.3" pag="C-248" /> | …sin ensayos específicos: sobreperforación / torque controlado / desplazamiento controlado | $6d_a$ / $8d_a$ / $10d_a$ |
+| <NormaRef s="C-D.8.5" pag="C-248" /> | $h_{ef}$ máximo de postinstalados de expansión o sobreperforación | El mayor entre $\tfrac23$ del espesor y el espesor menos 100 mm |
+| <NormaRef s="C-D.8.6" pag="C-248" /> | Distancia crítica $c_{ac}$ sin ensayos de tracción: sobreperforación / torque / desplazamiento | $2.5h_{ef}$ / $4h_{ef}$ / $4h_{ef}$ |
+
+</TablaNorma>
+
+- <NormaRef s="C-D.8.4" pag="C-248" />: si la instalación **no produce fuerza de hendimiento** y no hay torsión, y la distancia al borde o la separación son menores que las de C-D.8.1 a C-D.8.3, se hacen los cálculos sustituyendo $d_a$ por un **$d'_a$ menor** que cumpla esos requisitos; las fuerzas aplicadas se limitan a las que corresponden a un anclaje de diámetro $d'_a$.
+- <NormaRef s="C-D.8.7" pag="C-248" />: los **planos y especificaciones** deben indicar los anclajes con la **distancia mínima al borde** supuesta en el diseño.
+
+## C-D.9 — Instalación de los anclajes
+
+<NormaRef s="C-D.9.1" pag="C-248" />: los anclajes se instalan **de acuerdo con los planos y especificaciones** del proyecto. Es la única disposición del numeral: toda la estrategia de seguridad del apéndice depende de que lo instalado coincida con lo diseñado (diámetro, $h_{ef}$, distancias al borde, categoría del anclaje postinstalado).
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Resistencia del acero de un grupo de cuatro anclajes en tracción">
+Cuatro tornillos M20 de acero dúctil (norma NTC 4034 / ASTM A307: se consideran dúctiles, <NormaRef s="C-D.1" pag="C-235" />), con $A_{se,N}$ = {ej1.Ase} mm² (área de rosca de un M20, hipótesis del ejemplo), $f_{uta}$ = {ej1.futa} MPa y $f_{ya}$ = {ej1.fya} MPa (hipótesis del ejemplo, no son datos de la norma). Hallar $N_{sa}$ y $\phi N_{sa}$ con combinaciones de C.9.2.
+
+<Paso titulo="Límite de futa" ref="C-D.5.1.2">
+
+El menor entre $1.9f_{ya}$ = {f(ej1.lim2, 0)} MPa y 860 MPa es {f(ej1.lim2, 0)}; como $f_{uta}$ = 400 es menor, se usa **400 MPa**. (Si el acero tuviera $f_{uta}$ = 500 MPa con la misma $f_{ya}$, se limitaría a **{f(ej1.lim, 0)} MPa**.)
+
+</Paso>
+<Paso titulo="Un anclaje y el grupo" ref="C-D-3">
+
+$$
+N_{sa} = n\,A_{se,N}\,f_{uta}
+$$
+
+Resultado: un anclaje, {f(ej1.un, 1)} kN; el grupo de 4, $N_{sa}$ = 4 × {f(ej1.un, 1)} = **{f(ej1.cuatro, 1)} kN**.
+
+</Paso>
+<Paso titulo="Resistencia de diseño" ref="C-D.4.4">
+Acero dúctil en tracción: φ = {ej1.phi}. $\phi N_{sa}$ = {ej1.phi} × {f(ej1.cuatro, 1)} = **{f(ej1.phiN, 1)} kN**.
+</Paso>
+<Resultado>
+$N_{sa}$ = **{f(ej1.cuatro, 1)} kN** y $\phi N_{sa}$ = **{f(ej1.phiN, 1)} kN** para el grupo de cuatro tornillos. Es solo uno de los modos: falta contrastarlo con el concreto (ejemplo siguiente).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Arrancamiento del concreto: anclaje individual y grupo de 2×2 (ANc/ANco)">
+Pernos con cabeza **preinstalados**, $h_{ef}$ = {ej2.hef} mm, $f'_c$ = {ej2.fc} MPa, λ = 1.0, concreto **fisurado** a cargas de servicio. Grupo de 2×2 con separación $s_x = s_y$ = 150 mm.
+
+<Paso titulo="Resistencia básica y área de un anclaje" ref="C-D-7, C-D-6">
+
+$$
+N_b = k_c\lambda\sqrt{f'_c}\,h_{ef}^{1.5} = 10\,(1)\sqrt{28}\,(200)^{1.5}
+\qquad
+A_{Nco} = 9h_{ef}^2 = 9\,(200)^2
+$$
+
+Resultado: $N_b$ = **{f(ej2.Nb, 1)} kN** y $A_{Nco}$ = **{f(ej2.Anco, 0)} mm²**.
+
+</Paso>
+<Paso titulo="Anclaje individual lejos de bordes" ref="C-D-4, C-D.5.2.6">
+$A_{Nc} = A_{Nco}$ y todos los ψ valen 1.0 (fisurado: $\psi_{c,N}$ = 1.0): $N_{cb}$ = **{f(ej2.a.Ncb, 1)} kN**.
+</Paso>
+<Paso titulo="El mismo anclaje con un borde a 150 mm" ref="C-D-4, C-D-11">
+
+Como 150 mm es menor que $1.5h_{ef}$ = 300 mm, el área se recorta: $A_{Nc} = (150 + 300)(600)$ = {f(ej2.b.Anc, 0)} mm² (razón {f(ej2.b.Anc / ej2.b.Anco, 3)}) y
+
+$$
+\psi_{ed,N} = 0.7 + 0.3\,\frac{150}{300} = 0.85
+$$
+
+Resultado: $N_{cb}$ = ({f(ej2.b.Anc / ej2.b.Anco, 3)})(0.85)({f(ej2.Nb, 1)}) = **{f(ej2.b.Ncb, 1)} kN**.
+
+</Paso>
+<Paso titulo="Grupo de 2×2, lejos de bordes" ref="C-D-5, C-D.5.2.1">
+
+Cada eje proyecta $1.5h_{ef}$ = 300 mm hacia afuera: $A_{Nc} = (300 + 150 + 300)^2$ = {f(ej2.c.Anc, 0)} mm², menor que $nA_{Nco}$ = 4 × 360 000. Los anclajes están a 150 mm, menos de $3h_{ef}$ = 600 mm: forman un **grupo**.
+
+Resultado: $N_{cbg}$ = ({f(ej2.c.Anc / ej2.c.Anco, 3)})({f(ej2.Nb, 1)}) = **{f(ej2.c.Ncb, 1)} kN** (menos de 4 × {f(ej2.Nb, 1)}: los conos se traslapan).
+
+</Paso>
+<Paso titulo="Grupo de 2×2 con un borde a 150 mm" ref="C-D-5, C-D-11">
+$A_{Nc} = (150 + 150 + 300)(750)$ = {f(ej2.d.Anc, 0)} mm², $\psi_{ed,N}$ = 0.85: $N_{cbg}$ = **{f(ej2.d.Ncb, 1)} kN**. Si además la carga fuera excéntrica $e'_N$ = 50 mm en x, $\psi_{ec,N} = 1/(1 + 2(50)/(3(200)))$ = {f(ej2.e.psiEc, 3)} y $N_{cbg}$ = **{f(ej2.e.Ncb, 1)} kN**.
+</Paso>
+<Paso titulo="Resistencia de diseño con φ" ref="C-D.4.4">
+Preinstalados en tracción: φ = {ej2.phiA} con refuerzo suplementario (condición A) o {ej2.phiB} sin él (condición B). Para el grupo con borde: $\phi N_{cbg}$ = {f(ej2.phiA * ej2.d.Ncb, 1)} kN (con refuerzo) o {f(ej2.phiB * ej2.d.Ncb, 1)} kN (sin refuerzo).
+</Paso>
+<Paso titulo="Un postinstalado de torque controlado, concreto no fisurado" ref="C-D-4, C-D-13">
+
+$h_{ef}$ = 100 mm, $k_c$ = 7, borde a 100 mm, $c_{ac} = 4h_{ef}$ = 400 mm, sin refuerzo suplementario. $N_b = 7\sqrt{28}(100)^{1.5}$ = {f(ej2.p.Nb, 1)} kN; $A_{Nc}/A_{Nco}$ = 75 000/90 000; $\psi_{ed,N}$ = 0.7 + 0.3(100/150) = {f(ej2.p.psiEd, 2)}; $\psi_{c,N}$ = 1.4 (no fisurado); y como $c_{a,\text{mín}}$ = 100 < $c_{ac}$ = 400, $\psi_{cp,N}$ = 100/400 = 0.25, pero el mínimo es $1.5h_{ef}/c_{ac}$ = 150/400 = **{f(ej2.p.psiCp, 3)}**.
+
+Resultado: $N_{cb}$ = **{f(ej2.p.Ncb, 1)} kN**. (Con $c_{a,\text{mín}}$ = 200 mm, $\psi_{cp,N}$ sería {f(ejPsi.b, 2)}.)
+
+</Paso>
+<Resultado>
+Anclaje individual: $N_{cb}$ = {f(ej2.a.Ncb, 1)} kN lejos de bordes y {f(ej2.b.Ncb, 1)} kN con borde a 150 mm. Grupo 2×2: {f(ej2.c.Ncb, 1)} kN sin borde y {f(ej2.d.Ncb, 1)} kN con borde. Compruébalo con la calculadora al final del apéndice.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Cortante, cabeceo e interacción tracción-cortante">
+Un perno con cabeza preinstalado (M20, $A_{se}$ = 245 mm², $f_{uta}$ = 400 MPa, $f_{ya}$ = 250 MPa; $d_a$ = 20 mm; $h_{ef}$ = 200 mm; $A_{brg}$ = 1500 mm²; $f'_c$ = 28 MPa, concreto fisurado, sin refuerzo suplementario) está a **150 mm de un borde** en un elemento de $h_a$ = 300 mm; el cortante actúa perpendicular a ese borde. Combinaciones de C.9.2.
+
+<Paso titulo="Modos de tracción" ref="C-D-3, C-D-4, C-D-14">
+
+El borde a 150 mm es también el único cercano para la tracción. $N_{sa}$ = **{f(ej3.n('Nsa').nominal, 1)} kN** (φ = {f(ej3.n('Nsa').phi, 2)}, φN = {f(ej3.n('Nsa').disenio, 1)}); $N_{cb}$ = **{f(ej3.n('Ncb').nominal, 1)} kN** (φ = {f(ej3.n('Ncb').phi, 2)}, φN = {f(ej3.n('Ncb').disenio, 1)}); $N_p = 8A_{brg}f'_c$ = {f(ej3.Np, 0)} kN y $N_{pn}$ = {f(ej3.n('Npn').nominal, 0)} kN (φ = 0.70, φN = {f(ej3.n('Npn').disenio, 1)}). El desprendimiento lateral no aplica porque $h_{ef}$ = 200 mm no excede $2.5c_{a1}$ = 375 mm.
+
+Resultado: $\phi N_n$ = **{f(ej3.tr.phiNn, 1)} kN**, gobierna **{ej3.tr.gobernante.clave}**.
+
+</Paso>
+<Paso titulo="Resistencia del acero en cortante" ref="C-D-20">
+
+$$
+V_{sa} = n\,(0.6)\,A_{se,V}\,f_{uta} = 0.6\,(245)(400)
+$$
+
+Resultado: $V_{sa}$ = **{f(ej3.Vsa, 1)} kN**; φ = 0.65 (acero dúctil, cortante): φV = {f(ej3.v('Vsa').disenio, 1)} kN.
+
+</Paso>
+<Paso titulo="Arrancamiento del concreto en cortante" ref="C-D-21, C-D-23, C-D-24">
+
+Con $c_{a1}$ = 150 mm y $\ell_e = h_{ef}$ = 200 mm:
+
+$$
+V_b = 0.6\left(\frac{200}{20}\right)^{0.2}\sqrt{20}\,(1)\sqrt{28}\,(150)^{1.5}
+\qquad
+A_{Vco} = 4.5\,(150)^2 = 101\,250\ \text{mm}^2
+$$
+
+$V_b$ = **{f(ej3.vb, 1)} kN**. $A_{Vc}$ = $(3 \times 150)\times\min(1.5\times 150,\,300)$ = 450 × 225 = 101 250 mm²: razón 1.0. Con $c_{a2}$ lejos, $\psi_{ed,V}$ = 1.0; fisurado sin refuerzo de borde, $\psi_{c,V}$ = 1.0; $h_a$ = 300 ≥ $1.5c_{a1}$ = 225, $\psi_{h,V}$ = 1.0.
+
+Resultado: $V_{cb}$ = **{f(ej3.v('Vcb').nominal, 1)} kN**, φ = 0.70 (condición B): φV = **{f(ej3.v('Vcb').disenio, 1)} kN**.
+
+</Paso>
+<Paso titulo="Cabeceo" ref="C-D-30">
+$h_{ef}$ = 200 ≥ 65 mm: $k_{cp}$ = 2.0. $V_{cp}$ = 2.0 × $N_{cb}$ = 2.0 × {f(ej3.n('Ncb').nominal, 1)} = **{f(ej3.v('Vcp').nominal, 1)} kN**; con φ = 0.70, φV = {f(ej3.v('Vcp').disenio, 1)} kN. No gobierna.
+</Paso>
+<Paso titulo="Resistencia de diseño en cortante" ref="C-D.4.1.2">
+$\phi V_n$ = mínimo de {f(ej3.v('Vsa').disenio, 1)}, {f(ej3.v('Vcb').disenio, 1)} y {f(ej3.v('Vcp').disenio, 1)} = **{f(ej3.cor.phiVn, 1)} kN** (gobierna **{ej3.cor.gobernante.clave}**).
+</Paso>
+<Paso titulo="Interacción con Nua = 40 kN" ref="C-D.7.3, C-D-32">
+
+Con $V_{ua}$ = 16 kN: ambas fuerzas superan el 20 % de su resistencia ($0.2\phi N_n$ = {f(0.2 * ej3.tr.phiNn, 1)}; $0.2\phi V_n$ = {f(0.2 * ej3.cor.phiVn, 1)}), así que aplica la Ec. C-D-32:
+
+$$
+\frac{40}{\phi N_n} + \frac{16}{\phi V_n} = {f(ej3.ok.razonN, 3)} + {f(ej3.ok.razonV, 3)}
+$$
+
+Resultado: suma = **{f(ej3.ok.razon, 3)}**, no excede 1.2: **{ej3.ok.cumple ? 'cumple' : 'no cumple'}**. Con $V_{ua}$ = 18 kN la suma sería **{f(ej3.mal.razon, 3)}**: **{ej3.mal.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Resultado>
+$\phi N_n$ = **{f(ej3.tr.phiNn, 1)} kN** ({ej3.tr.gobernante.clave}) y $\phi V_n$ = **{f(ej3.cor.phiVn, 1)} kN** ({ej3.cor.gobernante.clave}). Con $N_{ua}$ = 40 kN y $V_{ua}$ = 16 kN, Ec. C-D-32 da {f(ej3.ok.razon, 3)} ≤ 1.2: cumple; con 18 kN falla. Cambia los datos aquí:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="anclaje-concreto" />
+
+<Callout tipo="practica" titulo="Qué hace la calculadora y qué no (autoría del proyecto)">
+Evalúa un anclaje individual o un grupo de hasta 2×2 con carga repartida por igual: $N_{sa}$, $N_{cb(g)}$, $N_{pn}$ (si das $A_{brg}$ o $N_p$), $N_{sb(g)}$ (anclajes con cabeza profundos), $V_{sa}$, $V_{cb(g)}$ y $V_{cp(g)}$; aplica φ por modo, el factor 0.75 de zonas DMO/DES y la interacción de C-D.7. **No** cubre: excentricidades en el cálculo del cortante, refuerzo del anclaje (C-D.5.2.9), platinas añadidas (C-D.5.2.8), cortante paralelo al borde ni esquinas con dos bordes en cortante (C-D.6.2.1 c, d).
+</Callout>
+
+## Erratas y observaciones del PDF
+
+- **Grupo de anclajes (C-D.1, C-235):** el texto dice que cada anclaje está espaciado «**al menos** $3h_{ef}$» de otro (tracción) o «al menos $3c_{a1}$» (cortante). El sentido físico —y la definición del ACI 318 de la que proviene— es **menos de** $3h_{ef}$: a más de $3h_{ef}$ los conos no se traslapan y los anclajes no forman un grupo. Interpretación del proyecto.
+- **Ec. C-D-20 (C-244):** dice «$A_{se,V}$ … **pulg²**»; en este Título (SI) debe ser **mm²**, como en la Ec. C-D-19. Además, el literal «(b)» aparece **dos veces** en C-D.6.1.2 (el segundo debería ser «(c)»).
+- **Referencias sin prefijo «C-»:** C-D.3.4 cita «8.6.1» (C.8.6.1), C-D.5.2.6 cita «10.6.4» (C.10.6.4) y C-D.5.3.3 cita «D.5.3.4» (C-D.5.3.4).
+- **C-D.5.2.9 (C-242)** remite al «Capítulo **C.21**» para desarrollar el refuerzo del anclaje, mientras que el análogo C-D.6.2.9 (C-247) remite al «Capítulo **C.12**» (desarrollo). El ACI 318 dice Capítulo 12 en ambos: probable errata (lectura del proyecto).
+- **Orden de texto en C-D.8 / C-D.8.1 (C-247):** la frase «Se permiten valores menores para determinados productos basados en ensayos específicos realizados de» termina en el párrafo C-D.8.1 como «…torsión. acuerdo con el ACI 355.2.»: línea desplazada por la maquetación; el sentido es «realizados de acuerdo con el ACI 355.2».
+- **Notación de áreas** ($A_{Vc}$, $A_{V,c}$, $A_{V,co}$) irregular en C-D.6.2.1: es la misma variable. **«Elemento alto»** en la definición de $A_{Vco}$ significa un elemento con $h_a \ge 1.5c_{a1}$.
+- **C-D.5.2.7:** la cota inferior de $\psi_{cp,N}$ es $1.5h_{ef}/c_{ac}$ (se verificó con la imagen: no es $c_{a,\text{mín}}/c_{ac}$).
+- **C-D.4.4/4.5:** la norma da **un solo valor** de φ para el acero (no distingue A y B) y de la categoría 1 a 3 solo para postinstalados en tracción; el cortante del concreto no distingue tipo de anclaje.
+- **Alcance de unidades:** las ecuaciones C-D-7, C-D-8, C-D-15, C-D-17, C-D-24 y C-D-25 son **no homogéneas**; con MPa y mm dan N. Sus equivalentes en kgf/cm² y psi están en el [Apéndice C-F](/titulo-c/apendice-cf).
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Verificar solo el acero** o solo el arrancamiento: el diseño lo rige el **menor** $\phi\times$ resistencia de todos los modos (<NormaRef s="C-D.4.1.2" pag="C-238" />).
+- **Usar $N_{ua}$ por anclaje con la resistencia del grupo**: $N_{cbg}$, $N_{sa}$ y $n\,N_{pn}$ son del grupo; $N_{ua}$ debe ser la fuerza total.
+- **Medir $h_{ef}$ desde la superficie** en lugar de desde la **cara de apoyo de la cabeza** (<NormaRef s="C-D.1" pag="C-236" />).
+- **Contar un solo φ** para todos los modos: el acero y los modos del concreto tienen φ distintos; extracción y cabeceo siempre condición B.
+- **Usar $\psi_{c,N}$ = 1.25 o 1.4 sin saber que el concreto no se fisura**: si el análisis indica fisuración a cargas de servicio, vale 1.0.
+- **Calcular $N_p$ de postinstalados**: debe venir de ensayos ACI 355.2 (<NormaRef s="C-D.5.3.2" pag="C-243" />).
+- **Aplicar $\psi_{cp,N}$ a preinstalados** o a anclajes con refuerzo suplementario: en todos los demás casos vale 1.0.
+- **Olvidar los mínimos de C-D.8** (separación $4d_a$, bordes de $6$–$10d_a$ en postinstalados, $c_{ac}$) o no indicarlos en planos (<NormaRef s="C-D.8.7" pag="C-248" />).
+- **Ignorar el 0.75φ y la ductilidad en zonas DMO/DES** (<NormaRef s="C-D.3.3" pag="C-237" />), o usar el apéndice en zonas de articulación plástica (<NormaRef s="C-D.3.3.1" pag="C-237" />).
+- **Excluir la interacción** cuando ambas fuerzas superan 0.2φ: la suma de C-D-32 debe quedar en 1.2 como máximo.
+- **Pasar $f'_c$ de 70 MPa (55 MPa postinstalados)** (<NormaRef s="C-D.3.5" pag="C-237" />).
+</Callout>
+
+## Resumen en una línea
+
+**Un anclaje se verifica modo por modo —acero, arrancamiento $N_{cb}=(A_{Nc}/A_{Nco})\,\psi\,N_b$ con $N_b=k_c\lambda\sqrt{f'_c}\,h_{ef}^{1.5}$, extracción, desprendimiento lateral, cortante y cabeceo—, usando el menor $\phi\times$ resistencia, la interacción $N_{ua}/\phi N_n+V_{ua}/\phi V_n\le 1.2$ y los mínimos de borde y separación de C-D.8.**

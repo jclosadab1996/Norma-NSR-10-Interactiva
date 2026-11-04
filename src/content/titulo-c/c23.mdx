@@ -1,0 +1,735 @@
+---
+codigo: 'C.23'
+tipo: capitulo
+titulo: 'Tanques y estructuras de ingeniería ambiental de concreto'
+resumen: 'Modificaciones del Título C para tanques, piscinas y estructuras de ingeniería ambiental: durabilidad y mezclas más exigentes, juntas y barreras impermeables, recubrimientos, refuerzo de retracción, coeficiente de durabilidad ambiental Sd, control de fisuración con fs,max, muros y losas sobre el terreno.'
+objetivos:
+  - 'Distinguir qué requisitos del Título C se mantienen y cuáles se sustituyen por los prefijados C.23-C.n en estructuras ambientales'
+  - 'Escoger mezcla (a/mc, f′c, cementantes, cemento) y recubrimientos para una estructura ambiental según su exposición'
+  - 'Calcular el coeficiente de durabilidad ambiental Sd y el esfuerzo máximo de servicio fs,max que controla el agrietamiento'
+  - 'Determinar el refuerzo mínimo de retracción y temperatura a partir de la distancia entre juntas y fy'
+  - 'Detallar juntas, barreras impermeables, muros y losas sobre el terreno de un tanque'
+paginasNorma: 'C-207 a C-222'
+paginaPdf: 509
+orden: 23
+calculadoras: []
+nivel: 'avanzado'
+---
+
+import {
+  betaSimplificado,
+  betaGradiente,
+  fsMaximoFisuracion,
+  coeficienteDurabilidad,
+  fsDurabilidad,
+  gammaCarga,
+  cortanteNominalAmbiental,
+  brazoInternoFisurado,
+  esfuerzoServicioFlexion,
+  separacionMaximaApariencia,
+  cuantiaRetraccionAmbiental,
+  refuerzoRetraccionAmbiental,
+  separacionParaArea,
+  verificarDetalleRetraccion,
+  recubrimientoAmbiental,
+  verificarRecubrimiento,
+  cementanteMinimo,
+  requisitoMezclaAmbiental,
+  claseSulfatoAmbiental,
+  clasificarExposicion,
+  anchoMinimoBarrera,
+  espesorMinimoMuroContactoLiquido,
+  muroRequiereDosCapas,
+  espesorMinimoLosaSobreTerreno,
+  exentoRefuerzoMinimo,
+} from '../../lib/nsr10/tanquesConcreto';
+import { disenarFlexion } from '../../lib/nsr10/flexionConcreto';
+import { moduloElasticidad } from '../../lib/nsr10/concreto';
+import { requisitosExposicion } from '../../lib/nsr10/durabilidad';
+import { buscarBarra } from '../../data/refuerzoDetalles';
+import {
+  TABLA_CEMENTANTE_MIN,
+  TABLA_MEZCLA_AMBIENTAL,
+  TABLA_RETRACCION_AMBIENTAL,
+  TABLA_RECUBRIMIENTO_AMBIENTAL,
+  FS_DURABILIDAD_MPA,
+  FISURACION,
+  ABRASION,
+  LOSAS_TERRENO,
+} from '../../data/concretoSimpleTanques';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const rec = (v) => (v === null ? 'No aplica' : v + ' mm');
+
+export const ej1 = (() => {
+  const fc = 28, fy = 420, h = 350, db = 16, cc = 50, H = 3.5, gammaAgua = 9.81;
+  const Ab = buscarBarra('16M').area;
+  const d = h - cc - db / 2;
+  const Ms = (gammaAgua * H ** 3) / 6;
+  const gamma = 1.4;
+  const Mu = gamma * Ms;
+  const beta = betaSimplificado(h);
+  const caso = (s, exposicion) => {
+    const fs = fsMaximoFisuracion({ s, db, beta, exposicion, direcciones: 'una' });
+    const sd = coeficienteDurabilidad(0.9, fy, gamma, fs.fsMax);
+    const dis = disenarFlexion(Mu * sd.sd, 1000, d, fc, fy);
+    const asProv = (1000 * Ab) / s;
+    return { s, fs, sd, MuSd: Mu * sd.sd, asReq: dis.As, asProv, cumple: asProv >= dis.As };
+  };
+  const a150 = caso(150, 'normal');
+  const a180 = caso(180, 'normal');
+  const severa = caso(150, 'severa');
+  const sinSd = disenarFlexion(Mu, 1000, d, fc, fy);
+  const cr = brazoInternoFisurado({ bMm: 1000, dMm: d, asMm2: a150.asProv, ecMpa: moduloElasticidad(fc) });
+  const fsServ = esfuerzoServicioFlexion(Ms, a150.asProv, cr.brazo);
+  const betaExacta = betaGradiente(h, cr.x, d);
+  const fsExacto = fsMaximoFisuracion({ s: 150, db, beta: betaExacta, exposicion: 'normal', direcciones: 'una' });
+  const sdCort = coeficienteDurabilidad(0.75, fy, gamma, fsDurabilidad('cortante', 'normal'));
+  const sdCortSev = coeficienteDurabilidad(0.75, fy, gamma, fsDurabilidad('cortante', 'severa'));
+  return { fc, fy, h, db, cc, H, Ab, d, Ms, gamma, Mu, beta, a150, a180, severa, sinSd, cr, fsServ, betaExacta, fsExacto, sdCort, sdCortSev, vn: cortanteNominalAmbiental(150, 90, sdCort.sd) };
+})();
+
+export const ej2 = (() => {
+  const b4 = buscarBarra('No.4');
+  const caso = (h, L, fy, extra = {}) => {
+    const r = refuerzoRetraccionAmbiental({ hMm: h, distanciaM: L, fy, ...extra });
+    const sCara = separacionParaArea(b4.area, r.asPorCaraIgualMm2PorM);
+    return { h, L, fy, r, sCara, det: verificarDetalleRetraccion(Math.floor(sCara / 10) * 10, b4.db) };
+  };
+  const muro8 = caso(350, 8, 420);
+  const muro14 = caso(350, 14, 420);
+  const muro14fy240 = caso(350, 14, 240);
+  const parcial = caso(350, 6, 420, { juntaParcial: true });
+  const gruesa = caso(700, 8, 420);
+  const losa = caso(250, 10, 420, { losaSobreSuelo: true });
+  const recMuro = recubrimientoAmbiental({ condicion: 'b', elemento: 'Muros', tipo: 'enSitio' });
+  const recBase = recubrimientoAmbiental({ condicion: 'a', elemento: 'contra la tierra', tipo: 'enSitio' });
+  const recSup = recubrimientoAmbiental({ condicion: 'b', elemento: 'Zapatas y losas de base', detalle: 'Superficie superior', tipo: 'enSitio' });
+  const ccProvisto = 45;
+  return { b4, muro8, muro14, muro14fy240, parcial, gruesa, losa, recMuro, recBase, recSup, ccProvisto, chk: verificarRecubrimiento(ccProvisto, recMuro), chk2: verificarRecubrimiento(55, recMuro) };
+})();
+
+export const ej3 = (() => {
+  const sueloPct = 0.15, phAgua = 7.2, sulfAguaPpm = 300;
+  const claseS = claseSulfatoAmbiental(sueloPct, undefined);
+  const expo = clasificarExposicion({ ph: phAgua, sulfatosPpm: sulfAguaPpm });
+  const reqS = requisitoMezclaAmbiental(claseS);
+  const reqP = requisitoMezclaAmbiental('P1');
+  const reqC = requisitosExposicion(['C1']);
+  const fcMin = Math.max(28, reqS.fcMin, reqP.fcMin, reqC.fcMin);
+  const aMcMax = Math.min(reqS.aMcMax, reqP.aMcMax, reqC.aMcMax ?? Infinity);
+  const tamano = 20;
+  const cementante = cementanteMinimo(tamano);
+  const recMuro = recubrimientoAmbiental({ condicion: 'b', elemento: 'Muros', tipo: 'enSitio' });
+  const recBaseInf = recubrimientoAmbiental({ condicion: 'a', elemento: 'contra la tierra', tipo: 'enSitio' });
+  const recBaseSup = recubrimientoAmbiental({ condicion: 'b', elemento: 'Zapatas y losas de base', detalle: 'Superficie superior', tipo: 'enSitio' });
+  const hMuro = 350, hLosa = 350, alto = 4.0, lado = 6.0;
+  const espMin = espesorMinimoMuroContactoLiquido(alto * 1000);
+  const rMuro = refuerzoRetraccionAmbiental({ hMm: hMuro, distanciaM: 8, fy: 420 });
+  const rLosa = refuerzoRetraccionAmbiental({ hMm: hLosa, distanciaM: 8, fy: 420, losaSobreSuelo: true });
+  // Estática de flotación (cálculo del autor): tanque vacío, nivel freático en la superficie del terreno.
+  const gc = 24, gw = 9.81;
+  const exterior = lado + 2 * (hMuro / 1000);
+  const profundidad = alto + hLosa / 1000;
+  const peso = gc * (exterior * exterior * (hLosa / 1000) + (exterior * exterior - lado * lado) * alto);
+  const empuje = gw * profundidad * exterior * exterior;
+  return { sueloPct, phAgua, sulfAguaPpm, claseS, expo, reqS, reqP, reqC, fcMin, aMcMax, tamano, cementante, recMuro, recBaseInf, recBaseSup, hMuro, hLosa, alto, lado, espMin, dosCapas: muroRequiereDosCapas(hMuro), rMuro, rLosa, exterior, profundidad, peso, empuje, fs: peso / empuje, anchoExp: anchoMinimoBarrera(true), anchoOtras: anchoMinimoBarrera(false), b4: buscarBarra('No.4') };
+})();
+
+## Idea central del capítulo
+
+Una pérdida de agua en un tanque no es solo un problema de funcionamiento: una fisura que atraviesa el muro **lleva el líquido hasta el refuerzo**, lo corroe y degrada el concreto. Por eso el Capítulo C.23 **no inventa una teoría nueva**: toma el Título C y lo **modifica** donde la impermeabilidad, el agrietamiento y la durabilidad mandan más que la pura resistencia (<NormaRef s="C.23.0" pag="C-207" />).
+
+Cómo se lee el capítulo:
+
+- **Todo el Título C aplica**, salvo donde C.23 lo cambie. Si C.23 no menciona un numeral, éste **se cumple igual**. Lo que se cambia se nombra con el prefijo **C.23-C.n**: por ejemplo, el texto "C.23-C.1.2" **sustituye** a C.1.2 en estructuras ambientales.
+- **Mezclas más exigentes:** $f'_c \ge$ 28 MPa, menor relación a/mc, más material cementante (C.23-C.4).
+- **Juntas con barreras impermeables**, rellenos y sellantes, y reglas de construcción (C.23-C.4.10, C.23-C.6).
+- **Más refuerzo de retracción** y **más recubrimiento** que en edificios (C.23-C.7).
+- **Resistencia y servicio unidos:** la resistencia requerida $U$ se **multiplica por $S_d \ge 1$** en las zonas donde importa la estanqueidad, y el esfuerzo de servicio del acero se limita a $f_{s,max}$ ($\le$ 250 MPa) para controlar la fisuración (C.23-C.9.2.6 y C.23-C.10.6).
+
+<Callout tipo="importante" titulo="φ y factores de carga siguen siendo los de C.9">
+Los tanques se diseñan "para los estados límites de resistencia y funcionamiento" con los **factores de carga y $\phi$ del Capítulo C.9** (<NormaRef s="C.23-C.8.1.1" pag="C-216" />). Lo nuevo es el factor de **durabilidad $S_d$** que **amplifica** la resistencia requerida de flexión, tracción y cortante del refuerzo, y que **no se aplica con sismo** (<NormaRef s="C.23-C.9.2.6" pag="C-217" />).
+</Callout>
+
+El capítulo no tiene calculadora registrada; las comprobaciones salen de `src/lib/nsr10/tanquesConcreto.ts`, que usan los ejemplos de abajo.
+
+## C.23.0 — Aplicación del Capítulo C.23
+
+Todos los requisitos del Título C se aplican a las estructuras de ingeniería ambiental, **excepto** donde se modifican en C.23; los requisitos del Título C que **no** apliquen se declaran explícitamente. La nomenclatura "C.23-" + ordinal indica el numeral del Título C que se **sustituye** (<NormaRef s="C.23.0" pag="C-207" />).
+
+## C.23-C.1 — Alcance, planos y especificaciones
+
+### C.23-C.1.1 — Alcance
+
+- **C.23-C.1.1.1:** el capítulo cubre **tanques y compartimentos estancos**, incluidas **piscinas y albercas** de edificaciones, en concreto **reforzado vaciado en sitio, prefabricado y preesforzado**. Es **totalmente aplicable** a estructuras de ingeniería ambiental y sanitaria, **con excepción** de las estructuras primarias para evitar la fuga de materiales peligrosos. Para ellas **$f'_c \ge$ 28 MPa**; no se define resistencia máxima salvo que una sección lo diga (<NormaRef s="C.23-C.1.1.1" pag="C-207" />).
+- **C.23-C.1.1.2:** estructuras ambientales = almacenamiento, flujo y tratamiento de líquidos y materiales afines (p. ej. residuos sólidos), estructuras **secundarias** de contención y auxiliares, donde se exija **impermeabilidad** a líquidos y gases o **durabilidad especial**. El concreto debe **(a)** controlar agrietamiento y fisuración para impedir el flujo de líquidos entre interior y exterior, **(b)** ser denso e impermeable para no contaminar ni ser contaminado, **(c)** dar la máxima resistencia a los químicos del líquido y **(d)** tener superficies poco rugosas que minimicen la resistencia al flujo (<NormaRef s="C.23-C.1.1.2" pag="C-207" />). Se cuida especialmente evitar la corrosión del refuerzo.
+- **C.23-C.1.1.3:** el capítulo contiene los requisitos **adicionales o sustitutivos** (<NormaRef s="C.23-C.1.1.3" pag="C-207" />).
+- **C.23-C.1.1.4:** los requisitos de C.1.1.4 **no aplican** a estas estructuras (<NormaRef s="C.23-C.1.1.4" pag="C-207" />).
+- **C.23-C.1.1.7:** las **losas sobre el terreno** pueden diseñarse según C.23-C.15.14 (<NormaRef s="C.23-C.1.1.7" pag="C-208" />).
+- **C.23-C.1.1.9:** se cumple el **Capítulo C.21** de diseño sismo resistente, con las modificaciones del capítulo y los requisitos del **Apéndice A-1** del Título A para estructuras ambientales (<NormaRef s="C.23-C.1.1.9" pag="C-208" />).
+
+### C.23-C.1.2 — Planos y especificaciones
+
+De C.1.2.1 se **mantienen los literales (a) a (i)**, se **modifican (j) a (m)** y se **adicionan (n) a (p)** (<NormaRef s="C.23-C.1.2" pag="C-208" />):
+
+- **(j)** el **nivel de diseño del líquido** de toda estructura que contenga líquidos;
+- **(k)** la **secuencia de tensionamiento** de los tendones de postensado;
+- **(l)** si una losa sobre el terreno se diseñó como **diafragma estructural** (véase 21.12.3.4);
+- **(m)** la **presión de gas de diseño** de los elementos sometidos a gas o líquido a presión;
+- **(n)** propiedades del concreto y componentes: **tipo de cemento**, **relación agua-material cementante** y si se permiten adiciones, aditivos y puzolanas;
+- **(o)** requisitos adicionales, como **límites a la retracción de fraguado** permisible;
+- **(p)** requisitos para **ensayar la impermeabilidad y estanqueidad antes de los rellenos aledaños**.
+
+**C.23-C.1.2.2:** los requisitos de C.1.2.2 se cumplen también en estructuras ambientales (<NormaRef s="C.23-C.1.2.2" pag="C-208" />).
+
+La norma **no da un procedimiento** de prueba de estanqueidad (volumen, tiempo, pérdida admisible): solo exige que los planos **exijan** el ensayo antes del relleno (literal (p)) y que el diseño contemple esa condición (<NormaRef s="C.23-C.8.2.7" pag="C-216" />).
+
+## C.23-C.2.2 — Definiciones
+
+Términos adicionales a los de C.2.2 (<NormaRef s="C.23-C.2.2" pag="C-208" />):
+
+- **Banda de respaldo (backer rod):** barra o banda de material compresible entre el relleno preformado y el sellante; da soporte y controla la penetración del sellante.
+- **Barrera impermeable (waterstop):** cinta continua de metal, caucho, plástico u otro material, insertada **a través de la junta** para impedir el paso de líquidos.
+- **Coeficiente de durabilidad ambiental ($S_d$):** coeficiente usado para controlar los esfuerzos en el refuerzo y el ancho de fisura en elementos diseñados por el método de resistencia.
+- **Relleno preformado (joint filler):** material compresible preformado para llenar una junta de expansión, evitar la infiltración de residuos y dar apoyo a la banda de respaldo y a los sellantes.
+- **Sellante de junta:** material elastomérico sintético que termina la junta y evita que se llene de materia sólida.
+
+## C.23-C.3.8 — Normas técnicas adicionales
+
+Se **adicionan** a las de C.3.8 (mientras ICONTEC expide las NTC correspondientes) (<NormaRef s="C.23-C.3.8" pag="C-208" />, <NormaRef s="C.23-C.3.8" pag="C-209" />):
+
+<Detalle titulo="Lista de normas (ASTM, AWWA, CRD, TT-S, ACI, AASHTO)">
+
+- ASTM C 1138-97 — resistencia a la abrasión del concreto (método bajo el agua).
+- ASTM D 412-98a — propiedades del caucho en tracción; ASTM D 746-98 — temperatura de fragilidad de plásticos y elastómeros por impacto; ASTM D 1056-00 — materiales celulares flexibles (caucho esponja); ASTM D 1149-99 — agrietamiento superficial del caucho por ozono; ASTM D 1752-84 — rellenos preformados de caucho esponja y corcho para juntas de expansión; ASTM D 2000-03 — clasificación de productos de caucho; ASTM D 2240-03 — dureza durómetro.
+- ASTM E 96-00 — transmisión de vapor de agua de los materiales.
+- AWWA C 652-92 — desinfección de instalaciones de almacenamiento de agua.
+- CRD C 572 — especificación del Cuerpo de Ingenieros del Ejército de EE. UU. para barreras impermeables de PVC (1999).
+- TT-S-227e(3) y TT-S-230c(2) — compuestos sellantes elastoméricos multicomponente y de un componente (Gobierno Federal de EE. UU.).
+- ACI 350.3/350.3R-06 — diseño sísmico de estructuras de concreto que contienen líquidos.
+- AASHTO T260-84 — muestreo y ensayo de ion cloruro total en concreto y materias primas.
+
+</Detalle>
+
+## C.23-C.4 — Requisitos especiales de durabilidad
+
+### C.23-C.4.1.3 — Contenido mínimo de materiales cementantes
+
+El contenido mínimo de materiales cementantes es el de la tabla siguiente (el PDF encabeza el numeral con "Tabla C.23-C.1.1", pero la tabla se titula C.23-C.4.1.1) (<NormaRef s="C.23-C.4.1.3" pag="C-209" />).
+
+<TablaNorma numero="Tabla C.23-C.4.1.1" titulo="Contenido mínimo de materiales cementantes" pag="C-209" nota="Para tamaños nominales del agregado grueso que no se indican se permite interpolar entre los tamaños nominales indicados. La columna del tamiz es el número de tamaño del agregado grueso según NTC 174 (ASTM C 33).">
+
+| Tamaño máximo del agregado (mm) | Tamiz que pasa el agregado grueso según NTC 174 (ASTM C 33) | Contenido mínimo de materiales cementantes (kg/m³) |
+|---:|:---:|---:|
+| 38 | 467 | 320 |
+| 25 | 57 | 330 |
+| 20 | 67 | 350 |
+| 13 | 7 | 360 |
+| 10 | 8 | 370 |
+
+</TablaNorma>
+
+Cuanto **menor** el agregado, **más pasta** se necesita para envolverlo. Por interpolación lineal (lectura del autor), un agregado de 22.5 mm pide {f(cementanteMinimo(22.5), 0)} kg/m³ y uno de 16.5 mm, {f(cementanteMinimo(16.5), 0)} kg/m³.
+
+### C.23-C.4.2 — Categorías y clases de exposición
+
+La Tabla C.23-C.4.2.1 **modifica** la C.4.2.1 para estructuras ambientales (<NormaRef s="C.23-C.4.2" pag="C-209" />). Añade la categoría **Q** (químicos corrosivos) y usa **P1/P0** y **C0–C2** para baja permeabilidad y protección del refuerzo.
+
+<TablaNorma numero="Tabla C.23-C.4.2.1" titulo="Categorías y clases de exposición (estructuras ambientales)" pag="C-210" nota="Transcrita de la imagen de la página. En el PDF las celdas de sulfato en el suelo de S1 y S2 están cortadas en el borde; los límites 0.20 % (S1) y 2.00 % (S2) se completan con la secuencia de la tabla (S2 comienza en 0.20 %; S3 es mayor de 2.00 %), como en la Tabla C.4.2.1.">
+
+| Clase | Categoría | Severidad | Condición |
+|---|---|---|---|
+| F0 | F — Congelamiento y deshielo | No es aplicable | Concreto no expuesto a ciclos de congelamiento y deshielo |
+| F1 | F | Moderada | Concreto expuesto a ciclos de congelamiento y deshielo y exposición ocasional a la humedad |
+| F2 | F | Severa | Concreto expuesto a ciclos de congelamiento y deshielo y en contacto continuo con la humedad |
+| F3 | F | Muy severa | Concreto expuesto a ciclos de congelamiento y deshielo, en contacto continuo con la humedad y expuesto a productos químicos descongelantes |
+| S0 | S — Sulfato | No aplicable | SO₄ en el suelo &lt; 0.10 % en peso; SO₄ disuelto en agua &lt; 150 ppm |
+| S1 | S | Moderada | Suelo 0.10 % ≤ SO₄ &lt; 0.20 % (cota cortada en el PDF); agua 150 ≤ SO₄ &lt; 1500 ppm; agua marina |
+| S2 | S | Severa | Suelo 0.20 % ≤ SO₄ ≤ 2.00 % (cotas cortadas en el PDF); agua 1500 ≤ SO₄ ≤ 10 000 ppm |
+| S3 | S | Muy severa | Suelo SO₄ &gt; 2.00 %; agua SO₄ &gt; 10 000 ppm |
+| P0 | P — Requiere baja permeabilidad | No aplicable | En contacto con el agua donde no se requiere baja permeabilidad |
+| P1 | P | Requerida | En contacto con el agua donde se requiera baja permeabilidad |
+| C0 | C — Protección del refuerzo para la corrosión | No aplicable | Concreto seco o protegido contra la humedad |
+| C1 | C | Moderada | Concreto expuesto a la humedad, pero no a una fuente externa de cloruros |
+| C2 | C | Severa | Concreto expuesto a la humedad y a una fuente externa de cloruros provenientes de productos químicos descongelantes, sal, agua salobre, agua de mar o salpicaduras del mismo origen |
+| Q0 | Q — Exposición a químicos corrosivos | No aplicable | Concreto que no está expuesto a químicos corrosivos |
+| Q1 | Q | Severa | Concreto expuesto a químicos corrosivos diferentes de descongelantes |
+
+</TablaNorma>
+
+<Figura src="/img/titulo-c/tabla-c23-4-2-1-exposicion.png" alt="Tabla C.23-C.4.2.1 de la NSR-10: categorías y clases de exposición para estructuras ambientales" numero="Tabla C.23-C.4.2.1" pie="Recorte de la página del PDF. Las celdas de sulfato en el suelo (S1 y S2) están truncadas en el original." pag="C-210" />
+
+### C.23-C.4.3 — Requisitos para mezclas de concreto
+
+La Tabla C.23-C.4.3.1 **modifica** la C.4.3.1 y **solo muestra las clases que cambian** (F3, S0 a S3, P1 y Q1); para las demás clases rige la Tabla C.4.3.1 (<NormaRef s="C.23-C.4.3" pag="C-210" />).
+
+<TablaNorma numero="Tabla C.23-C.4.3.1" titulo="Requisitos para el concreto según la clase de exposición" pag="C-211" nota="a/mc máx. aplica a concreto de peso normal (para liviano véase C.4.1.2). El contenido de iones cloruro soluble en agua de los ingredientes se determina con NTC 4049 (ASTM C 1218M) a edades de 28 a 42 días.">
+
+| Clase | a/mc máx. | f′c mín. (MPa) | Requisitos mínimos adicionales |
+|---|---:|---:|---|
+| F3 | 0.42 | 31 | Contenido de aire: Tabla C.4.4.1; límites en los cementantes: Tabla C.4.4.2 |
+| S0 | 0.45 | 28 | Sin restricción en el tipo de cemento (ASTM C 150, C 595 y C 1157); cloruro de calcio: sin restricción |
+| S1 | 0.42 | 31 | C 150: tipo II (†‡); C 595: IP(MS), IS(&lt;70)(MS); C 1157: MS; cloruro de calcio: sin restricción |
+| S2 | 0.40 | 35 | C 150: tipo V (‡); C 595: IP(HS), IS(&lt;70)(HS); C 1157: HS; **no se permite** cloruro de calcio |
+| S3 | 0.40 | 35 | C 150: tipo V más puzolanas o escoria (§); C 595: IP(HS) y puzolanas o escoria, o IS(&lt;70)(HS) y puzolanas o escoria; C 1157: HS y puzolanas o escoria; **no se permite** cloruro de calcio |
+| P1 | 0.45 | 28 | Ninguna |
+| Q1 | 0.42 | 31 | Ninguna |
+
+</TablaNorma>
+
+Notas de la tabla (<NormaRef s="Tabla C.23-C.4.3.1" pag="C-211" />):
+
+- **\*** Se pueden permitir combinaciones alternativas de cementantes diferentes a las de la tabla si se **ensayan** para comprobar la resistencia a los sulfatos y cumplen los criterios de C.23-C.4.5.1.
+- **†** Para **agua marina**, se permiten otros cementos pórtland con hasta **10 % de C₃A** si a/mc no excede **0.40**.
+- **‡** Se permiten cementos tipo III o tipo I en exposiciones **S1 o S2** si el C₃A es menor de **8 % o 5 %**, respectivamente.
+- **§** La cantidad de puzolana o escoria no debe ser menor que la determinada por experiencia como mejora de la resistencia a sulfatos con cemento tipo V, o la ensayada según NTC 3330 (ASTM C 1012) cumpliendo C.4.5.1.
+
+<Figura src="/img/titulo-c/tabla-c23-4-3-1-requisitos.png" alt="Tabla C.23-C.4.3.1 de la NSR-10: requisitos para el concreto según la clase de exposición" numero="Tabla C.23-C.4.3.1" pie="Recorte de la página del PDF." pag="C-211" />
+
+Comparada con la Tabla C.4.3.1 de edificios (por ejemplo S1: a/mc 0.50 y 28 MPa; S2: 0.45 y 31 MPa), en estructuras ambientales la relación a/mc **baja** y $f'_c$ **sube** una clase de sulfato: S1 pasa a {requisitoMezclaAmbiental('S1').aMcMax.toFixed(2)} y {requisitoMezclaAmbiental('S1').fcMin} MPa; S2 pasa a {requisitoMezclaAmbiental('S2').aMcMax.toFixed(2)} y {requisitoMezclaAmbiental('S2').fcMin} MPa.
+
+### C.23-C.4.5 a C.23-C.4.7 — Sulfatos y ataque químico
+
+- **C.23-C.4.5.1:** el concreto expuesto a **agua, aguas residuales o suelos con sulfatos** cumple la Tabla C.23-C.4.3.1, o se fabrica con un cemento resistente a sulfatos que cumpla la a/mc y la resistencia mínima de la "Tabla C.23-C.4.4.1" (esa tabla **no existe** en el capítulo; ver erratas) (<NormaRef s="C.23-C.4.5.1" pag="C-211" />).
+- **C.23-C.4.6.1 a C.23-C.4.6.3:** el concreto que pueda sufrir ataque de **soluciones químicas o gases corrosivos** se protege según C.23-C.4.6.2 a C.4.6.4. Se **dosifica** con atención a cemento, mezclado, colocación, consolidación, acabado y curado para que sea **impermeable a líquidos y gases**; si hay sulfatos, cumple C.23-C.4.5 (<NormaRef s="C.23-C.4.6.1" pag="C-211" />, <NormaRef s="C.23-C.4.6.2" pag="C-212" />).
+- **C.23-C.4.6.4:** **(a)** el concreto expuesto a **sulfato de cobre o de hierro** (o ambos) se hace con **cemento resistente a sulfatos** o lleva revestimiento según C.23-C.4.9; **(b)** contra **químicos corrosivos** se protege con **revestimiento o cobertura** (C.23-C.4.9) (<NormaRef s="C.23-C.4.6.4" pag="C-212" />).
+- **C.23-C.4.6.5:** los materiales de **juntas** (barreras, juntas de expansión, sellantes) deben resistir el ataque químico **toda la vida útil**; se ensayan según **ASTM C 920** y la especificación **TT-S-00277E** (sellantes), y **ASTM D 570, D 746, D 1149 y CRD-C572** (barreras de PVC) (<NormaRef s="C.23-C.4.6.5" pag="C-212" />).
+- **C.23-C.4.7.1 a C.23-C.4.7.3:** la **composición, temperatura y pH** del líquido o gas se ensayan para conocer su agresividad; la idoneidad de la protección (cementos especiales, coberturas, revestimientos) se **confirma con ensayos**; los **agregados** se ensayan frente a reacción química con **ASTM C 295** (<NormaRef s="C.23-C.4.7.1" pag="C-212" />).
+
+### C.23-C.4.8 — Protección contra la erosión
+
+- **C.23-C.4.8.1:** el concreto se protege del daño por **erosión por cavitación o abrasión** (<NormaRef s="C.23-C.4.8.1" pag="C-212" />).
+- **C.23-C.4.8.2 (cavitación):** se usa **uno** de estos métodos: **(a)** reducir la velocidad y presión del flujo con deflectores; **(b)** formas, acabados y tolerancias que bajen el índice de cavitación por debajo del nivel incipiente; **(c)** incorporar **aire al flujo** hasta una relación aire/líquido de aproximadamente **8 % por volumen** cerca de la frontera sólida; **(d)** materiales resistentes a la erosión según C.23-C.4.8.3 (<NormaRef s="C.23-C.4.8.2" pag="C-212" />).
+- **C.23-C.4.8.3 (abrasión):** los agregados cumplen **NTC 174 (ASTM C 33)**, el concreto se ensaya con **ASTM C 1138** y cumple: **(a)** $f'_c \ge$ {ABRASION.fcMinMpa} MPa a 28 días; **(b)** a/mc ≤ {ABRASION.aMcMax}; **(c)** aire máximo {ABRASION.aireMaxPct} % (si no hay congelamiento y deshielo, {ABRASION.aireMaxSinCongelamientoPct} %); **(d)** cementante ≥ {ABRASION.cementanteMinKgM3} kg/m³ por m³; **(e)** agregados duros, densos y limpios. Si hace falta más protección, se usan revestimientos de C.23-C.4.9 (<NormaRef s="C.23-C.4.8.3" pag="C-212" />).
+- **C.23-C.4.8.4 a C.23-C.4.8.6:** las estructuras con **cavitación** se hacen con concreto de **alta resistencia** y baja a/mc, **superficie lisa** con cambios suaves de inclinación; las **barras más cercanas a la superficie** se colocan **paralelas al flujo**; y la eficacia de la protección se **confirma con ensayos ASTM C 1138** (<NormaRef s="C.23-C.4.8.4" pag="C-213" />).
+
+### C.23-C.4.9 — Revestimientos y coberturas
+
+- **C.23-C.4.9.1:** si el concreto está en contacto con químicos o gases que ataquen la **matriz de mortero o el acero**, se usan revestimientos o coberturas **impermeables y bien adheridos** (<NormaRef s="C.23-C.4.9.1" pag="C-213" />).
+- **C.23-C.4.9.2:** no se usan en contacto con **gas ozono** sin comprobar su compatibilidad por ensayos (<NormaRef s="C.23-C.4.9.2" pag="C-213" />).
+- **C.23-C.4.9.3:** se **especifican** según la exposición y su efectividad se **ensaya**; el **espesor** se mide con instrumentos para películas y las uniones se verifican con **ensayos de chispa** (<NormaRef s="C.23-C.4.9.3" pag="C-213" />).
+- **C.23-C.4.9.4:** si la transmisión de vapor es peligrosa, los revestimientos deben tener transmisión **menor de 1×10⁻⁶ cm/s (34 g/h/m²)**, según ASTM E 96 (<NormaRef s="C.23-C.4.9.4" pag="C-213" />).
+- **C.23-C.4.9.5:** la selección considera los **químicos** a resistir, la capacidad de **salvar fisuras o juntas** de la sub-base y, en agua potable, **toda la reglamentación** nacional, departamental, distrital y municipal (<NormaRef s="C.23-C.4.9.5" pag="C-213" />).
+
+### C.23-C.4.10 — Juntas
+
+- **C.23-C.4.10.1:** las juntas de **expansión/contracción** y de **construcción** se diseñan para impedir fisuración y corrosión del refuerzo; número, separación y detalle consideran las propiedades de rellenos, sellantes y barreras **frente a ciclos de deformación** (<NormaRef s="C.23-C.4.10.1" pag="C-213" />).
+- **C.23-C.4.10.2 — Barreras impermeables:** aceptan movimientos de elongación y contracción **sin deformación permanente**, resisten congelamiento, temperatura y ataque químico. Pueden ser de **caucho, PVC, acero** u otro material; las de caucho para juntas con mayores movimientos. **Caucho y PVC:** espesor mínimo **9.5 mm**; ancho mínimo **220 mm** en juntas de expansión y **150 mm** en las demás, repartido mitad y mitad entre los dos concretos. **Acero:** platina de **6 mm (1/4")**, embebida **75 mm como mínimo** a cada lado, con doblez central según el movimiento (<NormaRef s="C.23-C.4.10.2" pag="C-213" />, <NormaRef s="C.23-C.4.10.2" pag="C-214" />).
+- **C.23-C.4.10.3 — Sellantes:** a lo largo del perímetro expuesto de las juntas, para impedir el paso de líquidos y gases y la entrada de sólidos; resisten presiones, temperaturas y movimientos sin perder adherencia ni degradarse químicamente. Los **sellantes/rellenos preformados** sirven de formaleta del segundo vaciado y preservan el espacio de expansión; el relleno ideal resiste compresión hasta **la mitad de su espesor** y se expande de nuevo (corcho, neopreno, caucho, poliuretano…). **La madera no puede usarse como relleno** (<NormaRef s="C.23-C.4.10.3" pag="C-214" />).
+- **C.23-C.4.10.4 — Ozono:** sellantes, rellenos y barreras se ensayan por compatibilidad con ozono. Las juntas de contracción en cuña o cortadas con disco de diamante se **llenan con sellante** para proteger el acero (<NormaRef s="C.23-C.4.10.4" pag="C-214" />).
+- **C.23-C.4.10.5 — Llaves de cortante:** la junta se diseña para evitar **descascaramiento y hendimiento** que causen fugas, y se construyen con cuidado para que **no interfieran con las barreras** (<NormaRef s="C.23-C.4.10.5" pag="C-214" />).
+- **C.23-C.4.10.6 — Juntas de construcción:** donde se requiera impermeabilidad llevan una **barrera integral impermeable**; el lapso mínimo entre el vaciado de unidades adyacentes es **48 horas** (<NormaRef s="C.23-C.4.10.6" pag="C-214" />).
+
+## C.23-C.6 — Formaletas, juntas de construcción y juntas de movimiento
+
+- **C.23-C.6.1.7 y C.23-C.6.1.7.1:** los **amarres** de la formaleta en estructuras que contendrán líquidos garantizan la estanqueidad y **no dejan elementos metálicos ni de otro material distinto de concreto dentro de 40 mm** de la superficie (<NormaRef s="C.23-C.6.1.7" pag="C-214" />).
+- **C.23-C.6.4.8 y C.23-C.6.4.9:** las juntas de construcción en elementos impermeables llevan **barrera impermeable integral** y entre el vaciado de sectores adyacentes pasan **al menos 48 horas** (<NormaRef s="C.23-C.6.4.8" pag="C-214" />).
+
+### C.23-C.6.5 — Juntas para compensar movimientos
+
+El diseño considera todos los cambios volumétricos (retracción de fraguado, flujo plástico, temperatura, humedad, asentamientos diferenciales) y minimiza el daño (<NormaRef s="C.23-C.6.5.1" pag="C-215" />).
+
+- **C.23-C.6.5.2 — Juntas de expansión:** llevan **relleno preformado compresible, sellante** y, si deben ser impermeables, **barrera impermeable** (<NormaRef s="C.23-C.6.5.2" pag="C-215" />).
+- **C.23-C.6.5.3 — Juntas de contracción** (parciales o totales; con muesca para el sellante). Su función es **reducir los esfuerzos de retracción** (<NormaRef s="C.23-C.6.5.3" pag="C-215" />):
+  - **(a) Profundidad total:** el refuerzo se **suspende a 50 mm** de la junta; la cara del primer vaciado lleva un compuesto que **evita la adherencia**; barrera del tipo de C.23-C.4.10.2; si hay que transferir cortante, **dowels engrasados**; la separación **no supera** la de la Tabla C.23-C.7.12.2.1.
+  - **(b) Profundidad parcial:** transfieren parte de la tracción para amarrar las dos partes; el refuerzo que pasa **no es más del 50 %** del perpendicular a la junta; se espacian a **≈ 2/3** de la distancia de las juntas de profundidad total.
+
+## C.23-C.7 — Detalles del refuerzo
+
+### C.23-C.7.7 — Protección de concreto para el refuerzo
+
+La Tabla C.23-C.7.7.1 **sustituye** a C.7.7.1, C.7.7.2 y C.7.7.3 (<NormaRef s="C.23-C.7.7" pag="C-215" />).
+
+<TablaNorma numero="Tabla C.23-C.7.7.1" titulo="Protección de concreto para el refuerzo en estructuras ambientales (recubrimiento mínimo, mm)" pag="C-215" nota="(a) concreto vaciado contra la tierra y en permanente contacto con ella; (b) expuesto a la tierra, líquidos, intemperie, o en losas que sostienen rellenos de tierra; (c) condiciones no cubiertas en (a) o (b). Nota 1: construido bajo condiciones de control en planta de prefabricación. Nota 2: incluye ductos de preesforzado menores de 40 mm de diámetro. Nota 3: incluye ductos de preesforzado mayores o iguales a 40 mm de diámetro.">
+
+| Condición | Elemento | Concreto construido en sitio | Concreto prefabricado (nota 1) | Concreto preesforzado vaciado en sitio |
+|---|---|---:|---:|---:|
+| (a) Contra la tierra | — | 75 | No aplica | 75 |
+| (b) Expuesto a tierra, líquidos, intemperie o rellenos | Losas y viguetas | 50 | 40 | 40 |
+| (b) | Vigas y columnas: estribos y espirales | 50 | 40 | 40 |
+| (b) | Vigas y columnas: refuerzo principal | 65 | 50 | 50 |
+| (b) | Muros | 50 | 40 | 40 |
+| (b) | Zapatas y losas de base: superficies vaciadas contra formaleta | 50 | No aplica | No aplica |
+| (b) | Zapatas y losas de base: superficie superior | 50 | No aplica | No aplica |
+| (b) | Cascarones y losas plegadas | 40 | 25 | 25 |
+| (c) Otras | Losas y viguetas: barras No. 11 (36M) y menores | 20 | 20 (nota 2) | 20 |
+| (c) | Losas y viguetas: barras No. 14 (45M) y No. 18 (55M) | 40 | 40 (nota 3) | 40 |
+| (c) | Vigas y columnas: estribos y espirales | 40 | 25 | 25 |
+| (c) | Vigas y columnas: refuerzo principal | 50 | 40 | 40 |
+| (c) | Muros: barras No. 11 (36M) y menores | 20 | 20 (nota 2) | 20 |
+| (c) | Muros: barras No. 14 (45M) y No. 18 (55M) | 40 | 40 (nota 3) | 40 |
+| (c) | Cascarones y losas plegadas: barras No. 5 (16M), alambre MW30 o MD30 (6.2 mm), o menores | 13 | 20 | 20 |
+| (c) | Cascarones y losas plegadas: barras No. 6 (20M) y mayores | 20 | 25 | 25 |
+
+</TablaNorma>
+
+<Figura src="/img/titulo-c/tabla-c23-7-7-1-recubrimientos.png" alt="Tabla C.23-C.7.7.1 de la NSR-10: protección de concreto para el refuerzo en estructuras ambientales" numero="Tabla C.23-C.7.7.1" pie="Recorte de la página del PDF." pag="C-215" />
+
+La fila (b) cubre **muros y losas en contacto con el líquido**, que es el caso típico de un tanque: **50 mm** en muros y losas vaciadas en sitio, y **75 mm** en el concreto contra el suelo. Son valores mayores que los de C.7.7 para edificios.
+
+### C.23-C.7.12 — Refuerzo de retracción y temperatura
+
+**C.23-C.7.12.2.1.** En elementos expuestos al ambiente o que deban ser impermeables (losas y muros), el refuerzo de retracción y temperatura cumple **como mínimo** las cuantías sobre la **sección bruta** de la tabla (<NormaRef s="C.23-C.7.12.2.1" pag="C-216" />).
+
+<TablaNorma numero="Tabla C.23-C.7.12.2.1" titulo="Cuantías mínimas de retracción de fraguado y variación de temperatura" pag="C-216" nota="† La distancia es entre juntas de expansión y juntas de contracción de profundidad total. Para juntas de contracción de profundidad parcial, las cuantías mínimas se determinan multiplicando la distancia real entre juntas parciales por 1.5. * Corresponde a la cuantía máxima a emplear cuando no se proveen juntas para compensar movimientos.">
+
+| Distancia entre juntas para compensar movimientos† | fy = 240 MPa | fy = 420 MPa |
+|---|---:|---:|
+| menos de 6 m | 0.0030 | 0.0030 |
+| 6 a menos de 9 m | 0.0040 | 0.0030 |
+| 9 a menos de 12 m | 0.0050 | 0.0040 |
+| 12 m o más | 0.0060* | 0.0050* |
+
+</TablaNorma>
+
+Además (<NormaRef s="C.23-C.7.12.2.1" pag="C-216" />):
+
+- En secciones de **600 mm o más** de espesor, el refuerzo se determina con una **capa de concreto de 300 mm en cada superficie**.
+- El refuerzo en la **cara inferior de losas en contacto con el suelo** se puede **reducir 50 %** de lo que pide la tabla.
+
+**C.23-C.7.12.2.2.** El refuerzo de retracción y temperatura **no se separa más de 300 mm**, la barra mínima es **No. 4 (1/2") ó 12M (12 mm)** y **al menos 1/3 del área requerida** se coloca **en cada cara** del elemento (el PDF dice "cualquiera de las caras"; ver erratas) (<NormaRef s="C.23-C.7.12.2.2" pag="C-216" />).
+
+<Ejemplo numero={1} titulo="Refuerzo de retracción y temperatura de un muro y una losa, y comprobación de recubrimientos">
+Muro de tanque vaciado en sitio, $h$ = {ej2.muro8.h} mm, con juntas de contracción de profundidad total cada {ej2.muro8.L} m, acero $f_y$ = 420 MPa. Se arma con barras No. 4 (área {ej2.b4.area} mm², $d_b$ = {ej2.b4.db} mm) en las dos caras. Se estudian también otros casos.
+
+<Paso titulo="Cuantía de la tabla" ref="Tabla C.23-C.7.12.2.1">
+Distancia 8 m (fila "6 a menos de 9 m") con $f_y$ = 420: $\rho$ = **{ej2.muro8.r.rho.toFixed(4)}**.
+</Paso>
+<Paso titulo="Área total y por cara" ref="C.23-C.7.12.2.1, C.23-C.7.12.2.2">
+$A_s = \rho\,b\,h$ = {ej2.muro8.r.rho.toFixed(4)} × 1000 × {ej2.muro8.h} = **{f(ej2.muro8.r.asTotalMm2PorM, 0)} mm²/m**. Por cara (reparto igual): **{f(ej2.muro8.r.asPorCaraIgualMm2PorM, 0)} mm²/m**, que supera el mínimo de 1/3 por cara ({f(ej2.muro8.r.asMinimaPorCaraMm2PorM, 0)} mm²/m).
+</Paso>
+<Paso titulo="Separación de las barras" ref="C.23-C.7.12.2.2">
+$s$ = 1000 × {ej2.b4.area} / {f(ej2.muro8.r.asPorCaraIgualMm2PorM, 0)} = {f(ej2.muro8.sCara, 0)} mm → **No. 4 a {f(Math.floor(ej2.muro8.sCara / 10) * 10, 0)} mm** en cada cara; {ej2.muro8.det.cumple ? 'cumple' : 'no cumple'} el máximo de 300 mm y la barra mínima de 12 mm. Como $h$ = 350 mm supera 250 mm, además se arma en **dos capas** (C.23-C.14.3.4: {muroRequiereDosCapas(350) ? 'sí aplica' : 'no aplica'}).
+</Paso>
+<Paso titulo="Efecto de la distancia entre juntas y de fy" ref="Tabla C.23-C.7.12.2.1">
+Con juntas cada 14 m: $\rho$ = {ej2.muro14.r.rho.toFixed(4)} (fy 420) → {f(ej2.muro14.r.asTotalMm2PorM, 0)} mm²/m; con fy = 240: $\rho$ = {ej2.muro14fy240.r.rho.toFixed(4)} → {f(ej2.muro14fy240.r.asTotalMm2PorM, 0)} mm²/m. **Menos juntas, más acero**; y un acero de menor fy pide más área.
+</Paso>
+<Paso titulo="Juntas de contracción parciales" ref="Tabla C.23-C.7.12.2.1, nota †">
+Con juntas parciales cada 6 m la distancia efectiva es 1.5 × 6 = 9 m: $\rho$ = **{ej2.parcial.r.rho.toFixed(4)}** (fy 420) en vez de {cuantiaRetraccionAmbiental(6, 420).toFixed(4)}.
+</Paso>
+<Paso titulo="Elemento grueso" ref="C.23-C.7.12.2.1">
+Un muro de {ej2.gruesa.h} mm (≥ 600 mm) se calcula con 300 mm en cada superficie: espesor de cálculo {ej2.gruesa.r.espesorCalculoMm} mm, $A_s$ = **{f(ej2.gruesa.r.asTotalMm2PorM, 0)} mm²/m** en total, en vez de {f(0.003 * 1000 * ej2.gruesa.h, 0)} mm²/m con el espesor completo.
+</Paso>
+<Paso titulo="Losa sobre el suelo" ref="C.23-C.7.12.2.1">
+Losa de {ej2.losa.h} mm, juntas cada {ej2.losa.L} m, fy 420: $\rho$ = {ej2.losa.r.rho.toFixed(4)} → {f(ej2.losa.r.rho * 1000 * ej2.losa.h, 0)} mm²/m en total ({f(ej2.losa.r.asPorCaraIgualMm2PorM, 0)} por cara). La cara inferior (contra el suelo) puede reducirse 50 %: queda {f(ej2.losa.r.asPorCaraIgualMm2PorM * 0.5, 0)} mm²/m abajo y el total pasa a **{f(ej2.losa.r.asTotalMm2PorM, 0)} mm²/m**.
+</Paso>
+<Paso titulo="Recubrimientos" ref="Tabla C.23-C.7.7.1">
+Muro en contacto con el líquido (fila (b)): **{ej2.recMuro} mm**. Si el detallista dejó {ej2.ccProvisto} mm, {ej2.chk.cumple ? 'cumple' : 'no cumple'} (falta {f(-ej2.chk.holguraMm, 0)} mm); con 55 mm {ej2.chk2.cumple ? 'cumple' : 'no cumple'}. Cara inferior de la losa de base contra el suelo (fila (a)): **{ej2.recBase} mm**; cara superior de la losa de base: **{ej2.recSup} mm**.
+</Paso>
+<Resultado>
+Muro de 350 mm con juntas cada 8 m y fy 420: **No. 4 a {f(Math.floor(ej2.muro8.sCara / 10) * 10, 0)} mm en cada cara** (ρ = {ej2.muro8.r.rho.toFixed(4)}, {f(ej2.muro8.r.asPorCaraIgualMm2PorM, 0)} mm²/m por cara), recubrimiento de **{ej2.recMuro} mm**; losa de base: recubrimiento de **{ej2.recBase} mm** contra el suelo.
+</Resultado>
+</Ejemplo>
+
+## C.23-C.8 — Métodos de diseño y cargas
+
+- **C.23-C.8.1.1:** el diseño de tanques, compartimentos estancos y estructuras ambientales se hace para los **estados límites de resistencia y funcionamiento** del Título C, con los **factores de carga y $\phi$ de C.9**. El objetivo particular es **minimizar el agrietamiento y la fisuración** (<NormaRef s="C.23-C.8.1.1" pag="C-216" />).
+- **C.23-C.8.2.5:** se tienen en cuenta la **presión interna**, los **movimientos y la separación de las juntas** y el **llenado y vaciado** del contenido (<NormaRef s="C.23-C.8.2.5" pag="C-216" />).
+- **C.23-C.8.2.6:** se consideran las **presiones del agua freática**, sobre todo las **subpresiones** en tanques vacíos; se previene la falla por **flotación** con lastres adecuados y, sin drenaje adecuado, se evalúa el efecto de eventuales **fugas** sobre el nivel freático (<NormaRef s="C.23-C.8.2.6" pag="C-216" />).
+- **C.23-C.8.2.7:** en tanques enterrados cuya **estanqueidad se prueba antes del relleno exterior**, esa condición se considera en el diseño estructural (<NormaRef s="C.23-C.8.2.7" pag="C-216" />).
+- **C.23-C.8.2.8:** especial cuidado al definir **presiones de líquidos**, **empujes del suelo** y fuerzas del **funcionamiento y de los equipos** (<NormaRef s="C.23-C.8.2.8" pag="C-216" />).
+
+## C.23-C.9 — Resistencia requerida y coeficiente de durabilidad ambiental
+
+### C.23-C.9.2.6 — El coeficiente Sd
+
+La resistencia requerida $U$ de las secciones **no controladas por compresión** (C.10.3.3) se **multiplica por $S_d$** en las porciones donde importen la **durabilidad, la estanqueidad** u otras consideraciones de funcionamiento (<NormaRef s="C.23-C.9.2.6" pag="C-217" />).
+
+<Ecuacion num="C.23-1" titulo="Coeficiente de durabilidad ambiental">
+
+$$
+S_d=\frac{\phi\,f_y}{\gamma\,f_s}\ \ge 1.0
+$$
+
+- $\gamma$ = carga mayorada / carga no mayorada.
+- $f_s$: esfuerzo permisible de tracción en el refuerzo (flexión: $f_{s,max}$ de C.23-C.10.6.4; los demás casos abajo).
+
+</Ecuacion>
+
+Condiciones de aplicación (<NormaRef s="C.23-C.9.2.6" pag="C-217" />):
+
+- **(a)** en cortante, $S_d$ afecta **solo** la parte de la resistencia a cortante que lleva el **refuerzo** (ver C.23-C.11-2);
+- **(b)** **no** se usa en diseños con **cargas de servicio o esfuerzos admisibles**;
+- **(c)** **no se requiere** en combinaciones de carga **con sismo $E$**.
+
+<TablaNorma numero="C.23-C.9.2.6.2 a .5" titulo="Esfuerzo permisible fs para el coeficiente Sd" pag="C-217" nota="Agrupados en una tabla por el autor. Para flexión, fs es fs,max de C.23-C.10.6.4 (C.23-C.9.2.6.1).">
+
+| Numeral | Caso | Exposición normal (MPa) | Exposición severa (MPa) |
+|---|---|---:|---:|
+| C.23-C.9.2.6.2 y .3 | Tracción directa o esfuerzos anulares de tracción | 140 | 120 |
+| C.23-C.9.2.6.4 y .5 | Esfuerzos en el refuerzo para cortante causados por cortante | 170 | 140 |
+
+</TablaNorma>
+
+**C.23-C.9.2.7.** $S_d$ = **1.0** en flexión de secciones **controladas por compresión**, en el **refuerzo preesforzado** y en las **zonas de anclaje de postensado**, sea cual sea la exposición (<NormaRef s="C.23-C.9.2.7" pag="C-217" />).
+
+Para $\gamma$ = 1.4 (solo cargas permanentes y de fluido, ecuación C.9-1), $\phi$ = 0.75 y $f_y$ = 420 MPa, el coeficiente de cortante es {f(ej1.sdCort.sd, 3)} con exposición normal y {f(ej1.sdCortSev.sd, 3)} con severa. La exposición severa **amplifica más** la resistencia requerida porque el $f_s$ permisible es menor.
+
+### C.23-C.10.5.3 — Refuerzo mínimo en flexión
+
+Los requisitos de refuerzo mínimo de C.10.5.1 y C.10.5.2 **no se aplican** si en cada sección el $A_s$ provisto es **al menos un tercio superior** al requerido por análisis para $U$ **sin incluir** $S_d$ (<NormaRef s="C.23-C.10.5.3" pag="C-217" />). Es decir, $A_s \ge \tfrac{4}{3} A_{s,req}$: {exentoRefuerzoMinimo(1334, 1000) ? 'con 1334 mm² frente a 1000 mm² requeridos se está exento' : 'no exento'}.
+
+## C.23-C.10.6 — Distribución del refuerzo de flexión (control de fisuración)
+
+Esta sección fija reglas para distribuir el refuerzo y los **esfuerzos permisibles** que controlan el agrietamiento en **todas las secciones no controladas por compresión**. **No aplica** a combinaciones con sismo (<NormaRef s="C.23-C.10.6.1" pag="C-217" />, <NormaRef s="C.23-C.10.6.1" pag="C-218" />).
+
+- **C.23-C.10.6.2:** la distribución en losas en dos direcciones sigue C.13.3. Para aplicar C.23-C.10.6.4, las losas con relación lado largo / lado corto **no mayor de 2** son elementos en **dos direcciones**; si es **mayor de 2**, en **una dirección** (<NormaRef s="C.23-C.10.6.2" pag="C-218" />).
+- **C.23-C.10.6.3:** el refuerzo de tracción por flexión se distribuye en las zonas de **tracción máxima** según C.23-C.10.6.4 (<NormaRef s="C.23-C.10.6.3" pag="C-218" />).
+
+### C.23-C.10.6.4 — Esfuerzo máximo de servicio fs,max
+
+El esfuerzo calculado en el refuerzo **más cercano a la cara en tracción**, a niveles de servicio, $f_s$, no debe exceder las ecuaciones C.23-2 o C.23-3 **ni 250 MPa** (<NormaRef s="C.23-C.10.6.4" pag="C-218" />).
+
+<Ecuacion num="C.23-2" titulo="fs,max en exposición ambiental normal">
+
+$$
+f_{s,max}=\frac{57\,000}{\beta\sqrt{s^{2}+4\left(50+\dfrac{d_b}{2}\right)^{2}}}
+$$
+
+- $f_{s,max}$ en MPa; $s$: separación centro a centro del refuerzo (mm); $d_b$: diámetro de la barra (mm).
+- No hace falta que sea menor de **140 MPa** en elementos en una dirección ni de **170 MPa** en elementos en dos direcciones (C.23-C.10.6.4.1).
+
+</Ecuacion>
+
+<Ecuacion num="C.23-3" titulo="fs,max en exposición ambiental severa">
+
+$$
+f_{s,max}=\frac{46\,500}{\beta\sqrt{s^{2}+4\left(50+\dfrac{d_b}{2}\right)^{2}}}
+$$
+
+- No hace falta que sea menor de **120 MPa** en una dirección ni de **140 MPa** en dos direcciones (C.23-C.10.6.4.2).
+
+</Ecuacion>
+
+- **C.23-C.10.6.4.3:** como simplificación se permite usar **15 625** para el término $4(50+d_b/2)^2$ (equivale a $d_b$ = 25 mm) (<NormaRef s="C.23-C.10.6.4.3" pag="C-218" />).
+- **C.23-C.10.6.4.4:** el factor de gradiente de deformaciones es:
+
+<Ecuacion num="C.23-4" titulo="Factor de amplificación del gradiente de deformaciones unitarias">
+
+$$
+\beta=\frac{h-c}{d-c}
+$$
+
+- $c$: profundidad del eje neutro al nivel de cargas de servicio. En lugar de este cálculo se permite $\beta$ = **1.2** para $h \ge$ 400 mm y **1.35** para $h$ &lt; 400 mm.
+
+</Ecuacion>
+
+- **C.23-C.10.6.4.5 — Exposición normal o severa** en compartimentos estancos: **normal** = exposición a líquidos con **pH mayor de 5**, o a soluciones con sulfatos de **1000 ppm o menos**; **severa** = cuando se **exceden** los límites de la normal (<NormaRef s="C.23-C.10.6.4.5" pag="C-218" />). *(Lectura del autor: basta exceder cualquiera de los dos límites para que sea severa.)*
+- **C.23-C.10.6.4.6:** $f_s$ en MPa = **momento no mayorado** dividido por el producto del **área de acero por el brazo interno de palanca** (<NormaRef s="C.23-C.10.6.4.6" pag="C-218" />).
+
+### C.23-C.10.6.5 — Apariencia y recubrimiento mayor de 75 mm
+
+Cuando la apariencia de la superficie importa **y el recubrimiento excede 75 mm**, los esfuerzos de servicio no exceden C.23-C.10.6.4 y la separación $s$ del refuerzo más cercano a la cara en tracción no excede (<NormaRef s="C.23-C.10.6.5" pag="C-218" />, <NormaRef s="C.23-5" pag="C-219" />):
+
+<Ecuacion num="C.23-5" titulo="Separación máxima por apariencia">
+
+$$
+s=380\left(\frac{280}{f_s}\right)-2.5\,c_c\ \le 300\ \text{mm}
+$$
+
+- $c_c$: recubrimiento libre del refuerzo (mm); $f_s$ en MPa.
+
+</Ecuacion>
+
+Por ejemplo, con $f_s$ = 200 MPa y $c_c$ = 80 mm: 380(280/200) − 2.5(80) = {(380 * 280 / 200 - 2.5 * 80).toFixed(0)} mm, que se limita a **{f(separacionMaximaApariencia(200, 80), 0)} mm**.
+
+<Ejemplo numero={2} titulo="Coeficiente Sd y refuerzo de flexión del muro de un tanque de agua">
+Muro en voladizo de un tanque de concreto $f'_c$ = {ej1.fc} MPa (mínimo de C.23-C.1.1.1), $f_y$ = {ej1.fy} MPa, que retiene agua de **H = {ej1.H} m** (γ_agua = 9.81 kN/m³; líquido de pH neutro: **exposición normal**), $h$ = {ej1.h} mm, en una dirección. Recubrimiento {ej1.cc} mm (fila (b) de la Tabla C.23-C.7.7.1) y barras 16M ($d_b$ = {ej1.db} mm, área {f(ej1.Ab, 1)} mm²): $d$ = {ej1.h} − {ej1.cc} − {ej1.db / 2} = **{ej1.d} mm**. El espesor cumple C.23-C.14.6.2 (≥ 300 mm por tener más de 3 m en contacto con líquido).
+
+<Paso titulo="Momento de servicio y mayorado en la base" ref="C.9-1, C.23-C.10.6.4.6">
+Momento no mayorado por presión hidrostática triangular: $M_s = \gamma_w H^3/6$ = **{f(ej1.Ms, 1)} kN·m/m** (estática del autor). Solo líquido: C.9-1 con $F$ y 1.4, de modo que $\gamma$ = 1.4 y $M_u$ = 1.4 × {f(ej1.Ms, 1)} = **{f(ej1.Mu, 1)} kN·m/m**.
+</Paso>
+<Paso titulo="fs,max para s = 150 mm" ref="C.23-2, C.23-C.10.6.4.4">
+$\beta$ = **{ej1.beta}** (simplificado, $h$ &lt; 400 mm). $\sqrt{s^2 + 4(50+d_b/2)^2} = \sqrt{150^2 + 4(58)^2}$ = {f(Math.sqrt(150 ** 2 + 4 * (50 + ej1.db / 2) ** 2), 1)} mm. $f_{s,max}$ = 57 000 / ({ej1.beta} × {f(Math.sqrt(150 ** 2 + 4 * (50 + ej1.db / 2) ** 2), 1)}) = **{f(ej1.a150.fs.fsCalculado, 1)} MPa** (mayor que el piso de 140 y menor que el tope de 250).
+</Paso>
+<Paso titulo="Coeficiente de durabilidad" ref="C.23-1">
+$S_d = \phi f_y/(\gamma f_s)$ = 0.90 × {ej1.fy} / (1.4 × {f(ej1.a150.fs.fsMax, 1)}) = **{f(ej1.a150.sd.sd, 3)}** (mayor que 1.0). Resistencia requerida de diseño: $S_d M_u$ = {f(ej1.a150.sd.sd, 3)} × {f(ej1.Mu, 1)} = **{f(ej1.a150.MuSd, 1)} kN·m/m**.
+</Paso>
+<Paso titulo="Refuerzo requerido" ref="C.10.2, C.9.3.2">
+Para $S_d M_u$ con b = 1000 mm y $d$ = {ej1.d} mm (resistencia de la sección, ver C.10): $A_{s,req}$ = **{f(ej1.a150.asReq, 0)} mm²/m**. Con 16M a 150 mm se provee {f(ej1.a150.asProv, 0)} mm²/m: {ej1.a150.cumple ? 'cumple' : 'no cumple'}. Sin $S_d$ habrían bastado {f(ej1.sinSd.As, 0)} mm²/m: **el coeficiente aumenta el acero {f((ej1.a150.asReq / ej1.sinSd.As - 1) * 100, 0)} %**.
+</Paso>
+<Paso titulo="Efecto de la separación" ref="C.23-2">
+Con 16M a 180 mm: $f_{s,max}$ baja a {f(ej1.a180.fs.fsMax, 1)} MPa, $S_d$ sube a {f(ej1.a180.sd.sd, 3)}, $A_{s,req}$ = {f(ej1.a180.asReq, 0)} mm²/m frente a {f(ej1.a180.asProv, 0)} provistos: **no cumple** ({ej1.a180.cumple ? 'cumple' : 'no cumple'}). Barras **más cercanas** permiten más esfuerzo de servicio y menos $S_d$.
+</Paso>
+<Paso titulo="Comprobación del esfuerzo de servicio" ref="C.23-C.10.6.4.6, C.23-4">
+Sección fisurada con $n = E_s/E_c$ = {f(ej1.cr.n, 2)}: eje neutro $x$ = {f(ej1.cr.x, 1)} mm, brazo $jd = d - x/3$ = {f(ej1.cr.brazo, 1)} mm (mecánica del autor). $f_s = M_s/(A_s\, jd)$ = {f(ej1.Ms, 1)} × 10⁶ / ({f(ej1.a150.asProv, 0)} × {f(ej1.cr.brazo, 1)}) = **{f(ej1.fsServ, 1)} MPa**, menor que $f_{s,max}$ = {f(ej1.a150.fs.fsMax, 1)} MPa: cumple. Con $\beta$ exacto = (h − c)/(d − c) = {f(ej1.betaExacta, 3)}, $f_{s,max}$ sería {f(ej1.fsExacto.fsMax, 1)} MPa; el simplificado es conservador.
+</Paso>
+<Paso titulo="Exposición severa" ref="C.23-3">
+Si el líquido fuera agresivo (pH menor de 5): $f_{s,max}$ = {f(ej1.severa.fs.fsMax, 1)} MPa, $S_d$ = {f(ej1.severa.sd.sd, 3)} y $A_{s,req}$ = {f(ej1.severa.asReq, 0)} mm²/m (16M a 150 mm: {ej1.severa.cumple ? 'cumple' : 'no cumple'}).
+</Paso>
+<Resultado>
+Con exposición normal, 16M a 150 mm en la cara en tracción da $A_s$ = {f(ej1.a150.asProv, 0)} mm²/m, $S_d$ = **{f(ej1.a150.sd.sd, 2)}** y $f_s$ de servicio = {f(ej1.fsServ, 0)} MPa ≤ $f_{s,max}$ = {f(ej1.a150.fs.fsMax, 0)} MPa. El factor de durabilidad aumentó el acero de {f(ej1.sinSd.As, 0)} a {f(ej1.a150.asReq, 0)} mm²/m.
+</Resultado>
+</Ejemplo>
+
+## C.23-C.11 — Resistencia al cortante
+
+**C.23-C.11.1.1.** El diseño a cortante se basa en $\phi V_n \ge V_u$ (C.23-C.11-1), con la resistencia nominal **modificada por $S_d$** (<NormaRef s="C.23-C.11.1.1" pag="C-219" />):
+
+<Ecuacion num="C.23-C.11-1" titulo="Condición de resistencia a cortante">
+
+$$
+\phi V_n \ge V_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.23-C.11-2" titulo="Vn con el coeficiente de durabilidad">
+
+$$
+V_n = V_c + \frac{V_s}{S_d}
+$$
+
+- $V_c$: aporte del concreto (C.11.2, C.11.3 o C.11.11); $V_s$: aporte del refuerzo de cortante (C.11.4, C.11.9.9 o C.11.11).
+
+</Ecuacion>
+
+El concreto **no se penaliza**: solo se reduce el aporte de los **estribos**. Con $V_c$ = 150 kN, $V_s$ = 90 kN y $S_d$ = {f(ej1.sdCort.sd, 3)} (cortante, exposición normal, γ = 1.4), $V_n$ = 150 + 90/{f(ej1.sdCort.sd, 3)} = **{f(ej1.vn, 1)} kN** en vez de 240 kN (cálculo ilustrativo del autor).
+
+## C.23-C.14 — Muros
+
+- **C.23-C.14.1.1:** las disposiciones de C.14 se aplican a **muros planos** con carga axial (con o sin flexión) y a **muros circulares** con carga axial y **esfuerzos anulares** (con o sin flexión) (<NormaRef s="C.23-C.14.1.1" pag="C-219" />).
+
+### C.23-C.14.3 — Refuerzo mínimo
+
+- **C.23-C.14.3.1 a C.23-C.14.3.3:** el refuerzo mínimo vertical y horizontal por temperatura y retracción: **cuantía vertical $\rho_\ell$ = 0.0030**; **cuantía horizontal $\rho_t$** según la distancia entre juntas, con la Tabla C.23-C.7.12.2.1 (<NormaRef s="C.23-C.14.3.1" pag="C-219" />).
+- **C.23-C.14.3.4:** con **espesor mayor de 250 mm** el refuerzo de cada dirección va en **dos capas** paralelas a las caras: **(a)** una capa con **entre 1/2 y 2/3** del total, a no menos del recubrimiento de C.23-C.7.7 ni a más de 1/3 del espesor desde la **superficie exterior**; **(b)** la otra, con el resto, entre el recubrimiento y 1/3 del espesor desde la **superficie interior** (<NormaRef s="C.23-C.14.3.4" pag="C-219" />).
+- **C.23-C.14.3.5:** separación del refuerzo vertical y horizontal **no mayor de 300 mm** (<NormaRef s="C.23-C.14.3.5" pag="C-219" />).
+- **C.23-C.14.3.6:** el refuerzo vertical **no necesita estribos** si no excede **0.01 Ag** o si no se requiere como refuerzo de compresión (<NormaRef s="C.23-C.14.3.6" pag="C-219" />).
+- **C.23-C.14.3.7:** además del mínimo, se añade a los lados de **cada abertura** un refuerzo **equivalente al interrumpido**, que **desarrolla $f_y$** en las esquinas de aberturas rectangulares y se extiende **no menos de 600 mm** (también más allá de la intersección con otras barras en aberturas circulares) (<NormaRef s="C.23-C.14.3.7" pag="C-219" />, <NormaRef s="C.23-C.14.3.7" pag="C-220" />).
+
+### C.23-C.14.5.3 y C.23-C.14.6 — Espesor mínimo
+
+- **C.23-C.14.5.3.1:** muros **de carga** (método empírico) cuya estabilidad vertical no depende de la curvatura en planta: espesor **no menor de 1/25 de la altura o longitud** (la menor) **ni de 200 mm**. **C.23-C.14.5.3.2:** esta sección **no aplica** a estructuras ambientales (el PDF la deja así redactada) (<NormaRef s="C.23-C.14.5.3" pag="C-220" />).
+- **C.23-C.14.6.1:** muros que **no** son de carga y cuya estabilidad no depende de la curvatura: **150 mm** como mínimo y **1/30** de la distancia mínima entre apoyos laterales (<NormaRef s="C.23-C.14.6.1" pag="C-220" />).
+- **C.23-C.14.6.2:** muros convencionales vaciados en sitio **en contacto con líquidos y de más de 3 m de altura**: **300 mm** como mínimo (<NormaRef s="C.23-C.14.6.2" pag="C-220" />).
+
+## C.23-C.15.14 — Losas sobre el terreno en estructuras ambientales
+
+### Alcance y sub-base
+
+**C.23-C.15.14.1.** Hay **tres tipos** de losas sobre el terreno: **(1)** losas estructurales de cimentación, **(2)** losas sobre el terreno y **(3)** **losas-membrana**. La primera se rige por el resto del Título C; esta sección cubre las losas sobre el terreno y las losas-membrana. El diseño parte de que la losa **transmite las cargas directamente a la sub-base** sin distribuirlas, o solo distribuye cargas de ruedas como un pavimento (<NormaRef s="C.23-C.15.14.1" pag="C-220" />).
+
+**C.23-C.15.14.2 — Sub-base** (<NormaRef s="C.23-C.15.14.2" pag="C-220" />):
+
+- debe tener **resistencia, rigidez y estabilidad** suficientes;
+- se consideran **asentamientos**, puntos de distinta resistencia y apoyo sobre más de un tipo de sub-base (corte y relleno);
+- se previene la **erosión** por flujo de agua bajo la losa (gradación del relleno o **geotextil**); si el suelo no es apropiado, se **retira y reemplaza**;
+- densidad y compresibilidad **uniformes** para limitar asentamientos diferenciales con zapatas; el suelo remoldeado o suelto se retira y reemplaza por material seleccionado compactado;
+- nivel de la superficie de la sub-base: **+0 mm y −25 mm** en cualquier tramo de **30 m**, con variaciones **suaves y graduales**.
+
+### C.23-C.15.14.3 — Espesor de la losa
+
+<TablaNorma numero="C.23-C.15.14.3" titulo="Espesores de losas sobre el terreno y losas-membrana" pag="C-221" nota="Agrupados en una tabla por el autor a partir de C.23-C.15.14.3.1 a .3. Las losas-membrana no preesforzadas con barras mayores que No. 4 (12M) deben tener un espesor tal que se cumpla el recubrimiento de C.23-C.15.14.4.4.">
+
+| Tipo de losa | Refuerzo | Espesor mínimo (mm) | Espesor máximo (mm) |
+|---|---|---:|---:|
+| Sobre el terreno | Una sola capa de refuerzo no preesforzado | 100 | — |
+| Sobre el terreno | Refuerzo preesforzado | 125 | — |
+| Sobre el terreno | Refuerzo superior e inferior | 150 | — |
+| Losa-membrana | Refuerzo electrosoldado | 75 | 150 (no preesforzada) |
+| Losa-membrana | No preesforzada con electrosoldado o barras No. 4 (12M) o menores | 100 | 150 |
+| Losa-membrana | Preesforzada | 125 | 175 |
+
+</TablaNorma>
+
+- **C.23-C.15.14.3.4:** tolerancia del nivel de la superficie terminada: **−0 mm y +20 mm**, con diferencia no mayor de **±6 mm en 3 m** (<NormaRef s="C.23-C.15.14.3.4" pag="C-221" />).
+
+### C.23-C.15.14.4 — Refuerzo
+
+- **C.23-C.15.14.4.1:** las losas sobre el terreno llevan una o dos capas; las **losas-membrana, una sola**. El mínimo no es menor que el de C.23-C.7.12; el preesforzado impone una compresión de **1.4 MPa** (<NormaRef s="C.23-C.15.14.4.1" pag="C-221" />).
+- **C.23-C.15.14.4.2:** losas-membrana no preesforzadas: **ρ ≥ 0.0050** en cada dirección ortogonal; refuerzo adicional en bordes y discontinuidades; electrosoldado (**alambres paralelos a no más de 100 mm**) o barras corrugadas a **mín(300 mm, 2 veces el espesor)** (<NormaRef s="C.23-C.15.14.4.2" pag="C-221" />).
+- **C.23-C.15.14.4.3:** losas-membrana preesforzadas: refuerzo en las dos direcciones, compresión final de **1.4 MPa**, tendones en el **tercio central** del espesor, tensionados tan pronto el concreto resista los anclajes; ρ mínima no preesforzada de **0.0015** en cada dirección (<NormaRef s="C.23-C.15.14.4.3" pag="C-221" />).
+- **C.23-C.15.14.4.4 — Recubrimiento:** **superior** ≥ **40 mm** (sobre el terreno) y **25 mm** (membrana); **inferior** ≥ **40 mm** con sub-base estabilizada o con barrera plástica y **50 mm** si no (en ambos tipos). Las losas sobre el terreno de **más de 200 mm** cumplen el recubrimiento de las losas de cimentación. El refuerzo se mantiene en posición con sillas o cubos de concreto (<NormaRef s="C.23-C.15.14.4.4" pag="C-221" />).
+
+### Juntas, subpresión y curado
+
+- **C.23-C.15.14.5.1:** **barreras impermeables en todas las juntas** de losas de estructuras que contengan líquidos; vaciar en secciones **tan grandes como sea posible** para evitar juntas de construcción. **No se usan barreras integrales en espesores menores de 125 mm**; llevan **≥ 25 mm de concreto** entre la barrera y la superficie, y las colocadas en la parte inferior de la junta quedan **≥ 25 mm** del acero de refuerzo (<NormaRef s="C.23-C.15.14.5.1" pag="C-221" />, <NormaRef s="C.23-C.15.14.5.1" pag="C-222" />).
+- **C.23-C.15.14.5.2:** se considera cualquier **engrosamiento o transición** de la losa (<NormaRef s="C.23-C.15.14.5.2" pag="C-222" />).
+- **C.23-C.15.14.6.1 — Flotación por subpresión:** drenajes bajo la losa, **válvulas de alivio**, o bien diseño para resistir la subpresión; con válvulas, la losa resiste la subpresión **hasta que abran** (<NormaRef s="C.23-C.15.14.6.1" pag="C-222" />).
+- **C.23-C.15.14.7.1 — Curado:** según el Título C (<NormaRef s="C.23-C.15.14.7.1" pag="C-222" />).
+
+## C.23-C.21 y C.23-C.22 — Sismo y concreto simple
+
+- **C.23-C.21.1.1.2:** el **Apéndice A-1** del Título A da los requisitos sísmicos de las estructuras ambientales y designa su capacidad de disipación como **mínima (DMI), moderada (DMO) o especial (DES)**; esa designación rige la aplicación del Capítulo C.21 (<NormaRef s="C.23-C.21.1.1.2" pag="C-222" />).
+- **C.23-C.21.1.1.9 — Definiciones:** **estructura que contiene líquidos** (primaria o secundaria, de cualquier forma en planta, varios pisos y cubiertas), **presión convectiva** (hidrodinámica por la parte superior de la ola del líquido en el sismo) y **presión impulsiva** (hidrodinámica por la parte inferior del líquido) (<NormaRef s="C.23-C.21.1.1.9" pag="C-222" />).
+- **C.23-C.21.1.2.4:** las fuerzas y el análisis sísmico están en el Apéndice A-1. Por funcionamiento no se admiten oscilaciones inelásticas excesivas, por eso el coeficiente $R$ de estructuras ambientales es **sustancialmente menor** que el de edificios. **No hace falta $S_d$** en el diseño sísmico porque sus combinaciones incluyen $E$ (<NormaRef s="C.23-C.21.1.2.4" pag="C-222" />).
+- **C.23-C.22:** **no se permite concreto estructural simple** en estructuras ambientales (<NormaRef s="C.23-C.22" pag="C-222" />). Es la única conexión con el Capítulo C.22.
+
+<Ejemplo numero={3} titulo="Caso práctico: tanque enterrado de agua potable, decisiones de durabilidad y detalle">
+Tanque rectangular enterrado de agua potable, 6.0 × 6.0 m en planta y {ej3.alto.toFixed(1)} m de altura de agua, muros y losa de base de {ej3.hMuro} mm, vaciados en sitio. El suelo tiene {ej3.sueloPct} % de sulfatos; el agua tiene pH {ej3.phAgua} y {ej3.sulfAguaPpm} ppm de sulfatos. Agregado máximo de {ej3.tamano} mm. Juntas de movimiento cada 8 m, fy = 420 MPa.
+
+<Paso titulo="Clases de exposición" ref="Tabla C.23-C.4.2.1">
+Sulfato en el suelo {ej3.sueloPct} % → **{ej3.claseS}**. Contacto con agua donde se exige baja permeabilidad → **P1**. Concreto húmedo sin fuente externa de cloruros → **C1**. Sin congelamiento: F0. El agua (pH {ej3.phAgua} &gt; 5 y {ej3.sulfAguaPpm} ppm ≤ 1000) da **exposición ambiental {ej3.expo}** para C.23-C.10.6.4.5.
+</Paso>
+<Paso titulo="Mezcla" ref="Tabla C.23-C.4.3.1, C.23-C.1.1.1">
+{ej3.claseS}: a/mc ≤ {ej3.reqS.aMcMax.toFixed(2)} y $f'_c \ge$ {ej3.reqS.fcMin} MPa; P1: a/mc ≤ {ej3.reqP.aMcMax.toFixed(2)} y {ej3.reqP.fcMin} MPa; C1 (Tabla C.4.3.1): $f'_c \ge$ {ej3.reqC.fcMin} MPa; mínimo del capítulo: 28 MPa. Gobierna **$f'_c \ge$ {ej3.fcMin} MPa** y **a/mc ≤ {ej3.aMcMax.toFixed(2)}**. Cemento tipo **II** (ASTM C 150), IP(MS) o IS(&lt;70)(MS), o MS (C 1157). Cloruro de calcio: sin restricción en S1, pero no conviene en concreto con refuerzo (comentario del autor).
+</Paso>
+<Paso titulo="Material cementante" ref="Tabla C.23-C.4.1.1">
+Agregado de {ej3.tamano} mm: **≥ {f(ej3.cementante, 0)} kg/m³** de materiales cementantes.
+</Paso>
+<Paso titulo="Espesor de muros y capas" ref="C.23-C.14.6.2, C.23-C.14.3.4">
+Más de 3 m en contacto con líquido: espesor mínimo **{ej3.espMin} mm**; se adoptaron {ej3.hMuro} mm (cumple). Como supera 250 mm, el refuerzo de cada dirección va en **dos capas** ({ej3.dosCapas ? 'sí aplica' : 'no aplica'}), con entre 1/2 y 2/3 del total en la capa exterior. Cuantía vertical mínima de 0.0030.
+</Paso>
+<Paso titulo="Recubrimientos" ref="Tabla C.23-C.7.7.1">
+Muros en contacto con el líquido y con el terreno: **{ej3.recMuro} mm**; cara de la losa de base contra el suelo: **{ej3.recBaseInf} mm**; cara superior de la losa de base (en contacto con el agua): **{ej3.recBaseSup} mm**.
+</Paso>
+<Paso titulo="Refuerzo de retracción" ref="Tabla C.23-C.7.12.2.1">
+Muro de {ej3.hMuro} mm, juntas cada 8 m, fy 420: $\rho$ = {ej3.rMuro.rho.toFixed(4)} → {f(ej3.rMuro.asTotalMm2PorM, 0)} mm²/m en total ({f(ej3.rMuro.asPorCaraIgualMm2PorM, 0)} por cara). Losa de base: misma cuantía, con la cara contra el suelo reducible 50 %: total {f(ej3.rLosa.asTotalMm2PorM, 0)} mm²/m. Barra mínima No. 4 (12M) a no más de 300 mm.
+</Paso>
+<Paso titulo="Juntas" ref="C.23-C.4.10, C.23-C.6.5, C.23-C.15.14.5">
+Barreras impermeables de caucho o PVC de **≥ 9.5 mm** de espesor y **≥ {ej3.anchoExp} mm** de ancho en juntas de expansión (**≥ {ej3.anchoOtras} mm** en las demás); barrera integral en todas las juntas de la losa y en las juntas de construcción de los muros; **≥ 48 h** entre vaciados de unidades adyacentes; amarres de formaleta sin metal a menos de **40 mm** de la superficie; relleno preformado que **no** sea madera.
+</Paso>
+<Paso titulo="Planos y ensayos" ref="C.23-C.1.2">
+Los planos indican el **nivel de diseño del líquido**, el tipo de cemento y la a/mc, los límites de retracción, y la exigencia de **ensayar la estanqueidad antes del relleno** (C.23-C.8.2.7: el muro debe resistir esa etapa con el relleno aún ausente).
+</Paso>
+<Paso titulo="Flotación con el tanque vacío" ref="C.23-C.8.2.6">
+Estática del autor, con nivel freático en la superficie del terreno y sin cubierta: lado exterior {f(ej3.exterior, 1)} m, profundidad {f(ej3.profundidad, 2)} m. Peso del concreto (24 kN/m³) = {f(ej3.peso, 0)} kN; subpresión = 9.81 × {f(ej3.profundidad, 2)} × {f(ej3.exterior, 1)}² = {f(ej3.empuje, 0)} kN. Relación peso/subpresión = **{f(ej3.fs, 2)}**: el tanque **flotaría**. La norma ordena prevenirlo con **lastres, drenajes o válvulas de alivio** (C.23-C.8.2.6, C.23-C.15.14.6) pero no fija aquí un factor de seguridad.
+</Paso>
+<Resultado>
+Tanque de agua potable en suelo con sulfatos moderados: concreto **S1 + P1 + C1** con **$f'_c \ge$ {ej3.fcMin} MPa, a/mc ≤ {ej3.aMcMax.toFixed(2)}**, cemento tipo II / MS, **≥ {f(ej3.cementante, 0)} kg/m³** de cementantes, recubrimientos de **{ej3.recMuro} mm** (muros) y **{ej3.recBaseInf} mm** (contra el suelo), retracción ρ = {ej3.rMuro.rho.toFixed(4)}, barreras impermeables en las juntas y verificación de flotación del tanque vacío.
+</Resultado>
+</Ejemplo>
+
+## Erratas y observaciones sobre el texto del PDF
+
+<Callout tipo="nota" titulo="Observaciones del autor (no son texto de la norma)">
+- **Tabla C.23-C.4.2.1:** las celdas de sulfato en el suelo de **S1** y **S2** están **cortadas** en la imagen del PDF ("0.10 ≤ SO₄ &lt;" y "0.20 ≤ SO₄ ≤"); las cotas 0.20 % y 2.00 % se completan con la secuencia de la tabla, igual que en la Tabla C.4.2.1. En la tabla de agua marina de S1 aparece solo la anotación "agua marina".
+- **Remisiones a tablas inexistentes:** C.23-C.4.1.3 dice "Tabla C.23-C.1.1" (la tabla se titula C.23-C.4.1.1) y C.23-C.4.5.1 cita una "Tabla C.23-C.4.4.1" que no figura en el capítulo; probablemente la Tabla C.4.4.1 del Capítulo C.4.
+- **Tabla C.23-C.7.7.1, filas (c) de muros:** la segunda fila dice "Barras No. 14 (1-3/4") ó 45M y No. 18 (1-3/8") ó 36M (36 mm) y menores"; el "No. 18" tiene 2-1/4" (55M), como en las filas de losas. Se transcribió como No. 14 y No. 18 (55M). En la fila (b), el recubrimiento del refuerzo principal de vigas y columnas vaciadas en sitio (65 mm) es mayor que el de estribos (50 mm) pero no coincide con los 50 mm de muros; se transcribió tal cual.
+- **C.23-C.7.12.2.2:** "al menos 1/3 del área... en cualquiera de las caras". Aquí se lee como **1/3 en cada cara** (lectura del autor).
+- **C.23-C.10.6.4.5:** "pH mayor de 5, **o** sulfatos de 1000 ppm o menos"; con la frase final ("severa cuando se exceden los límites") se interpreta que superar **cualquiera** de los dos límites da exposición severa.
+- **C.23-C.10.6.4.1/.2:** la numeración del PDF alterna "C.23-10.6.4" y "C.23-C.10.6.4" (falta la "C." en algunos). El texto "pero no hay necesidad que sea menor de 140 MPa para elementos en una dirección…" se leyó como piso inferior de $f_{s,max}$.
+- **C.23-C.10.6.5:** el PDF dice "Donde la apariencia… el recubrimiento… excede 75 mm" y deja la ecuación C.23-5 al inicio de la página siguiente.
+- **C.23-C.14.5.3.2** dice que "esta sección no aplica a estructuras ambientales", pero **C.23-C.14.5.3.1** acaba de fijar un espesor mínimo con el método empírico; se transcribieron ambos.
+- **C.23-C.15.14.3.2** (segunda viñeta): el PDF dice "refierso" y "umplan" (erratas de tipeo). La **tabla de espesores de losas** de esta página fue agrupada por el autor a partir de listas del texto.
+- **C.23-C.1.1.4, C.1.1.7, C.1.1.9** y otros numerales aparecen con saltos de numeración (no hay C.23-C.1.1.5, .6 ni .8): el capítulo solo transcribe los numerales que modifica.
+- **C.23-C.6.5 (PDF):** el encabezado "C.23-C.6.5 — Juntas para compensar movimientos" queda al pie de la página C-214 y su contenido en la C-215.
+- **C.23-C.4.6.5:** la especificación se cita como "TT-S-00277E" aquí y como "TT-S-227e(3)" en la lista de C.23-C.3.8; se transcribió como en el PDF.
+- **La página C-222** termina con un marcador de fin de capítulo (█).
+- Las ecuaciones C.23-1 a C.23-5, C.23-C.11-2 y las cotas de la Tabla C.23-C.4.2.1 salen sin fracciones ni radicales en el texto extraído; se transcribieron de la **imagen** de las páginas C-217 a C-219.
+- El PDF **no da** procedimiento ni criterio de aceptación de las pruebas de estanqueidad, ni valores de $\gamma$, ni un factor de seguridad contra la flotación: los ejemplos usan supuestos del autor, marcados como tales.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Diseñar el tanque como un edificio:** olvidar $S_d$, $f_{s,max}$, el recubrimiento de la Tabla C.23-C.7.7.1 o el refuerzo de retracción de la Tabla C.23-C.7.12.2.1 (<NormaRef s="C.23-C.9.2.6" pag="C-217" />).
+- **Aplicar $S_d$ con sismo**, en secciones **controladas por compresión**, en preesforzado o con cargas de servicio: en esos casos $S_d$ = 1 o no se usa (<NormaRef s="C.23-C.9.2.7" pag="C-217" />).
+- **Aplicar $S_d$ a todo el cortante:** solo afecta el aporte del refuerzo, $V_s/S_d$ (<NormaRef s="C.23-C.11.1.1" pag="C-219" />).
+- **Bajar de $f_{s,max}$ el piso** (140/170 MPa normal, 120/140 severa) o pasar de **250 MPa** (<NormaRef s="C.23-C.10.6.4" pag="C-218" />).
+- **Usar fy distinto de 240 o 420 MPa** en la tabla de retracción sin criterio: la tabla solo trae esos dos valores.
+- **Olvidar que la cuantía crece con la distancia entre juntas** y que las juntas parciales multiplican la distancia por 1.5 (<NormaRef s="C.23-C.7.12.2.1" pag="C-216" />).
+- **Barreras impermeables sin ancho o espesor suficiente**, o **madera como relleno de junta** (<NormaRef s="C.23-C.4.10.2" pag="C-213" />, <NormaRef s="C.23-C.4.10.3" pag="C-214" />).
+- **Vaciar unidades adyacentes antes de 48 horas** (<NormaRef s="C.23-C.4.10.6.2" pag="C-214" />).
+- **Dejar amarres metálicos de formaleta a menos de 40 mm** de la superficie (<NormaRef s="C.23-C.6.1.7.1" pag="C-214" />).
+- **Pensar que el relleno puede esperar la prueba de estanqueidad sin revisar el diseño:** esa condición debe contemplarse (<NormaRef s="C.23-C.8.2.7" pag="C-216" />).
+- **No revisar la flotación** del tanque vacío con nivel freático alto (<NormaRef s="C.23-C.8.2.6" pag="C-216" />).
+- **Usar concreto simple** en estructuras ambientales (<NormaRef s="C.23-C.22" pag="C-222" />).
+</Callout>
+
+## Resumen en una línea
+
+**Una estructura ambiental sigue todo el Título C pero con $f'_c \ge$ 28 MPa, mezclas y recubrimientos más estrictos, juntas con barreras impermeables, retracción mínima por tabla, resistencia requerida multiplicada por $S_d = \phi f_y/(\gamma f_s) \ge 1$ y esfuerzo de servicio del acero limitado a $f_{s,max}$ (≤ 250 MPa) para controlar la fisuración.**

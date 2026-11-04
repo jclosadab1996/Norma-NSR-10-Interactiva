@@ -1,0 +1,259 @@
+---
+codigo: 'C.20'
+tipo: capitulo
+titulo: 'Evaluación de la resistencia de estructuras existentes'
+resumen: 'Cuándo y cómo evaluar una estructura de concreto con dudas de resistencia: evaluación analítica con φ aumentados, prueba de carga (intensidad, procedimiento, edad mínima), criterios de aceptación por deflexión (Ecs. C.20-1 a C.20-3) y fisuración, y uso con cargas de servicio menores.'
+objetivos:
+  - 'Decidir entre evaluación analítica y prueba de carga según C.20.1'
+  - 'Determinar dimensiones y propiedades de los materiales y los φ máximos permitidos al evaluar (C.20.2.5)'
+  - 'Calcular la intensidad de la carga de prueba con las expresiones de C.20.3.2'
+  - 'Aplicar los criterios de aceptación Δ1 ≤ ℓt²/(20 000 h), Δr ≤ Δ1/4 y la repetición de la prueba'
+  - 'Conocer el procedimiento de aplicación de carga, mediciones, seguridad y uso con cargas menores'
+paginasNorma: 'C-171 a C-173'
+paginaPdf: 473
+orden: 20
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import { cargaPrueba, puedeReducirLEnB, limiteDeflexionC201, luzPrueba, evaluarPrimeraPrueba, evaluarRepeticion, PHI_MAX_EVALUACION } from '../../lib/nsr10/pruebaCarga';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const p1 = (() => {
+  const D = 5.0, L = 2.4;
+  const uso = 'general';
+  const reduce = puedeReducirLEnB(uso, L);
+  const base = cargaPrueba({ D, L });
+  const red = cargaPrueba({ D, L, reducirLEnB: reduce });
+  const cub = cargaPrueba({ D: 3.5, L: 1.0, cubierta: 1.8 });
+  const parq = puedeReducirLEnB('estacionamiento', 2.5);
+  return { D, L, reduce, base, red, cub, parq };
+})();
+
+export const p2 = (() => {
+  const lt = luzPrueba({ entreCentros: 6000, libre: 5700, h: 400 });
+  const h = 400;
+  const lim1 = limiteDeflexionC201(lt, h);
+  const casoA = evaluarPrimeraPrueba({ lt, h, delta1: 4.2, deltaR: 2.0 });
+  const casoB = evaluarPrimeraPrueba({ lt, h, delta1: 6.0, deltaR: 1.2 });
+  const casoC = evaluarPrimeraPrueba({ lt, h, delta1: 6.0, deltaR: 2.0 });
+  const rep = evaluarRepeticion({ delta2: 6.5, deltaR: 1.2 });
+  const repMal = evaluarRepeticion({ delta2: 6.5, deltaR: 1.6 });
+  const voladizo = luzPrueba({ voladizo: 1800 });
+  const limVol = limiteDeflexionC201(voladizo, 250);
+  return { lt, h, lim1, casoA, casoB, casoC, rep, repMal, voladizo, limVol };
+})();
+
+## Idea central del capítulo
+
+Cuando hay **dudas** de que una estructura (o parte de ella) cumple los requisitos de seguridad del Título C —por errores de construcción, deterioro, cambio de uso o resultados bajos de ensayos— el Capítulo C.20 indica **cómo evaluar su resistencia**. Hay dos caminos: una **evaluación analítica** basada en mediciones reales de dimensiones y propiedades de los materiales, o una **prueba de carga** si el efecto de la deficiencia no se entiende bien o no se pueden medir las dimensiones y propiedades (<NormaRef s="C.20.1" pag="C-171" />). La prueba se acepta o se rechaza con **criterios de deflexión y de fisuración**, y si no se cumplen, la estructura puede usarse con una **carga de servicio menor** si lo aprueba la autoridad competente (<NormaRef s="C.20.6" pag="C-173" />).
+
+<Callout tipo="importante" titulo="Las cargas de prueba de la NSR-10 no son 0.85(1.4D+1.7L)">
+Las intensidades de C.20.3.2 son **1.15D + 1.5L + 0.4(Lr ó G ó Le)**, **1.15D + 0.9L + 1.5(Lr ó G ó Le)** y **1.3D**. No se debe usar el criterio anterior de "85 % de las cargas mayoradas": el PDF de esta norma no lo contiene. Las cargas de prueba son **la carga total, incluida la carga muerta ya presente**.
+</Callout>
+
+## C.20.1 — Evaluación de la resistencia — Generalidades
+
+- **C.20.1.1.** Si hay dudas sobre si una parte o toda la estructura cumple los requisitos de seguridad del Título C, debe hacerse una **evaluación de resistencia** según lo requiera el profesional facultado para diseñar o la autoridad competente (<NormaRef s="C.20.1.1" pag="C-171" />).
+- **C.20.1.2.** Si el efecto de la deficiencia **se entiende bien** y es posible **medir** las dimensiones y propiedades de los materiales necesarias, basta una **evaluación analítica** con esas mediciones, determinadas según **C.20.2**.
+- **C.20.1.3.** Si los efectos de la deficiencia **no se entienden bien** o **no es posible** establecer dimensiones y propiedades mediante mediciones, se requiere **prueba de carga** si la estructura va a **mantenerse en servicio**.
+- **C.20.1.4.** Si la duda involucra **deterioro** y la respuesta observada en la prueba **satisface los criterios de aceptación**, la estructura puede **mantenerse en servicio por un período especificado**; si el profesional lo considera necesario, se hacen **reevaluaciones periódicas** (<NormaRef s="C.20.1.4" pag="C-171" />).
+
+## C.20.2 — Determinación de dimensiones y propiedades de los materiales
+
+- **C.20.2.1.** Se establecen las **dimensiones de los elementos en las secciones críticas**.
+- **C.20.2.2.** La **ubicación y tamaño** de barras, malla electrosoldada o tendones se determina **mediante mediciones**; la ubicación puede basarse en planos disponibles si se hacen **verificaciones puntuales** que confirmen los planos.
+- **C.20.2.3.** Si se requiere, la resistencia del concreto se basa en **ensayos de cilindros** de la construcción original o en **ensayos de núcleos** de la parte en duda; los resultados pueden usarse para calcular un **$f'_c$ equivalente**. La extracción y el ensayo de núcleos siguen **NTC 3658 (ASTM C42M)**.
+- **C.20.2.4.** Si se requiere, la resistencia del refuerzo o del acero de preesforzado se basa en **ensayos de tracción** de muestras representativas (<NormaRef s="C.20.2" pag="C-171" />).
+
+### C.20.2.5 — Aumento de φ
+
+Si las dimensiones y propiedades se determinan por **mediciones o ensayos** y los cálculos se hacen según C.20.1.2, se puede **aumentar φ** respecto a los de C.9.3, pero **no más de** (<NormaRef s="C.20.2.5" pag="C-171" />):
+
+<TablaNorma numero="C.20.2.5" titulo="Valores máximos de φ en la evaluación analítica" pag="C-171" nota="Transcrita del PDF. Los φ de C.9.3 para comparar: tracción 0.90; compresión 0.75 (espiral) y 0.65 (otros); cortante y torsión 0.75; aplastamiento 0.65.">
+
+| Solicitación | φ máximo |
+|---|---:|
+| Secciones controladas por tracción (C.10.3.4) | 1.0 |
+| Secciones controladas por compresión (C.10.3.3): elementos con espiral que cumplan C.10.9.3 | 0.9 |
+| Secciones controladas por compresión (C.10.3.3): otros elementos reforzados | 0.8 |
+| Cortante y/o torsión | 0.8 |
+| Aplastamiento del concreto | 0.8 |
+
+</TablaNorma>
+
+## C.20.3 — Procedimiento para la prueba de carga
+
+### C.20.3.1 — Disposición de la carga
+
+El número y disposición de **vanos o paneles cargados** se selecciona para **maximizar deflexiones y esfuerzos** en las zonas críticas de los elementos en duda. Se usa **más de un patrón de carga** si uno solo no produce simultáneamente los valores máximos de los efectos (deflexión, rotaciones o esfuerzos) necesarios para demostrar la idoneidad (<NormaRef s="C.20.3.1" pag="C-172" />).
+
+### C.20.3.2 — Intensidad de la carga
+
+La **carga total de ensayo** (incluyendo la carga muerta ya presente) **no debe ser menor que el mayor** entre (<NormaRef s="C.20.3.2" pag="C-172" />):
+
+<Ecuacion num="C.20.3.2(a)" titulo="Carga de prueba, expresión (a)">
+
+$$
+1.15\,D+1.5\,L+0.4\left(L_r\ \text{ó}\ G\ \text{ó}\ L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.20.3.2(b)" titulo="Carga de prueba, expresión (b)">
+
+$$
+1.15\,D+0.9\,L+1.5\left(L_r\ \text{ó}\ G\ \text{ó}\ L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.20.3.2(c)" titulo="Carga de prueba, expresión (c)">
+
+$$
+1.3\,D
+$$
+
+</Ecuacion>
+
+El factor de $L$ en **(b)** se puede reducir a **0.45**, **excepto** en estacionamientos, áreas de reunión pública y todas las áreas donde $L$ sea **mayor de 4.8 kN/m²**. Se permite reducir $L$ según el **Título B**.
+
+### C.20.3.3 — Edad mínima
+
+La prueba **no se realiza** hasta que la porción que se cargará tenga **al menos 56 días**. Pueden hacerse a menor edad si el propietario, el constructor y todas las partes involucradas están de acuerdo (<NormaRef s="C.20.3.3" pag="C-172" />).
+
+<Ejemplo numero={1} titulo="Intensidad de la carga de prueba de una losa de oficinas">
+Una losa de entrepiso en oficinas ($L$ = {p1.L} kN/m², uso general) tiene $D$ = {p1.D} kN/m² ya presente (incluye peso propio y acabados). No hay carga de cubierta. Se determina la carga total y la carga por aplicar.
+
+<Paso titulo="Expresión (a)" ref="C.20.3.2(a)">
+1.15({p1.D}) + 1.5({p1.L}) = 5.75 + 3.60 = **{f(p1.base.a, 2)} kN/m²**.
+</Paso>
+<Paso titulo="Expresión (b), sin y con reducción de L" ref="C.20.3.2(b)">
+Sin reducir: 1.15({p1.D}) + 0.9({p1.L}) = 5.75 + 2.16 = **{f(p1.base.b, 2)} kN/m²**. Con el factor de $L$ reducido a 0.45 (permitido: uso general con L ≤ 4.8: {p1.reduce ? 'sí' : 'no'}): 5.75 + 1.08 = **{f(p1.red.b, 2)} kN/m²**. No hay carga de cubierta, así que el término $1.5(L_r\ \text{ó}\ G\ \text{ó}\ L_e)$ vale cero.
+</Paso>
+<Paso titulo="Expresión (c)" ref="C.20.3.2(c)">
+1.3({p1.D}) = **{f(p1.base.c, 2)} kN/m²**.
+</Paso>
+<Paso titulo="Mayor de las tres" ref="C.20.3.2">
+Gobierna **({p1.base.gobierna})** con **{f(p1.base.total, 2)} kN/m²** de carga total. La parte que se coloca sobre la losa es {f(p1.base.total, 2)} − {p1.D} = **{f(p1.base.adicional, 2)} kN/m²**, aplicada en **al menos cuatro incrementos** aproximadamente iguales (C.20.4.2), es decir, de {f(p1.base.adicional / 4, 2)} kN/m² cada uno.
+</Paso>
+<Paso titulo="Variaciones" ref="C.20.3.2">
+Una cubierta con $D$ = 3.5, $L$ = 1.0 y $L_r$ = 1.8 kN/m² da (a) {f(p1.cub.a, 2)}, (b) {f(p1.cub.b, 2)} y (c) {f(p1.cub.c, 2)}: gobierna ({p1.cub.gobierna}) con **{f(p1.cub.total, 2)} kN/m²**. En un **estacionamiento** de 2.5 kN/m² la reducción de $L$ a 0.45 {p1.parq ? 'se permite' : 'no se permite'}.
+</Paso>
+<Resultado>
+Carga total de prueba = **{f(p1.base.total, 2)} kN/m²** (expresión {p1.base.gobierna}), de la cual **{f(p1.base.adicional, 2)} kN/m²** se agregan sobre la carga muerta existente.
+</Resultado>
+</Ejemplo>
+
+## C.20.4 — Criterio de carga
+
+- **C.20.4.1.** El **valor inicial** de todas las mediciones de respuesta pertinentes (deflexión, rotación, deformación unitaria, deslizamiento, ancho de fisura) se obtiene **no más de una hora antes** del primer incremento de carga, en ubicaciones donde se espere la respuesta máxima; se hacen mediciones adicionales si se requieren.
+- **C.20.4.2.** La carga se aplica en **no menos de cuatro incrementos** aproximadamente iguales.
+- **C.20.4.3.** La carga uniforme se aplica asegurando una **distribución uniforme**; debe evitarse el **efecto de arco** en la carga aplicada.
+- **C.20.4.4.** Se realiza un conjunto de mediciones **después de cada incremento** y después de que **el total de la carga** haya estado colocado **al menos 24 horas**.
+- **C.20.4.5.** Toda la carga se **retira inmediatamente** después de realizar las mediciones de C.20.4.4.
+- **C.20.4.6.** Se hace un **conjunto final de mediciones 24 horas después** de retirada la carga (<NormaRef s="C.20.4" pag="C-172" />).
+
+## C.20.5 — Criterio de aceptación
+
+- **C.20.5.1.** La porción ensayada **no debe mostrar evidencias de falla**. El **descascaramiento y aplastamiento** del concreto comprimido se considera indicación de falla (<NormaRef s="C.20.5.1" pag="C-172" />).
+
+### C.20.5.2 — Deflexiones
+
+Las deflexiones máximas medidas deben satisfacer **una** de las siguientes condiciones (<NormaRef s="C.20.5.2" pag="C-173" />):
+
+<Ecuacion num="C.20-1" titulo="Deflexión máxima medida">
+
+$$
+\Delta_1\le\frac{\ell_t^{2}}{20\,000\,h}
+$$
+
+- $\Delta_1$: deflexión máxima medida durante la primera prueba (mm).
+- $\ell_t$: luz del elemento ensayado (mm): la **menor** entre (a) la distancia entre centros de apoyos y (b) la distancia libre entre apoyos más el espesor $h$; en losas en dos direcciones, la luz menor; en voladizo, **el doble** de la distancia entre la cara del apoyo y el extremo (nomenclatura C.2, <NormaRef s="C.2" pag="C-10" />).
+- $h$: espesor total o altura del elemento (mm).
+
+</Ecuacion>
+
+<Ecuacion num="C.20-2" titulo="Deflexión residual">
+
+$$
+\Delta_r\le\frac{\Delta_1}{4}
+$$
+
+- $\Delta_r$: diferencia entre las deflexiones inicial y final (después de retirar la carga) (mm).
+
+</Ecuacion>
+
+Si $\Delta_1$ y $\Delta_r$ **no satisfacen** C.20-1 **ni** C.20-2, la prueba **puede repetirse**, no antes de **72 horas** después de retirar la carga de la primera prueba. El elemento se considera **aceptable** en la repetición si la recuperación $\Delta_r$ satisface:
+
+<Ecuacion num="C.20-3" titulo="Repetición de la prueba">
+
+$$
+\Delta_r\le\frac{\Delta_2}{5}
+$$
+
+- $\Delta_2$: deflexión máxima medida durante la **segunda** prueba, **relativa a la posición de la estructura al iniciar la segunda prueba** (mm).
+
+</Ecuacion>
+
+### C.20.5.3 a C.20.5.5 — Fisuración
+
+- **C.20.5.3.** Los elementos ensayados **no deben tener fisuras que indiquen la inminencia de una falla por cortante**.
+- **C.20.5.4.** En zonas **sin refuerzo transversal**, la aparición de fisuras estructurales **inclinadas** respecto al eje longitudinal y con **proyección horizontal mayor que la altura** del elemento en el punto medio de la fisura **debe evaluarse**.
+- **C.20.5.5.** En zonas de **anclaje o empalmes por traslapo**, la aparición a lo largo del refuerzo de una serie de **fisuras cortas inclinadas o fisuras horizontales** debe **investigarse** (<NormaRef s="C.20.5" pag="C-173" />).
+
+<Ejemplo numero={2} titulo="Aceptación de una prueba de carga con Δ1, Δr y repetición">
+Una losa maciza de espesor $h$ = {p2.h} mm tiene apoyos con distancia entre centros de 6000 mm y luz libre de 5700 mm. Se somete a la carga de prueba del Ejemplo 1. Se evalúan tres resultados de campo (datos supuestos).
+
+<Paso titulo="Luz ℓt" ref="C.2 (nomenclatura)">
+$\ell_t$ = menor entre 6000 mm y 5700 + {p2.h} = {5700 + p2.h} mm → **{p2.lt} mm**.
+</Paso>
+<Paso titulo="Límite de C.20-1" ref="C.20-1">
+$\Delta_1 \le \ell_t^2/(20\,000\,h)$ = {p2.lt}²/(20 000·{p2.h}) = **{f(p2.lim1, 2)} mm**.
+</Paso>
+<Paso titulo="Resultado A: Δ1 = 4.2 mm, Δr = 2.0 mm" ref="C.20-1, C.20-2">
+$\Delta_1$ = 4.2 ≤ {f(p2.lim1, 2)} mm: **cumple C.20-1** (basta una de las dos). Aunque $\Delta_r$ = 2.0 > $\Delta_1/4$ = {f(p2.casoA.limite202, 2)} mm (no cumpliría C.20-2), la losa es **aceptable** en este criterio: {p2.casoA.aceptable ? 'aceptable' : 'no aceptable'}.
+</Paso>
+<Paso titulo="Resultado B: Δ1 = 6.0 mm, Δr = 1.2 mm" ref="C.20-2">
+$\Delta_1$ = 6.0 > {f(p2.lim1, 2)}: no cumple C.20-1. $\Delta_r$ = 1.2 ≤ $\Delta_1/4$ = 6.0/4 = **{f(p2.casoB.limite202, 2)} mm**: **cumple C.20-2** → {p2.casoB.aceptable ? 'aceptable' : 'no aceptable'}.
+</Paso>
+<Paso titulo="Resultado C: Δ1 = 6.0 mm, Δr = 2.0 mm" ref="C.20-1, C.20-2">
+No cumple C.20-1 ni C.20-2 (2.0 > {f(p2.casoC.limite202, 2)} mm): {p2.casoC.puedeRepetir ? 'no se acepta con la primera prueba; puede repetirse después de 72 horas' : ''}.
+</Paso>
+<Paso titulo="Repetición del caso C" ref="C.20-3">
+En la segunda prueba se mide $\Delta_2$ = 6.5 mm (relativa a la posición inicial de esa prueba) y $\Delta_r$ = 1.2 mm: límite $\Delta_2/5$ = **{f(p2.rep.limite203, 2)} mm**; 1.2 ≤ {f(p2.rep.limite203, 2)} → **{p2.rep.cumple203 ? 'cumple C.20-3: aceptable' : 'no cumple'}**. Con $\Delta_r$ = 1.6 mm ({f(p2.repMal.limite203, 2)} mm de límite) {p2.repMal.cumple203 ? 'cumpliría' : 'no cumpliría y habría que limitar la carga de servicio (C.20.6)'}.
+</Paso>
+<Paso titulo="Voladizo" ref="C.2 (nomenclatura), C.20-1">
+Un voladizo de 1800 mm de la cara del apoyo al extremo se ensaya con $\ell_t$ = 2 × 1800 = **{p2.voladizo} mm**; con $h$ = 250 mm el límite sería **{f(p2.limVol, 1)} mm**.
+</Paso>
+<Resultado>
+Con $\ell_t$ = {p2.lt} mm y $h$ = {p2.h} mm el límite de C.20-1 es **{f(p2.lim1, 2)} mm**. A y B son **aceptables** (por C.20-1 y C.20-2 respectivamente); C **no** lo es en la primera prueba pero sí tras una repetición con $\Delta_r \le \Delta_2/5$. Además no debe haber evidencia de falla (C.20.5.1) ni fisuras de cortante inminente (C.20.5.3).
+</Resultado>
+</Ejemplo>
+
+## C.20.6 — Disposiciones para la aceptación de cargas de servicio menores
+
+Si la estructura no satisface las condiciones o criterios de **C.20.1.2, C.20.5.2 o C.20.5.3**, se puede usar para un **nivel menor de carga**, con base en los resultados de la prueba o del análisis, **siempre que lo apruebe la autoridad competente** (<NormaRef s="C.20.6" pag="C-173" />).
+
+## C.20.7 — Seguridad
+
+- **C.20.7.1.** Las pruebas se hacen de modo que existan **condiciones seguras para la vida y para la estructura** durante la prueba.
+- **C.20.7.2.** Ninguna medida de seguridad debe **interferir** con los procedimientos de prueba ni afectar los resultados (<NormaRef s="C.20.7" pag="C-173" />).
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores típicos al evaluar una estructura existente">
+- **Confundir la carga total con la carga adicional.** Las expresiones de C.20.3.2 incluyen la carga muerta ya presente: se resta $D$ para saber cuánta carga colocar.
+- **Reducir $L$ a 0.45 donde no se permite** (estacionamientos, reunión pública, $L$ > 4.8 kN/m²).
+- **Probar a los 14 o 28 días** sin acuerdo de todas las partes: la edad mínima es 56 días (C.20.3.3).
+- **Usar mal $\ell_t$:** en voladizo es el **doble** de la distancia al extremo; en losas en dos direcciones, la luz **menor**.
+- **Exigir las dos condiciones:** basta cumplir **C.20-1 ó C.20-2**; solo si ninguna se cumple se repite la prueba, y **no antes de 72 horas**.
+- **Medir $\Delta_2$ desde la posición original** en vez de desde la posición al iniciar la segunda prueba.
+- **Dejar la carga más de lo necesario:** debe retirarse inmediatamente después de las mediciones de las 24 horas y repetir mediciones 24 horas después (C.20.4.5 y C.20.4.6).
+- **Subir φ sin haber medido** dimensiones y propiedades de los materiales: solo C.20.2.5 lo permite, con medición o ensayo y evaluación analítica.
+</Callout>
+
+## Resumen en una línea
+
+Si se duda de la resistencia, se evalúa analíticamente con mediciones (φ hasta 1.0, 0.9, 0.8) o con una **prueba de carga** a ≥ 56 días con carga total ≥ el mayor de 1.15D+1.5L+0.4(Lr ó G ó Le), 1.15D+0.9L+1.5(Lr ó G ó Le) y 1.3D, y se acepta si Δ1 ≤ ℓt²/(20 000 h) ó Δr ≤ Δ1/4 (o Δr ≤ Δ2/5 en la repetición), sin evidencias de falla.

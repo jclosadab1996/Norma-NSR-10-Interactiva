@@ -1,0 +1,24 @@
+---
+import TituloLayout from '../../layouts/TituloLayout.astro';
+import GlosarioC from '../../components/calc/GlosarioC';
+import { definicionesC, simbolosC } from '../../data/glosarioC';
+---
+
+<TituloLayout
+  titulo="c"
+  title="Glosario y notación del Título C"
+  description="Definiciones (C.2.2) y notación (C.2.1) del Título C de la NSR-10, con búsqueda, filtro por tema e índice alfabético."
+  actual="c2"
+  ancho="amplio"
+>
+  <header class="mb-6">
+    <p class="text-sm font-semibold uppercase tracking-wider text-primary">Título C · Capítulo C.2</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Glosario y notación</h1>
+    <p class="mt-3 max-w-3xl text-muted-foreground">
+      Las <strong>{definicionesC.length} definiciones</strong> de C.2.2 y los <strong>{simbolosC.length} símbolos</strong> de C.2.1 del Título C, tal
+      como los escribe la norma. Busca por término, por símbolo (f′c, As, ld…) o por cualquier palabra de la definición. Para aprender a usarlos,
+      lee el <a href="/titulo-c/c2" class="font-medium text-primary underline-offset-4 hover:underline">Capítulo C.2 explicado</a>.
+    </p>
+  </header>
+  <GlosarioC client:load />
+</TituloLayout>

@@ -1,0 +1,881 @@
+---
+codigo: 'C.10'
+tipo: capitulo
+titulo: 'Flexión y cargas axiales'
+resumen: 'Cómo se calcula la resistencia de vigas, columnas y muros a flexión y carga axial: hipótesis de diseño (εcu = 0.003, bloque rectangular 0.85 f′c, β1), secciones controladas por tracción o compresión, refuerzo mínimo, control de fisuración, límites del refuerzo de columnas y efectos de esbeltez por magnificación de momentos.'
+objetivos:
+  - 'Plantear el equilibrio y la compatibilidad de deformaciones de una sección con las hipótesis de C.10.2'
+  - 'Clasificar una sección por su deformación εt (compresión, transición, tracción) y obtener φ'
+  - 'Calcular As,min, la separación máxima del refuerzo (C.10-4) y los límites del refuerzo de columnas'
+  - 'Trazar el diagrama de interacción P–M de una columna y verificar una pareja (Pu, Mu)'
+  - 'Decidir si se ignoran los efectos de esbeltez y calcular los momentos magnificados'
+paginasNorma: 'C-75 a C-86'
+paginaPdf: 377
+orden: 10
+calculadoras: ['flexion-viga', 'columna-interaccion']
+nivel: 'avanzado'
+---
+
+import { beta1 } from '../../lib/nsr10/concreto';
+import {
+  asMinimo,
+  disenarFlexion,
+  ecParaEsbeltez,
+  flexionViga,
+  fcEfectivoNudo,
+  fsServicioPermitido,
+  inerciaBruta,
+  limiteEsbeltez,
+  magnificarSinDesplazamiento,
+  phiPorDeformacion,
+  radioGiro,
+  relacionInerciaColumnaC108,
+  requiereTransmisionEspecial,
+  resistenciaAplastamiento,
+  rigidezEI,
+  separacionMaximaFisuracion,
+  vigaSimplementeArmada,
+  FC_CAMBIO_ASMIN,
+} from '../../lib/nsr10/flexionConcreto';
+import {
+  P0,
+  armaduraPerimetral,
+  curvaInteraccion,
+  phiPnMax,
+  puntoP0,
+  verificarPunto,
+} from '../../lib/nsr10/columnaInteraccion';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const s = { b: 300, h: 500, d: 440, fc: 28, fy: 420, As: 1530 };
+  const r = flexionViga(s);
+  const cer = vigaSimplementeArmada(s.b, s.d, s.fc, s.fy, s.As);
+  return { s, r, cer, b1: beta1(s.fc), asmin: asMinimo(s.fc, s.fy, s.b, s.d) };
+})();
+
+export const ej2 = (() => {
+  const dis = disenarFlexion(300, 300, 440, 28, 420, 60, 500);
+  const AsReal = 2181;
+  const real = flexionViga({ b: 300, h: 500, d: 440, fc: 28, fy: 420, As: AsReal });
+  const fs = fsServicioPermitido(420);
+  const s = separacionMaximaFisuracion(fs, 50);
+  return { dis, AsReal, real, fs, s, sCrudo: 380 * (280 / fs) - 2.5 * 50, tope: 300 * (280 / fs) };
+})();
+
+export const ej3 = (() => {
+  const dis = disenarFlexion(450, 300, 440, 28, 420, 60, 500);
+  const b1 = beta1(28);
+  const cMax = (440 * 0.003) / 0.008;
+  const aMax = b1 * cMax;
+  const Mn1 = (0.85 * 28 * 300 * aMax * (440 - aMax / 2)) / 1e6;
+  const epsP = (0.003 * (cMax - 60)) / cMax;
+  const fsP = Math.min(420, 200000 * epsP);
+  const simple = flexionViga({ b: 300, h: 500, d: 440, fc: 28, fy: 420, As: dis.As });
+  return { dis, cMax, aMax, Mn1, epsP, fsP, simple };
+})();
+
+export const ej4 = (() => {
+  const arm = armaduraPerimetral(400, 60, 3, 3, 387);
+  const col = { b: 400, h: 400, fc: 28, fy: 420, capas: arm.capas };
+  const cv = curvaInteraccion(col);
+  return {
+    arm,
+    col,
+    cv,
+    p0: puntoP0(col),
+    ok: verificarPunto(cv, 1500, 150),
+    mal: verificarPunto(cv, 1500, 250),
+    rho: arm.Ast / (400 * 400),
+  };
+})();
+
+export const ej5 = (() => {
+  const Ec = ecParaEsbeltez(28);
+  const Ig = inerciaBruta(400, 400);
+  const EI = rigidezEI(Ec, Ig, 0.6);
+  const r = radioGiro(400);
+  const kluR = 5000 / r;
+  const mag = magnificarSinDesplazamiento({ Pu: 1500, M1: 60, M2: 100, lu: 5000, h: 400, EI });
+  const I108 = relacionInerciaColumnaC108(ej4.arm.Ast, 160000, 100, 1500, 400, P0(ej4.col));
+  const ver = verificarPunto(ej4.cv, 1500, mag.Mc);
+  return { Ec, Ig, EI, r, kluR, lim: limiteEsbeltez(true, 0.6), mag, I108, ver };
+})();
+
+export const ej6 = (() => {
+  const fe = fcEfectivoNudo('interior', 56, 28, 200, 500);
+  const ap = resistenciaAplastamiento(28, 100000, 400000);
+  const ap1 = resistenciaAplastamiento(28, 100000);
+  return { requiere: requiereTransmisionEspecial('interior', 56, 28), fe, ap, ap1 };
+})();
+
+## Idea central del capítulo
+
+El Capítulo C.10 es el **corazón del diseño por resistencia** de elementos de concreto reforzado: explica cómo calcular la capacidad de una sección a **flexión**, a **carga axial** o a ambas a la vez (**flexocompresión**). Todo se reduce a dos principios —**equilibrio de fuerzas y compatibilidad de deformaciones**— aplicados con unas pocas hipótesis simples: la deformación del concreto en la fibra extrema comprimida es **0.003**, las deformaciones varían linealmente con la distancia al eje neutro, el concreto no resiste tracción y la zona comprimida se reemplaza por un **bloque rectangular de esfuerzo 0.85 f′c**.
+
+De ahí salen, en este orden: cuándo una sección es **controlada por tracción** (dúctil) o **por compresión** (frágil) y qué factor φ le corresponde; cuánto refuerzo mínimo hay que colocar y cómo repartirlo para controlar las fisuras; los límites del refuerzo de **columnas**; y los **efectos de esbeltez** (segundo orden) que amplifican los momentos de columnas esbeltas.
+
+<Callout tipo="importante" titulo="Qué calcula este capítulo y qué no">
+C.10 da la **resistencia nominal** $M_n$, $P_n$; la resistencia de diseño se obtiene multiplicando por φ de <NormaRef s="C.9.3.2" pag="C-68" />. Las combinaciones de carga que producen $M_u$, $P_u$ están en <NormaRef s="C.9.2" pag="C-67" /> y la deflexión (servicio) en C.9.5. El cortante y la torsión se tratan en el Capítulo C.11; el anclaje del refuerzo, en C.12.
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este capítulo (autoría del proyecto)">
+Las calculadoras y los ejemplos usan las funciones de `src/lib/nsr10/flexionConcreto.ts` y `columnaInteraccion.ts`. Todo lo marcado como **«autoría del proyecto»** (algoritmos de diseño, sección con refuerzo perimetral, interpretación de casos límite) **no es texto de la norma**. Unidades del SI: mm, MPa, kN, kN·m; el Título C no usa los kgf/cm² de la NSR-98.
+</Callout>
+
+## C.10.1 — Alcance
+
+Las disposiciones del capítulo se aplican al diseño de elementos sometidos a **flexión**, a **cargas axiales** o a su **combinación** (<NormaRef s="C.10.1" pag="C-75" />).
+
+## C.10.2 — Suposiciones de diseño
+
+El diseño por resistencia debe basarse en las hipótesis de C.10.2.2 a C.10.2.7 y satisfacer **equilibrio** y **compatibilidad de deformaciones** (<NormaRef s="C.10.2.1" pag="C-75" />). En orden:
+
+| Numeral | Hipótesis | En palabras |
+|---|---|---|
+| <NormaRef s="C.10.2.2" pag="C-75" /> | Deformaciones unitarias proporcionales a la distancia al eje neutro | «Las secciones planas siguen planas». Excepción: **vigas de gran altura** (C.10.7.1), que exigen distribución no lineal o el modelo puntal-tensor (Apéndice C-A). |
+| <NormaRef s="C.10.2.3" pag="C-75" /> | $\varepsilon_{cu} = 0.003$ | Máxima deformación utilizable del concreto en la fibra extrema comprimida. |
+| <NormaRef s="C.10.2.4" pag="C-75" /> | $f_s = E_s\varepsilon_s \le f_y$ | Acero **elastoplástico perfecto**: elástico hasta $f_y$ y luego constante. |
+| <NormaRef s="C.10.2.5" pag="C-75" /> | Sin resistencia a tracción del concreto | Salvo los casos de C.18.4 (preesforzado). |
+| <NormaRef s="C.10.2.6" pag="C-75" /> | Forma de la distribución de esfuerzos | Rectangular, trapezoidal, parabólica o cualquiera que concuerde con ensayos. |
+| <NormaRef s="C.10.2.7" pag="C-75" /> | **Bloque rectangular equivalente** | Esfuerzo uniforme $0.85f'_c$ en una profundidad $a=\beta_1 c$ medida desde la fibra más comprimida, perpendicular al eje neutro. |
+
+### C.10.2.7 — El bloque rectangular y β1
+
+<Ecuacion num="C.10.2.7.1" titulo="Profundidad del bloque equivalente">
+
+$$
+a = \beta_1\, c
+$$
+
+- $c$: distancia de la fibra de máxima compresión al eje neutro, medida perpendicularmente a éste (<NormaRef s="C.10.2.7.2" pag="C-75" />).
+- $\beta_1$: ver <NormaRef s="C.10.2.7.3" pag="C-75" />.
+
+</Ecuacion>
+
+**β1** vale **0.85** para $f'_c$ entre 17 y 28 MPa; para $f'_c$ mayor que 28 MPa **disminuye linealmente 0.05 por cada 7 MPa** de aumento sobre 28, sin bajar de **0.65** (<NormaRef s="C.10.2.7.3" pag="C-75" />). La función `beta1(fc)` de `concreto.ts` implementa esta regla.
+
+| $f'_c$ (MPa) | 17–28 | 35 | 42 | 49 | 56 o más |
+|---|---:|---:|---:|---:|---:|
+| $\beta_1$ | {f(beta1(28), 2)} | {f(beta1(35), 2)} | {f(beta1(42), 2)} | {f(beta1(49), 2)} | {f(beta1(56), 2)} |
+
+<Callout tipo="nota" titulo="Tabla elaborada a partir de la regla (autoría del proyecto)">
+Los valores de la tabla anterior no están impresos en el PDF: se calculan con la regla de C.10.2.7.3.
+</Callout>
+
+## C.10.3 — Principios y requisitos generales
+
+<NormaRef s="C.10.3.1" pag="C-75" />: el diseño de secciones sometidas a flexión, carga axial o flexocompresión se basa en **equilibrio y compatibilidad**, con las hipótesis de C.10.2. Para una sección con $\varepsilon_{cu}=0.003$ y eje neutro a profundidad $c$, la deformación en una capa de acero a profundidad $y$ es $\varepsilon_s = 0.003\,(c-y)/c$ (positiva en compresión).
+
+### C.10.3.2 a C.10.3.5 — Deformación balanceada, secciones controladas por compresión y por tracción
+
+- **Deformación balanceada** (<NormaRef s="C.10.3.2" pag="C-76" />): el refuerzo en tracción alcanza la deformación de fluencia $f_y/E_s$ **al mismo tiempo** que el concreto llega a 0.003.
+- **Controlada por compresión** (<NormaRef s="C.10.3.3" pag="C-76" />): la deformación neta de tracción del acero extremo, $\varepsilon_t$, es **igual o menor** que el límite de compresión (la deformación balanceada). Para refuerzo **Grado 420** y para todo el preesforzado se permite fijar ese límite en **0.002**.
+- **Controlada por tracción** (<NormaRef s="C.10.3.4" pag="C-76" />): $\varepsilon_t \ge 0.005$. Entre el límite de compresión y 0.005 hay una **región de transición**.
+- **Límite en flexión** (<NormaRef s="C.10.3.5" pag="C-76" />): en elementos **no preesforzados** en flexión, y en los no preesforzados con carga axial mayorada de compresión menor que $0.10f'_cA_g$, $\varepsilon_t$ en el estado de resistencia nominal **no debe ser menor que 0.004**. Se permite usar refuerzo de compresión junto con refuerzo adicional de tracción para aumentar la resistencia (<NormaRef s="C.10.3.5.1" pag="C-76" />).
+
+| Sección | Condición de $\varepsilon_t$ (Grado 420) | φ (C.9.3.2) |
+|---|---|---|
+| Controlada por compresión | $\varepsilon_t \le 0.002$ | 0.65 estribos · 0.75 espiral |
+| Transición | $0.002 < \varepsilon_t < 0.005$ | Interpolación lineal hasta 0.90 |
+| Controlada por tracción | $\varepsilon_t \ge 0.005$ | 0.90 |
+
+La regla de φ es de <NormaRef s="C.9.3.2" pag="C-68" /> (la norma indica que φ aumenta **linealmente** desde el valor de compresión hasta 0.90 cuando $\varepsilon_t$ pasa del límite de compresión a 0.005). Por ejemplo, con $\varepsilon_t = 0.0035$ y estribos: φ = {f(phiPorDeformacion(0.0035, 420), 3)}; con espiral: φ = {f(phiPorDeformacion(0.0035, 420, true), 3)}.
+
+<Callout tipo="atencion" titulo="Otros aspectos de φ que no son de este capítulo">
+C.9.3.2 permite además, con el Apéndice C-B, aumentar φ linealmente a 0.90 según $\phi P_n$ disminuye de $0.10f'_cA_g$ a cero para ciertas columnas con refuerzo simétrico; y en DMO/DES, C.9.3.4 modifica φ de cortante. Las calculadoras de este capítulo usan la regla basada en $\varepsilon_t$.
+</Callout>
+
+### C.10.3.6 — Resistencia axial máxima de diseño
+
+La resistencia axial de diseño $\phi P_n$ de un elemento en compresión **no debe tomarse mayor** que $\phi P_{n,max}$ (<NormaRef s="C.10.3.6" pag="C-76" />). Es un tope que cubre la **excentricidad accidental** mínima inevitable.
+
+<Ecuacion num="C.10-1" titulo="φPn,max con refuerzo en espiral o elementos compuestos">
+
+$$
+\phi P_{n(max)} = 0.80\,\phi\left[\,0.85 f'_c \left(A_g - A_{st}\right) + f_y A_{st}\,\right]
+$$
+
+- Elementos no preesforzados con espiral que cumplan C.7.10.4, o compuestos que cumplan C.10.13 (<NormaRef s="C.10.3.6.1" pag="C-76" />).
+
+</Ecuacion>
+
+<Ecuacion num="C.10-2" titulo="φPn,max con estribos">
+
+$$
+\phi P_{n(max)} = 0.75\,\phi\left[\,0.85 f'_c \left(A_g - A_{st}\right) + f_y A_{st}\,\right]
+$$
+
+- Elementos no preesforzados con estribos que cumplan C.7.10.5 (<NormaRef s="C.10.3.6.2" pag="C-76" />).
+
+</Ecuacion>
+
+Para elementos **preesforzados**, $\phi P_n$ no debe exceder 0.80 (espiral) o 0.75 (estribos) de la carga axial de diseño con excentricidad nula $\phi P_o$ (<NormaRef s="C.10.3.6.3" pag="C-76" />). El corchete es la resistencia axial nominal con excentricidad cero, $P_0 = 0.85f'_c(A_g-A_{st})+f_yA_{st}$ (nombre de autoría del proyecto; la norma lo deja dentro de la ecuación).
+
+### C.10.3.7 — Momento que acompaña a la carga axial
+
+Las columnas deben diseñarse para el **momento máximo** que puede acompañar a la carga axial. $P_u$, a una excentricidad dada, no debe exceder la de C.10.3.6, y $M_u$ debe **incrementarse por esbeltez** según C.10.10 (<NormaRef s="C.10.3.7" pag="C-76" />).
+
+## C.10.4 — Distancia entre apoyos laterales de elementos a flexión
+
+La separación entre apoyos laterales de una viga **no debe exceder 50 veces el menor ancho $b$** del ala o cara de compresión (<NormaRef s="C.10.4.1" pag="C-76" />) y deben considerarse los efectos de la **excentricidad lateral de la carga** (<NormaRef s="C.10.4.2" pag="C-76" />). Es una regla para evitar el pandeo lateral: una viga de $b = 300$ mm puede tener apoyos laterales cada 15 m como máximo.
+
+## C.10.5 — Refuerzo mínimo en elementos a flexión
+
+<NormaRef s="C.10.5.1" pag="C-77" />: en toda sección de un elemento a flexión donde el análisis requiera refuerzo de tracción (salvo C.10.5.2 a C.10.5.4), el $A_s$ proporcionado no debe ser menor que:
+
+<Ecuacion num="C.10-3" titulo="Refuerzo mínimo de flexión">
+
+$$
+A_{s,min} = \frac{0.25\sqrt{f'_c}}{f_y}\, b_w\, d
+\qquad\text{pero no menor que}\qquad
+\frac{1.4\, b_w\, d}{f_y}
+$$
+
+- $f'_c$ y $f_y$ en MPa; $b_w$ y $d$ en mm; $A_{s,min}$ en mm².
+
+</Ecuacion>
+
+El segundo término (1.4/fy) gobierna mientras $0.25\sqrt{f'_c} \le 1.4$, es decir, hasta $f'_c = (1.4/0.25)^2 =$ **{f(FC_CAMBIO_ASMIN, 2)} MPa** (cálculo del proyecto). Para los concretos usuales de 21 a 28 MPa gobierna siempre 1.4 bw d / fy.
+
+- **Elementos estáticamente determinados con el ala en tracción** (<NormaRef s="C.10.5.2" pag="C-77" />): se usa la Ec. C.10-3 reemplazando $b_w$ por $2b_w$ o el ancho del ala, **el menor**.
+- **Excepción de un tercio** (<NormaRef s="C.10.5.3" pag="C-77" />): no se aplican C.10.5.1 ni C.10.5.2 si en cada sección el $A_s$ proporcionado es **al menos un tercio superior** al requerido por análisis, es decir, $A_s \ge \tfrac{4}{3}A_{s,req}$.
+- **Losas estructurales y zapatas de espesor uniforme** (<NormaRef s="C.10.5.4" pag="C-77" />): $A_{s,min}$ en la dirección de la luz es el de C.7.12.2.1; la separación máxima es **tres veces el espesor ni 450 mm**.
+
+## C.10.6 — Distribución del refuerzo de flexión en vigas y losas en una dirección
+
+Estas reglas controlan el **agrietamiento por flexión** en vigas y losas en una dirección (<NormaRef s="C.10.6.1" pag="C-77" />). Las losas en dos direcciones siguen C.13.3 (<NormaRef s="C.10.6.2" pag="C-77" />). El refuerzo de tracción debe distribuirse adecuadamente en las zonas de máxima tracción (<NormaRef s="C.10.6.3" pag="C-77" />).
+
+### C.10.6.4 — Separación máxima del refuerzo
+
+<Ecuacion num="C.10-4" titulo="Separación máxima del refuerzo más cercano a la cara en tracción">
+
+$$
+s = 380\left(\frac{280}{f_s}\right) - 2.5\,c_c
+\qquad\text{pero no mayor que}\qquad
+300\left(\frac{280}{f_s}\right)
+$$
+
+- $s$: separación del refuerzo más cercano a la superficie en tracción (mm).
+- $c_c$: menor distancia desde la superficie del refuerzo o del acero de preesfuerzo a la cara en tracción (mm).
+- $f_s$: esfuerzo calculado (MPa) en el refuerzo más cercano a la cara en tracción **para cargas de servicio**, con el **momento no mayorado**. Se permite tomar $f_s = \tfrac{2}{3}f_y$.
+- Si el refuerzo más cercano a la cara extrema en tracción es **una sola barra o alambre**, $s$ es el **ancho de la cara en tracción**.
+
+</Ecuacion>
+
+Con $f_y = 420$ MPa, $f_s = 280$ MPa y la Ec. C.10-4 da $s = 380 - 2.5c_c$ (máx. 300 mm). Con $c_c = 50$ mm: $s = $ {f(separacionMaximaFisuracion(280, 50), 0)} mm; con $c_c = 30$ mm el término da 305 mm pero **rige el tope de 300 mm**.
+
+<NormaRef s="C.10.6.5" pag="C-77" />: estas disposiciones **no bastan** para estructuras expuestas a medios muy agresivos o diseñadas para ser impermeables; requieren precauciones e investigaciones especiales.
+
+<NormaRef s="C.10.6.6" pag="C-77" />: cuando las alas de vigas T están en tracción, parte del refuerzo de tracción debe distribuirse sobre un ancho efectivo del ala (C.8.12) o un ancho igual a **1/10 de la luz**, el que sea menor; si el ancho efectivo excede 1/10 de la luz, se coloca algún refuerzo longitudinal en las zonas más externas del ala.
+
+<NormaRef s="C.10.6.7" pag="C-78" />: si la altura $h$ de una viga o vigueta es **mayor de 900 mm**, se coloca **refuerzo superficial longitudinal** uniformemente distribuido en **ambas caras laterales**, dentro de una distancia $h/2$ cercana a la cara de tracción. Su separación $s$ es la de C.10.6.4 con $c_c$ medido desde el refuerzo superficial a la cara lateral. Solo puede contarse en la resistencia si se hace un análisis de compatibilidad de deformaciones.
+
+## C.10.7 — Vigas de gran altura
+
+Son elementos cargados en una cara y apoyados en la opuesta, de modo que se desarrollan **puntales de compresión** entre cargas y apoyos, y tienen (<NormaRef s="C.10.7.1" pag="C-78" />):
+
+(a) luz libre $\ell_n$ **igual o menor que cuatro veces** la altura total, o
+
+(b) regiones con **cargas concentradas a menos de dos veces la altura** medida desde la sección de apoyo.
+
+Deben diseñarse considerando la **distribución no lineal de deformaciones** o el **Apéndice C-A** (puntal-tensor); véanse también C.11.7.1 y C.12.10.6. Debe tenerse en cuenta el **pandeo lateral**. $V_n$ se toma de C.11.7 (<NormaRef s="C.10.7.2" pag="C-78" />); $A_{s,min}$ cumple C.10.5 (<NormaRef s="C.10.7.3" pag="C-78" />); el refuerzo mínimo horizontal y vertical en las caras laterales cumple C-A.3.3 o C.11.7.4 y C.11.7.5 (<NormaRef s="C.10.7.4" pag="C-78" />).
+
+## C.10.8 — Dimensiones de diseño para elementos a compresión
+
+- **Espirales múltiples entrelazados** (<NormaRef s="C.10.8.1" pag="C-78" />): los límites exteriores de la sección efectiva se toman a una distancia fuera de los espirales extremos igual al **recubrimiento mínimo** de C.7.7.
+- **Columnas monolíticas con muros** (<NormaRef s="C.10.8.2" pag="C-78" />): los límites exteriores de la sección efectiva no se toman a más de **40 mm** fuera de la espiral o los estribos.
+- **Sección circular equivalente** (<NormaRef s="C.10.8.3" pag="C-78" />): en lugar del área bruta de una sección cuadrada, octogonal u otra, puede usarse una sección **circular de diámetro igual a la menor dimensión lateral** real; el área bruta, las cuantías requeridas y la resistencia se basan en esa sección circular.
+- **Límites de la sección** (<NormaRef s="C.10.8.4" pag="C-78" />): si la sección es mayor que la requerida por la carga, se permite un **área efectiva reducida $A_g$ no menor que la mitad del área total** para determinar el refuerzo mínimo y la resistencia. **No aplica** a pórticos resistentes a momento ni muros estructurales con capacidad de disipación moderada (DMO) o especial (DES) del Capítulo C.21 (continúa en C-79).
+
+## C.10.9 — Límites del refuerzo de elementos a compresión
+
+- **Cuantía longitudinal** (<NormaRef s="C.10.9.1" pag="C-79" />): $0.01A_g \le A_{st} \le 0.04A_g$ para elementos no compuestos. En DMO y DES el área máxima admisible es **más restrictiva** (Capítulo C.21).
+- **Número mínimo de barras** (<NormaRef s="C.10.9.2" pag="C-79" />): **4** dentro de estribos circulares o rectangulares, **3** dentro de estribos triangulares y **6** rodeadas por espirales que cumplan C.10.9.3.
+
+<TablaNorma numero="Resumen de C.10.9.1 y C.10.9.2" titulo="Límites del refuerzo longitudinal de columnas" pag="C-79" nota="Elaborada a partir del texto de la norma; no es una tabla impresa.">
+
+| Concepto | Valor |
+|---|---|
+| $A_{st}$ mínimo | $0.01A_g$ |
+| $A_{st}$ máximo (no sísmico) | $0.04A_g$ |
+| Barras mínimas con estribos rectangulares o circulares | 4 |
+| Barras mínimas con estribos triangulares | 3 |
+| Barras mínimas con espiral | 6 |
+
+</TablaNorma>
+
+### C.10.9.3 — Cuantía del refuerzo en espiral
+
+<Ecuacion num="C.10-5" titulo="Cuantía volumétrica mínima de la espiral">
+
+$$
+\rho_s = 0.45\left(\frac{A_g}{A_{ch}} - 1\right)\frac{f'_c}{f_{yt}}
+$$
+
+- $A_g$: área bruta de la sección; $A_{ch}$: área del núcleo medida al borde exterior del refuerzo transversal (definida en C.2; esta página no la define).
+- $f_{yt}$: resistencia de fluencia del refuerzo transversal; **no mayor de 700 MPa** en la ecuación. Para $f_{yt}$ mayor de 420 MPa no se usan empalmes por traslapo según C.7.10.4.5(a).
+
+</Ecuacion>
+
+## C.10.10 — Efectos de esbeltez en elementos a compresión
+
+Una columna esbelta, al flectarse, desplaza su carga axial respecto al eje y **aumenta el momento** ($P\!-\!\delta$ en el elemento, $P\!-\!\Delta$ en el piso). C.10.10 define cuándo se puede **ignorar** ese segundo orden y cómo **calcularlo**.
+
+### C.10.10.1 — Cuándo se pueden ignorar los efectos de esbeltez
+
+<Ecuacion num="C.10-6" titulo="Elementos no arriostrados contra desplazamientos laterales">
+
+$$
+\frac{k\,\ell_u}{r} \le 22
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.10-7" titulo="Elementos arriostrados contra desplazamientos laterales">
+
+$$
+\frac{k\,\ell_u}{r} \le 34 - 12\left(\frac{M_1}{M_2}\right) \le 40
+$$
+
+- $M_1/M_2$ es **positivo** si la columna se flecta en **curvatura simple** y **negativo** si lo hace en **curvatura doble**. $M_2$ es el mayor momento de extremo (en valor absoluto) y $M_1$ el menor.
+
+</Ecuacion>
+
+Se permite considerar los elementos a compresión como **arriostrados** cuando los elementos de arriostramiento tienen una rigidez total que restringe los movimientos laterales del piso de **al menos doce veces la rigidez bruta** de las columnas del piso.
+
+- **Longitud no apoyada** $\ell_u$ (<NormaRef s="C.10.10.1.1" pag="C-79" />): distancia **libre** entre losas de piso, vigas u otros elementos que den apoyo lateral en la dirección considerada. Con capiteles o cartelas, se mide hasta el extremo inferior del capitel o cartela.
+- **Radio de giro** $r$ (<NormaRef s="C.10.10.1.2" pag="C-79" />): se puede tomar **0.3 veces la dimensión total** de la sección en la dirección de la estabilidad (rectangulares) y **0.25 veces el diámetro** (circulares); para otras formas se calcula con la sección bruta. (Nota del proyecto: el valor exacto de una sección rectangular es $h/\sqrt{12} = 0.289h$; la norma permite 0.3h.)
+
+### C.10.10.2 — Cuando la esbeltez no se ignora
+
+Hay que usar fuerzas y momentos mayorados de un **análisis de segundo orden** que cumpla C.10.10.3, C.10.10.4 o C.10.10.5, y los requisitos de C.10.10.2.1 y C.10.10.2.2. Las dimensiones de la sección usadas en el análisis deben estar **dentro del 10 %** de las de los planos; si no, se repite el análisis (<NormaRef s="C.10.10.2" pag="C-79" />).
+
+- <NormaRef s="C.10.10.2.1" pag="C-80" />: los momentos totales, incluidos los de segundo orden, **no deben exceder 1.4 veces** los de primer orden.
+- <NormaRef s="C.10.10.2.2" pag="C-80" />: los efectos de segundo orden se consideran a lo largo de la longitud de los elementos; se permite calcularlos con la **magnificación de momentos** de C.10.10.6.
+
+### C.10.10.3 — Análisis no lineal de segundo orden
+
+Debe considerar la **no linealidad del material**, la **curvatura del elemento y la deriva**, la **duración de la carga**, la **retracción y el flujo plástico** y la **interacción con la cimentación**, y demostrar que predice la resistencia en acuerdo sustancial con ensayos de estructuras de concreto reforzado estáticamente indeterminadas (<NormaRef s="C.10.10.3" pag="C-80" />).
+
+### C.10.10.4 — Análisis elástico de segundo orden
+
+Debe tener en cuenta las propiedades de la sección considerando la **carga axial**, las **regiones agrietadas** y los **efectos de duración de la carga** (<NormaRef s="C.10.10.4" pag="C-80" />). En C.10.10.4.1 se permite usar:
+
+<TablaNorma numero="C.10.10.4.1" titulo="Propiedades de los elementos para el análisis elástico de segundo orden" pag="C-80" nota="Transcrita de la lista (a) a (c) de C.10.10.4.1; Ig es el momento de inercia de la sección bruta de concreto, sin considerar el refuerzo.">
+
+| Propiedad | Elemento | Valor |
+|---|---|---|
+| (a) Módulo de elasticidad | Todos | $E_c$ de C.8.5.1 |
+| (b) Momento de inercia $I$ | Columnas | $0.70\,I_g$ |
+| | Muros no agrietados | $0.70\,I_g$ |
+| | Muros agrietados | $0.35\,I_g$ |
+| | Vigas | $0.35\,I_g$ |
+| | Placas planas y losas planas | $0.25\,I_g$ |
+| (c) Área | Todos | $1.0\,A_g$ |
+
+</TablaNorma>
+
+Como alternativa se permiten las siguientes expresiones para $I$:
+
+<Ecuacion num="C.10-8" titulo="Inercia efectiva de elementos en compresión">
+
+$$
+I = \left(0.80 + 25\,\frac{A_{st}}{A_g}\right)\left(1 - \frac{M_u}{P_u\, h} - 0.5\,\frac{P_u}{P_o}\right) I_g \;\le\; 0.875\, I_g
+$$
+
+- $P_u$ y $M_u$ provienen de la combinación de carga considerada, o de la combinación que dé el **menor** valor de $I$. No hay necesidad de usar $I$ menor que $0.35I_g$.
+- $P_o$: resistencia axial nominal para excentricidad nula; $h$: altura de la sección en el plano de flexión.
+
+</Ecuacion>
+
+<Ecuacion num="C.10-9" titulo="Inercia efectiva de elementos a flexión">
+
+$$
+I = \left(0.10 + 25\rho\right)\left(1.2 - 0.2\,\frac{b_w}{d}\right) I_g \;\le\; 0.5\, I_g
+$$
+
+- Para elementos **continuos** a flexión, $I$ es el **promedio** de los valores de la Ec. C.10-9 en las secciones críticas de momento positivo y negativo. No hay necesidad de usar $I$ menor que $0.25I_g$.
+- $\rho$: cuantía de refuerzo de tracción ($A_s/b_wd$).
+
+</Ecuacion>
+
+Las dimensiones de la sección del análisis no deben apartarse más del 10 % de las de los planos; si no, se repite el análisis (<NormaRef s="C.10.10.4.1" pag="C-81" />).
+
+<NormaRef s="C.10.10.4.2" pag="C-81" />: para elementos en compresión, $I$ se **divide por $1+\beta_{ds}$** cuando hay **cargas laterales sostenidas**. $\beta_{ds}$ es la relación entre el máximo cortante sostenido mayorado de un piso y el máximo cortante mayorado de la misma combinación, y no puede ser mayor que 1.0.
+
+### C.10.10.5 — Procedimiento de magnificación de momentos
+
+Las columnas y pisos se designan como parte de estructuras **con desplazamiento lateral (no arriostradas)** o **sin desplazamiento lateral (arriostradas)**. Las columnas arriostradas se diseñan con C.10.10.6; las no arriostradas, con C.10.10.7 (<NormaRef s="C.10.10.5" pag="C-81" />).
+
+- <NormaRef s="C.10.10.5.1" pag="C-81" />: una columna puede suponerse **arriostrada** si el incremento de los momentos extremos por segundo orden **no excede el 5 %** de los de primer orden.
+- <NormaRef s="C.10.10.5.2" pag="C-81" />: un **piso** puede suponerse arriostrado si el índice de estabilidad cumple:
+
+<Ecuacion num="C.10-10" titulo="Índice de estabilidad del piso">
+
+$$
+Q = \frac{\sum P_u\,\Delta_o}{V_{us}\,\ell_c} \le 0.05
+$$
+
+- $\sum P_u$ y $V_{us}$: carga vertical total y cortante horizontal de piso, mayorados.
+- $\Delta_o$: deriva (deformación lateral relativa) de **primer orden** entre la parte superior e inferior del piso debida a $V_{us}$.
+- $\ell_c$: longitud del elemento a compresión (la norma no la define en esta página; es la longitud medida entre ejes de nudos, como en ACI 318 — **precisión del proyecto**).
+
+</Ecuacion>
+
+### C.10.10.6 — Estructuras sin desplazamiento lateral
+
+Las columnas se diseñan para la fuerza axial mayorada $P_u$ y para el **momento amplificado** $M_c$ (<NormaRef s="C.10.10.6" pag="C-81" />):
+
+<Ecuacion num="C.10-11" titulo="Momento de diseño amplificado">
+
+$$
+M_c = \delta\, M_2
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.10-12" titulo="Magnificador de momentos">
+
+$$
+\delta = \frac{C_m}{1 - \dfrac{P_u}{0.75\,P_c}} \;\ge\; 1.0
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.10-13" titulo="Carga crítica de pandeo">
+
+$$
+P_c = \frac{\pi^2\, EI}{\left(k\,\ell_u\right)^2}
+$$
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Nombre del magnificador">
+El PDF de la NSR-10 llama simplemente **δ** a este factor; en ACI 318 se denomina $\delta_{ns}$ (sin desplazamiento, *non-sway*) para distinguirlo del $\delta_s$ de C.10.10.7. Aquí se usa «δ (δns)» en la calculadora y los ejemplos, aclarando que es el mismo de C.10-12.
+</Callout>
+
+<NormaRef s="C.10.10.6.1" pag="C-81" /> — $EI$ se toma como:
+
+<Ecuacion num="C.10-14" titulo="Rigidez a flexión de la columna (con acero)">
+
+$$
+EI = \frac{0.2\,E_c I_g + E_s I_{se}}{1 + \beta_{dns}}
+$$
+
+- $I_{se}$: momento de inercia del refuerzo respecto al eje centroidal de la sección (la norma no lo define en esta página).
+
+</Ecuacion>
+
+o, simplificadamente:
+
+<Ecuacion num="C.10-15" titulo="Rigidez a flexión simplificada">
+
+$$
+EI = \frac{0.4\,E_c I_g}{1 + \beta_{dns}}
+$$
+
+</Ecuacion>
+
+Como alternativa, $EI$ puede calcularse con el valor de $I$ de la Ec. C.10-8 dividido por $(1+\beta_{dns})$ (<NormaRef s="C.10.10.6.1" pag="C-82" />).
+
+- $\beta_{dns}$ (<NormaRef s="C.10.10.6.2" pag="C-82" />): relación entre la máxima carga axial **sostenida** mayorada dentro de un piso y la máxima carga axial mayorada de la misma combinación; **no mayor de 1.0**.
+- Se permite tomar el factor de longitud efectiva $k = 1.0$ (<NormaRef s="C.10.10.6.3" pag="C-82" />).
+
+<Ecuacion num="C.10-16" titulo="Factor Cm (sin cargas transversales entre apoyos)">
+
+$$
+C_m = 0.6 + 0.4\,\frac{M_1}{M_2}
+$$
+
+- $M_1/M_2$ positivo en curvatura simple, negativo en doble curvatura. Para elementos **con cargas transversales entre los apoyos**, $C_m = 1.0$ (<NormaRef s="C.10.10.6.4" pag="C-82" />).
+
+</Ecuacion>
+
+<Ecuacion num="C.10-17" titulo="Momento mínimo M2,min">
+
+$$
+M_{2,min} = P_u\left(15 + 0.03\,h\right)
+$$
+
+- En **cada eje separadamente**, con 15 y $h$ en mm. Si $M_{2,min}$ excede a $M_2$, $C_m$ de la Ec. C.10-16 se toma **igual a 1.0** o basado en la relación de los momentos calculados en los extremos (<NormaRef s="C.10.10.6.5" pag="C-82" />).
+
+</Ecuacion>
+
+### C.10.10.7 — Estructuras con desplazamiento lateral
+
+Los momentos extremos de un elemento individual se toman como (<NormaRef s="C.10.10.7" pag="C-82" />):
+
+<Ecuacion num="C.10-18" titulo="Momento menor de extremo">
+
+$$
+M_1 = M_{1ns} + \delta_s\, M_{1s}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.10-19" titulo="Momento mayor de extremo">
+
+$$
+M_2 = M_{2ns} + \delta_s\, M_{2s}
+$$
+
+- $M_{ns}$: momentos por cargas que **no** producen desplazamiento lateral apreciable; $M_s$: momentos por cargas que **sí** lo producen (nomenclatura habitual; el PDF no la define en esta página — **precisión del proyecto**).
+
+</Ecuacion>
+
+- Los elementos a flexión se diseñan para todos los **momentos extremos magnificados** de las columnas en el nudo (<NormaRef s="C.10.10.7.1" pag="C-82" />).
+- $k$ se determina con $E_c$ e $I$ de C.10.10.4 y **no puede ser menor de 1.0** (<NormaRef s="C.10.10.7.2" pag="C-82" />).
+
+<Ecuacion num="C.10-20" titulo="Magnificador de desplazamiento lateral (con Q)">
+
+$$
+\delta_s = \frac{1}{1 - Q} \;\ge\; 1
+$$
+
+- Si $\delta_s$ excede de **1.5**, debe calcularse con análisis elástico de segundo orden o con C.10.10.7.4 (<NormaRef s="C.10.10.7.3" pag="C-82" />).
+
+</Ecuacion>
+
+<Ecuacion num="C.10-21" titulo="Magnificador de desplazamiento lateral (con cargas)">
+
+$$
+\delta_s = \frac{1}{1 - \dfrac{\sum P_u}{0.75\sum P_c}} \;\ge\; 1
+$$
+
+- $\sum P_u$: todas las cargas verticales mayoradas del piso; $\sum P_c$: suma de $P_c$ de todas las columnas que resisten el desplazamiento lateral del piso, con $P_c$ de la Ec. C.10-13 usando el $k$ de C.10.10.7.2 y el $EI$ de C.10.10.6.1 **con $\beta_{ds}$ en lugar de $\beta_{dns}$** (<NormaRef s="C.10.10.7.4" pag="C-83" />).
+
+</Ecuacion>
+
+## C.10.11 — Elementos cargados axialmente que soportan sistemas de losas
+
+Los elementos cargados axialmente que soportan un sistema de losas dentro del alcance de C.13.1 se diseñan como dispone el Capítulo C.10 **y** con los requisitos adicionales del Capítulo C.13 (<NormaRef s="C.10.11" pag="C-83" />).
+
+## C.10.12 — Transmisión de cargas de las columnas a través de losas de entrepiso
+
+Si el $f'_c$ de la columna es **1.4 veces mayor** que el del sistema de entrepiso en columnas **interiores o de borde**, o **1.2 veces mayor** en columnas **esquineras**, la carga debe transmitirse a través de la losa según C.10.12.1 o C.10.12.2 (<NormaRef s="C.10.12" pag="C-83" />).
+
+<NormaRef s="C.10.12.1" pag="C-83" /> — la resistencia de la columna en el nudo puede calcularse con una **resistencia efectiva** $(f'_c)_e$ del concreto de la columna dentro del nudo, en función de la del concreto de la columna $(f'_c)_c$ y la de la losa $(f'_c)_s$:
+
+<Ecuacion num="C.10-22" titulo="Columnas interiores">
+
+$$
+\left(f'_c\right)_e = \frac{0.25}{(h/c_2)}\left(f'_c\right)_c + \left[\,1.4 - \frac{0.35}{(h/c_2)}\,\right]\left(f'_c\right)_s \;\le\; \left(f'_c\right)_c
+$$
+
+- $h/c_2$ **no debe ser menor de un tercio**; $h$ es el espesor total de la losa y $c_2$ la menor dimensión de la sección de la columna.
+
+</Ecuacion>
+
+<Ecuacion num="C.10-23" titulo="Columnas de borde">
+
+$$
+\left(f'_c\right)_e = 1.4\left(f'_c\right)_s \;\le\; \left(f'_c\right)_c
+$$
+
+</Ecuacion>
+
+<Ecuacion num="C.10-24" titulo="Columnas esquineras">
+
+$$
+\left(f'_c\right)_e = 1.2\left(f'_c\right)_s \;\le\; \left(f'_c\right)_c
+$$
+
+</Ecuacion>
+
+En cualquiera de los casos pueden usarse barras longitudinales adicionales y estribos o espirales si se requiere. Alternativa (<NormaRef s="C.10.12.2" pag="C-83" />): colocar **concreto de la resistencia de la columna** en el entrepiso, en la zona de la columna; su superficie superior debe extenderse **600 mm** dentro de la losa a partir de la cara de la columna; debe ser **monolítico** con el concreto del piso y colocarse según C.6.4.6 y C.6.4.7.
+
+## C.10.13 — Elementos compuestos sometidos a compresión
+
+Son los reforzados longitudinalmente con **perfiles de acero estructural, tuberías o tubos**, con o sin barras longitudinales (<NormaRef s="C.10.13.1" pag="C-84" />).
+
+- Se calculan con las **mismas condiciones limitantes** que los elementos comunes de concreto reforzado (<NormaRef s="C.10.13.2" pag="C-84" />).
+- La carga axial asignada al concreto se transmite al concreto mediante elementos o ménsulas que se apoyen **directamente en el concreto** (<NormaRef s="C.10.13.3" pag="C-84" />); la no asignada al concreto se desarrolla por **conexión directa** al perfil, tubería o tubo (<NormaRef s="C.10.13.4" pag="C-84" />).
+
+<NormaRef s="C.10.13.5" pag="C-84" /> — para evaluar la esbeltez, el radio de giro de la sección compuesta **no debe ser mayor** que:
+
+<Ecuacion num="C.10-25" titulo="Radio de giro de la sección compuesta">
+
+$$
+r = \sqrt{\frac{\left(E_c I_g/5\right) + E_s I_{sx}}{\left(E_c A_g/5\right) + E_s A_{sx}}}
+$$
+
+- $I_{sx}$, $A_{sx}$: momento de inercia y área del perfil, tubería o tubo de acero estructural.
+
+</Ecuacion>
+
+Como alternativa a un cálculo más preciso, $EI$ de la Ec. C.10-13 puede tomarse con la Ec. C.10-14 o con:
+
+<Ecuacion num="C.10-26" titulo="Rigidez de la sección compuesta">
+
+$$
+EI = \frac{\left(E_c I_g/5\right)}{1+\beta_{dns}} + E_s I_{sx}
+$$
+
+</Ecuacion>
+
+### C.10.13.6 — Núcleo de concreto confinado en acero estructural
+
+El espesor del acero de confinamiento no debe ser menor que (<NormaRef s="C.10.13.6.1" pag="C-84" />):
+
+$$
+b\sqrt{\frac{f_y}{3E_s}} \ \text{para cada cara de ancho } b
+\qquad\text{ni que}\qquad
+h\sqrt{\frac{f_y}{8E_s}} \ \text{para secciones circulares de diámetro } h
+$$
+
+Las barras longitudinales dentro del núcleo confinado pueden usarse en el cálculo de $A_{sx}$ e $I_{sx}$ (<NormaRef s="C.10.13.6.2" pag="C-84" />).
+
+### C.10.13.7 — Espiral alrededor de un núcleo de acero estructural
+
+- $f_y$ de diseño del núcleo: la mínima especificada del grado usado, **sin exceder 350 MPa** (<NormaRef s="C.10.13.7.1" pag="C-84" />).
+- La espiral cumple C.10.9.3 (<NormaRef s="C.10.13.7.2" pag="C-84" />).
+- Las barras longitudinales dentro de la espiral tienen un área **no menor de 0.01 ni mayor de 0.08** veces el área **neta** de la sección de concreto (<NormaRef s="C.10.13.7.3" pag="C-84" />), y pueden considerarse en $A_{sx}$ e $I_{sx}$ (<NormaRef s="C.10.13.7.4" pag="C-84" />).
+
+### C.10.13.8 — Estribos alrededor de un núcleo de acero estructural
+
+Para concreto confinado lateralmente con estribos alrededor de un núcleo de acero estructural (<NormaRef s="C.10.13.8" pag="C-85" />):
+
+- **Fluencia del núcleo:** mínima especificada del grado, sin exceder 350 MPa (C.10.13.8.1).
+- Los estribos **rodean por completo** el núcleo (C.10.13.8.2).
+- **Diámetro del estribo** no menor que **0.02 veces la mayor dimensión lateral** del elemento compuesto; no menor que No. 10 ni necesita ser mayor que No. 16 (puede usarse malla electrosoldada de área equivalente) (C.10.13.8.3).
+- **Separación vertical** no mayor que la **mitad de la menor dimensión lateral**, ni **48 diámetros del estribo**, ni **16 diámetros de las barras longitudinales** (C.10.13.8.4).
+- Barras longitudinales dentro de los estribos: **0.01 a 0.08** veces el área neta de concreto (C.10.13.8.5).
+- Una barra longitudinal en **cada esquina** de una sección rectangular, y las demás espaciadas a menos de **1/2 de la menor dimensión lateral** (C.10.13.8.6).
+- Esas barras pueden considerarse en $A_{sx}$ e $I_{sx}$ (C.10.13.8.7).
+
+## C.10.14 — Resistencia al aplastamiento
+
+La resistencia de diseño al aplastamiento del concreto **no debe exceder** $\phi\,(0.85f'_cA_1)$, con φ = 0.65 de <NormaRef s="C.9.3.2.4" pag="C-68" />. Cuando la superficie de soporte es **más ancha en todos los lados** que el área cargada, la resistencia en el área cargada puede multiplicarse por $\sqrt{A_2/A_1}$, **pero no más que 2** (<NormaRef s="C.10.14.1" pag="C-85" />).
+
+<Ecuacion num="C.10.14.1" titulo="Resistencia de diseño al aplastamiento">
+
+$$
+\phi B_n = \phi\,\left(0.85 f'_c A_1\right)\sqrt{\frac{A_2}{A_1}} \qquad \sqrt{A_2/A_1}\le 2
+$$
+
+- $A_1$: área cargada; $A_2$: área de la base inferior del mayor tronco de pirámide, cono o cuña contenido totalmente en el apoyo (definición de C.2 / ACI; el PDF no la repite aquí — **precisión del proyecto**).
+
+</Ecuacion>
+
+<NormaRef s="C.10.14.2" pag="C-85" />: no aplica a **anclajes de postensado**. (La página C-86 del PDF es una hoja de «Notas» en blanco.)
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Resistencia a flexión de una viga rectangular simplemente armada">
+Viga de $b$ = 300 mm, $h$ = 500 mm, $d$ = 440 mm, $f'_c$ = 28 MPa, $f_y$ = 420 MPa, con tres barras No. 8 de 510 mm² (Tabla C.3.5.3-2, <NormaRef s="C.3.5.3" pag="C-27" />): $A_s$ = 1530 mm². Hallar $a$, $c$, $\varepsilon_t$, φ y $\phi M_n$.
+
+<Paso titulo="Bloque equivalente" ref="C.10.2.7.1, C.10.2.7.3">
+
+Equilibrio $0.85f'_c\,b\,a = A_sf_y$:
+
+$$
+a = \frac{A_s f_y}{0.85 f'_c b} = \frac{1530\,(420)}{0.85\,(28)\,(300)}
+$$
+
+Resultado: $a$ = **{f(ej1.cer.a, 1)} mm**; con $\beta_1$ = {f(ej1.b1, 2)}, $c = a/\beta_1$ = **{f(ej1.cer.c, 1)} mm**.
+
+</Paso>
+<Paso titulo="Deformación del acero y φ" ref="C.10.2.3, C.10.3.4, C.9.3.2.1">
+
+$$
+\varepsilon_t = 0.003\,\frac{d-c}{c}
+$$
+
+Resultado: $\varepsilon_t$ = **{f(ej1.r.epsT, 5)}**, mayor que 0.005 → sección **controlada por tracción**, φ = {f(ej1.r.phi, 2)}. Cumple además $\varepsilon_t \ge 0.004$ (<NormaRef s="C.10.3.5" pag="C-76" />) y $f_y$ fluye porque $\varepsilon_t > f_y/E_s$ = 0.0021.
+
+</Paso>
+<Paso titulo="Momento nominal y de diseño" ref="C.10.2">
+
+$$
+M_n = A_s f_y \left(d - \frac{a}{2}\right) = 1530\,(420)\,(440-45)
+$$
+
+Resultado: $M_n$ = **{f(ej1.r.Mn, 1)} kN·m** y $\phi M_n$ = 0.90 × {f(ej1.r.Mn, 1)} = **{f(ej1.r.phiMn, 1)} kN·m**.
+
+</Paso>
+<Paso titulo="Refuerzo mínimo" ref="C.10-3">
+$A_{s,min}$ = $1.4\,b_wd/f_y$ = **{f(ej1.asmin, 0)} mm²** (gobierna 1.4/fy porque $f'_c$ = 28 es menor que {f(FC_CAMBIO_ASMIN, 2)} MPa). Como $A_s$ = 1530 mm² es mayor, **cumple**.
+</Paso>
+<Resultado>
+$\phi M_n$ = **{f(ej1.r.phiMn, 1)} kN·m**, sección controlada por tracción ($\varepsilon_t$ = {f(ej1.r.epsT, 4)}). Compruébalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="flexion-viga" />
+
+<Ejemplo numero={2} titulo="Diseño del As requerido para un Mu dado, y separación del refuerzo">
+Misma sección ($b$ = 300, $d$ = 440, $f'_c$ = 28, $f_y$ = 420). Momento mayorado $M_u$ = 300 kN·m. Hallar el $A_s$ requerido, escoger barras y verificar la separación máxima de C.10-4 con $c_c$ = 50 mm (hipótesis del ejemplo: recubrimiento 40 mm más estribo de 10 mm).
+
+<Paso titulo="Resolver $\phi M_n = M_u$" ref="C.10.2.7, C.9.3.2.1">
+
+Suponiendo φ = 0.90 y $M_n = 0.85f'_cba(d-a/2)$:
+
+$$
+a = d - \sqrt{d^2 - \frac{2M_u}{\phi\,0.85 f'_c\, b}}
+$$
+
+Resultado: $a$ = **{f(ej2.dis.a, 1)} mm**, $c$ = {f(ej2.dis.c, 1)} mm, $\varepsilon_t$ = {f(ej2.dis.epsT, 4)} ≥ 0.005 → φ = 0.90 confirmado. $A_s = 0.85f'_cba/f_y$ = **{f(ej2.dis.As, 0)} mm²** (procedimiento de autoría del proyecto).
+
+</Paso>
+<Paso titulo="Escoger barras y verificar" ref="C.10.2">
+Con 2 No. 8 + 3 No. 7 = 2(510) + 3(387) = **{ej2.AsReal} mm²** (mayor que el requerido): $\phi M_n$ = **{f(ej2.real.phiMn, 1)} kN·m** ≥ 300, $\varepsilon_t$ = {f(ej2.real.epsT, 4)}. $A_{s,min}$ = {f(ej2.dis.Asmin, 0)} mm²: **cumple**.
+</Paso>
+<Paso titulo="Separación máxima del refuerzo" ref="C.10-4">
+Con $f_s = \tfrac{2}{3}f_y$ = {f(ej2.fs, 0)} MPa (el factor 280/fs vale {f(280 / ej2.fs, 2)}): 380 × {f(280 / ej2.fs, 2)} − 2.5 × 50 = {f(ej2.sCrudo, 0)} mm, y el tope es 300 × {f(280 / ej2.fs, 2)} = {f(ej2.tope, 0)} mm. La separación máxima es **{f(ej2.s, 0)} mm**: las barras de la capa más cercana a la cara en tracción deben quedar a ese espaciamiento o menos (si hay una sola barra, $s$ es el ancho de la cara).
+</Paso>
+<Resultado>
+$A_s$ requerido ≈ **{f(ej2.dis.As, 0)} mm²** (se usan {ej2.AsReal} mm²); $s_{max}$ = **{f(ej2.s, 0)} mm** con $c_c$ = 50 mm.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Viga doblemente armada">
+Misma sección, pero $M_u$ = 450 kN·m y refuerzo de compresión a $d'$ = 60 mm. La simple armada no alcanza con $\varepsilon_t \ge 0.004$ (<NormaRef s="C.10.3.5" pag="C-76" />); se agrega $A'_s$ (<NormaRef s="C.10.3.5.1" pag="C-76" />). Criterio de autoría del proyecto: fijar $\varepsilon_t = 0.005$ (φ = 0.90).
+
+<Paso titulo="Eje neutro para εt = 0.005" ref="C.10.3.4, C.10.2.3">
+
+$$
+c = \frac{0.003}{0.003+0.005}\,d = 0.375\,d
+$$
+
+Resultado: $c$ = **{f(ej3.cMax, 1)} mm**, $a = \beta_1 c$ = **{f(ej3.aMax, 2)} mm**.
+
+</Paso>
+<Paso titulo="Momento del bloque comprimido" ref="C.10.2.7">
+$M_{n1} = 0.85f'_c\,b\,a\,(d - a/2)$ = **{f(ej3.Mn1, 1)} kN·m**. Como $\phi M_{n1}$ = {f(0.9 * ej3.Mn1, 1)} kN·m es menor que 450, falta {f(450 / 0.9 - ej3.Mn1, 1)} kN·m (nominal).
+</Paso>
+<Paso titulo="Acero de compresión" ref="C.10.2.4">
+$\varepsilon'_s = 0.003\,(c-d')/c$ = {f(ej3.epsP, 5)} → $f'_s$ = {f(ej3.fsP, 1)} MPa (menor que $f_y$: **no fluye**). Descontando el concreto desplazado, $A'_s = \Delta M_n / [(f'_s - 0.85f'_c)(d-d')]$ = **{f(ej3.dis.Aprime, 0)} mm²**.
+</Paso>
+<Paso titulo="Acero de tracción" ref="C.10.2">
+$A_s = [0.85f'_c\,b\,a + A'_s(f'_s - 0.85f'_c)]/f_y$ = **{f(ej3.dis.As, 0)} mm²**.
+</Paso>
+<Paso titulo="Verificación con el equilibrio general" ref="C.10.2">
+Con $A_s$ = {f(ej3.dis.As, 1)} y $A'_s$ = {f(ej3.dis.Aprime, 1)} mm², el equilibrio da $c$ = {f(ej3.dis.c, 1)} mm, $\varepsilon_t$ = {f(ej3.dis.epsT, 4)}, φ = {f(ej3.dis.phi, 2)} y $\phi M_n$ = **{f(ej3.dis.phiMn, 1)} kN·m** = $M_u$.
+</Paso>
+<Resultado>
+$A_s$ ≈ **{f(ej3.dis.As, 0)} mm²** y $A'_s$ ≈ **{f(ej3.dis.Aprime, 0)} mm²**. Una viga simplemente armada con ese mismo $A_s$ y sin $A'_s$ daría $\varepsilon_t$ = {f(ej3.simple.epsT, 4)} y solo {f(ej3.simple.phiMn, 0)} kN·m: el acero de compresión aumenta la resistencia y la ductilidad (εt).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={4} titulo="Diagrama de interacción de una columna y verificación de (Pu, Mu)">
+Columna de 400 × 400 mm, $f'_c$ = 28 MPa, $f_y$ = 420 MPa, estribos. Refuerzo: 8 barras No. 7 (387 mm²) —3 en cada cara de 400 mm y 2 intermedias—, $A_{st}$ = {f(ej4.arm.Ast, 0)} mm² a $d'$ = 60 mm. Hallar los puntos principales y verificar $P_u$ = 1500 kN, $M_u$ = 150 kN·m.
+
+<Paso titulo="Cuantía y P0" ref="C.10.9.1, C.10-2">
+ρ = {f(ej4.arm.Ast / 160000 * 100, 2)} % (entre 1 % y 4 %: **cumple**). $P_0 = 0.85f'_c(A_g - A_{st}) + f_yA_{st}$ = **{f(P0(ej4.col), 1)} kN**. Con estribos y φ = 0.65: $\phi P_{n,max} = 0.75(0.65)P_0$ = **{f(phiPnMax(ej4.col), 1)} kN**.
+</Paso>
+<Paso titulo="Punto balanceado" ref="C.10.3.2">
+$\varepsilon_t$ = $f_y/E_s$ = 0.0021 → $c = 0.003\,d_t/(0.003+0.0021)$ = {f(ej4.cv.balanceado.c, 1)} mm ($d_t$ = 340 mm). El equilibrio da $P_n$ = **{f(ej4.cv.balanceado.Pn, 1)} kN** y $M_n$ = **{f(ej4.cv.balanceado.Mn, 1)} kN·m**; φ = {f(ej4.cv.balanceado.phi, 3)} (apenas por encima de 0.65, porque el límite de compresión se tomó 0.002).
+</Paso>
+<Paso titulo="Otros puntos de la curva" ref="C.10.2, C.10.3.4">
+
+| Punto | $c$ (mm) | $\varepsilon_t$ | φ | $P_n$ (kN) | $M_n$ (kN·m) | $\phi P_n$ (kN) | $\phi M_n$ (kN·m) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Compresión pura ($P_0$) | ∞ | — | {f(ej4.p0.phi, 2)} | {f(ej4.p0.Pn, 0)} | 0 | {f(ej4.p0.phiPn, 0)} (tope) | 0 |
+| Balanceado | {f(ej4.cv.balanceado.c, 1)} | {f(ej4.cv.balanceado.epsT, 4)} | {f(ej4.cv.balanceado.phi, 3)} | {f(ej4.cv.balanceado.Pn, 0)} | {f(ej4.cv.balanceado.Mn, 1)} | {f(ej4.cv.balanceado.phiPn, 0)} | {f(ej4.cv.balanceado.phiMn, 1)} |
+| εt = 0.005 | {f(ej4.cv.controladoTraccion.c, 1)} | {f(ej4.cv.controladoTraccion.epsT, 4)} | {f(ej4.cv.controladoTraccion.phi, 2)} | {f(ej4.cv.controladoTraccion.Pn, 0)} | {f(ej4.cv.controladoTraccion.Mn, 1)} | {f(ej4.cv.controladoTraccion.phiPn, 0)} | {f(ej4.cv.controladoTraccion.phiMn, 1)} |
+| Flexión pura | {f(ej4.cv.flexionPura.c, 1)} | {f(ej4.cv.flexionPura.epsT, 4)} | {f(ej4.cv.flexionPura.phi, 2)} | 0 | {f(ej4.cv.flexionPura.Mn, 1)} | 0 | {f(ej4.cv.flexionPura.phiMn, 1)} |
+
+</Paso>
+<Paso titulo="Verificar (Pu, Mu) = (1500, 150)" ref="C.10.3.6, C.10.3.7">
+Con $P_u$ = 1500 kN (menor que $\phi P_{n,max}$ = {f(ej4.cv.phiPnMax, 0)} kN), la curva de diseño da $\phi M_n$ = **{f(ej4.ok.phiMnDisponible, 1)} kN·m**. Razón $M_u/\phi M_n$ = {f(ej4.ok.razon, 3)}: **{ej4.ok.cumple ? 'cumple' : 'no cumple'}** (excentricidad e = {f(ej4.ok.excentricidad, 0)} mm). Con $M_u$ = 250 kN·m la razón sería {f(ej4.mal.razon, 3)}: **{ej4.mal.cumple ? 'cumple' : 'no cumple'}**.
+</Paso>
+<Resultado>
+Con $P_u$ = 1500 kN la columna resiste $\phi M_n$ ≈ **{f(ej4.ok.phiMnDisponible, 0)} kN·m**. La curva completa (nominal y de diseño) se grafica en la calculadora; cámbiale la pareja ($P_u$, $M_u$):
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="columna-interaccion" />
+
+<Ejemplo numero={5} titulo="Magnificación de momentos de una columna esbelta arriostrada">
+La columna del ejemplo 4 (400 × 400, $f'_c$ = 28 MPa) es parte de un pórtico arriostrado, con $\ell_u$ = 5.0 m, $k$ = 1.0 (<NormaRef s="C.10.10.6.3" pag="C-82" />), $P_u$ = 1500 kN, momentos de extremo $M_1$ = 60 kN·m y $M_2$ = 100 kN·m (curvatura simple) y $\beta_{dns}$ = 0.6 (hipótesis del ejemplo). ¿Hay que considerar la esbeltez? ¿Cuál es $M_c$?
+
+<Paso titulo="¿Se puede ignorar la esbeltez?" ref="C.10-7, C.10.10.1.2">
+$r = 0.3h$ = {f(ej5.r, 0)} mm → $k\ell_u/r$ = **{f(ej5.kluR, 1)}**. El límite es $34 - 12(M_1/M_2) = 34 - 12(0.6)$ = **{f(ej5.lim, 1)}** (≤ 40). Como {f(ej5.kluR, 1)} es mayor que {f(ej5.lim, 1)}, **no se ignora**: hay que magnificar.
+</Paso>
+<Paso titulo="Rigidez EI y carga crítica" ref="C.10-15, C.10-13">
+
+$E_c = 4700\sqrt{28}$ = {f(ej5.Ec, 0)} MPa; $I_g = bh^3/12$ = {f(ej5.Ig / 1e9, 4)} × 10⁹ mm⁴.
+
+$$
+EI = \frac{0.4 E_c I_g}{1+\beta_{dns}}\qquad P_c = \frac{\pi^2 EI}{(k\ell_u)^2}
+$$
+
+Resultado: $EI$ = {f(ej5.EI / 1e12, 3)} × 10¹² N·mm² y $P_c$ = **{f(ej5.mag.Pc, 1)} kN**.
+
+</Paso>
+<Paso titulo="Cm y momento mínimo" ref="C.10-16, C.10-17">
+$C_m = 0.6 + 0.4(60/100)$ = **{f(ej5.mag.Cm, 2)}**. $M_{2,min} = P_u(15+0.03h)$ = 1500(15 + 12)/1000 = **{f(ej5.mag.M2min, 1)} kN·m**, menor que $M_2$ = 100: se usa $M_2$ = 100 kN·m.
+</Paso>
+<Paso titulo="Magnificador y momento de diseño" ref="C.10-12, C.10-11">
+
+$$
+\delta = \frac{C_m}{1 - \dfrac{P_u}{0.75P_c}} = \frac{0.84}{1 - \dfrac{1500}{0.75\,P_c}}
+$$
+
+Resultado: $\delta$ = **{f(ej5.mag.delta, 3)}** (mayor que 1.0) y $M_c = \delta M_2$ = **{f(ej5.mag.Mc, 1)} kN·m**. La amplificación {f(ej5.mag.amplificacion, 3)} no excede 1.4 (<NormaRef s="C.10.10.2.1" pag="C-80" />).
+</Paso>
+<Paso titulo="Verificación en el diagrama de interacción" ref="C.10.3.7">
+Con ($P_u$ = 1500; $M_c$ = {f(ej5.mag.Mc, 1)}): $\phi M_n$ = {f(ej5.ver.phiMnDisponible, 1)} kN·m, razón = **{f(ej5.ver.razon, 3)}**: **{ej5.ver.cumple ? 'cumple' : 'no cumple'}**.
+</Paso>
+<Resultado>
+$k\ell_u/r$ = {f(ej5.kluR, 1)} supera el límite {f(ej5.lim, 1)}; $\delta$ = **{f(ej5.mag.delta, 3)}** y $M_c$ = **{f(ej5.mag.Mc, 1)} kN·m** en lugar de 100 kN·m de primer orden. (Con la inercia de la Ec. C.10-8 en lugar de C.10-15 se usaría $I/I_g$ = {f(ej5.I108, 3)} en este caso.)
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={6} titulo="Columna de concreto de mayor resistencia que la losa, y aplastamiento">
+Una columna interior de $(f'_c)_c$ = 56 MPa atraviesa una losa de $(f'_c)_s$ = 28 MPa y espesor $h$ = 200 mm; $c_2$ = 500 mm.
+
+<Paso titulo="¿Aplica C.10.12?" ref="C.10.12">
+$56 > 1.4 \times 28 = 39.2$ → {ej6.requiere ? 'sí aplica' : 'no aplica'}: hay que usar C.10.12.1 o C.10.12.2.
+</Paso>
+<Paso titulo="Resistencia efectiva en el nudo" ref="C.10-22">
+$h/c_2$ = 0.40 (≥ 1/3):
+
+$$
+\left(f'_c\right)_e = \frac{0.25}{0.40}(56) + \left[1.4 - \frac{0.35}{0.40}\right](28)
+$$
+
+Resultado: $(f'_c)_e$ = **{f(ej6.fe, 1)} MPa** (menor que 56 MPa: manda la ecuación).
+</Paso>
+<Paso titulo="Aplastamiento bajo una placa" ref="C.10.14.1">
+Una placa de $A_1$ = 100 000 mm² sobre un apoyo con $A_2$ = 400 000 mm²: $\sqrt{A_2/A_1}$ = 2 (el máximo). $\phi B_n$ = 0.65(0.85)(28)(100 000)(2) = **{f(ej6.ap.phiBn, 0)} kN**, el doble de los {f(ej6.ap1.phiBn, 0)} kN sin el efecto de confinamiento del apoyo.
+</Paso>
+<Resultado>
+$(f'_c)_e$ = **{f(ej6.fe, 1)} MPa** para la columna en el nudo y $\phi B_n$ = **{f(ej6.ap.phiBn, 0)} kN** de aplastamiento con el tope de 2.
+</Resultado>
+</Ejemplo>
+
+## Erratas y observaciones del PDF
+
+Observaciones sobre la transcripción (no cambian el sentido de la norma):
+
+- **Símbolos sin definir en el capítulo:** $A_{ch}$ (Ec. C.10-5), $I_{se}$ (C.10-14), $\ell_c$ (C.10-10), $M_{ns}$/$M_s$ (C.10-18/19), $A_1$ y $A_2$ (C.10.14.1) se definen en C.2 o en ACI 318; el texto de C.10 no los repite.
+- **«Ec. (10-16»** en C.10.10.6.5 omite el prefijo «C.»: se refiere a la Ec. **C.10-16**.
+- **C.10.10.2** remite a «C.10.10.3, C.10.10.4 ó C.10.10.5»; el procedimiento de magnificación que se desarrolla en C.10.10.6 y C.10.10.7 está dentro de C.10.10.5.
+- **Tolerancia del 10 %** en las dimensiones de la sección: aparece dos veces, en C.10.10.2 y al final de C.10.10.4.1; es redundante, no contradictoria.
+- **Magnificador δ:** el PDF no usa «δns» (ACI); lo escribe δ. En C.10.10.7.4 aparece «βds debe sustituir a βdns».
+- **C.10.3.3** permite fijar el límite de compresión en 0.002 para Grado 420 (el valor balanceado exacto sería 0.0021); la lib usa 0.002 solo para $f_y$ = 420 MPa y $f_y/E_s$ en los demás casos (decisión del proyecto).
+- **C.10.5.1:** «pero no menor a 1.4bwd/fy» se transcribe tal como aparece en la imagen de C-77 (en el texto extraído sale sin barra de fracción).
+- **Página C-86** del PDF (PDF 388): hoja en blanco con el rótulo «Notas».
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Confundir $a$ con $c$:** $a = \beta_1c$; la deformación del acero se calcula con **$c$**, la fuerza del concreto con **$a$** (<NormaRef s="C.10.2.7.1" pag="C-75" />).
+- **Usar φ = 0.90 siempre:** φ depende de $\varepsilon_t$ (0.65 o 0.75 a 0.90); en columnas con carga axial grande rige φ de compresión (<NormaRef s="C.9.3.2" pag="C-68" />).
+- **Dejar $\varepsilon_t < 0.004$ en una viga:** no cumple <NormaRef s="C.10.3.5" pag="C-76" />; se corrige con una sección mayor o con refuerzo de compresión.
+- **No comprobar $A_{s,min}$:** gobierna 1.4/fy hasta $f'_c$ = {f(FC_CAMBIO_ASMIN, 1)} MPa; no se aplica si $A_s \ge \tfrac43A_{s,req}$ (<NormaRef s="C.10.5" pag="C-77" />).
+- **Olvidar el tope $\phi P_{n,max}$:** la curva de interacción se recorta en 0.80 (espiral) o 0.75 (estribos) de $\phi P_0$ (<NormaRef s="C.10.3.6" pag="C-76" />).
+- **Pasar de 4 % o de 1 % en columnas** o contar menos de 4 barras (6 con espiral) (<NormaRef s="C.10.9" pag="C-79" />).
+- **Usar $M_1/M_2$ con el signo equivocado:** positivo en curvatura simple, negativo en doble. En doble curvatura el límite de esbeltez sube (hasta 40).
+- **Olvidar $M_{2,min}$** en columnas con momentos pequeños (<NormaRef s="C.10.10.6.5" pag="C-82" />).
+- **Aplicar magnificación $\delta$ (C.10-12) a una columna de pórtico desplazable:** ahí se usa $\delta_s$ de C.10-20/21 con $k \ge 1.0$ (<NormaRef s="C.10.10.7" pag="C-82" />).
+- **Usar $f_s = f_y$** en la Ec. C.10-4: es el esfuerzo de **servicio**, normalmente $2f_y/3$.
+- **Aplicar C.10.8.4** (reducir el área) en pórticos DMO/DES del Capítulo C.21.
+</Callout>
+
+## Resumen en una línea
+
+**Con εcu = 0.003, bloque 0.85 f′c de profundidad β1c y acero elastoplástico se obtiene Mn y Pn por equilibrio; φ depende de εt (0.65–0.90), el refuerzo cumple As,min y C.10-4 (vigas) o 1–4 % (columnas), y la esbeltez se resuelve con δ = Cm/(1 − Pu/0.75Pc) o δs.**

@@ -1,0 +1,455 @@
+---
+codigo: 'C.3'
+tipo: capitulo
+titulo: 'Materiales'
+resumen: 'Qué normas deben cumplir el cemento, los agregados, el agua, el acero de refuerzo y de preesfuerzo y los aditivos del concreto estructural; límites de tamaño del agregado; dimensiones de las barras; control de calidad del acero y lista de normas NTC y ASTM que hacen parte del Reglamento.'
+objetivos:
+  - 'Identificar la norma NTC (o ASTM) que debe cumplir cada material del concreto estructural'
+  - 'Aplicar los límites de tamaño máximo nominal del agregado grueso (1/5, 1/3 y 3/4)'
+  - 'Usar las Tablas C.3.5.3-1 y C.3.5.3-2 para obtener área, perímetro y masa de las barras'
+  - 'Saber qué refuerzo liso o corrugado está permitido y qué debe contener el certificado de conformidad del acero'
+  - 'Reconocer las restricciones sobre cloruros, aditivos y almacenamiento de materiales'
+paginasNorma: 'C-25 a C-34'
+paginaPdf: 327
+orden: 3
+calculadoras: []
+nivel: 'basico'
+---
+
+import { TMN_FRACCIONES, BARRAS_METRICAS, BARRAS_PULGADA, buscarBarra } from '../../data/materialesConcreto';
+import { cloruroPorcentajeCemento } from '../../lib/nsr10/durabilidad';
+import { requisitoDeClase } from '../../data/durabilidad';
+
+export const ej1 = (() => {
+  const separacionEncofrado = 250; // mm, menor separación entre lados del encofrado
+  const alturaLosa = 150; // mm
+  const separacionLibre = 40; // mm, separación libre mínima entre barras
+  const a = separacionEncofrado * TMN_FRACCIONES.encofrado;
+  const b = alturaLosa * TMN_FRACCIONES.alturaLosa;
+  const c = separacionLibre * TMN_FRACCIONES.separacionLibreBarras;
+  return { separacionEncofrado, alturaLosa, separacionLibre, a, b, c, limite: Math.min(a, b, c) };
+})();
+
+export const ej2 = (() => {
+  const cemento = 380; // kg/m³
+  const agua = 190; // kg/m³
+  const clAgua = (agua * 250e-6); // 250 mg/L ≈ 250 mg/kg → kg de Cl-
+  const agregados = 1800; // kg/m³
+  const clAgregados = agregados * 0.0001; // 0.01 % en masa
+  const clCemento = cemento * 0.0001; // 0.01 %
+  const aditivo = 3; // kg/m³
+  const clAditivo = aditivo * 0.005; // 0.5 %
+  const aportes = [clAgua, clAgregados, clCemento, clAditivo];
+  const total = aportes.reduce((a, b) => a + b, 0);
+  const pct = cloruroPorcentajeCemento(aportes, cemento);
+  const c0 = requisitoDeClase('C0').cloruro;
+  const c1 = requisitoDeClase('C1').cloruro;
+  const c2 = requisitoDeClase('C2').cloruro;
+  return { cemento, agua, clAgua, agregados, clAgregados, clCemento, aditivo, clAditivo, total, pct, c0, c1, c2 };
+})();
+
+export const ej3 = (() => {
+  const barra = buscarBarra('No. 5');
+  const metrica = buscarBarra('16M');
+  const n = 4;
+  return { barra, metrica, n, area: n * barra.area, masaPorM: n * barra.masa, areaMetrica: n * metrica.area };
+})();
+
+## Idea central del capítulo
+
+El concreto estructural es tan bueno como sus ingredientes. El Capítulo C.3 no diseña nada: **fija con qué materiales se puede construir** y cómo se comprueba que lo que llega a la obra es lo que se especificó.
+
+1. **Cada material remite a una norma técnica** (NTC del ICONTEC o, si no existe, ASTM, AWS, AASHTO, ACI): cementantes (C.3.2), agregados (C.3.3), agua (C.3.4), acero (C.3.5) y aditivos (C.3.6).
+2. **El acero tiene el régimen más estricto**: el refuerzo debe ser corrugado (el liso solo en casos puntuales), las barras corrugadas son de acero de baja aleación según NTC 2289 y los ensayos de laboratorio deben certificarse (C.3.5.10).
+3. **Hay límites geométricos**: el tamaño máximo nominal del agregado grueso depende del encofrado, del espesor de la losa y de la separación del refuerzo (C.3.3.2).
+4. **Los cloruros preocupan**: el agua y los aditivos no deben aportar cloruros perjudiciales al concreto preesforzado ni con aluminio embebido (C.3.4.2 y C.3.6.4).
+5. **Las normas citadas hacen parte del Reglamento** (C.3.8): son obligatorias como si estuvieran reproducidas en él.
+
+<Callout tipo="importante" titulo="Quién controla la calidad">
+Si la edificación requiere Supervisión Técnica (Ley 400 de 1997), el Supervisor Técnico establece el programa de control de calidad; si no la requiere, el **constructor** debe realizar y **documentar** los controles de calidad de los materiales (<NormaRef s="C.3.1.1" pag="C-25" />). Los registros deben estar disponibles durante toda la obra (<NormaRef s="C.3.1.3" pag="C-25" />).
+</Callout>
+
+## C.3.1 — Ensayos de materiales
+
+- **C.3.1.1.** Los materiales deben ensayarse sobre **muestras representativas** para asegurar que tienen la calidad especificada. Con Supervisión Técnica, el supervisor fija el programa de control según A.1.3.9, el Título C y el Título I; sin ella, el constructor cumple el Artículo 19 de la Ley 400 y documenta los controles (<NormaRef s="C.3.1.1" pag="C-25" />).
+- **C.3.1.2.** Los ensayos se hacen según las **NTC** del ICONTEC listadas en C.3.8; si no hay NTC, según ASTM, AWS, AASHTO, PTI o ACI. Esas normas hacen parte del Reglamento (<NormaRef s="C.3.1.2" pag="C-25" />; la obligatoriedad se trata en C.1.5).
+- **C.3.1.3.** El **registro completo** de ensayos de materiales y del concreto debe estar disponible para revisión durante la obra y conservarse según el Título I (<NormaRef s="C.3.1.3" pag="C-25" />).
+
+## C.3.2 — Materiales cementantes
+
+Los materiales cementantes deben cumplir las normas de la tabla siguiente (<NormaRef s="C.3.2.1" pag="C-25" />). El material realmente usado en obra debe ser el que sirvió de base para escoger la dosificación (<NormaRef s="C.3.2.2" pag="C-25" /> y <NormaRef s="C.5.2" pag="C-39" />).
+
+<TablaNorma numero="C.3.2.1" titulo="Materiales cementantes y norma que deben cumplir" pag="C-25" nota="Organización de la tabla: del autor, a partir de la lista (a) a (h) del numeral. El ítem (i) del numeral es una prohibición: no se pueden usar cementos de mampostería en concreto.">
+
+| Ítem | Material | Norma NTC | Norma ASTM |
+|---|---|---|---|
+| (a) | Cemento (pórtland) | NTC 121 y NTC 321 | ASTM C150 (también permitida) |
+| (b) | Cementos hidráulicos adicionados (se excluyen los Tipos IS (≥70)) | — | ASTM C595 |
+| (c) | Cemento hidráulico expansivo | NTC 4578 | ASTM C845 |
+| (d) | Cemento hidráulico (por desempeño) | — | ASTM C1157 |
+| (e) | Ceniza volante, puzolana natural y materiales calcinados | NTC 3493 | ASTM C618 |
+| (f) | Escoria granulada molida de alto horno | NTC 4018 | ASTM C989 |
+| (g) | Humo de sílice | NTC 4637 | ASTM C1240 |
+| (h) | Cemento blanco | NTC 1362 | — |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Dos prohibiciones en una línea">
+- Los cementos **tipo IS con 70 % o más de escoria** («IS (≥70)») no pueden ser el constituyente cementante principal del concreto estructural.
+- **Está prohibido** usar cementos «de mampostería» en la fabricación de concreto (<NormaRef s="C.3.2.1" pag="C-25" />, ítem (i)).
+</Callout>
+
+## C.3.3 — Agregados
+
+### C.3.3.1 — Normas
+
+Los agregados deben cumplir **NTC 174 (ASTM C33)** si son de peso normal y **NTC 4045 (ASTM C330)** si son livianos. Se admiten agregados que, por ensayos o por experiencia práctica, hayan demostrado producir concreto de resistencia y durabilidad adecuadas, **siempre que los apruebe el Supervisor Técnico** (<NormaRef s="C.3.3.1" pag="C-26" />).
+
+### C.3.3.2 — Tamaño máximo nominal del agregado grueso
+
+El tamaño máximo nominal del agregado grueso no debe ser mayor que (<NormaRef s="C.3.3.2" pag="C-26" />):
+
+<Ecuacion num="C.3.3.2 (a)-(c)" titulo="Límites del tamaño máximo nominal (TMN)">
+
+$$
+\text{TMN} \le \min\left(\tfrac{1}{5}\,s_{\text{encofrado}},\;\; \tfrac{1}{3}\,h_{\text{losa}},\;\; \tfrac{3}{4}\,s_{\text{libre}}\right)
+$$
+
+- $s_{\text{encofrado}}$: menor separación entre los lados del encofrado.
+- $h_{\text{losa}}$: espesor (altura) de la losa.
+- $s_{\text{libre}}$: espaciamiento libre mínimo entre barras o alambres individuales, paquetes de barras, tendones individuales, paquetes de tendones o ductos.
+
+</Ecuacion>
+
+Estas limitaciones **se pueden omitir** si, a juicio del profesional facultado para diseñar, la trabajabilidad y los métodos de compactación permiten colocar el concreto **sin hormigueros, vacíos ni segregación**.
+
+<Ejemplo numero={1} titulo="Escoger el tamaño máximo del agregado">
+
+Una viga se funde con un encofrado cuyos lados están a 250 mm; forma parte de una losa de 150 mm de espesor y la **separación libre mínima** entre las barras longitudinales es de 40 mm. ¿Qué TMN de agregado puede usarse? (Datos hipotéticos del autor.)
+
+<Paso titulo="Límite por el encofrado" ref="C.3.3.2(a)">
+$\tfrac{1}{5} \times$ {ej1.separacionEncofrado} mm = **{ej1.a.toFixed(1)} mm**.
+</Paso>
+<Paso titulo="Límite por la altura de la losa" ref="C.3.3.2(b)">
+$\tfrac{1}{3} \times$ {ej1.alturaLosa} mm = **{ej1.b.toFixed(1)} mm**.
+</Paso>
+<Paso titulo="Límite por el refuerzo" ref="C.3.3.2(c)">
+$\tfrac{3}{4} \times$ {ej1.separacionLibre} mm = **{ej1.c.toFixed(1)} mm**.
+</Paso>
+<Paso titulo="Gobierna el menor" ref="C.3.3.2">
+El mínimo es {ej1.limite.toFixed(1)} mm (lo fija la separación entre barras). Con las gradaciones comunes de agregado grueso se usaría un TMN de **19 mm (3/4″)**, que cumple; uno de 25 mm no (sin la excepción del profesional diseñador).
+</Paso>
+<Resultado>
+TMN máximo = {ej1.limite.toFixed(1)} mm → agregado de 19 mm. Si la mezcla es muy trabajable y se compacta bien, el diseñador podría aceptar uno mayor, pero debe justificarlo.
+</Resultado>
+</Ejemplo>
+
+## C.3.4 — Agua
+
+- **C.3.4.1.** El agua de mezclado debe cumplir **NTC 3459 (BS 3148)** o **ASTM C1602M** cuando esta sea menos exigente que la NTC 3459 (<NormaRef s="C.3.4.1" pag="C-26" />).
+- **C.3.4.2.** El agua de mezclado para **concreto preesforzado** o con **elementos de aluminio embebidos** —incluida la humedad libre de los agregados— no debe contener cantidades perjudiciales de **iones cloruro** (<NormaRef s="C.3.4.2" pag="C-26" />; véase C.4.3.1).
+
+## C.3.5 — Acero de refuerzo
+
+### C.3.5.1 — Tipos de refuerzo permitidos
+
+- El refuerzo debe ser **corrugado**.
+- El refuerzo **liso** solo puede usarse en **estribos, espirales o tendones** y en **refuerzo de repartición y temperatura**.
+- Cuando el Título C lo permita: pernos con cabeza para cortante, perfiles de acero estructural o tubos, o elementos tubulares de acero.
+- Las **fibras de acero deformadas dispersas** se permiten solo para resistir cortante en las condiciones de C.11.4.6.1(f) (<NormaRef s="C.3.5.1" pag="C-26" />).
+
+### C.3.5.2 — Soldadura
+
+La soldadura de barras de refuerzo se hace según **NTC 4040 (AWS D1.4)**. La **ubicación y el tipo** de los empalmes soldados y demás soldaduras deben estar indicados en los planos o en las especificaciones. Las NTC para barras, salvo NTC 2289 (ASTM A706M), deben complementarse para exigir un informe de las propiedades del material necesarias para cumplir NTC 4040 (<NormaRef s="C.3.5.2" pag="C-26" />).
+
+### C.3.5.3 — Refuerzo corrugado
+
+**C.3.5.3.1 — Barras.** Las barras corrugadas deben ser de **acero de baja aleación NTC 2289 (ASTM A706M)**. Se permite acero inoxidable ASTM A955M si además cumple NTC 2289. La resistencia a la fluencia es la determinada por **ensayos sobre barras de tamaño completo**, y los esfuerzos del ensayo de tracción se calculan con el **área nominal** de las Tablas C.3.5.3-1 y C.3.5.3-2. **No se permite** acero NTC 245 ni ningún acero trabajado en frío o trefilado, salvo que lo permita explícitamente la norma de fabricación de un material permitido (<NormaRef s="C.3.5.3.1" pag="C-26" />).
+
+<TablaNorma numero="Tabla C.3.5.3-1" titulo="Dimensiones nominales de las barras de refuerzo (diámetros basados en milímetros)" pag="C-27" nota="La M indica que son diámetros nominales en mm. Verificada contra la imagen de la página.">
+
+| Designación | Diámetro (mm) | Área (mm²) | Perímetro (mm) | Masa (kg/m) |
+|---|---:|---:|---:|---:|
+| 6M | 6.0 | 28.3 | 18.85 | 0.222 |
+| 8M | 8.0 | 50.3 | 25.14 | 0.394 |
+| 10M | 10.0 | 78.5 | 31.42 | 0.616 |
+| 12M | 12.0 | 113.1 | 37.70 | 0.887 |
+| 16M | 16.0 | 201.1 | 50.27 | 1.577 |
+| 18M | 18.0 | 254.5 | 56.55 | 1.996 |
+| 20M | 20.0 | 314.2 | 62.83 | 2.465 |
+| 22M | 22.0 | 380.1 | 69.12 | 2.982 |
+| 25M | 25.0 | 490.9 | 78.54 | 3.851 |
+| 30M | 30.0 | 706.9 | 94.25 | 5.544 |
+| 32M | 32.0 | 804.2 | 100.53 | 6.309 |
+| 36M | 36.0 | 1017.9 | 113.10 | 7.985 |
+| 45M | 45.0 | 1590.4 | 141.37 | 12.477 |
+| 55M | 55.0 | 2375.8 | 172.79 | 18.638 |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla C.3.5.3-2" titulo="Dimensiones nominales de las barras de refuerzo (diámetros basados en octavos de pulgada)" pag="C-27" nota="El No. de la barra indica el número de octavos de pulgada del diámetro de referencia. Verificada contra la imagen de la página.">
+
+| Designación | Diámetro de referencia (pulg) | Diámetro (mm) | Área (mm²) | Perímetro (mm) | Masa (kg/m) |
+|---|---|---:|---:|---:|---:|
+| No. 2 | 1/4″ | 6.4 | 32 | 20.0 | 0.250 |
+| No. 3 | 3/8″ | 9.5 | 71 | 30.0 | 0.560 |
+| No. 4 | 1/2″ | 12.7 | 129 | 40.0 | 0.994 |
+| No. 5 | 5/8″ | 15.9 | 199 | 50.0 | 1.552 |
+| No. 6 | 3/4″ | 19.1 | 284 | 60.0 | 2.235 |
+| No. 7 | 7/8″ | 22.2 | 387 | 70.0 | 3.042 |
+| No. 8 | 1″ | 25.4 | 510 | 80.0 | 3.973 |
+| No. 9 | 1-1/8″ | 28.7 | 645 | 90.0 | 5.060 |
+| No. 10 | 1-1/4″ | 32.3 | 819 | 101.3 | 6.404 |
+| No. 11 | 1-3/8″ | 35.8 | 1006 | 112.5 | 7.907 |
+| No. 14 | 1-3/4″ | 43.0 | 1452 | 135.1 | 11.380 |
+| No. 18 | 2-1/4″ | 57.3 | 2581 | 180.1 | 20.240 |
+
+</TablaNorma>
+
+<Callout tipo="practica" titulo="Cómo usar las dos tablas de barras">
+Las áreas de estas tablas son las que se usan en **todo el diseño** ($A_s$ = número de barras × área nominal) y en el ensayo de tracción. Con las barras de octavos de pulgada, el área de una No. 5 es 199 mm², no $\pi\,(15.9)^2/4$ = 198.6 mm²: usa siempre el valor tabulado.
+</Callout>
+
+<Ejemplo numero={2} titulo="Área y peso de una armadura">
+
+Una viga lleva {ej3.n} barras No. 5 como refuerzo longitudinal inferior. Calcular el área de acero y el peso por metro de viga, y compararlas con {ej3.n} barras 16M. (Ejemplo del autor con valores de las tablas.)
+
+<Paso titulo="Barras No. 5" ref="Tabla C.3.5.3-2">
+Área nominal {ej3.barra.area} mm² y masa {ej3.barra.masa} kg/m por barra. $A_s$ = {ej3.n} × {ej3.barra.area} = **{ej3.area} mm²**; masa = {ej3.n} × {ej3.barra.masa} = **{ej3.masaPorM.toFixed(3)} kg/m**.
+</Paso>
+<Paso titulo="Barras 16M" ref="Tabla C.3.5.3-1">
+Área nominal {ej3.metrica.area} mm². $A_s$ = {ej3.n} × {ej3.metrica.area} = **{ej3.areaMetrica.toFixed(1)} mm²** (diferencia de {(100 * (ej3.areaMetrica / ej3.area - 1)).toFixed(1)} % frente a las No. 5).
+</Paso>
+<Resultado>
+{ej3.n} No. 5 → {ej3.area} mm²; {ej3.n} barras 16M → {ej3.areaMetrica.toFixed(1)} mm². Las dos series son casi equivalentes, pero no se mezclan designaciones dentro de un mismo plano sin indicarlo.
+</Resultado>
+</Ejemplo>
+
+**C.3.5.3.2.** Si $f_y$ es mayor que 420 MPa, la resistencia a la fluencia se toma como el esfuerzo correspondiente a una **deformación unitaria de 0.35 %** (véase C.9.4) (<NormaRef s="C.3.5.3.2" pag="C-27" />).
+
+**C.3.5.3.3.** Las barras ASTM A1035M pueden usarse como **refuerzo transversal** en C.21.6.4 o como **espiral** en C.10.9.3 (<NormaRef s="C.3.5.3.3" pag="C-27" />).
+
+**C.3.5.3.4.** Las **parrillas de refuerzo** cumplen NTC 2043 (ASTM A184M), y sus barras NTC 2289 (<NormaRef s="C.3.5.3.4" pag="C-27" />).
+
+**C.3.5.3.5 — Alambre corrugado.** Cumple NTC 1907 (ASTM A496M), con tamaño **entre MD25 (5.6 mm) y MD200 (16 mm)**, salvo lo que permite C.3.5.3.7. Para $f_y > 420$ MPa vale la deformación de 0.35 %. **No se permiten alambres individuales** (corrugados o lisos) como estribos ni como refuerzo longitudinal en elementos del sistema de resistencia sísmica (<NormaRef s="C.3.5.3.5" pag="C-28" />).
+
+**C.3.5.3.6 — Malla electrosoldada de alambre liso.** NTC 1925 (ASTM A185M); intersecciones soldadas separadas **no más de 300 mm** en el sentido del esfuerzo (excepto mallas usadas como estribos según C.12.13.2) (<NormaRef s="C.3.5.3.6" pag="C-28" />).
+
+**C.3.5.3.7 — Malla electrosoldada de alambre corrugado.** NTC 2310 (ASTM A497M); intersecciones **no más de 400 mm**. El alambre corrugado de diámetro mayor que MD200 se permite en malla electrosoldada pero se trata como **alambre liso** para desarrollo y empalmes (<NormaRef s="C.3.5.3.7" pag="C-28" />).
+
+**C.3.5.3.8 — Barras galvanizadas o con epóxico.** Galvanizadas: NTC 4013 (ASTM A767M). Con epóxico: NTC 4004 (ASTM A775M) o ASTM A934M. Las barras que se vayan a galvanizar o recubrir deben cumplir NTC 2289 (<NormaRef s="C.3.5.3.8" pag="C-28" />).
+
+**C.3.5.3.9 — Alambre y malla con epóxico.** ASTM A884M (<NormaRef s="C.3.5.3.9" pag="C-28" />).
+
+**C.3.5.3.10 — Alambre y malla de acero inoxidable.** ASTM A1022M, con las mismas restricciones de tamaño (MD25 a MD200), la deformación de 0.35 % y las separaciones de soldaduras de 300 mm (liso) y 400 mm (corrugado) (<NormaRef s="C.3.5.3.10" pag="C-28" />).
+
+### C.3.5.4 — Refuerzo liso
+
+El refuerzo liso solo se permite en **estribos, refuerzo de retracción y temperatura o espiral**; **no** puede ser refuerzo longitudinal de flexión, excepto en mallas electrosoldadas. Cumple NTC 161 (ASTM A615M) o los requisitos del corrugado de C.3.5.3.1 (<NormaRef s="C.3.5.4.1" pag="C-28" />). Los alambres lisos para espiral cumplen NTC 4002 (ASTM A82M) (<NormaRef s="C.3.5.4.2" pag="C-28" />).
+
+### C.3.5.5 — Pernos con cabeza para cortante
+
+Los pernos con cabeza y sus ensamblajes cumplen **ASTM A1044M** (<NormaRef s="C.3.5.5.1" pag="C-28" />).
+
+### C.3.5.6 — Acero de preesfuerzo
+
+Debe cumplir una de: alambre NTC 159 (ASTM A421M); alambre de baja relajación NTC 159; torón **NTC 2010 (ASTM A416M)**; barras de alta resistencia NTC 2142 (ASTM A722M). Se admiten otros alambres, torones o barras si se demuestra que cumplen los requisitos mínimos de esas normas y no tienen propiedades menos satisfactorias (<NormaRef s="C.3.5.6" pag="C-28" />).
+
+### C.3.5.7 — Acero estructural, tubos o tuberías
+
+- **Acero estructural** en elementos compuestos a compresión (C.10.13.7 o C.10.13.8): NTC 1920 (ASTM A36M), NTC 1950 (A242M), NTC 1985 (A572M), NTC 2012 (A588M) o perfiles ASTM A992M (<NormaRef s="C.3.5.7.1" pag="C-29" />).
+- **Tubos rellenos de concreto** (C.10.13.6): NTC 3470 (ASTM A53M) Grado B, NTC 4526 (ASTM A500M) o NTC 2374 (ASTM A501) (<NormaRef s="C.3.5.7.2" pag="C-29" />).
+
+### C.3.5.8 y C.3.5.9 — Fibras y barras con cabeza
+
+Las **fibras de acero** para concreto reforzado con fibras dispersas deben cumplir NTC 5214 (ASTM A820M) y tener una relación longitud/diámetro **entre 50 y 100** (<NormaRef s="C.3.5.8" pag="C-29" />). Las **barras corrugadas con cabeza** cumplen ASTM A970M, y las interrupciones del corrugado no deben exceder $2\,d_b$ medidas desde la cara de apoyo de la cabeza (<NormaRef s="C.3.5.9" pag="C-29" />).
+
+### C.3.5.10 — Evaluación y aceptación del acero de refuerzo
+
+1. Deben tomarse y ensayarse **muestras representativas** con la frecuencia y el alcance del Título I, según la NTC correspondiente (<NormaRef s="C.3.5.10.1" pag="C-29" />).
+2. Los ensayos deben demostrar **inequívocamente** que el acero cumple la NTC; el laboratorio **certifica la conformidad** y envía copia al **Supervisor Técnico** y al **ingeniero diseñador estructural** (<NormaRef s="C.3.5.10.2" pag="C-29" />).
+3. El certificado debe contener, como mínimo (<NormaRef s="C.3.5.10.3" pag="C-29" />):
+
+<Detalle titulo="Contenido mínimo del certificado de conformidad (C.3.5.10.3, ítems a–j)">
+
+- (a) nombre y dirección de la obra;
+- (b) fecha de recepción de las muestras y fecha de los ensayos;
+- (c) fabricante y norma NTC bajo la cual se fabricó el material y se ensayó;
+- (d) masa por unidad de longitud de la barra, alambre, malla o torón, su conformidad con las variaciones permitidas y su diámetro nominal;
+- (e) características del corrugado, si es acero corrugado;
+- (f) resultados del ensayo de tracción: resistencia a la fluencia y resistencia última, evaluadas con el área nominal de la norma NTC, y el porcentaje de alargamiento;
+- (g) resultado del ensayo de doblamiento;
+- (h) composición química, cuando se solicita;
+- (i) conformidad con la norma de fabricación;
+- (j) nombre y firma del director del laboratorio.
+
+</Detalle>
+
+## C.3.6 — Aditivos
+
+- **C.3.6.1.** Reductores de agua y modificadores del fraguado: **NTC 1299 (ASTM C494M)**. Aditivos para concreto fluido: NTC 4023 (ASTM C1017M) (<NormaRef s="C.3.6.1" pag="C-30" />).
+- **C.3.6.2.** Incorporadores de aire: **NTC 3502 (ASTM C260)** (<NormaRef s="C.3.6.2" pag="C-30" />).
+- **C.3.6.3.** Los aditivos que no cumplan C.3.6.1 y C.3.6.2 requieren **aprobación previa del Supervisor Técnico** (<NormaRef s="C.3.6.3" pag="C-30" />).
+- **C.3.6.4.** **No debe emplearse cloruro de calcio** ni aditivos con cloruros (que no provengan de impurezas) en concreto **preesforzado**, con **aluminio embebido** o fundido en **encofrados permanentes de acero galvanizado** (<NormaRef s="C.3.6.4" pag="C-30" />; véanse C.4.3.1 y C.6.3.2).
+- **C.3.6.5.** Los aditivos usados con **cemento expansivo** (NTC 4578) deben ser compatibles con él y no producir efectos nocivos (<NormaRef s="C.3.6.5" pag="C-30" />).
+
+<Ejemplo numero={3} titulo="Contenido de cloruros de una mezcla">
+
+Una mezcla tiene {ej2.cemento} kg/m³ de cemento, {ej2.agua} kg/m³ de agua con 250 mg/L de cloruro, {ej2.agregados} kg/m³ de agregados con 0.01 % de cloruro (en masa), cemento con 0.01 % y {ej2.aditivo} kg/m³ de aditivo con 0.5 % de cloruro. ¿Puede usarse en concreto reforzado clase C2 o en concreto preesforzado? (Datos hipotéticos del autor; la suma y la comparación usan la nota ‼ y la Tabla C.4.3.1.)
+
+<Paso titulo="Aporte de cada ingrediente" ref="Tabla C.4.3.1, nota ‼">
+Agua: {ej2.agua} × 250·10⁻⁶ = {ej2.clAgua.toFixed(4)} kg. Agregados: {ej2.agregados} × 0.0001 = {ej2.clAgregados.toFixed(4)} kg. Cemento: {ej2.cemento} × 0.0001 = {ej2.clCemento.toFixed(4)} kg. Aditivo: {ej2.aditivo} × 0.005 = {ej2.clAditivo.toFixed(4)} kg.
+</Paso>
+<Paso titulo="Total y porcentaje del cemento" ref="C.4.3.1">
+Cl⁻ total = **{ej2.total.toFixed(4)} kg/m³**, es decir, {ej2.total.toFixed(4)} / {ej2.cemento} × 100 = **{ej2.pct.toFixed(4)} %** del peso de cemento.
+</Paso>
+<Paso titulo="Comparar con los límites" ref="Tabla C.4.3.1">
+Concreto reforzado: C0 ≤ {ej2.c0.reforzado.toFixed(2)} %, C1 ≤ {ej2.c1.reforzado.toFixed(2)} %, C2 ≤ {ej2.c2.reforzado.toFixed(2)} %: **cumple** todos. Concreto preesforzado: ≤ {ej2.c2.preesforzado.toFixed(2)} %: {ej2.pct <= ej2.c2.preesforzado ? 'cumple' : 'NO cumple'}.
+</Paso>
+<Resultado>
+La mezcla sirve para concreto reforzado hasta clase C2 ({ej2.pct.toFixed(3)} % ≤ 0.15 %), pero **no** para preesforzado ({ej2.pct.toFixed(3)} % > 0.06 %). Habría que cambiar de aditivo o de agregados, o lavar el agregado.
+</Resultado>
+</Ejemplo>
+
+## C.3.7 — Almacenamiento de materiales
+
+- Los materiales cementantes y los agregados se almacenan de modo que **no se deterioren** ni se contaminen con **materia extraña** (<NormaRef s="C.3.7.1" pag="C-30" />).
+- Un material **deteriorado o contaminado no debe usarse** en el concreto (<NormaRef s="C.3.7.2" pag="C-30" />).
+
+## C.3.8 — Normas citadas
+
+Todas las normas NTC, ASTM y las demás listadas en C.3.8 **hacen parte del Reglamento** como si estuvieran reproducidas en él (<NormaRef s="C.3.8.1" pag="C-30" />; véanse A.1.6 y C.1.5).
+
+<Detalle titulo="C.3.8.1 — Normas NTC del ICONTEC (59 normas)">
+
+<TablaNorma numero="C.3.8.1" titulo="Normas NTC citadas en el Título C" pag="C-30 a C-32" nota="Transcrita en el mismo orden del PDF (NTC 2240 aparece antes que NTC 2043; se conservó). La columna ASTM es la designación entre paréntesis del PDF.">
+
+| Norma | Título | ASTM / BS equivalente | Pág. |
+|---|---|---|---|
+| NTC 1 | Ensayo de doblamiento para productos metálicos | ASTM A370 | C-30 |
+| NTC 2 | Ensayo de tracción para productos de acero | ASTM A370 | C-30 |
+| NTC 30 | Cemento Portland – Clasificación y nomenclatura | — | C-30 |
+| NTC 121 | Cemento Portland – Especificaciones físicas y mecánicas | ASTM C150 | C-30 |
+| NTC 159 | Alambres de acero, sin recubrimiento, liberados de esfuerzos, para concreto preesforzado | ASTM A421 | C-30 |
+| NTC 161 | Barras lisas de acero al carbono para concreto armado (nota de la norma: C.3.5.5 impone limitaciones) | ASTM A615 | C-30 |
+| NTC 174 | Especificaciones de los agregados para concreto | ASTM C33 | C-30 |
+| NTC 220 | Resistencia a la compresión de morteros de cemento hidráulico con cubos de 50 mm de lado | ASTM C109 | C-30 |
+| NTC 245 | Barras de acero al carbono trabajadas en frío para concreto reforzado armado (nota: C.3.5.3 prohíbe este acero) | — | C-30 |
+| NTC 248 | Barras corrugadas de acero al carbono para concreto reforzado armado (nota: C.3.5.3 prohíbe este acero como corrugado) | ASTM A615 | C-31 |
+| NTC 321 | Cemento Portland – Especificaciones químicas | — | C-31 |
+| NTC 396 | Ensayo para determinar el asentamiento del concreto | ASTM C143 | C-31 |
+| NTC 423 | Barras de acero al carbono, terminadas en frío de calidad estándar | ASTM A108 | C-31 |
+| NTC 454 | Hormigón fresco, toma de muestras | ASTM C172 | C-31 |
+| NTC 504 | Refrentado de especímenes cilíndricos de concreto | ASTM C617 | C-31 |
+| NTC 550 | Elaboración y curado de especímenes de concreto en obra | ASTM C31 | C-31 |
+| NTC 673 | Ensayo de resistencia a la compresión de cilindros de concreto | ASTM C39 | C-31 |
+| NTC 722 | Ensayo de tracción indirecta de cilindros de concreto | ASTM C496 | C-31 |
+| NTC 1032 | Contenido de aire en el concreto fresco, método de presión | «ASTM 231» (sic) | C-31 |
+| NTC 1299 | Aditivos químicos para el concreto | ASTM C494 | C-31 |
+| NTC 1377 | Elaboración y curado de especímenes de concreto para ensayo de laboratorio | ASTM C192 | C-31 |
+| NTC 1907 | Alambre de acero para concreto armado | ASTM A496 | C-31 |
+| NTC 1920 | Acero estructural | ASTM A36 | C-31 |
+| NTC 1925 | Mallas soldadas con alambre liso de acero para concreto reforzado | ASTM A185 | C-31 |
+| NTC 1950 | Acero estructural de baja aleación y alta resistencia | ASTM A242 | C-31 |
+| NTC 1985 | Acero de calidad estructural de alta resistencia y baja aleación al Columbio (Nionio) | ASTM A572 | C-31 |
+| NTC 2010 | Cordones de acero de siete alambres, sin recubrimiento, para concreto preesforzado | ASTM A416 | C-31 |
+| NTC 2012 | Acero estructural de baja aleación y alta resistencia, fluencia mínima de 345 MPa, espesores hasta 100 mm | ASTM A588 | C-31 |
+| NTC 2240 | Agregados usados en morteros de mampostería | ASTM C144 | C-31 |
+| NTC 2043 | Mallas fabricadas con barras corrugadas de acero para hormigón reforzado | ASTM A184 | C-31 |
+| NTC 2142 | Barras de acero de alta resistencia, sin revestimiento, para concreto pretensado | ASTM A722 | C-31 |
+| NTC 2289 | Barras y rollos corrugados de acero de baja aleación y/o termotratados para concreto reforzado en construcciones de diseño sismo resistente | ASTM A706 | C-31 |
+| NTC 2310 | Mallas soldadas con alambre corrugado para refuerzo de concreto | ASTM A497 | C-31 |
+| NTC 2374 | Tubos redondos, rectangulares y cuadrados de acero al carbono, formados en caliente, para propósitos estructurales | ASTM A501 | C-31 |
+| NTC 3318 | Concreto premezclado | ASTM C94 | C-31 |
+| NTC 3330 | Cambio longitudinal de morteros de cemento hidráulico expuestos a una solución de sulfatos | ASTM C1012 | C-31 |
+| NTC 3353 | Definiciones y métodos para los ensayos mecánicos de productos de acero | ASTM A370 | C-31 |
+| NTC 3459 | Agua para la elaboración de concreto | BS 3148 | C-32 |
+| NTC 3470 | Tubos de acero soldados o sin costura recubiertos de cinc por inmersión en caliente, o pavonados | ASTM A53 | C-32 |
+| NTC 3493 | Cenizas volantes y puzolanas naturales, calcinadas o crudas, usadas como aditivos minerales | ASTM C618 | C-32 |
+| NTC 3502 | Aditivos incorporadores de aire para concreto | ASTM C260 | C-32 |
+| NTC 3658 | Obtención y ensayo de núcleos extraídos y vigas de concreto aserradas | ASTM C42 | C-32 |
+| NTC 4002 | Siderurgia. Alambre liso de acero para refuerzo de concreto | ASTM A82 | C-32 |
+| NTC 4004 | Barras de acero de refuerzo con recubrimiento epóxico | ASTM A775 | C-32 |
+| NTC 4013 | Barras de acero recubiertas con cinc (galvanizadas) para refuerzo de concreto | ASTM A767 | C-32 |
+| NTC 4018 | Escoria de alto horno, granulada y molida, para concreto y morteros | ASTM C989 | C-32 |
+| NTC 4022 | Masa unitaria de concreto liviano estructural | ASTM C567 | C-32 |
+| NTC 4023 | Aditivos químicos para la producción de concreto fluido | ASTM C1017 | C-32 |
+| NTC 4025 | Módulo de elasticidad estático y relación de Poisson en concreto a compresión | ASTM C469 | C-32 |
+| NTC 4027 | Concreto hecho por bachada volumétrica y mezclado continuo | ASTM C685 | C-32 |
+| NTC 4034 | Tornillos y pernos de acero al carbono, con 60 000 psi de resistencia a la tensión | ASTM A307 | C-32 |
+| NTC 4040 | Procedimientos de soldadura aplicables al acero para refuerzo de concreto | ANSI/AWS D1.4 | C-32 |
+| NTC 4045 | Agregados livianos para concreto estructural | ASTM C330 | C-32 |
+| NTC 4049 | Cloruros solubles en agua presentes en el concreto | ASTM C1218 | C-32 |
+| NTC 4526 | Mallas electrosoldadas de acero, fabricadas con alambre corrugado, para refuerzo de concreto | ASTM A500 | C-32 |
+| NTC 4578 | Cemento hidráulico expansivo | ASTM C845 | C-32 |
+| NTC 4637 | Uso de microsílica como adición en mortero y concreto de cemento hidráulico | «ASTM 1240» (sic) | C-32 |
+| NTC 5214 | Fibras de acero para refuerzo de concreto | ASTM A820 | C-32 |
+| NTC 5541 | Concretos reforzados con fibra | ASTM C1116 | C-32 |
+
+</TablaNorma>
+
+</Detalle>
+
+<Detalle titulo="C.3.8.1 (cont.) — Normas ASTM sin NTC equivalente al adoptar la NSR-10 (15 normas)">
+
+<TablaNorma numero="C.3.8.1" titulo="Normas ASTM que hacen parte del Reglamento por no existir NTC" pag="C-32 y C-33">
+
+| Designación | Título | Pág. |
+|---|---|---|
+| ASTM C150-05 | Standard Specification for Portland Cement | C-32 |
+| ASTM A421/A421M-05 | Standard Specification for Uncoated Stress-Relieved Steel Wire for Prestressed Concrete | C-32 |
+| ASTM A884/A884M-06 | Standard Specification for Epoxy-Coated Steel Wire and Welded Wire Reinforcement | C-32 |
+| ASTM A934/A934M-07 | Standard Specification for Epoxy-Coated Prefabricated Steel Reinforcing Bars | C-33 |
+| ASTM A955/A955M-07a | Standard Specification for Deformed and Plain Stainless-Steel Bars for Concrete Reinforcement | C-33 |
+| ASTM A970/A970M-06 | Standard Specification for Headed Steel Bars for Concrete Reinforcement | C-33 |
+| ASTM A992/A992M-06a | Standard Specification for Structural Steel Shapes | C-33 |
+| ASTM A1022/A1022M-07 | Standard Specification for Deformed and Plain Stainless-Steel Wire and Welded Wire for Concrete Reinforcement | C-33 |
+| ASTM A1035/A1035M-07 | Standard Specification for Deformed and Plain Low-Carbon, Chromium, Steel Bars for Concrete Reinforcement | C-33 |
+| ASTM A1044/A1044M-05 | Standard Specification for Steel Stud Assemblies for Shear Reinforcement of Concrete | C-33 |
+| ASTM C29/C29M-97 | Standard Test Method for Bulk Density («Unit Weight») and Voids in Aggregates | C-33 |
+| ASTM C595-07 | Specification for Blended Hydraulic Cements | C-33 |
+| ASTM C1157-03 | Standard Performance Specification for Hydraulic Cement | C-33 |
+| ASTM C1602/C1602M-06 | Standard Specification for Mixing Water Used in the Production of Hydraulic Cement Concrete | C-33 |
+| ASTM C1609/C1609M-06 | Standard Test Method for Flexural Performance of Fiber-Reinforced Concrete (Using Beam With Third-Point Loading) | C-33 |
+
+</TablaNorma>
+
+</Detalle>
+
+<Detalle titulo="C.3.8.2 a C.3.8.8 — Otras normas declaradas parte del Reglamento">
+
+- **C.3.8.2:** NTC 4040 (Structural Welding Code — Reinforcing Steel, AWS D1.4/D1.4M:2005).
+- **C.3.8.3:** Specification for Unbonded Single Strand Tendons (ACI 423.7-07).
+- **C.3.8.4:** artículos C.9.21.7.2 y C.9.21.7.3 (División I) y C.10.3.2.3 (División II) de AASHTO «Standard Specification for Highway Bridges» (17ª ed., 2002), para los fines de C.18.15.1.
+- **C.3.8.5:** Qualification of Post-Installed Mechanical Anchors in Concrete (ACI 355.2-07), para el Apéndice C-D.
+- **C.3.8.6:** Structural Welding Code — Steel (AWS D1.1/D1.1M:2006).
+- **C.3.8.7:** Acceptance Criteria for Moment Frames Based on Structural Testing (ACI 374.1-05).
+- **C.3.8.8:** Acceptance Criteria for Special Unbonded Post-Tensioned Precast Structural Walls Based on Validation Testing (ACI ITG 5.1-07).
+
+</Detalle>
+
+<Callout tipo="nota" titulo="Erratas y observaciones del PDF (transcripción verificada contra la imagen)">
+- La página **C-34** del PDF es una hoja en blanco titulada «Notas».
+- **NTC 1032** aparece con «ASTM 231» y **NTC 4637** con «ASTM 1240»: faltan las letras (deberían ser C231 y C1240, como las citan C.4.4.1 y C.3.2.1). Se transcribieron como están.
+- **NTC 4526** se titula «Mallas electrosoldadas… de alambre corrugado» en C.3.8.1, pero C.3.5.7.2(b) la usa (con ASTM A500M) para **tubos** formados en frío: hay una incongruencia de la norma impresa.
+- La nota de NTC 161 dice que «C.3.5.5 impone limitaciones» al acero liso; el numeral que trata el refuerzo liso es **C.3.5.4**.
+- Varias remisiones internas parecen desfasadas: C.3.5.3.9 remite a «C.3.5.3.4» para alambres y a «C.3.5.3.5 ó C.3.5.3.6» para mallas; C.3.5.3.10 contiene una errata («ka resistencia»). NTC 1362 (cemento blanco) se cita en C.3.2.1(h) pero no aparece en la lista C.3.8.1.
+- Estas observaciones son **del autor**, no de la norma.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar acero corrugado NTC 248 / ASTM A615 «porque es el de siempre»**: según el texto de C.3.5.3.1 impreso en el PDF, las barras corrugadas deben ser NTC 2289 (ASTM A706M) y la nota de NTC 248 dice que C.3.5.3 prohíbe ese tipo de acero como corrugado. Verifica el suministro con el diseñador y el Supervisor Técnico.
+- **Calcular áreas con $\pi d^2/4$** en vez de usar el área nominal de las Tablas C.3.5.3-1 y C.3.5.3-2.
+- **Olvidar el límite de tamaño del agregado** frente a la separación entre barras (3/4 de la separación libre): produce hormigueros.
+- **Usar cloruro de calcio** o aditivos con cloruros en concreto preesforzado o con aluminio embebido (C.3.6.4).
+- **Emplear cemento de mampostería** o cementos IS (≥70) como cementante principal.
+- **Usar alambres individuales como estribos** en elementos del sistema de resistencia sísmica (C.3.5.3.5).
+- **Aceptar el acero sin certificado de conformidad** del laboratorio, firmado por su director (C.3.5.10).
+- **Cambiar de cemento o de agregado** sin revisar la dosificación: el material de obra debe ser el que sirvió de base (C.3.2.2).
+</Callout>
+
+## Resumen en una línea
+
+**Cada material del concreto estructural debe cumplir su norma NTC (o ASTM), el agregado debe caber entre encofrado y barras (TMN ≤ 1/5, 1/3 y 3/4 de los límites), el refuerzo es corrugado y certificado por laboratorio (NTC 2289), los cloruros se limitan en preesforzado y aluminio embebido, y todo lo citado en C.3.8 forma parte del Reglamento.**

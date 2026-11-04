@@ -3,10 +3,10 @@
 Uso (desde la raíz del proyecto):
   python -I scripts/extraer-texto.py                 # Título A (págs. PDF 43-218) -> .cache/texto
   python -I scripts/extraer-texto.py --titulo b      # Título B (págs. PDF 220-301) -> .cache/texto-b
-  python -I scripts/extraer-texto.py --desde 303 --hasta 400 --salida .cache/texto-c
+  python -I scripts/extraer-texto.py --titulo c      # Título C (págs. PDF 303-564) -> .cache/texto-c
 
 Requiere `pdftotext` (xpdf/poppler) en el PATH.
-Equivalencia de páginas: PDF = página impresa "X-n" + desplazamiento (A: +43, B: +219).
+Equivalencia de páginas: PDF = página impresa "X-n" + desplazamiento (A: +43, B: +219, C: +302).
 """
 import argparse
 import subprocess
@@ -19,6 +19,7 @@ PDF = RAIZ / "Norma" / "Norma-Sismo-Resistente-NSR-10.pdf"
 TITULOS = {
     "a": (43, 218, RAIZ / ".cache" / "texto"),
     "b": (220, 301, RAIZ / ".cache" / "texto-b"),
+    "c": (303, 564, RAIZ / ".cache" / "texto-c"),
 }
 
 

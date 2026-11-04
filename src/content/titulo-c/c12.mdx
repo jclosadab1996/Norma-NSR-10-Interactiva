@@ -1,0 +1,761 @@
+---
+codigo: 'C.12'
+tipo: capitulo
+titulo: 'Longitudes de desarrollo y empalmes del refuerzo'
+resumen: 'Cuánto debe estar embebida una barra para alcanzar su resistencia (ℓd, ℓdc, ℓdh, ℓdt), cómo se anclan ganchos, cabezas, mallas y torones, hasta dónde se prolongan las barras de flexión y cómo se empalman por traslapo (Clases A y B), mecánicamente o con soldadura.'
+objetivos:
+  - 'Calcular la longitud de desarrollo a tracción ℓd con la tabla de C.12.2.2 y con la Ecuación C.12-1, y aplicar ψt, ψe, ψs y λ'
+  - 'Obtener la longitud a compresión ℓdc y la del gancho estándar ℓdh con sus factores de reducción'
+  - 'Decidir hasta dónde se prolongan las barras de momento positivo y negativo (puntos de corte, C.12-5)'
+  - 'Escoger y calcular un empalme por traslapo en tracción (Clase A o B) o en compresión, y reconocer las reglas de columnas'
+  - 'Distinguir cuándo se admiten empalmes mecánicos, soldados o a tope'
+paginasNorma: 'C-107 a C-118'
+paginaPdf: 409
+orden: 12
+calculadoras: ['longitud-desarrollo']
+nivel: 'avanzado'
+---
+
+import {
+  cbDesdeLibres,
+  claseEmpalmeTraccion,
+  empalmeCompresion,
+  empalmeCompresionColumna,
+  empalmeTraccion,
+  espaciamientoAdecuadoC122,
+  extensionMasAllaPuntoCorte,
+  factorPaquete,
+  lambdaDesarrollo,
+  ldcCompresion,
+  ldEcuacionC121,
+  ldhGancho,
+  ldTablaC122,
+  ktr,
+  psiT,
+  separacionTransversalMaximaTraslapo,
+  verificarC125,
+} from '../../lib/nsr10/desarrollo';
+import { buscarBarra } from '../../data/refuerzoDetalles';
+import { ganchoEstandar } from '../../lib/nsr10/refuerzoDetalles';
+import { beta1 } from '../../lib/nsr10/concreto';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const tablaLd = [21, 28, 35, 42].map((fc) => {
+  const c = (db, adecuado) => ldTablaC122({ fy: 420, fc, db, espaciamientoAdecuado: adecuado }, { paraEmpalme: true }).ldSobreDb;
+  return { fc, p1: c(19.1, true), g1: c(25.4, true), p2: c(19.1, false), g2: c(25.4, false) };
+});
+
+export const ej1 = (() => {
+  const b = buscarBarra('No.8');
+  const fy = 420, fc = 28;
+  const ancho = 300, cc = 50; // 40 mm de recubrimiento + 10 mm de estribo
+  const sLibre = ancho - 2 * cc - 2 * b.db;
+  const base = { fy, fc, db: b.db };
+  const adecuado = espaciamientoAdecuadoC122(sLibre, cc, b.db, true);
+  const cb = cbDesdeLibres(cc, sLibre, b.db);
+  const ktrV = ktr(142, 150, 2);
+  return {
+    b, fy, fc, ancho, cc, sLibre, cb, adecuado, ktrV,
+    tabla: ldTablaC122({ ...base, espaciamientoAdecuado: adecuado }),
+    otros: ldTablaC122({ ...base, espaciamientoAdecuado: false }),
+    tablaSup: ldTablaC122({ ...base, espaciamientoAdecuado: adecuado, psiT: psiT(350) }),
+    eq0: ldEcuacionC121({ ...base, cb }),
+    eqK: ldEcuacionC121({ ...base, cb, ktrMm: ktrV }),
+    eqSup: ldEcuacionC121({ ...base, cb, psiT: psiT(350) }),
+    liviano: ldTablaC122({ ...base, espaciamientoAdecuado: adecuado, lambda: lambdaDesarrollo('liviano-otros') }),
+  };
+})();
+
+export const ej2 = (() => {
+  const b = buscarBarra('No.8');
+  const fy = 420, fc = 28;
+  const g = ganchoEstandar('estandar-90', b);
+  const a = ldhGancho({ fy, fc, db: b.db });
+  const r = ldhGancho({ fy, fc, db: b.db, recubrimientoSuficiente: true });
+  const r2 = ldhGancho({ fy, fc, db: b.db, recubrimientoSuficiente: true, estribosConfinan: true });
+  const hCol = 450, recCol = 40;
+  const recta = ldTablaC122({ fy, fc, db: b.db, espaciamientoAdecuado: true }).ld;
+  return { b, fy, fc, g, a, r, r2, hCol, recCol, disponible: hCol - recCol, recta };
+})();
+
+export const ej3 = (() => {
+  const b = buscarBarra('No.6');
+  const fy = 420, fc = 21;
+  const base = { fy, fc, db: b.db, espaciamientoAdecuado: true };
+  const inf = ldTablaC122(base, { paraEmpalme: true }).ld;
+  const sup = ldTablaC122({ ...base, psiT: psiT(350) }, { paraEmpalme: true }).ld;
+  return {
+    b, fy, fc, inf, sup,
+    claseA: empalmeTraccion(inf, 'A'),
+    claseB: empalmeTraccion(inf, 'B'),
+    claseBsup: empalmeTraccion(sup, 'B'),
+    exigida: claseEmpalmeTraccion({ relacionAsProporcionadaRequerida: 1.2, fraccionEmpalmada: 1.0 }),
+    permitidaA: claseEmpalmeTraccion({ relacionAsProporcionadaRequerida: 2.4, fraccionEmpalmada: 0.5 }),
+    sepMax: separacionTransversalMaximaTraslapo(empalmeTraccion(inf, 'B')),
+  };
+})();
+
+export const ej4 = (() => {
+  const b = 300, d = 450, fc = 28, fy = 420, L = 6.0, wu = 60;
+  const bar = buscarBarra('No.8');
+  const phi = 0.9;
+  const mnDe = (as) => {
+    const a = (as * fy) / (0.85 * fc * b);
+    return { as, a, c: a / beta1(fc), mn: (as * fy * (d - a / 2)) / 1e6 };
+  };
+  const cuatro = mnDe(4 * bar.area);
+  const dos = mnDe(2 * bar.area);
+  const muMax = (wu * L * L) / 8;
+  const phiMn4 = phi * cuatro.mn;
+  const phiMn2 = phi * dos.mn;
+  const x = (L - Math.sqrt(L * L - (8 * phiMn2) / wu)) / 2;
+  const ext = extensionMasAllaPuntoCorte(d, bar.db);
+  const xCorte = x + ext / 1000;
+  const ld = ldEcuacionC121({ fy, fc, db: bar.db, cb: cbDesdeLibres(50, 149.2, bar.db) }).ld;
+  const ldTab = ldTablaC122({ fy, fc, db: bar.db, espaciamientoAdecuado: true }).ld;
+  const embebida = (L / 2 - xCorte) * 1000;
+  const vuCorte = wu * (L / 2 - xCorte);
+  const phiVc = (0.75 * 0.17 * Math.sqrt(fc) * b * d) / 1000;
+  const vuApoyo = (wu * L) / 2;
+  const la = 150;
+  const apoyo = verificarC125({ ld, mn: dos.mn, vu: vuApoyo, la });
+  const apoyoTabla = verificarC125({ ld: ldTab, mn: dos.mn, vu: vuApoyo, la });
+  const apoyoTablaConf = verificarC125({ ld: ldTab, mn: dos.mn, vu: vuApoyo, la, confinadoPorReaccion: true });
+  return { b, d, fc, fy, L, wu, bar, cuatro, dos, muMax, phiMn4, phiMn2, x, ext, xCorte, ld, ldTab, embebida, vuCorte, phiVc, necesitaPhiVn: vuCorte / (2 / 3), vuApoyo, la, apoyo, apoyoTabla, apoyoTablaConf, c12: 12 * bar.db };
+})();
+
+export const ej5 = (() => {
+  const b = buscarBarra('No.8');
+  const fy = 420, fc = 28;
+  const ldc = ldcCompresion({ fy, fc, db: b.db });
+  const ldcEsp = ldcCompresion({ fy, fc, db: b.db, confinado: true });
+  const emp = empalmeCompresion(fy, fc, b.db);
+  const empBajo = empalmeCompresion(fy, 17.5, b.db);
+  const emp500 = empalmeCompresion(500, fc, b.db);
+  return {
+    b, fy, fc, ldc, ldcEsp, emp, empBajo, emp500,
+    estribos: empalmeCompresionColumna(emp.longitud, 'estribos'),
+    espiral: empalmeCompresionColumna(emp.longitud, 'espiral'),
+    paquete3: ldTablaC122({ fy, fc, db: b.db, espaciamientoAdecuado: true }).ld * factorPaquete(3),
+  };
+})();
+
+## Idea central del capítulo
+
+El acero de refuerzo trabaja solo si el concreto lo **agarra**. Una barra que se pide a tracción en una sección debe seguir embebida, **a cada lado de esa sección**, una longitud suficiente para que la adherencia (o un gancho, una cabeza o un dispositivo mecánico) le transfiera al concreto la fuerza que lleva. Esa longitud es la **longitud de desarrollo** $\ell_d$. El capítulo C.12 dice cuánto vale en cada caso y qué hacer cuando la barra no cabe de una sola pieza: **empalmarla** (traslapo, soldadura, conector mecánico) o **doblarla** (gancho estándar) (<NormaRef s="C.12.1.1" pag="C-107" />).
+
+Las piezas del capítulo son:
+
+- **Barras rectas** a tracción (C.12.2) y a compresión (C.12.3), solas o en paquetes (C.12.4).
+- **Ganchos** (C.12.5), **barras con cabeza** y anclajes mecánicos (C.12.6), **malla electrosoldada** (C.12.7–C.12.8) y **torones** (C.12.9).
+- **Dónde terminar las barras** de una viga (C.12.10–C.12.13): puntos de corte, momento positivo y negativo, refuerzo del alma.
+- **Empalmes** (C.12.14–C.12.19): por traslapo Clase A o B, a compresión, en columnas, en malla; empalmes soldados, mecánicos y a tope.
+
+<Callout tipo="importante" titulo="ℓd depende de pocas cosas, pero todas pesan">
+$\ell_d$ crece con $f_y$ y con el diámetro $d_b$ (más fuerza que transferir), y decrece con $\sqrt{f'_c}$ y con el **confinamiento** (recubrimiento, separación entre barras y estribos). Crece además con $\psi_t$ (barras superiores), $\psi_e$ (epóxico) y $1/\lambda$ (concreto liviano). Una barra No. 8 de $f_y$ = 420 MPa en concreto de 28 MPa necesita entre unas 29 y 47 veces su diámetro, es decir, entre 0.74 m y 1.19 m, según las condiciones. Los valores de este capítulo **no son medidas “típicas”**: el diseñador debe calcularlos para cada barra.
+</Callout>
+
+## C.12.1 — Desarrollo del refuerzo — Generalidades
+
+- **C.12.1.1.** La tracción o compresión calculada en el refuerzo de cada sección se desarrolla **hacia cada lado** de la sección con una longitud embebida, un gancho, una barra con cabeza, un dispositivo mecánico, o una combinación. **Los ganchos y las cabezas no sirven para barras en compresión** (<NormaRef s="C.12.1.1" pag="C-107" />).
+- **C.12.1.2.** Los valores de $\sqrt{f'_c}$ usados en el capítulo **no deben exceder 8.3 MPa** (<NormaRef s="C.12.1.2" pag="C-107" />). Equivale a $f'_c \le 68.9$ MPa (cálculo del autor: $8.3^2$). Para concretos de mayor resistencia se usa 8.3 MPa en las ecuaciones, no el valor real.
+- **C.12.1.3.** Además de lo que exige este capítulo para el detalle del refuerzo se deben cumplir los requisitos de **integridad estructural de C.7.13** (<NormaRef s="C.12.1.3" pag="C-107" />).
+
+## C.12.2 — Desarrollo de barras corrugadas y alambres corrugados a tracción
+
+### C.12.2.1 — Dos caminos y un mínimo
+
+$\ell_d$ se determina con **C.12.2.2** (la tabla) **o** con **C.12.2.3** (Ecuación C.12-1), con los factores de C.12.2.4 y el de refuerzo en exceso de C.12.2.5. **En ningún caso $\ell_d$ puede ser menor de 300 mm** (<NormaRef s="C.12.2.1" pag="C-107" />).
+
+### C.12.2.2 — La tabla de longitudes de desarrollo
+
+Para barras o alambres corrugados, $\ell_d$ es el producto del diámetro $d_b$ por la expresión que corresponda según el tamaño de la barra y las condiciones de espaciamiento y recubrimiento (<NormaRef s="C.12.2.2" pag="C-107" />):
+
+<Figura src="/img/titulo-c/tabla-c12-2-2-longitud-desarrollo.png" alt="Tabla de C.12.2.2 con las cuatro expresiones de la longitud de desarrollo" numero="Tabla de C.12.2.2" pie="Tal como aparece en la norma (la tabla no tiene número). En la celda inferior derecha el PDF imprime λ también en el numerador: ver las erratas al final del capítulo." pag="C-107" />
+
+<TablaNorma numero="Tabla de C.12.2.2" titulo="ℓd/db para barras y alambres corrugados a tracción" pag="C-107" nota="Transcripción verificada con la imagen. En la celda «Otros casos» de No. 7 y mayores el PDF imprime λ en el numerador y en el denominador; aquí se transcribe con λ solo en el denominador (ver erratas). fy y f′c en MPa; el resultado es ℓd/db (adimensional).">
+
+| Espaciamiento y recubrimiento | Barras No. 6 (3/4″) ó 20M (20 mm) y menores, y alambres corrugados | Barras No. 7 (7/8″) ó 22M (22 mm) y mayores |
+|---|:---:|:---:|
+| Espaciamiento libre entre barras que se desarrollan o empalman no menor que $d_b$, recubrimiento libre no menor que $d_b$ y estribos a lo largo de $\ell_d$ no menos que el mínimo del Título C; **o** espaciamiento libre no menor de $2d_b$ y recubrimiento libre no menor de $d_b$ | $\dfrac{f_y\,\psi_t\,\psi_e}{2.1\,\lambda\sqrt{f'_c}}\;d_b$ | $\dfrac{f_y\,\psi_t\,\psi_e}{1.7\,\lambda\sqrt{f'_c}}\;d_b$ |
+| Otros casos | $\dfrac{f_y\,\psi_t\,\psi_e}{1.4\,\lambda\sqrt{f'_c}}\;d_b$ | $\dfrac{f_y\,\psi_t\,\psi_e}{1.1\,\lambda\sqrt{f'_c}}\;d_b$ |
+
+</TablaNorma>
+
+Para tener una idea de órdenes de magnitud, la tabla siguiente evalúa $\ell_d/d_b$ con $f_y$ = 420 MPa, concreto de peso normal ($\lambda$ = 1), barra inferior ($\psi_t = \psi_e = 1$) y **sin** el mínimo de 300 mm ni el factor de exceso:
+
+<TablaNorma numero="Tabla propia (derivada de la tabla de C.12.2.2)" titulo="ℓd/db con fy = 420 MPa, ψt = ψe = λ = 1" nota="Cálculo del autor con src/lib/nsr10/desarrollo.ts. No es una tabla de la norma.">
+
+| $f'_c$ (MPa) | Adecuado, ≤ No. 6 | Adecuado, ≥ No. 7 | Otros casos, ≤ No. 6 | Otros casos, ≥ No. 7 |
+|---:|---:|---:|---:|---:|
+| {tablaLd[0].fc} | {f(tablaLd[0].p1)} | {f(tablaLd[0].g1)} | {f(tablaLd[0].p2)} | {f(tablaLd[0].g2)} |
+| {tablaLd[1].fc} | {f(tablaLd[1].p1)} | {f(tablaLd[1].g1)} | {f(tablaLd[1].p2)} | {f(tablaLd[1].g2)} |
+| {tablaLd[2].fc} | {f(tablaLd[2].p1)} | {f(tablaLd[2].g1)} | {f(tablaLd[2].p2)} | {f(tablaLd[2].g2)} |
+| {tablaLd[3].fc} | {f(tablaLd[3].p1)} | {f(tablaLd[3].g1)} | {f(tablaLd[3].p2)} | {f(tablaLd[3].g2)} |
+
+</TablaNorma>
+
+### C.12.2.3 — La ecuación general
+
+Cuando se quiere aprovechar el confinamiento real (recubrimiento, separación y refuerzo transversal), $\ell_d$ se calcula con la Ecuación C.12-1 (<NormaRef s="C.12-1" pag="C-107" />):
+
+<Ecuacion num="C.12-1" titulo="Longitud de desarrollo de barras y alambres corrugados a tracción">
+
+$$
+\ell_d=\left(\frac{f_y\,\psi_t\,\psi_e\,\psi_s}{1.1\,\lambda\sqrt{f'_c}\,\left(\dfrac{c_b+K_{tr}}{d_b}\right)}\right)d_b
+$$
+
+- $f_y$ y $f'_c$ en MPa; $d_b$ en mm; $\sqrt{f'_c}$ no mayor de 8.3 MPa (C.12.1.2).
+- $\psi_t$, $\psi_e$, $\psi_s$, $\lambda$: factores de C.12.2.4.
+- $c_b$: la menor de (a) la distancia del centro de la barra a la superficie de concreto más cercana y (b) la **mitad** de la separación centro a centro de las barras que se desarrollan (notación C.2, <NormaRef s="C.2" pag="C-7" />).
+- $K_{tr}$: índice de refuerzo transversal, Ecuación C.12-2.
+- El término $(c_b + K_{tr})/d_b$ **no debe tomarse mayor de 2.5**.
+
+</Ecuacion>
+
+<Ecuacion num="C.12-2" titulo="Índice de refuerzo transversal">
+
+$$
+K_{tr}=\frac{40\,A_{tr}}{s\,n}
+$$
+
+- $A_{tr}$: área total del refuerzo transversal dentro de una separación $s$ que cruza el plano potencial de hendimiento de la barra que se desarrolla, mm² (notación C.2).
+- $s$: separación de ese refuerzo transversal, mm; $n$: número de barras o alambres que se empalman o desarrollan **dentro del plano de hendimiento**.
+- $K_{tr}$ queda en mm. Se permite usar **$K_{tr}=0$** como simplificación, aunque haya refuerzo transversal.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="La tabla es la ecuación evaluada en dos puntos (comprobación del autor)">
+Si en la Ecuación C.12-1 se toma $(c_b+K_{tr})/d_b = 1.5$ resulta $\ell_d/d_b = f_y\psi_t\psi_e\psi_s/(1.65\lambda\sqrt{f'_c})$, que con $\psi_s = 0.8$ y 1.0 reproduce los divisores 2.1 (≈ 2.06) y 1.7 (≈ 1.65) de la primera fila de la tabla. Con $(c_b+K_{tr})/d_b = 1.0$ se obtienen 1.4 (≈ 1.375) y 1.1 de la fila «Otros casos». Por eso la tabla es **más conservadora** que la ecuación cuando hay buen recubrimiento o estribos: la ecuación admite hasta un término de 2.5.
+</Callout>
+
+### C.12.2.4 — Factores de modificación
+
+<TablaNorma numero="C.12.2.4" titulo="Factores ψt, ψe, ψs y λ" pag="C-108" nota="El producto ψtψe no necesita ser mayor de 1.7.">
+
+| Factor | Condición | Valor |
+|---|---|:---:|
+| $\psi_t$ (ubicación) | Refuerzo horizontal con **más de 300 mm** de concreto fresco debajo de la longitud de desarrollo o del empalme | 1.3 |
+| | Otras situaciones | 1.0 |
+| $\psi_e$ (recubrimiento) | Barras o alambres con recubrimiento epóxico con recubrimiento menor de $3d_b$, o separación libre menor de $6d_b$ | 1.5 |
+| | Las demás barras o alambres con recubrimiento epóxico | 1.2 |
+| | Refuerzo sin recubrimiento y refuerzo galvanizado (cinc) | 1.0 |
+| $\psi_s$ (tamaño) | Barras No. 6 (3/4″) ó 20M y menores, y alambres corrugados | 0.8 |
+| | Barras No. 7 (7/8″) ó 22M y mayores | 1.0 |
+| $\lambda$ (concreto) | Concreto liviano: no debe exceder de 0.75 a menos que se especifique $f_{ct}$ (C.8.6.1) | ≤ 0.75 |
+| | Concreto de peso normal | 1.0 |
+
+</TablaNorma>
+
+Estos factores se citan en <NormaRef s="C.12.2.4" pag="C-108" />. La razón física (explicación del autor): el concreto que se asienta bajo una barra horizontal alta deja una zona porosa debajo de ella (por eso $\psi_t$); el epóxico reduce la fricción y la adherencia (por eso $\psi_e$); las barras delgadas se agarran mejor por unidad de diámetro (por eso $\psi_s$ = 0.8).
+
+### C.12.2.5 — Refuerzo en exceso
+
+Si el refuerzo de un elemento a flexión excede el requerido por análisis, se permite **reducir $\ell_d$** en la proporción $(A_s\ \text{requerido})/(A_s\ \text{suministrado})$. No aplica si se exige específicamente anclaje o desarrollo para $f_y$, ni si el refuerzo se diseña según C.21.2.1.6 (<NormaRef s="C.12.2.5" pag="C-108" />).
+
+<Ejemplo numero={1} titulo="ℓd de una barra recta No. 8 a tracción, con la tabla y con la ecuación">
+
+Una viga de $b$ = {ej1.ancho} mm lleva dos barras **No. 8** ({ej1.b.db} mm) inferiores, con recubrimiento de 40 mm y estribos de 10 mm. Concreto de peso normal con $f'_c$ = {ej1.fc} MPa y $f_y$ = {ej1.fy} MPa. Calcular $\ell_d$ para la barra inferior y para la superior ($\psi_t$ = 1.3).
+
+<Paso titulo="Geometría de confinamiento" ref="C.12.2.2, C.12.2.3">
+
+Recubrimiento libre hasta la superficie: $c_c$ = 40 + 10 = {ej1.cc} mm $\ge d_b$. Separación libre entre las dos barras: {ej1.ancho} − 2·{ej1.cc} − 2·{f(ej1.b.db)} = **{f(ej1.sLibre)} mm**, que es mayor que $2d_b$ = {f(2 * ej1.b.db)} mm. Se cumple la primera fila de la tabla.
+
+$c_b$ es la menor de la distancia del centro de la barra a la superficie ({ej1.cc} + {f(ej1.b.db / 2)} = {f(ej1.cb)} mm) y la mitad de la separación centro a centro (({f(ej1.sLibre)} + {f(ej1.b.db)})/2 = {f((ej1.sLibre + ej1.b.db) / 2)} mm): $c_b$ = **{f(ej1.cb)} mm** (criterio del autor para calcular las distancias a partir de los recubrimientos libres).
+
+</Paso>
+<Paso titulo="Con la tabla de C.12.2.2" ref="C.12.2.2">
+
+Barra No. 8 (≥ No. 7), espaciamiento adecuado: divisor 1.7.
+
+$$
+\ell_d=\frac{f_y\,\psi_t\,\psi_e}{1.7\,\lambda\sqrt{f'_c}}\,d_b=\frac{420\,(1.0)(1.0)}{1.7\,(1.0)\sqrt{28}}\,(25.4)
+$$
+
+$\ell_d$ = **{f(ej1.tabla.ld, 0)} mm** ({f(ej1.tabla.ldSobreDb)} $d_b$). Para la barra superior ($\psi_t$ = 1.3): **{f(ej1.tablaSup.ld, 0)} mm**. Si **no** se cumpliera el espaciamiento adecuado (divisor 1.1): {f(ej1.otros.ld, 0)} mm.
+
+</Paso>
+<Paso titulo="Con la Ecuación C.12-1, sin Ktr" ref="C.12-1">
+
+$\psi_s$ = 1.0 (barra No. 8) y $(c_b + K_{tr})/d_b$ = {f(ej1.cb)}/{f(ej1.b.db)} = {f(ej1.eq0.terminoConfinamiento, 3)} (menor de 2.5):
+
+$$
+\ell_d=\frac{f_y\,\psi_t\,\psi_e\,\psi_s}{1.1\,\lambda\sqrt{f'_c}\,(c_b+K_{tr})/d_b}\,d_b=\frac{420\,(1.0)(1.0)(1.0)}{1.1\,(1.0)\sqrt{28}\,(2.469)}\,(25.4)
+$$
+
+$\ell_d$ = **{f(ej1.eq0.ld, 0)} mm** ({f(ej1.eq0.ldSobreDb)} $d_b$). Barra superior: **{f(ej1.eqSup.ld, 0)} mm**.
+
+</Paso>
+<Paso titulo="Efecto de los estribos (Ktr)" ref="C.12-2">
+
+Con estribos No. 3 (dos ramas, $A_{tr}$ = 142 mm²) cada 150 mm y $n$ = 2: $K_{tr} = 40(142)/(150\cdot 2)$ = {f(ej1.ktrV)} mm. Entonces $(c_b+K_{tr})/d_b$ = {f((ej1.cb + ej1.ktrV) / ej1.b.db, 2)}, que **se limita a 2.5**, y $\ell_d$ = **{f(ej1.eqK.ld, 0)} mm** ({f(ej1.eqK.ldSobreDb)} $d_b$): solo {f(ej1.eq0.ld - ej1.eqK.ld, 0)} mm menos que sin $K_{tr}$, porque el tope de 2.5 ya casi se alcanzaba con el recubrimiento.
+
+</Paso>
+<Paso titulo="Concreto liviano y exceso de refuerzo" ref="C.12.2.4(d), C.12.2.5">
+
+Con la tabla y concreto liviano sin $f_{ct}$ especificado ($\lambda$ = 0.75): {f(ej1.liviano.ld, 0)} mm ({f(ej1.liviano.ld / ej1.tabla.ld, 3)} veces el de peso normal). Si el refuerzo suministrado fuera 25 % mayor que el requerido ($A_s$ req./suministrado = 0.8) y no se exigiera desarrollar $f_y$, la tabla daría 0.8·{f(ej1.tabla.ld, 0)} = {f(0.8 * ej1.tabla.ld, 0)} mm.
+
+</Paso>
+<Resultado>
+La **tabla** exige {f(ej1.tabla.ld, 0)} mm y la **ecuación** {f(ej1.eq0.ld, 0)} mm: ambas son válidas (C.12.2.1) y la ecuación recompensa el buen confinamiento. Con una barra superior hay que multiplicar por 1.3. Calcula tus propios casos:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="longitud-desarrollo" />
+
+## C.12.3 — Desarrollo de barras corrugadas y alambres corrugados a compresión
+
+- **C.12.3.1.** $\ell_{dc}$ se calcula con C.12.3.2 y los factores de C.12.3.3, pero **no menor de 200 mm** (<NormaRef s="C.12.3.1" pag="C-108" />).
+- **C.12.3.2.** $\ell_{dc}$ es el **mayor** de dos valores (<NormaRef s="C.12.3.2" pag="C-108" />):
+
+<Ecuacion num="C.12.3.2" titulo="Longitud de desarrollo a compresión (sin número de ecuación en el PDF)">
+
+$$
+\ell_{dc}=\max\left\{\frac{0.24\,f_y}{\lambda\sqrt{f'_c}}\,d_b\ ,\ \ 0.043\,f_y\,d_b\right\}
+$$
+
+- $\lambda$ según C.12.2.4(d). La constante 0.043 tiene unidades de mm²/N. $f_y$ y $f'_c$ en MPa.
+- El primer término domina con concretos de baja resistencia; el segundo (independiente de $f'_c$) con concretos de alta resistencia.
+
+</Ecuacion>
+
+- **C.12.3.3.** Se permite multiplicar $\ell_{dc}$ por (<NormaRef s="C.12.3.3" pag="C-108" />): (a) $(A_s\ \text{requerido})/(A_s\ \text{proporcionado})$ si el refuerzo excede el requerido; (b) **0.75** si el refuerzo está confinado por una **espiral** (barra de al menos 6 mm y paso ≤ 100 mm) o por estribos No. 13 según C.7.10.5 espaciados ≤ 100 mm centro a centro.
+
+## C.12.4 — Desarrollo de paquetes de barras
+
+- **C.12.4.1.** Cada barra de un paquete (a tracción o a compresión) se desarrolla con la longitud de la barra individual **aumentada 20 %** (paquete de 3 barras) o **33 %** (paquete de 4) (<NormaRef s="C.12.4.1" pag="C-109" />).
+- **C.12.4.2.** Para hallar espaciamiento y recubrimiento en C.12.2.2, el parámetro de confinamiento de C.12.2.3 y $\psi_e$ de C.12.2.4(b), el paquete se trata como **una sola barra** de diámetro derivado del área total equivalente, con el centroide del paquete (<NormaRef s="C.12.4.2" pag="C-109" />). Para $n$ barras iguales, ese diámetro equivalente es $d_b\sqrt{n}$ (cálculo del autor).
+
+## C.12.5 — Desarrollo de ganchos estándar en tracción
+
+### C.12.5.1 y C.12.5.2 — Longitud ℓdh
+
+La longitud de desarrollo de una barra corrugada a tracción que termina en un **gancho estándar** (geometría en C.7.1) es $\ell_{dh}$, calculada con C.12.5.2 y los factores de C.12.5.3, pero **no menor que el mayor de $8d_b$ y 150 mm** (<NormaRef s="C.12.5.1" pag="C-109" />). Se mide **desde la sección crítica hasta el extremo exterior del gancho** (longitud recta más el radio interno del doblez y un diámetro de barra; notación C.2).
+
+<Ecuacion num="C.12.5.2" titulo="Longitud de desarrollo de ganchos estándar (sin número de ecuación en el PDF)">
+
+$$
+\ell_{dh}=\left(\frac{0.24\,\psi_e\,f_y}{\lambda\sqrt{f'_c}}\right)d_b
+$$
+
+- $\psi_e$ y $\lambda$ valen 1.0 en los «otros casos». El texto impreso fija además $\psi_e$ = 0.75 «para concreto con agregados livianos» (<NormaRef s="C.12.5.2" pag="C-109" />); ver erratas.
+
+</Ecuacion>
+
+### C.12.5.3 — Factores de modificación
+
+<TablaNorma numero="C.12.5.3" titulo="Factores que multiplican ℓdh" pag="C-109" nota="«Barras No. 36» equivale a 36M (No. 11). En (b) y (c), db es el diámetro de la barra del gancho y el primer estribo debe confinar la parte doblada del gancho a menos de 2db del borde externo del gancho.">
+
+| Caso | Factor |
+|---|:---:|
+| (a) Barras No. 36 (36M) y menores con **recubrimiento lateral** (normal al plano del gancho) ≥ 65 mm y, en ganchos de 90°, recubrimiento ≥ 50 mm sobre la extensión de la barra más allá del gancho | 0.7 |
+| (b) Ganchos de **90°** de barras No. 36 y menores confinados por estribos perpendiculares a la barra que se desarrolla, espaciados ≤ $3d_b$ a lo largo de $\ell_{dh}$; o rodeados por estribos paralelos a la barra, espaciados ≤ $3d_b$, a lo largo de $\ell_{dh}$ más el doblez | 0.8 |
+| (c) Ganchos de **180°** de barras No. 11 (36M) y menores confinados con estribos perpendiculares a la barra, espaciados ≤ $3d_b$ a lo largo de $\ell_{dh}$ | 0.8 |
+| (d) No se exige anclaje o $\ell_d$ específico para $f_y$ y hay más refuerzo que el requerido | $(A_s\text{ req.})/(A_s\text{ prop.})$ |
+
+</TablaNorma>
+
+### C.12.5.4 y C.12.5.5
+
+- **C.12.5.4.** En **extremos discontinuos** de elementos, con recubrimiento sobre el gancho de **menos de 65 mm** en ambos lados y en el borde superior (o inferior), la barra con gancho se confina con estribos perpendiculares espaciados ≤ $3d_b$ a lo largo de $\ell_{dh}$; el primer estribo, dentro de $2d_b$ del exterior del doblez. **No se aplican** entonces los factores (b) y (c) de C.12.5.3 (<NormaRef s="C.12.5.4" pag="C-109" />).
+- **C.12.5.5.** Los ganchos **no son efectivos** en compresión (<NormaRef s="C.12.5.5" pag="C-109" />).
+
+<Ejemplo numero={2} titulo="Anclaje con gancho de 90° de una barra No. 8 en una columna extrema">
+
+Una barra No. 8 superior de una viga termina con gancho de 90° en una columna de {ej2.hCol} mm de profundidad ($f'_c$ = {ej2.fc} MPa, $f_y$ = {ej2.fy} MPa, concreto de peso normal). La barra se mantiene {ej2.recCol} mm lejos de la cara exterior de la columna, de modo que la profundidad disponible es {ej2.hCol} − {ej2.recCol} = **{ej2.disponible} mm** (criterio del autor).
+
+<Paso titulo="Geometría del gancho estándar" ref="C.7.1.2">
+
+El gancho de 90° lleva una extensión de $12d_b$ = {f(ej2.g.extensionMm, 1)} mm y un diámetro interior de doblado de $6d_b$ = {f(ej2.g.diametroDobladoMm, 1)} mm (valores del capítulo C.7, leídos de `ganchoEstandar`).
+
+</Paso>
+<Paso titulo="ℓdh básica" ref="C.12.5.2">
+
+$$
+\ell_{dh}=\frac{0.24\,\psi_e\,f_y}{\lambda\sqrt{f'_c}}\,d_b=\frac{0.24\,(1.0)(420)}{(1.0)\sqrt{28}}\,(25.4)
+$$
+
+$\ell_{dh}$ = **{f(ej2.a.ldh, 0)} mm** ({f(ej2.a.ldhSobreDb)} $d_b$). Como referencia, una barra **recta** con la tabla de C.12.2.2 pediría {f(ej2.recta, 0)} mm: tampoco cabe en la columna; el gancho solo cabe si se aplican los factores del paso siguiente.
+
+</Paso>
+<Paso titulo="Factores de C.12.5.3" ref="C.12.5.3 (a) y (b)">
+
+Si el recubrimiento lateral es ≥ 65 mm y sobre la extensión ≥ 50 mm: ×0.7 → **{f(ej2.r.ldh, 0)} mm**. Si, además, hay estribos paralelos a la barra a ≤ $3d_b$ ({f(3 * ej2.b.db, 1)} mm) a lo largo de $\ell_{dh}$ más el doblez: ×0.8 → factor total {f(ej2.r2.factor, 2)} → **{f(ej2.r2.ldh, 0)} mm**. Mínimo: mayor de $8d_b$ = {f(ej2.r2.minimo, 1)} mm y 150 mm: no gobierna.
+
+</Paso>
+<Resultado>
+Con el gancho y el confinamiento de la columna la barra se desarrolla en {f(ej2.r2.ldh, 0)}–{f(ej2.r.ldh, 0)} mm, menos que los {ej2.disponible} mm disponibles. Sin esos factores serían {f(ej2.a.ldh, 0)} mm, que **no caben** en los {ej2.disponible} mm: el recubrimiento y los estribos del nudo son los que hacen posible el anclaje.
+</Resultado>
+</Ejemplo>
+
+## C.12.6 — Desarrollo de barras con cabeza y ancladas mecánicamente en tracción
+
+### C.12.6.1 y C.12.6.2 — Barras con cabeza
+
+El uso de cabezas queda limitado a condiciones que cumplan **todas** estas (<NormaRef s="C.12.6.1" pag="C-110" />):
+
+| | Condición |
+|---|---|
+| (a) | $f_y$ de la barra no mayor de 420 MPa |
+| (b) | Barra no mayor de No. 11 (36M) |
+| (c) | Concreto de peso normal |
+| (d) | Área de apoyo de la cabeza $A_{brg}$ no menor de $4A_b$ |
+| (e) | Recubrimiento libre de la barra no menor de $2d_b$ |
+| (f) | Separación libre entre barras no menor de $4d_b$ |
+
+<Ecuacion num="C.12.6.2" titulo="Longitud de desarrollo de barras con cabeza (sin número en el PDF)">
+
+$$
+\ell_{dt}=\left(\frac{0.19\,\psi_e\,f_y}{\sqrt{f'_c}}\right)d_b
+$$
+
+- Para barras con cabeza que cumplen C.3.5.9. El $f'_c$ usado **no excede 40 MPa**. $\psi_e$ = 1.2 con epóxico, 1.0 en los demás casos.
+- Con refuerzo en exceso (salvo si se exige desarrollar $f_y$) se multiplica por $(A_s\ \text{requerido})/(A_s\ \text{entregado})$. **No menor del mayor de $8d_b$ y 150 mm.**
+- $\ell_{dt}$ se mide desde la sección crítica hasta la cara de apoyo de la cabeza (notación C.2).
+
+</Ecuacion>
+
+(<NormaRef s="C.12.6.2" pag="C-110" />.) Con $f_y$ = 420 MPa, $f'_c$ = 28 MPa y una barra No. 8, $\ell_{dt}$ ≈ 383 mm (15.1 $d_b$), frente a 484 mm (19.1 $d_b$) del gancho estándar de C.12.5 (cálculo del autor).
+
+### C.12.6.3 y C.12.6.4 — Compresión y otros anclajes
+
+- **C.12.6.3.** Las cabezas no son efectivas en **compresión** (<NormaRef s="C.12.6.3" pag="C-110" />).
+- **C.12.6.4.** Se permite cualquier fijación o dispositivo mecánico capaz de desarrollar $f_y$, si los **ensayos** que lo demuestran están **aprobados por la autoridad competente**. También se permite combinar anclaje mecánico con longitud embebida entre la sección crítica y el dispositivo (<NormaRef s="C.12.6.4" pag="C-110" />).
+
+## C.12.7 — Desarrollo de refuerzo electrosoldado de alambre corrugado a tracción
+
+- **C.12.7.1.** $\ell_d$ de la malla, medida desde la sección crítica hasta el extremo del alambre, es el $\ell_d$ de C.12.2.2 o C.12.2.3 **multiplicado por $\psi_w$** (C.12.7.2 o C.12.7.3). Se permite reducirlo con C.12.2.5. No debe ser menor de **200 mm**, salvo para empalmes (C.12.18). Si se usa $\psi_w$ de C.12.7.2, se permite $\psi_e$ = 1.0 para malla con recubrimiento epóxico (<NormaRef s="C.12.7.1" pag="C-110" />).
+- **C.12.7.2.** Con **al menos un alambre transversal** dentro de $\ell_d$ y a no menos de 50 mm de la sección crítica, $\psi_w$ es el **mayor** de los dos valores siguientes, sin exceder 1.0 (<NormaRef s="C.12.7.2" pag="C-110" />):
+
+<Ecuacion num="C.12.7.2" titulo="Factor ψw para malla de alambre corrugado (sin número en el PDF)">
+
+$$
+\psi_w=\max\left\{\frac{f_y-240}{f_y}\ ,\ \ \frac{5\,d_b}{s_w}\right\}\le 1.0
+$$
+
+- $f_y$ en MPa (la constante 240 es MPa); $s_w$: separación entre los alambres que se desarrollan (el PDF la llama $s$).
+
+</Ecuacion>
+
+- **C.12.7.3.** Sin alambres transversales dentro de $\ell_d$, o con uno solo a menos de 50 mm de la sección crítica: $\psi_w$ = 1.0 y $\ell_d$ como para alambre corrugado (<NormaRef s="C.12.7.3" pag="C-111" />).
+- **C.12.7.4.** Si hay **alambre liso** o **alambres corrugados mayores que MD200 (16 mm)** en la dirección de desarrollo, la malla se desarrolla según **C.12.8** (<NormaRef s="C.12.7.4" pag="C-111" />).
+
+## C.12.8 — Desarrollo de refuerzo electrosoldado de alambre liso a tracción
+
+La fluencia de la malla de alambre liso se considera desarrollada con el embebido de **2 alambres transversales**, el más próximo a no menos de 50 mm de la sección crítica. Sin embargo, $\ell_d$ no debe ser menor que (<NormaRef s="C.12.8" pag="C-111" />):
+
+<Ecuacion num="C.12-3" titulo="Longitud de desarrollo de malla de alambre liso">
+
+$$
+\ell_d=3.3\left(\frac{A_b}{s}\right)\left(\frac{f_y}{\lambda\sqrt{f'_c}}\right)
+$$
+
+- $A_b$: área de un alambre, mm²; $s$: separación entre los alambres que se desarrollan, mm. $\ell_d$ se mide desde la sección crítica hasta el **alambre transversal más alejado**.
+- $\lambda$ de C.12.2.4(d). Se puede reducir con C.12.2.5. **No menor de 150 mm**, salvo para empalmes (C.12.19).
+
+</Ecuacion>
+
+## C.12.9 — Desarrollo de torones de preesforzado
+
+- **C.12.9.1.** Los torones de siete alambres deben estar adheridos más allá de la sección crítica una distancia no menor que (<NormaRef s="C.12.9.1" pag="C-111" />):
+
+<Ecuacion num="C.12-4" titulo="Longitud de adherencia de torones de siete alambres">
+
+$$
+\ell_d=\left(\frac{f_{se}}{21}\right)d_b+\left(\frac{f_{ps}-f_{se}}{7}\right)d_b
+$$
+
+- $f_{se}$: esfuerzo efectivo en el acero de preesfuerzo después de pérdidas; $f_{ps}$: esfuerzo en el acero de preesfuerzo en el estado de resistencia nominal a flexión, ambos en MPa; $d_b$ en mm.
+- «Las expresiones entre paréntesis se utilizan como constantes sin unidades.» El primer término es la **longitud de transferencia** y el segundo la longitud adicional de **desarrollo** (lectura del autor).
+
+</Ecuacion>
+
+- **C.12.9.1.1.** Se permite un embebido menor que $\ell_d$ en una sección si el esfuerzo de diseño del torón en ella no excede los valores de la **relación bilineal** de la Ecuación C.12-4 (<NormaRef s="C.12.9.1.1" pag="C-111" />).
+- **C.12.9.2.** Se puede limitar el estudio a las secciones más cercanas a cada extremo que requieran desarrollar su resistencia total de diseño, salvo donde la adherencia de uno o más torones no llegue al extremo del elemento o haya cargas concentradas dentro de la longitud de desarrollo (<NormaRef s="C.12.9.2" pag="C-111" />).
+- **C.12.9.3.** Cuando la adherencia no se extiende hasta el extremo y el diseño incluye tracciones de servicio en la zona precomprimida de tracción (C.18.4.2), $\ell_d$ de C.12.9.1 se **duplica** (<NormaRef s="C.12.9.3" pag="C-111" />).
+
+Ejemplo numérico del autor: con $f_{se}$ = 1100 MPa, $f_{ps}$ = 1700 MPa y $d_b$ = 12.7 mm, el primer término da 665 mm y el segundo 1089 mm: $\ell_d$ ≈ 1754 mm.
+
+## C.12.10 — Desarrollo del refuerzo de flexión — Generalidades
+
+- **C.12.10.1.** Se permite desarrollar el refuerzo de tracción **doblándolo dentro del alma** para anclarlo o hacerlo continuo con el refuerzo de la cara opuesta (<NormaRef s="C.12.10.1" pag="C-111" />).
+- **C.12.10.2.** Las **secciones críticas** para el desarrollo son los puntos de esfuerzo máximo y los puntos del vano donde termina o se dobla el refuerzo adyacente. Deben cumplirse las disposiciones de C.12.11.3 (<NormaRef s="C.12.10.2" pag="C-112" />).
+- **C.12.10.3.** El refuerzo se extiende **más allá del punto en que ya no se necesita para flexión** una distancia igual al mayor de $d$ y $12d_b$, excepto en los apoyos de vigas simplemente apoyadas y en el extremo libre de voladizos (<NormaRef s="C.12.10.3" pag="C-112" />).
+- **C.12.10.4.** El refuerzo continuo debe tener una longitud embebida no menor que $\ell_d$ más allá del punto donde no se requiere refuerzo de tracción para flexión (<NormaRef s="C.12.10.4" pag="C-112" />).
+- **C.12.10.5.** El refuerzo de flexión **no debe terminarse en una zona de tracción** salvo que se cumpla una de estas (<NormaRef s="C.12.10.5" pag="C-112" />):
+
+| | Condición |
+|---|---|
+| C.12.10.5.1 | $V_u$ en el punto terminal no excede $(2/3)\,\phi V_n$ |
+| C.12.10.5.2 | Se proporciona un **área de estribos** que exceda lo requerido para torsión y cortante a lo largo de cada barra o alambre que termina, en una distancia desde el punto de terminación igual a $(3/4)d$. El exceso de área no será menor que $0.41\,b_w s/f_{yt}$, y $s$ no excede $d/(8\beta_b)$ |
+| C.12.10.5.3 | Para barras No. 36 (36M) y menores: el refuerzo que continúa da el **doble** del área requerida por flexión en el punto terminal y $V_u$ no excede $(3/4)\,\phi V_n$ |
+
+En C.12.10.5.2, $\beta_b$ es la relación entre el área del refuerzo que se termina y el área total de refuerzo en tracción en la sección (notación C.2).
+
+- **C.12.10.6.** Se necesita un **anclaje adecuado** cuando el esfuerzo en el refuerzo no es directamente proporcional al momento: zapatas inclinadas, escalonadas o de sección variable, ménsulas, elementos de gran altura, o refuerzo de tracción no paralelo a la cara de compresión (<NormaRef s="C.12.10.6" pag="C-112" />).
+
+## C.12.11 — Desarrollo del refuerzo para momento positivo
+
+- **C.12.11.1.** Por lo menos **1/3** del refuerzo de momento positivo en elementos simplemente apoyados, y **1/4** en elementos continuos, se prolonga por la misma cara hasta el apoyo. En vigas, **al menos 150 mm dentro del apoyo** (<NormaRef s="C.12.11.1" pag="C-112" />).
+- **C.12.11.2.** Si el elemento es parte fundamental del sistema que resiste cargas laterales, ese refuerzo se ancla para desarrollar **$f_y$ en tracción en la cara de apoyo** (<NormaRef s="C.12.11.2" pag="C-112" />).
+- **C.12.11.3.** En apoyos simples y puntos de inflexión, el diámetro del refuerzo de momento positivo se limita a uno tal que $\ell_d$ (calculado para $f_y$ con C.12.2) cumpla la Ecuación C.12-5 (<NormaRef s="C.12.11.3" pag="C-112" />):
+
+<Ecuacion num="C.12-5" titulo="Límite de ℓd en apoyos simples y puntos de inflexión">
+
+$$
+\ell_d\le\frac{M_n}{V_u}+\ell_a
+$$
+
+- $M_n$: resistencia nominal a flexión, **calculada suponiendo que todo el refuerzo de la sección está a $f_y$**.
+- $V_u$: cortante mayorado en la sección.
+- $\ell_a$: en el apoyo, la longitud embebida más allá del **centro del apoyo**; en un punto de inflexión se limita al mayor de $d$ y $12d_b$.
+- Se permite **aumentar $M_n/V_u$ en 30 %** cuando los extremos del refuerzo están confinados por una **reacción de compresión**.
+- La ecuación **no** se exige a las barras que terminan más allá del eje central de un apoyo simple en un gancho estándar o un anclaje mecánico equivalente.
+
+</Ecuacion>
+
+- **C.12.11.4.** En apoyos simples de elementos de **gran altura** el refuerzo de momento positivo se ancla para desarrollar $f_y$ en la cara del apoyo (o según C-A.4.3 si se diseña con el Apéndice C-A); en apoyos interiores es continuo o se empalma con el del vano adyacente (<NormaRef s="C.12.11.4" pag="C-113" />).
+
+## C.12.12 — Desarrollo del refuerzo para momento negativo
+
+- **C.12.12.1.** El refuerzo de momento negativo en un elemento continuo, restringido o en voladizo, o en cualquier elemento de un pórtico rígido, se ancla **en o a través** de los elementos de apoyo con longitud embebida, ganchos o anclajes mecánicos (<NormaRef s="C.12.12.1" pag="C-113" />).
+- **C.12.12.2.** Debe tener la longitud embebida en el vano que exigen C.12.1 y C.12.10.3 (<NormaRef s="C.12.12.2" pag="C-113" />).
+- **C.12.12.3.** Por lo menos **1/3** del refuerzo total de tracción en el apoyo para momento negativo se prolonga más allá del punto de inflexión una longitud no menor que el mayor de $d$, $12d_b$ y $\ell_n/16$ (<NormaRef s="C.12.12.3" pag="C-113" />).
+- **C.12.12.4.** En apoyos interiores de vigas de **gran altura**, el refuerzo negativo es continuo con el de los vanos adyacentes (<NormaRef s="C.12.12.4" pag="C-113" />).
+
+<Ejemplo numero={3} titulo="Dónde cortar dos de las cuatro barras de una viga simplemente apoyada">
+
+Viga simplemente apoyada de luz {f(ej4.L, 1)} m (centro a centro), $b$ = {ej4.b} mm, $d$ = {ej4.d} mm, $f'_c$ = {ej4.fc} MPa, $f_y$ = {ej4.fy} MPa, carga mayorada uniforme $w_u$ = {ej4.wu} kN/m. Refuerzo: **4 No. 8** ({f(4 * ej4.bar.area, 0)} mm²) en el centro del vano; se quieren cortar **2** y llevar las otras 2 al apoyo. Apoyo de 400 mm; las barras terminan a 50 mm de su cara exterior, es decir $\ell_a$ = {ej4.la} mm más allá del centro del apoyo.
+
+<Paso titulo="Momentos resistentes con 4 y con 2 barras" ref="C.10.2 y C.9.3.2.1 (solo como apoyo)">
+
+Momento máximo: $M_u$ = $w_u L^2/8$ = **{f(ej4.muMax, 1)} kN·m**. Con 4 No. 8: $a$ = $A_s f_y/(0.85 f'_c b)$ = {f(ej4.cuatro.a, 1)} mm, $c/d$ = {f(ej4.cuatro.c / ej4.d, 2)} ≤ 0.375 (controlada por tracción, $\phi$ = 0.90), $M_n$ = {f(ej4.cuatro.mn, 1)} kN·m, $\phi M_n$ = **{f(ej4.phiMn4, 1)} kN·m** ≥ {f(ej4.muMax, 1)} ✓.
+
+Con 2 No. 8 ({f(2 * ej4.bar.area, 0)} mm²): $a$ = {f(ej4.dos.a, 1)} mm, $M_n$ = {f(ej4.dos.mn, 1)} kN·m, $\phi M_n$ = **{f(ej4.phiMn2, 1)} kN·m**.
+
+</Paso>
+<Paso titulo="Punto de corte teórico" ref="C.12.10.2">
+
+Las 2 barras que continúan bastan donde $M_u(x) = w_u\,x\,(L-x)/2 \le \phi M_n$ = {f(ej4.phiMn2, 1)} kN·m, es decir para $x \le$ **{f(ej4.x, 3)} m** medido desde el centro del apoyo.
+
+</Paso>
+<Paso titulo="Extensión más allá del punto teórico" ref="C.12.10.3">
+
+Se extienden el mayor de $d$ = {ej4.d} mm y $12d_b$ = {f(ej4.c12, 1)} mm → **{f(ej4.ext, 0)} mm**. Las 2 barras se cortan a $x$ = {f(ej4.x, 3)} + {f(ej4.ext / 1000, 3)} = **{f(ej4.xCorte, 2)} m** del centro del apoyo.
+
+</Paso>
+<Paso titulo="Desarrollo desde el punto de esfuerzo máximo" ref="C.12.2, C.12.10.2">
+
+Las barras cortadas están a $f_y$ en el centro del vano. Su longitud embebida desde allí es ({f(ej4.L / 2, 2)} − {f(ej4.xCorte, 2)}) = **{f(ej4.embebida, 0)} mm**. Con $\ell_d$ de la Ecuación C.12-1 ($c_b$ = 62.7 mm, $K_{tr}$ = 0) = {f(ej4.ld, 0)} mm ✓ (con la tabla de C.12.2.2 serían {f(ej4.ldTab, 0)} mm, también ✓).
+
+</Paso>
+<Paso titulo="Barras en zona de tracción: cortante en el corte" ref="C.12.10.5">
+
+$V_u$ en el corte = $w_u(L/2 - x)$ = {f(ej4.vuCorte, 1)} kN. Sin estribos, $\phi V_c$ = 0.75·0.17·$\sqrt{f'_c}$·$b_w d$ = {f(ej4.phiVc, 1)} kN (ecuación de C.11, solo para dimensionar esta verificación). C.12.10.5.1 exige $V_u \le (2/3)\phi V_n$, es decir $\phi V_n \ge$ {f(ej4.necesitaPhiVn, 1)} kN: **no se cumple solo con el concreto**. Hay que dar estribos con $\phi V_s \ge$ {f(ej4.necesitaPhiVn - ej4.phiVc, 1)} kN en esa zona, o aplicar C.12.10.5.2 (estribos adicionales a lo largo de $(3/4)d$ = {f(0.75 * ej4.d, 0)} mm).
+
+</Paso>
+<Paso titulo="Las barras que llegan al apoyo" ref="C.12.11.1, C.12.11.3, Ec. C.12-5">
+
+C.12.11.1: 2 de 4 barras = 50 % ≥ 1/3 ✓ (y penetran más de 150 mm). Para C.12-5, con las 2 barras al apoyo: $M_n$ = {f(ej4.dos.mn, 1)} kN·m (todo el refuerzo a $f_y$), $V_u$ = $w_u L/2$ = {f(ej4.vuApoyo, 0)} kN, $M_n/V_u$ = {f(ej4.apoyo.mnSobreVu, 0)} mm, límite = {f(ej4.apoyo.mnSobreVu, 0)} + {ej4.la} = **{f(ej4.apoyo.limite, 0)} mm** ≥ $\ell_d$ = {f(ej4.ld, 0)} mm ✓.
+
+Si se hubiese usado el $\ell_d$ de la tabla ({f(ej4.ldTab, 0)} mm), **no** se cumpliría ({f(ej4.apoyoTabla.limite, 0)} mm); solo con el aumento de 30 % por reacción de compresión ({f(ej4.apoyoTablaConf.limite, 0)} mm) se aceptaría. Es una de las razones por las que conviene calcular $\ell_d$ con la ecuación.
+
+</Paso>
+<Resultado>
+Las 2 barras se cortan a **{f(ej4.xCorte, 2)} m** del centro del apoyo (a {f(ej4.L / 2 - ej4.xCorte, 2)} m del centro del vano), con estribos reforzados en la zona del corte y con las otras 2 barras llegando al apoyo con la penetración indicada.
+</Resultado>
+</Ejemplo>
+
+## C.12.13 — Desarrollo del refuerzo del alma
+
+- **C.12.13.1.** El refuerzo del alma se coloca tan cerca de las superficies de tracción y compresión como permitan el recubrimiento y la proximidad de otro refuerzo (<NormaRef s="C.12.13.1" pag="C-113" />).
+- **C.12.13.2.** Las ramas individuales de estribos en U, simples o múltiples, se anclan así (<NormaRef s="C.12.13.2" pag="C-113" />):
+
+| Numeral | Caso | Anclaje |
+|---|---|---|
+| C.12.13.2.1 | Barras «No. 16» y alambre MD200 (16 mm) y menores; barras No. 6 (20M), No. 7 (22M) y No. 8 (25M) con $f_{yt}$ ≤ 280 MPa | Un gancho estándar alrededor del refuerzo longitudinal |
+| C.12.13.2.2 | Estribos No. 6 (20M), No. 7 (22M) y No. 8 (25M) con $f_{yt}$ > 280 MPa | Gancho de estribo estándar abrazando una barra longitudinal **más** un embebido entre el punto medio de la altura y el extremo exterior del gancho ≥ $0.17\,d_b f_{yt}/(\lambda\sqrt{f'_c})$ |
+| C.12.13.2.3 | Cada rama de malla de alambre liso en U sencillo | (a) dos alambres longitudinales con 50 mm de separación en la parte superior de la U, o (b) un alambre longitudinal a no más de $d/4$ de la cara en compresión y un segundo más cercano a la cara en compresión y separado al menos 50 mm del primero (en una rama después de un doblez, o en un doblez de diámetro interior ≥ $8d_b$) |
+| C.12.13.2.4 | Cada extremo de un estribo de una rama de malla, lisa o corrugada | Dos alambres longitudinales con separación mínima de 50 mm y el interior al menos a $d/4$ ó 50 mm de $d/2$; el exterior en la cara de tracción no más lejos de la cara que el refuerzo primario de flexión más cercano |
+| C.12.13.2.5 | Viguetas (C.8.11) con barras No. 4 (12M) y alambres MD130 (12.9 mm) o menores | Un gancho estándar |
+
+- **C.12.13.3.** Entre los extremos anclados, cada doblez de la parte continua de los estribos en U debe abrazar una barra longitudinal (<NormaRef s="C.12.13.3" pag="C-114" />).
+- **C.12.13.4.** Las barras longitudinales dobladas para trabajar como refuerzo de cortante, si se extienden a una zona de **tracción**, son continuas con el refuerzo longitudinal; si se extienden a una zona de **compresión**, se anclan más allá de $d/2$ como en C.12.2 para la fracción de $f_{yt}$ necesaria para satisfacer la Ecuación C.11-17 (<NormaRef s="C.12.13.4" pag="C-114" />).
+- **C.12.13.5.** Las parejas de estribos en U que forman una unidad cerrada se consideran bien empalmadas con un traslapo de **$1.3\ell_d$**. En elementos con $d \ge$ 450 mm, los empalmes con $A_b f_{yt}$ ≤ 40 kN por rama son adecuados si las ramas se prolongan en toda la altura disponible (<NormaRef s="C.12.13.5" pag="C-114" />).
+
+## C.12.14 — Empalmes del refuerzo — Generalidades
+
+- **C.12.14.1.** Solo se empalma donde lo requieran o permitan los planos, las especificaciones, o lo autorice el profesional facultado para diseñar (<NormaRef s="C.12.14.1" pag="C-114" />).
+- **C.12.14.2 — Traslapos.**
+  - **C.12.14.2.1.** No se usan traslapos en barras **mayores de No. 36 (36M)**, salvo en los casos de C.12.16.2 y C.15.8.2.3 (<NormaRef s="C.12.14.2.1" pag="C-114" />).
+  - **C.12.14.2.2.** Los traslapos de paquetes se basan en el traslapo de las barras individuales **aumentado según C.12.4**; los traslapos de barras individuales del paquete **no deben superponerse** y **no se empalman paquetes enteros** (<NormaRef s="C.12.14.2.2" pag="C-114" />).
+  - **C.12.14.2.3.** En flexión, las barras traslapadas **sin contacto** no se separan transversalmente más que la menor de **1/5 de la longitud de traslapo** y **150 mm** (<NormaRef s="C.12.14.2.3" pag="C-114" />).
+- **C.12.14.3 — Empalmes soldados y mecánicos.**
+  - **C.12.14.3.1.** Se permiten (<NormaRef s="C.12.14.3.1" pag="C-114" />).
+  - **C.12.14.3.2.** Un empalme **mecánico completo** debe desarrollar en tracción o compresión, según se requiera, al menos **$1.25f_y$** de la barra (<NormaRef s="C.12.14.3.2" pag="C-114" />).
+  - **C.12.14.3.3.** Toda soldadura sigue ANSI/AWS D.1.4 «Structural Welding Code—Reinforcing Steel», salvo lo que disponga el Título C (<NormaRef s="C.12.14.3.3" pag="C-114" />).
+  - **C.12.14.3.4.** Un empalme **totalmente soldado** debe desarrollar al menos **$1.25f_y$** (<NormaRef s="C.12.14.3.4" pag="C-114" />).
+  - **C.12.14.3.5.** Los que no cumplan 1.25 $f_y$ se permiten solo en barras No. 5 (16M) y menores y según C.12.15.4 (<NormaRef s="C.12.14.3.5" pag="C-114" />).
+
+## C.12.15 — Empalmes de alambres y barras corrugadas a tracción
+
+### C.12.15.1 — Clases A y B
+
+La longitud mínima del empalme por traslapo en tracción es la de un empalme **Clase A** o **Clase B**, pero **no menor de 300 mm** (<NormaRef s="C.12.15.1" pag="C-115" />):
+
+<TablaNorma numero="C.12.15.1" titulo="Longitud de empalme por traslapo en tracción" pag="C-115" nota="ℓd se calcula según C.12.2 para desarrollar fy, pero SIN el mínimo de 300 mm de C.12.2.1 y SIN el factor de refuerzo en exceso de C.12.2.5.">
+
+| Clase | Longitud |
+|---|:---:|
+| Empalme por traslapo Clase A | $1.0\,\ell_d$ |
+| Empalme por traslapo Clase B | $1.3\,\ell_d$ |
+
+</TablaNorma>
+
+### C.12.15.2 a C.12.15.6 — Cuándo A y cuándo B, diámetros distintos y empalmes soldados o mecánicos
+
+- **C.12.15.2.** Los traslapos en tracción son **Clase B**, excepto que se admite **Clase A** cuando (a) el área de refuerzo proporcionada es **al menos el doble** de la requerida por análisis en todo el traslapo, **y** (b) la **mitad o menos** del refuerzo total está empalmado en la longitud de traslapo requerida (<NormaRef s="C.12.15.2" pag="C-115" />).
+- **C.12.15.3.** Barras de **distinto diámetro** en tracción: la longitud del traslapo es el **mayor** entre $\ell_d$ de la barra mayor y el empalme en tracción de la barra menor (<NormaRef s="C.12.15.3" pag="C-115" />).
+- **C.12.15.4.** Empalmes soldados o mecánicos donde el área proporcionada es **menor del doble** de la requerida cumplen C.12.14.3.2 o C.12.14.3.4 (<NormaRef s="C.12.15.4" pag="C-115" />).
+- **C.12.15.5.** Los que **no** cumplen 1.25 $f_y$ se permiten para barras No. 5 (16M) o menores si (<NormaRef s="C.12.15.5" pag="C-115" />):
+  - **C.12.15.5.1:** están **escalonados** al menos **600 mm**.
+  - **C.12.15.5.2:** al calcular la fuerza de tracción en cada sección, el esfuerzo en el refuerzo empalmado es la **resistencia especificada del empalme** (no mayor que $f_y$); en el no empalmado, $f_y$ por la relación entre la menor longitud anclada más allá de la sección y $\ell_d$ (no mayor que $f_y$).
+  - **C.12.15.5.3:** la fuerza de tracción total que se puede desarrollar en cada sección es al menos el **doble** de la requerida y al menos **140 MPa** por el área total del refuerzo proporcionado.
+- **C.12.15.6.** Los empalmes en **elementos de amarre en tracción** (tirantes) son soldados o mecánicos **completos** (C.12.14.3.2 o C.12.14.3.4), con los de barras adyacentes escalonados al menos **750 mm** (<NormaRef s="C.12.15.6" pag="C-115" />).
+
+<Ejemplo numero={4} titulo="Longitud de un empalme Clase B de barras No. 6">
+
+Barras inferiores No. 6 ({ej3.b.db} mm) de una viga, $f'_c$ = {ej3.fc} MPa, $f_y$ = {ej3.fy} MPa, concreto de peso normal, con espaciamiento y recubrimiento adecuados (primera fila de la tabla de C.12.2.2). El área de acero proporcionada es 1.2 veces la requerida y se empalma el 100 % de las barras en la misma sección.
+
+<Paso titulo="¿Qué clase de empalme?" ref="C.12.15.2">
+
+$A_s$ proporcionada/requerida = 1.2 < 2 y la fracción empalmada (100 %) supera 50 %: no se cumple (a) ni (b) → **Clase {ej3.exigida}**. (Para que fuera Clase {ej3.permitidaA} haría falta, por ejemplo, 2.4 veces el acero requerido y empalmar solo la mitad de las barras.)
+
+</Paso>
+<Paso titulo="ℓd base, sin mínimo ni exceso" ref="C.12.15.1, C.12.2.2">
+
+Barra No. 6 (≤ No. 6), divisor 2.1:
+
+$$
+\ell_d=\frac{f_y\,\psi_t\,\psi_e}{2.1\,\lambda\sqrt{f'_c}}\,d_b=\frac{420\,(1.0)(1.0)}{2.1\,(1.0)\sqrt{21}}\,(19.1)
+$$
+
+$\ell_d$ = **{f(ej3.inf, 1)} mm** ({f(ej3.inf / ej3.b.db)} $d_b$).
+
+</Paso>
+<Paso titulo="Longitud de traslapo" ref="C.12.15.1">
+
+Clase B = 1.3 $\ell_d$ = **{f(ej3.claseB, 0)} mm** (≥ 300 mm ✓). Como comparación, un Clase A habría sido {f(ej3.claseA, 0)} mm. Si el empalme fuera en barras **superiores** ($\psi_t$ = 1.3): $\ell_d$ = {f(ej3.sup, 0)} mm y el Clase B pasa a **{f(ej3.claseBsup, 0)} mm**.
+
+</Paso>
+<Paso titulo="Barras sin contacto" ref="C.12.14.2.3">
+
+Si las barras traslapadas no se tocan, su separación transversal no puede superar el menor de $L_{emp}/5$ = {f(ej3.claseB / 5, 0)} mm y 150 mm → **{f(ej3.sepMax, 0)} mm**.
+
+</Paso>
+<Resultado>
+Se traslapan **{f(ej3.claseB, 0)} mm** (≈ {f(ej3.claseB / ej3.b.db, 0)} $d_b$) las barras inferiores y {f(ej3.claseBsup, 0)} mm las superiores. El **aumento del 30 %** que separa la Clase B de la A es lo que se paga por empalmar todas las barras en la misma sección.
+</Resultado>
+</Ejemplo>
+
+## C.12.16 — Empalmes de barras corrugadas a compresión
+
+- **C.12.16.1.** La longitud del traslapo en compresión es **$0.071f_y d_b$** para $f_y \le$ 420 MPa, o **$(0.13f_y - 24)d_b$** para $f_y >$ 420 MPa, pero **no menor de 300 mm**. Para $f'_c <$ 21 MPa, la longitud se **incrementa en 1/3** (<NormaRef s="C.12.16.1" pag="C-115" />).
+- **C.12.16.2.** Barras de distinto diámetro en compresión: el **mayor** entre $\ell_{dc}$ de la barra mayor y el traslapo en compresión de la barra menor. Se permite traslapar barras No. 14 (45M) y No. 18 (55M) con barras No. 36 (36M) y menores (<NormaRef s="C.12.16.2" pag="C-115" />).
+- **C.12.16.3.** Los empalmes soldados o mecánicos en compresión cumplen C.12.14.3.2 o C.12.14.3.4 (<NormaRef s="C.12.16.3" pag="C-116" />).
+- **C.12.16.4 — Empalmes a tope.** En barras requeridas **solo para compresión** se permite transmitir la compresión por **apoyo directo** con cortes a escuadra mantenidos en contacto concéntrico por un dispositivo adecuado (C.12.16.4.1). Los extremos terminan en superficies planas perpendiculares al eje con tolerancia de **1.5°** y se ajustan con tolerancia de **3°** respecto al apoyo completo después del ensamble (C.12.16.4.2). Se usan **solo en elementos con estribos cerrados o espirales** (C.12.16.4.3) (<NormaRef s="C.12.16.4" pag="C-116" />).
+
+## C.12.17 — Requisitos especiales de empalmes en columnas
+
+- **C.12.17.1.** Se pueden usar traslapos, empalmes mecánicos, soldados a tope, conexiones mecánicas o empalmes de tope, con las limitaciones de C.12.17.2 a C.12.17.4. Los empalmes deben satisfacer los requisitos para **todas las combinaciones de carga** de la columna (<NormaRef s="C.12.17.1" pag="C-116" />).
+- **C.12.17.2 — Traslapos en columnas** (<NormaRef s="C.12.17.2" pag="C-116" />):
+
+| Caso | Requisito |
+|---|---|
+| Esfuerzo por cargas mayoradas de **compresión** (C.12.17.2.1) | Cumplir C.12.16.1, C.12.16.2 y, cuando sea aplicable, C.12.17.2.4 o C.12.17.2.5 |
+| **Tracción ≤ 0.5 $f_y$** (C.12.17.2.2) | **Clase B** si más de la mitad de las barras se empalma en una sección; **Clase A** si la mitad o menos se empalma y los traslapos alternados están escalonados una distancia $\ell_d$ |
+| **Tracción > 0.5 $f_y$** (C.12.17.2.3) | **Clase B** |
+| Compresión con **estribos** efectivos ≥ $0.0015\,h\,s$ en ambas direcciones (C.12.17.2.4) | Traslapo × **0.83**, no menor de 300 mm (se usan las ramas perpendiculares a la dimensión $h$) |
+| Compresión con **espiral** (C.12.17.2.5) | Traslapo × **0.75** para las barras dentro de la espiral, no menor de 300 mm |
+
+- **C.12.17.3.** Los empalmes soldados o mecánicos en columnas cumplen C.12.14.3.2 o C.12.14.3.4 (<NormaRef s="C.12.17.3" pag="C-116" />).
+- **C.12.17.4.** Se permiten **empalmes a tope** (C.12.16.4) en barras de columnas comprimidas si están **escalonados** o si se especifican barras adicionales en la zona del empalme; las barras que continúan en cada cara deben tener una resistencia a la tracción, basada en $f_y$, no menor que $0.25f_y$ por el área del refuerzo vertical en esa cara (<NormaRef s="C.12.17.4" pag="C-116" />).
+
+<Ejemplo numero={5} titulo="Compresión: ℓdc y empalme de una barra No. 8 de columna">
+
+Barra No. 8 de columna, $f'_c$ = {ej5.fc} MPa, $f_y$ = {ej5.fy} MPa, concreto de peso normal.
+
+<Paso titulo="Longitud de desarrollo a compresión" ref="C.12.3.2">
+
+$0.24\,f_y d_b/(\lambda\sqrt{f'_c})$ = {f(ej5.ldc.termino1, 1)} mm y $0.043\,f_y d_b$ = {f(ej5.ldc.termino2, 1)} mm: gobierna el mayor, $\ell_{dc}$ = **{f(ej5.ldc.ldc, 0)} mm**. Con espiral (×0.75): **{f(ej5.ldcEsp.ldc, 0)} mm** (≥ 200 mm ✓).
+
+</Paso>
+<Paso titulo="Empalme por traslapo en compresión" ref="C.12.16.1">
+
+$f_y \le$ 420 MPa: $0.071\,f_y d_b$ = 0.071·420·25.4 = **{f(ej5.emp.longitud, 0)} mm**. Si el concreto fuera de 17.5 MPa (< 21 MPa) se incrementa 1/3: {f(ej5.empBajo.longitud, 0)} mm. Si el acero fuera $f_y$ = 500 MPa: $(0.13\cdot 500 - 24)\,d_b$ = {f(ej5.emp500.longitud, 0)} mm.
+
+</Paso>
+<Paso titulo="Con estribos o espiral" ref="C.12.17.2.4, C.12.17.2.5">
+
+Con estribos de área efectiva ≥ 0.0015 $h s$ en ambas direcciones: ×0.83 = **{f(ej5.estribos, 0)} mm**. Con espiral: ×0.75 = **{f(ej5.espiral, 0)} mm**.
+
+</Paso>
+<Paso titulo="Si la barra fuera parte de un paquete de 3 barras" ref="C.12.4.1">
+
+La longitud de cada barra del paquete se multiplica por 1.20 (3 barras): con la $\ell_d$ de tabla de C.12.2.2 de esta barra, {f(ej5.paquete3 / 1.2, 0)} mm → {f(ej5.paquete3, 0)} mm.
+
+</Paso>
+<Resultado>
+La barra se empalma por traslapo en compresión con **{f(ej5.emp.longitud, 0)} mm** ({f(ej5.emp.longitud / ej5.b.db, 1)} $d_b$); con estribos de columna bien dispuestos baja a {f(ej5.estribos, 0)} mm y con espiral a {f(ej5.espiral, 0)} mm. El traslapo en compresión es **más corto** que el de tracción de la misma barra: la punta de la barra también transmite por apoyo.
+</Resultado>
+</Ejemplo>
+
+## C.12.18 — Empalmes de refuerzo electrosoldado de alambre corrugado a tracción
+
+- **C.12.18.1.** El traslapo, medido entre los extremos de cada malla, no es menor que el mayor de **$1.3\ell_d$ y 200 mm**, y el traslapo medido entre los alambres transversales más alejados de cada malla no es menor de **50 mm**; $\ell_d$ se calcula para desarrollar $f_y$ según C.12.7 (<NormaRef s="C.12.18.1" pag="C-117" />).
+- **C.12.18.2.** Sin alambre transversal dentro del traslapo, se determina como para alambre corrugado (<NormaRef s="C.12.18.2" pag="C-117" />).
+- **C.12.18.3.** Con **alambre liso** o alambres corrugados mayores que MD200 (16 mm) en la dirección del empalme, o al empalmar malla corrugada con malla lisa, se aplica **C.12.19** (<NormaRef s="C.12.18.3" pag="C-117" />).
+
+## C.12.19 — Empalmes de refuerzo electrosoldado de alambre liso a tracción
+
+- **C.12.19.1.** Con $A_s$ suministrada **menor de 2 veces** la requerida en la zona del empalme, el traslapo, medido entre los alambres transversales más alejados de cada malla, es el **mayor** de: una separación de alambres transversales **más 50 mm**, **$1.5\ell_d$** y **150 mm**. $\ell_d$ según C.12.8 para desarrollar $f_y$ (<NormaRef s="C.12.19.1" pag="C-117" />).
+- **C.12.19.2.** Con $A_s$ suministrada **al menos el doble** de la requerida, el traslapo es el mayor de **$1.5\ell_d$ y 50 mm** (<NormaRef s="C.12.19.2" pag="C-117" />).
+
+La página C-118 está en blanco («Notas:»).
+
+## Erratas y observaciones sobre el texto del PDF
+
+<Callout tipo="nota" titulo="Observaciones del autor (no son texto de la norma)">
+- **Tabla de C.12.2.2, celda «Otros casos» de barras No. 7 y mayores.** La imagen del PDF imprime $f_y\psi_t\psi_e\lambda\,/\,(1.1\lambda\sqrt{f'_c})$, con $\lambda$ **también en el numerador**, lo que la cancelaría y dejaría sin penalización al concreto liviano. En las otras tres celdas y en la Ecuación C.12-1, $\lambda$ solo está en el denominador. Aquí (tabla, lib y calculadora) se usa $\lambda$ **solo en el denominador**. Con $\lambda$ = 1.0 (peso normal) no hay diferencia. Verifica con el texto oficial vigente si diseñas con concreto liviano.
+- **C.12.5.2.** El texto impreso dice «$\psi_e$ igual a 0.75 para concreto con agregados livianos. Para otros casos, $\psi_e$ y $\lambda$ deben tomarse igual a 1.0». Tomado literalmente **reduciría** $\ell_{dh}$ en concreto liviano (0.75 en el numerador), lo contrario de lo esperable, y omite el factor de recubrimiento epóxico. Parece una mezcla de los símbolos $\psi_e$ y $\lambda$ de la redacción original. Aquí se aplica $\lambda$ de C.12.2.4(d) en el **denominador** (más conservador) y $\psi_e$ = 1.0, y se avisa en la calculadora. **No se incluye 0.75 como factor.**
+- **C.12.1.2.** En el texto extraído se pierde el radical («valores de $f'_c$»); la imagen confirma que se trata de $\sqrt{f'_c}$ ≤ 8.3 MPa.
+- **C.12.13.2.1.** «Barras **No. 16** y alambre MD200 (16 mm)»: «No. 16» no es una designación de las Tablas C.3.5.3-1 y C.3.5.3-2; se lee como **No. 5 (5/8″) ó 16M**. Es una lectura del autor.
+- **C.12.13.2 y C.12.3.3(b).** El texto remite a «C.12.3.2.5» donde quiere decir C.12.13.2.5; y C.12.3.3(b) habla de estribos «No. 13», designación que tampoco figura en las tablas de barras (se transcribe tal cual).
+- **C.12.10.5.2.** El PDF usa $s$ sin definir (separación de estribos) y $\beta_b$ (relación del refuerzo que termina; notación C.2).
+- **C.12.8 y C.12.7.1:** el texto remite a «12.8» y «12.19» sin la «C.» inicial, y en C.12.19.1 pide calcular $\ell_d$ «de acuerdo con 12.8».
+- **C.12.14.3.3** cita «ANSI/AWS D1.4» (en el índice de la norma se escribe D.1.4).
+- «Barras No. 36» equivale en C.12 a **36M (No. 11)**; la norma mezcla numeración de pulgadas y milímetros.
+- Las ecuaciones y los radicales salen rotos en el texto extraído; todas las expresiones se verificaron contra las imágenes de las páginas C-107 a C-117.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Olvidar el mínimo** de 300 mm para $\ell_d$ (C.12.2.1) o de 200 mm para $\ell_{dc}$ (C.12.3.1); y **sí aplicarlo** al calcular un empalme (C.12.15.1 pide $\ell_d$ sin él).
+- **Aplicar el factor de refuerzo en exceso** (C.12.2.5) a un empalme: no se permite en el $\ell_d$ del empalme.
+- **Olvidar $\psi_t$ = 1.3** en barras superiores con más de 300 mm de concreto fresco debajo, o en el empalme de barras superiores.
+- **Tomar $(c_b+K_{tr})/d_b$ mayor de 2.5**: el tope existe porque más confinamiento no evita ya el hendimiento (<NormaRef s="C.12.2.3" pag="C-107" />).
+- **Usar $\sqrt{f'_c}$ sin el tope de 8.3 MPa** con concretos de alta resistencia (<NormaRef s="C.12.1.2" pag="C-107" />).
+- **Usar un gancho o una cabeza para barras en compresión** (<NormaRef s="C.12.5.5" pag="C-109" />, <NormaRef s="C.12.6.3" pag="C-110" />).
+- **Empalmar por traslapo barras mayores de No. 36 (36M)** (<NormaRef s="C.12.14.2.1" pag="C-114" />).
+- **Elegir Clase A** sin cumplir **las dos** condiciones de C.12.15.2 (el doble de acero y la mitad o menos empalmada).
+- **No incrementar 1/3** el traslapo en compresión con $f'_c$ < 21 MPa, o usar 0.071 $f_y d_b$ con $f_y$ > 420 MPa (<NormaRef s="C.12.16.1" pag="C-115" />).
+- **Cortar barras en zona de tracción** sin verificar C.12.10.5, o cortarlas justo en el punto teórico sin la extensión $d$ ó $12d_b$ (<NormaRef s="C.12.10.3" pag="C-112" />).
+- **Ignorar la Ecuación C.12-5** en apoyos simples con barras gruesas: puede obligar a más barras de menor diámetro o a un gancho.
+- **Empalmar paquetes enteros** o traslapar a la vez las barras de un paquete (<NormaRef s="C.12.14.2.2" pag="C-114" />).
+</Callout>
+
+## Resumen en una línea
+
+**Cada barra debe estar embebida $\ell_d$ (tabla de C.12.2.2 o Ecuación C.12-1, con $\psi_t\psi_e\psi_s/\lambda$, mínimo 300 mm), $\ell_{dc}$ a compresión, $\ell_{dh}$ con gancho o $\ell_{dt}$ con cabeza; las de flexión se extienden $d$ ó $12d_b$ más allá del corte y cumplen $\ell_d \le M_n/V_u + \ell_a$ en los apoyos; y los traslapos en tracción miden $1.0\ell_d$ (Clase A) o $1.3\ell_d$ (Clase B), 0.071 $f_y d_b$ en compresión, o se reemplazan por empalmes mecánicos o soldados de al menos $1.25f_y$.**
