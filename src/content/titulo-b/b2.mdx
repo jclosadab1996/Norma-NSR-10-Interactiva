@@ -1,0 +1,483 @@
+---
+codigo: 'B.2'
+tipo: capitulo
+titulo: 'Combinaciones de carga'
+resumen: 'Cómo se suman las cargas muertas, vivas, de viento, sismo, empuje y demás para diseñar: combinaciones mayoradas del método de la resistencia (B.2.4) y combinaciones de esfuerzos de trabajo y servicio (B.2.3), con la fuerza sísmica reducida E = Fs/R.'
+objetivos:
+  - 'Distinguir cargas nominales, mayoradas y de servicio, y los dos métodos de diseño'
+  - 'Armar las 7 combinaciones mayoradas de B.2.4 y las 10 de esfuerzos de trabajo de B.2.3'
+  - 'Usar correctamente E = Fs/R, la reducción de L a 0.5 y el 1.3W'
+  - 'Identificar la combinación gobernante de un elemento'
+paginasNorma: 'B-3 a B-8'
+paginaPdf: 222
+orden: 2
+calculadoras: ['combinaciones-carga']
+nivel: 'intermedio'
+---
+
+import { combinacionesResistencia, combinacionesTrabajo, envolvente, sismoReducido, puedeReducirFactorL } from '../../lib/nsr10/combinaciones';
+
+export const v = (lista, id) => lista.find((c) => c.id === id).valor.toFixed(1);
+
+export const ej1 = (() => {
+  const e = sismoReducido(1500, 5);
+  const cargas = { D: 800, L: 300, Lr: 60, W: 90, E: e };
+  const base = combinacionesResistencia(cargas);
+  const red = combinacionesResistencia(cargas, { reducirFactorL: true });
+  return { e, base, red, envBase: envolvente(base), envRed: envolvente(red), permite: puedeReducirFactorL('general', 2.0), noParq: puedeReducirFactorL('estacionamiento', 2.5) };
+})();
+
+export const ej2 = (() => {
+  const cargas = { D: 800, L: 300, Lr: 60, W: 90, E: sismoReducido(1500, 5) };
+  const lista = combinacionesTrabajo(cargas);
+  return { lista, env: envolvente(lista) };
+})();
+
+export const ej3 = (() => {
+  const lista = combinacionesResistencia({ D: 40, Lr: 10, W: -60 });
+  return { lista, env: envolvente(lista) };
+})();
+
+## Idea central del capítulo
+
+Las cargas del Título B (y el sismo del Título A) no actúan una por una: en la vida real **coexisten**, y es muy improbable que todas alcancen su máximo a la vez. El Capítulo B.2 resuelve cómo **sumarlas**: define los términos (cargas nominales, mayoradas, de servicio…), la **nomenclatura** (D, L, W, E…) y dos listas de combinaciones, una por cada método de diseño:
+
+- **B.2.4 — Método de la resistencia:** 7 combinaciones con las cargas **multiplicadas por coeficientes de carga** (1.4, 1.2, 1.6…). Es el que usan casi todos los materiales de la NSR-10.
+- **B.2.3 — Esfuerzos de trabajo / estado límite de servicio:** 10 combinaciones con cargas **sin mayorar** (o con factores de 0.75, 0.7, 0.6). Solo para casos especiales, como madera y guadua.
+
+<Callout tipo="importante" titulo="El diseño se hace con la combinación más desfavorable">
+Para cada elemento, cimentación o conexión se evalúan **todas** las combinaciones y se diseña con la que produce el **efecto más desfavorable**, que puede ocurrir cuando una o varias cargas **no actúan** (<NormaRef s="B.2.3.1" pag="B-5" />). Una vez escogido el método, se usa **en toda la estructura** (<NormaRef s="B.2.1.2" pag="B-4" />).
+</Callout>
+
+## B.2.1 — Definiciones y limitaciones
+
+### B.2.1.1 — Definiciones
+
+La norma define los términos del Título B, con su equivalente en inglés (<NormaRef s="B.2.1.1" pag="B-3" />). Los más importantes para entender las combinaciones:
+
+| Término | Qué significa (resumen) |
+|---|---|
+| **Cargas** (*loads*) | Fuerzas u otras solicitaciones sobre el sistema estructural: peso de los elementos permanentes, ocupantes y pertenencias, efectos ambientales, asentamientos diferenciales y restricción de cambios dimensionales. Las **permanentes** varían muy poco en el tiempo; **todas las demás son variables**. |
+| **Cargas nominales** (*nominal loads*) | Las magnitudes de B.3 a B.6. Las cargas muertas, vivas y de viento del Título B son **nominales (reales)**: **no** están multiplicadas por el coeficiente de carga. |
+| **Cargas de servicio** (*service loads*) | Sinónimo de cargas nominales. |
+| **Carga mayorada** (*factored load*) | Carga nominal multiplicada por un **coeficiente de carga**. Las fuerzas sísmicas del Título A ya son **mayoradas**: el coeficiente está incluido en la probabilidad del sismo de diseño. |
+| **Coeficiente de carga** (*load factor*) | Cubre las desviaciones inevitables entre cargas reales y nominales y las incertidumbres del análisis. Sinónimo de “factor de carga”. |
+| **Coeficiente de reducción de resistencia** ($\phi$) | Cubre las desviaciones entre resistencia real y nominal y la forma y consecuencia del tipo de falla. Sinónimo de “factor de reducción de resistencia”. |
+| **Resistencia nominal** | Capacidad del elemento calculada con valores nominales de materiales y dimensiones nominales. |
+| **Resistencia de diseño** | Resistencia nominal **por** el coeficiente de reducción de resistencia. |
+| **Efectos de las cargas** | Deformaciones y fuerzas internas que las cargas producen en los elementos. |
+| **Estado límite** | Condición más allá de la cual la estructura deja de cumplir su función (**servicio**) o se vuelve insegura (**resistencia**). |
+| **Método de la resistencia** | Las fuerzas internas producidas por las cargas **mayoradas** no deben exceder las **resistencias de diseño**. |
+| **Método de los esfuerzos de trabajo** | Los esfuerzos calculados **elásticamente con cargas reales** no deben exceder un límite especificado para cada material. |
+| **Método de los estados límites** | Busca que la probabilidad de falla de ciertos estados límites sea aceptable; en el de resistencia se conoce como método de la resistencia. |
+
+<Detalle titulo="Otras definiciones de B.2.1.1">
+
+| Término | Definición (resumen) |
+|---|---|
+| **Curadurías** | Entidades que estudian, tramitan y expiden licencias de construcción (Ley 388 de 1997); incluye a quien cumpla esa función. |
+| **Durabilidad** | Capacidad de la estructura de evitar un deterioro perjudicial para el desempeño requerido en su ambiente. |
+| **Edificación** | Construcción cuyo uso principal es la habitación u ocupación por seres humanos. |
+| **Funcionamiento** (*serviceability*) | Comportamiento adecuado en condiciones de servicio. |
+| **Integridad estructural** | Capacidad de evitar el colapso generalizado cuando ocurre daño localizado. |
+| **Mantenimiento** | Actividades durante la vida de servicio para que la estructura cumpla los requisitos de desempeño. |
+| **Reparabilidad** (*restorability*) | Capacidad de ser reparada física y económicamente tras el daño. |
+| **Resistencia** | Capacidad de un elemento de soportar las cargas o fuerzas aplicadas. |
+| **Sistema estructural** | Elementos estructurales interconectados que cumplen una función específica. |
+| **Trayectoria de cargas** | Sucesión de elementos por los que se transmiten las cargas desde su punto de aplicación hasta la cimentación. |
+| **Vida de servicio de diseño** | Período en que la estructura es utilizable para su propósito, con los mantenimientos requeridos pero sin reparaciones importantes. |
+
+</Detalle>
+
+### B.2.1.2 — Limitación
+
+La seguridad se verifica con los requisitos de **B.2.3 o de B.2.4**, según el método de diseño y el material. **Una vez escogido uno, el diseño se hace en su totalidad con ese numeral, para todos los elementos de la estructura** (<NormaRef s="B.2.1.2" pag="B-4" />). No se mezclan combinaciones de uno y otro método.
+
+## B.2.2 — Nomenclatura
+
+Estos son los símbolos de las combinaciones (<NormaRef s="B.2.2" pag="B-4" />):
+
+| Símbolo | Significado |
+|---|---|
+| **D** | Carga **muerta**: (a) peso propio del elemento; (b) peso de los materiales de construcción permanentemente soportados por el elemento, incluidos muros y particiones; (c) peso del equipo permanente |
+| **L** | Cargas **vivas** por uso y ocupación, incluidas las debidas a objetos móviles y a particiones que se pueden cambiar de sitio. **Incluye cualquier reducción permitida.** Si se considera el impacto, se incluye en L |
+| **L₀** | Carga viva **sin reducir**, en kN/m² (véase B.4.5.1) |
+| **Lr** | Carga viva **sobre la cubierta** |
+| **G** | Carga de **granizo**, sin la contribución del empozamiento |
+| **Le** | Carga de **empozamiento** de agua |
+| **W** | Carga de **viento** |
+| **E** | Fuerzas **sísmicas reducidas** de diseño, $E = F_s/R$, para diseñar los miembros |
+| **F** | Cargas por peso y presión de **fluidos** con densidades bien definidas y alturas máximas controlables |
+| **H** | Cargas por **empuje lateral** del suelo, del agua freática o de materiales almacenados con restricción horizontal |
+| **T** | Fuerzas y efectos por **variación de temperatura, retracción de fraguado, flujo plástico, cambios de humedad, asentamiento diferencial** o combinación de ellos |
+| **$F_s$** | Fuerzas sísmicas calculadas según el Título A (sin reducir) |
+| **$E_d$** | Fuerza sísmica del umbral de daño |
+| **$F_a$** | Carga debida a inundación (se define en la nomenclatura, pero no aparece en las combinaciones de B.2.3 ni B.2.4) |
+| **R₀** | Coeficiente de capacidad de disipación de energía **básico** (Capítulo A.3) |
+| **R** | Coeficiente de disipación de energía **de diseño**: $R=\phi_a\,\phi_p\,\phi_r\,R_0$ (reducción por irregularidades en altura y en planta y por ausencia de redundancia; Capítulo A.3) |
+
+<Callout tipo="nota" titulo="Las cargas de cubierta son alternativas">
+En las combinaciones aparece “(Lr ó G ó Le)”: significa que entra **una sola** de las tres cargas de cubierta —viva de cubierta, granizo o empozamiento—, la que resulte más desfavorable. No se suman entre sí.
+</Callout>
+
+## B.2.3 — Combinaciones para esfuerzos de trabajo o estado límite de servicio
+
+### B.2.3.1 — Combinaciones básicas
+
+Excepto cuando el reglamento de cada material indique otra cosa, se consideran todas las cargas en las combinaciones siguientes, y el diseño se hace con la que produce el **efecto más desfavorable** en la edificación, la cimentación o el elemento considerado; ese efecto puede ocurrir cuando alguna carga no actúa (<NormaRef s="B.2.3.1" pag="B-5" />).
+
+<Callout tipo="atencion" titulo="¿Cuándo se usan realmente estas combinaciones?">
+En la NSR-10 **todos los materiales estructurales, excepto la madera y la guadua (Título G), se diseñan por el método de la resistencia**. Por eso las combinaciones de B.2.3.1 **no son aplicables** a los demás materiales y **no deben utilizarse** con ellos. Se incluyen para los casos especiales de diseño por esfuerzos admisibles, y **solo cuando el Título, Capítulo o Sección correspondiente lo indique explícitamente** (<NormaRef s="B.2.3.1" pag="B-5" />). Sirven además para las **verificaciones del estado límite de servicio**.
+</Callout>
+
+<Ecuacion num="B.2.3-1" titulo="Combinación 1 (esfuerzos de trabajo)">
+
+$$
+D+F
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-2" titulo="Combinación 2">
+
+$$
+D+H+F+L+T
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-3" titulo="Combinación 3">
+
+$$
+D+H+F+\left(L_r \text{ ó } G \text{ ó } L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-4" titulo="Combinación 4">
+
+$$
+D+H+F+0.75\,(L+T)+0.75\left(L_r \text{ ó } G \text{ ó } L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-5" titulo="Combinación 5 (viento)">
+
+$$
+D+H+F+W
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-6" titulo="Combinación 6 (sismo)">
+
+$$
+D+H+F+0.7\,E
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-7" titulo="Combinación 7 (viento con cargas variables)">
+
+$$
+D+H+F+0.75\,W+0.75\,L+0.75\left(L_r \text{ ó } G \text{ ó } L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-8" titulo="Combinación 8 (sismo con cargas variables)">
+
+$$
+D+H+F+0.75\,(0.7\,E)+0.75\,L+0.75\left(L_r \text{ ó } G \text{ ó } L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-9" titulo="Combinación 9 (viento con carga muerta reducida)">
+
+$$
+0.6\,D+W+H
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.3-10" titulo="Combinación 10 (sismo con carga muerta reducida)">
+
+$$
+0.6\,D+0.7\,E+H
+$$
+
+</Ecuacion>
+
+**Viento y sismo se toman independientemente:** deben considerarse sus efectos más desfavorables, pero **nunca W y E en la misma combinación** (<NormaRef s="B.2.3.1" pag="B-5" />).
+
+<Callout tipo="practica" titulo="Cómo leer estas combinaciones">
+- Las ecuaciones **-1 a -5** y **-9** usan las cargas “tal cual” o con 0.75: son combinaciones de **servicio**.
+- Cuando se juntan **varias cargas variables** (L, T, cubierta, W o E) cada una se reduce a **0.75**, porque es improbable que todas alcancen su máximo simultáneamente.
+- Las ecuaciones **-9 y -10** usan **0.6D**: la carga muerta *ayuda* a resistir el volcamiento o la tensión por viento y sismo, así que se toma una fracción de ella.
+- El **0.7** que multiplica a E convierte la fuerza sísmica de nivel de resistencia al nivel de servicio (0.7 ≈ 1/1.4, consistente con el 1.4E de <NormaRef s="B.2.4.2.4" pag="B-7" />).
+</Callout>
+
+### B.2.3.2 — Fuerzas sísmicas
+
+Las fuerzas sísmicas reducidas $E$ de B.2.3-6, B.2.3-8 y B.2.3-10 son el efecto de las fuerzas $F_s$ del Título A **divididas por R**. Al diseñar por esfuerzos de trabajo, el coeficiente de carga que afecta a $E$ es **0.7** (<NormaRef s="B.2.3.2" pag="B-6" />).
+
+<Ecuacion num="B.2.2 / B.2.3.2" titulo="Fuerza sísmica reducida">
+
+$$
+E=\frac{F_s}{R}\qquad R=\phi_a\,\phi_p\,\phi_r\,R_0
+$$
+
+- $F_s$: fuerzas sísmicas del Título A (nivel de resistencia).
+- $R$: coeficiente de capacidad de disipación de energía de diseño (A.3).
+
+</Ecuacion>
+
+#### B.2.3.2.1 — Derivas por esfuerzos de trabajo, sismo de diseño
+
+Para evaluar las derivas (deflexiones horizontales) del sismo de diseño se aplica el Capítulo A.6, que exige verificarlas con las fuerzas $F_s$ **sin dividir por R**, usando **1.0E en vez de 0.7E** en las ecuaciones de B.2.3 que incluyan E (<NormaRef s="B.2.3.2.1" pag="B-6" />).
+
+#### B.2.3.2.2 — Derivas por esfuerzos de trabajo, umbral de daño
+
+Para las derivas del **sismo de umbral de daño** en edificaciones indispensables del **grupo de uso IV**, se aplica el Capítulo A.12, que exige verificar las derivas con las fuerzas sísmicas $E_d$ (<NormaRef s="B.2.3.2.2" pag="B-6" />).
+
+## B.2.4 — Combinaciones de cargas mayoradas (método de la resistencia)
+
+### B.2.4.1 — Aplicabilidad
+
+Las combinaciones y factores de B.2.4.2 se usan en **todos los materiales estructurales** permitidos por el reglamento de diseño de cada material, **salvo** que éste indique explícitamente el diseño por esfuerzos de trabajo, caso en que se usan las combinaciones de B.2.3.1 (<NormaRef s="B.2.4.1" pag="B-6" />).
+
+<Callout tipo="atencion" titulo="Nota importante de la norma: factores de carga y φ van de la mano">
+Las combinaciones de B.2.4.2 tienen **factores de carga menores** que los de la NSR-98, pero en cada material los **coeficientes de reducción de resistencia φ también son menores**, de modo que ambos conjuntos son coherentes con la probabilidad de falla que limita el reglamento. Por eso es **incorrecto e inseguro** usar las nuevas combinaciones con los φ de la NSR-98 (<NormaRef s="B.2.4.1" pag="B-6" />).
+</Callout>
+
+### B.2.4.2 — Combinaciones básicas
+
+El diseño de estructuras, componentes y cimentaciones debe hacerse de modo que sus **resistencias de diseño igualen o excedan** los efectos de las cargas mayoradas en estas combinaciones (<NormaRef s="B.2.4.2" pag="B-6" />):
+
+<Ecuacion num="B.2.4-1" titulo="Combinación 1 (solo cargas permanentes)">
+
+$$
+1.4\,(D+F)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.4-2" titulo="Combinación 2 (cargas gravitacionales dominantes: L y H)">
+
+$$
+1.2\,(D+F+T)+1.6\,(L+H)+0.5\left(L_r \text{ ó } G \text{ ó } L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.4-3" titulo="Combinación 3 (cubierta dominante)">
+
+$$
+1.2\,D+1.6\left(L_r \text{ ó } G \text{ ó } L_e\right)+\left(L \text{ ó } 0.8\,W\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.4-4" titulo="Combinación 4 (viento dominante)">
+
+$$
+1.2\,D+1.6\,W+1.0\,L+0.5\left(L_r \text{ ó } G \text{ ó } L_e\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.4-5" titulo="Combinación 5 (sismo)">
+
+$$
+1.2\,D+1.0\,E+1.0\,L
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.4-6" titulo="Combinación 6 (viento con carga muerta reducida)">
+
+$$
+0.9\,D+1.6\,W+1.6\,H
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.2.4-7" titulo="Combinación 7 (sismo con carga muerta reducida)">
+
+$$
+0.9\,D+1.0\,E+1.6\,H
+$$
+
+</Ecuacion>
+
+<Callout tipo="practica" titulo="Qué busca cada combinación">
+- **B.2.4-1:** cargas permanentes solas (mayoradas con 1.4); gobierna en elementos con muy poca carga viva.
+- **B.2.4-2:** carga viva principal; la cubierta acompaña con 0.5.
+- **B.2.4-3:** la cubierta (o el granizo o el empozamiento) es la carga variable principal; la acompaña **o bien L o bien 0.8W**, la mayor de las dos.
+- **B.2.4-4:** el viento es la carga principal (1.6W), con L y la cubierta como acompañantes.
+- **B.2.4-5:** sismo con la carga viva que se espera presente (1.0L).
+- **B.2.4-6 y -7:** con **0.9D**: verifican casos donde el **peso propio ayuda a la estabilidad** (volcamiento, levantamiento, tensión) frente a viento o sismo.
+</Callout>
+
+#### B.2.4.2.1 — La fuerza sísmica E y las derivas
+
+La $E$ de B.2.4-5 y B.2.4-7 es $F_s/R$. Para diseñar los miembros, el coeficiente de carga de $E$ es **1.0**, **porque las fuerzas sísmicas del Título A ya están prescritas al nivel de resistencia**. Las **derivas** se verifican con el Capítulo A.6, con las fuerzas $F_s$ **sin dividir por R** (<NormaRef s="B.2.4.2.1" pag="B-6" />).
+
+#### B.2.4.2.2 — Reducción del factor de L a 0.5
+
+Se permite usar **0.5** en lugar de 1.0 para la carga viva $L$ en **B.2.4-3, B.2.4-4 y B.2.4-5**, **excepto** en (<NormaRef s="B.2.4.2.2" pag="B-7" />):
+
+- **estacionamientos**,
+- áreas ocupadas como **lugares de reunión pública**,
+- todas las áreas donde **$L_0$ sea mayor de 4.8 kN/m²**.
+
+<Callout tipo="nota">
+Es una reducción del **factor de carga** (1.0 → 0.5); no confundir con la reducción de la **carga viva misma** por área aferente de B.4.5, que ya está incluida en $L$ (nomenclatura de <NormaRef s="B.2.2" pag="B-4" />). En B.2.4-2 el factor 1.6 de $L$ **no** se reduce.
+</Callout>
+
+#### B.2.4.2.3 — 1.3W en lugar de 1.6W
+
+Cuando las cargas de viento del Capítulo B.6 **no** se han reducido por el factor de direccionalidad allí prescrito, se permite usar **1.3W en lugar de 1.6W** en **B.2.4-4 y B.2.4-6** (<NormaRef s="B.2.4.2.3" pag="B-7" />).
+
+#### B.2.4.2.4 — 1.0E (o 1.4E si E es de servicio)
+
+El Título A define las fuerzas sísmicas al nivel de resistencia, por lo que en B.2.4-5 y B.2.4-7 se usa **1.0E**. Se puede usar **1.4E en lugar de 1.0E** cuando los efectos $E$ se basen en los **niveles de servicio** de las fuerzas sísmicas (<NormaRef s="B.2.4.2.4" pag="B-7" />).
+
+#### B.2.4.2.5 — El factor de H puede ser cero
+
+El factor de carga de $H$ (peso y presión del suelo, del agua en el suelo u otros materiales) debe fijarse en **cero** en **B.2.4-6 y B.2.4-7** si la acción estructural debida a $H$ **neutraliza** la causada por $W$ o $E$. Cuando las presiones laterales del suelo **resisten** acciones de otras fuerzas, no se incluyen en $H$ sino en la **resistencia de diseño** (<NormaRef s="B.2.4.2.5" pag="B-7" />).
+
+#### B.2.4.2.6 — Impacto
+
+Si hay que tener en cuenta efectos de **impacto**, se incluyen **con la carga viva L** (<NormaRef s="B.2.4.2.6" pag="B-7" />).
+
+#### B.2.4.2.7 — Efectos de T
+
+Los estimativos de **asentamientos diferenciales, flujo plástico, retracción, expansión de concretos de retracción compensada o variaciones de temperatura** deben basarse en una **evaluación realista** de lo que puede ocurrir durante la vida útil de la estructura (<NormaRef s="B.2.4.2.7" pag="B-7" />).
+
+### Resumen de factores
+
+<TablaNorma numero="Resumen B.2.4-1 a B.2.4-7" titulo="Factores de carga del método de la resistencia" pag="B-6" nota="Elaborado a partir de las ecuaciones; las modificaciones de B.2.4.2.2 a B.2.4.2.5 (pág. B-7) están en la columna final.">
+
+| Ec. | D | F | T | L | H | Lr/G/Le | W | E | Modificaciones permitidas |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| B.2.4-1 | 1.4 | 1.4 | — | — | — | — | — | — | — |
+| B.2.4-2 | 1.2 | 1.2 | 1.2 | 1.6 | 1.6 | 0.5 | — | — | — |
+| B.2.4-3 | 1.2 | — | — | 1.0 ó — | — | 1.6 | 0.8 ó — | — | L con 0.5 |
+| B.2.4-4 | 1.2 | — | — | 1.0 | — | 0.5 | 1.6 | — | L con 0.5; 1.3W |
+| B.2.4-5 | 1.2 | — | — | 1.0 | — | — | — | 1.0 | L con 0.5; 1.4E si E de servicio |
+| B.2.4-6 | 0.9 | — | — | — | 1.6 | — | 1.6 | — | 1.3W; H = 0 si neutraliza |
+| B.2.4-7 | 0.9 | — | — | — | 1.6 | — | — | 1.0 | 1.4E; H = 0 si neutraliza |
+
+</TablaNorma>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Columna de un edificio de oficinas por el método de la resistencia">
+Una columna de un edificio de oficinas (uso general, $L_0$ = 2.0 kN/m²) recibe las siguientes **cargas axiales nominales**: $D$ = 800 kN, $L$ = 300 kN, $L_r$ = 60 kN (cubierta) y $W$ = 90 kN. El sismo de diseño del Título A produce $F_s$ = 1500 kN con $R$ = 5. No hay empuje ($H$), fluidos ($F$) ni efectos $T$. Hallar la combinación gobernante con B.2.4.
+
+<Paso titulo="Fuerza sísmica reducida" ref="B.2.4.2.1">
+
+$$
+E=\frac{F_s}{R}=\frac{1500}{5}
+$$
+
+Resultado: $E$ = **{ej1.e.toFixed(0)} kN**. Con $E$ ya a nivel de resistencia, su coeficiente de carga es 1.0.
+
+</Paso>
+<Paso titulo="Evaluar las siete combinaciones" ref="B.2.4-1 a B.2.4-7">
+Aplicando cada ecuación con $D$ = 800, $L$ = 300, $L_r$ = 60, $W$ = 90 y $E$ = 300:
+
+| Ecuación | Cálculo | Valor (kN) |
+|---|---|---:|
+| B.2.4-1 | 1.4(800) | {v(ej1.base, 'B.2.4-1')} |
+| B.2.4-2 | 1.2(800) + 1.6(300) + 0.5(60) | {v(ej1.base, 'B.2.4-2')} |
+| B.2.4-3 | 1.2(800) + 1.6(60) + (300 ó 0.8·90 = 72), toma 300 | {v(ej1.base, 'B.2.4-3')} |
+| B.2.4-4 | 1.2(800) + 1.6(90) + 1.0(300) + 0.5(60) | {v(ej1.base, 'B.2.4-4')} |
+| B.2.4-5 | 1.2(800) + 1.0(300) + 1.0(300) | {v(ej1.base, 'B.2.4-5')} |
+| B.2.4-6 | 0.9(800) + 1.6(90) | {v(ej1.base, 'B.2.4-6')} |
+| B.2.4-7 | 0.9(800) + 1.0(300) | {v(ej1.base, 'B.2.4-7')} |
+
+</Paso>
+<Paso titulo="Gobernante sin reducir L" ref="B.2.3.1, B.2.4.2">
+La mayor es **{ej1.envBase.maxima.id}** con **{ej1.envBase.maxima.valor.toFixed(1)} kN**: el sismo gobierna.
+</Paso>
+<Paso titulo="Reducir el factor de L a 0.5" ref="B.2.4.2.2">
+Es uso general con $L_0$ = 2.0 kN/m² ≤ 4.8 y no es estacionamiento ni lugar de reunión pública, así que **está permitido** reducir $L$ a 0.5 en B.2.4-3, -4 y -5 ({ej1.permite ? 'verificado' : 'no permitido'}). Los nuevos valores son: B.2.4-3 = {v(ej1.red, 'B.2.4-3')}, B.2.4-4 = {v(ej1.red, 'B.2.4-4')} y B.2.4-5 = {v(ej1.red, 'B.2.4-5')} kN. B.2.4-2 no cambia ({v(ej1.red, 'B.2.4-2')} kN).
+</Paso>
+<Resultado>
+Sin la reducción gobierna **{ej1.envBase.maxima.id}** con {ej1.envBase.maxima.valor.toFixed(1)} kN; con la reducción permitida gobierna **{ej1.envRed.maxima.id}** con **{ej1.envRed.maxima.valor.toFixed(1)} kN**. En un **estacionamiento** ({ej1.noParq ? 'se permite' : 'no se permite'} reducir) no habría reducción. Compruébalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="combinaciones-carga" />
+
+<Ejemplo numero={2} titulo="Mismo elemento por esfuerzos de trabajo (madera, Título G)">
+Si la columna anterior fuera de **madera** (se diseña por esfuerzos admisibles, Título G), se usan las combinaciones de B.2.3.1 con las mismas cargas nominales: $D$ = 800, $L$ = 300, $L_r$ = 60 y $W$ = 90 kN, y $E$ = $F_s/R$ = 300 kN. Hallar la combinación gobernante.
+
+<Paso titulo="Coeficiente de E" ref="B.2.3.2">
+Por esfuerzos de trabajo, el coeficiente de carga de $E$ es **0.7**: 0.7E = 0.7(300) = 210 kN.
+</Paso>
+<Paso titulo="Evaluar las diez combinaciones" ref="B.2.3-1 a B.2.3-10">
+
+| Ecuación | Cálculo | Valor (kN) |
+|---|---|---:|
+| B.2.3-1 | 800 | {v(ej2.lista, 'B.2.3-1')} |
+| B.2.3-2 | 800 + 300 | {v(ej2.lista, 'B.2.3-2')} |
+| B.2.3-3 | 800 + 60 | {v(ej2.lista, 'B.2.3-3')} |
+| B.2.3-4 | 800 + 0.75(300) + 0.75(60) | {v(ej2.lista, 'B.2.3-4')} |
+| B.2.3-5 | 800 + 90 | {v(ej2.lista, 'B.2.3-5')} |
+| B.2.3-6 | 800 + 0.7(300) | {v(ej2.lista, 'B.2.3-6')} |
+| B.2.3-7 | 800 + 0.75(90) + 0.75(300) + 0.75(60) | {v(ej2.lista, 'B.2.3-7')} |
+| B.2.3-8 | 800 + 0.75(0.7·300) + 0.75(300) + 0.75(60) | {v(ej2.lista, 'B.2.3-8')} |
+| B.2.3-9 | 0.6(800) + 90 | {v(ej2.lista, 'B.2.3-9')} |
+| B.2.3-10 | 0.6(800) + 0.7(300) | {v(ej2.lista, 'B.2.3-10')} |
+
+</Paso>
+<Paso titulo="Gobernante" ref="B.2.3.1">
+La mayor es **{ej2.env.maxima.id}** con **{ej2.env.maxima.valor.toFixed(1)} kN**: el sismo con cargas variables reducidas a 0.75.
+</Paso>
+<Paso titulo="Derivas" ref="B.2.3.2.1">
+Si el análisis fuera de **derivas**, no se usaría esta $E$ reducida: se usaría 1.0E con las fuerzas $F_s$ **sin dividir por R**.
+</Paso>
+<Resultado>
+Gobierna **{ej2.env.maxima.id}** con {ej2.env.maxima.valor.toFixed(1)} kN **a nivel de servicio** (esfuerzos admisibles). No se comparan directamente con el resultado del método de la resistencia: son niveles de carga distintos.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Levantamiento en la columna de una cubierta ligera">
+Una columna de una cubierta ligera tiene $D$ = 40 kN (compresión), $L_r$ = 10 kN y un **viento de succión** que la tracciona: $W$ = −60 kN (signo negativo = tracción). Revisar las combinaciones de la resistencia para ver si cambia el signo del efecto.
+
+<Paso titulo="Combinaciones con W" ref="B.2.4-4, B.2.4-6">
+
+- B.2.4-4: 1.2(40) + 1.6(−60) + 0.5(10) = **{v(ej3.lista, 'B.2.4-4')} kN**.
+- B.2.4-6: 0.9(40) + 1.6(−60) = **{v(ej3.lista, 'B.2.4-6')} kN**.
+
+</Paso>
+<Paso titulo="Combinaciones sin viento" ref="B.2.4-1, B.2.4-2, B.2.4-3">
+B.2.4-1 = {v(ej3.lista, 'B.2.4-1')} kN; B.2.4-2 = {v(ej3.lista, 'B.2.4-2')} kN; B.2.4-3 = {v(ej3.lista, 'B.2.4-3')} kN (en (L ó 0.8W) con $L$ = 0 y 0.8W negativo, se toma $L$ = 0).
+</Paso>
+<Resultado>
+Con compresión máxima **{ej3.env.maxima.id}** = {ej3.env.maxima.valor.toFixed(1)} kN, pero la columna y su anclaje deben resistir también una **tracción de {Math.abs(ej3.env.minima.valor).toFixed(1)} kN** de **{ej3.env.minima.id}**, la de **0.9D**: por eso las combinaciones con carga muerta reducida son indispensables en cubiertas ligeras.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Mezclar métodos:** usar combinaciones mayoradas (B.2.4) junto con esfuerzos admisibles (B.2.3) en la misma estructura, o aplicar B.2.3.1 a concreto o acero (<NormaRef s="B.2.1.2" pag="B-4" />, <NormaRef s="B.2.3.1" pag="B-5" />).
+- **Mayorar el sismo otra vez:** las fuerzas del Título A ya están a nivel de resistencia; en B.2.4 el coeficiente de $E$ es **1.0** (<NormaRef s="B.2.4.2.4" pag="B-7" />).
+- **Usar $F_s$ sin dividir por $R$** en las combinaciones de diseño de miembros. Solo las **derivas** usan $F_s$ sin reducir (<NormaRef s="B.2.3.2.1" pag="B-6" />, <NormaRef s="B.2.4.2.1" pag="B-6" />).
+- **Combinar W y E** en una misma combinación: se consideran independientemente (<NormaRef s="B.2.3.1" pag="B-5" />).
+- **Reducir L a 0.5** en estacionamientos, reuniones públicas o con $L_0$ mayor de 4.8 kN/m² (<NormaRef s="B.2.4.2.2" pag="B-7" />).
+- **Sumar Lr, G y Le** entre sí: es una sola, la más desfavorable.
+- **Olvidar las combinaciones con 0.9D (o 0.6D)**, que son las que gobiernan el levantamiento y el volcamiento.
+- **Ignorar que H puede ser favorable:** si el empuje neutraliza a W o E, su factor es cero (<NormaRef s="B.2.4.2.5" pag="B-7" />).
+- **Usar los φ de la NSR-98** con las combinaciones de la NSR-10 (<NormaRef s="B.2.4.1" pag="B-6" />).
+</Callout>
+
+## Resumen en una línea
+
+**Con la resistencia se diseña con las 7 combinaciones mayoradas de B.2.4 (E = Fs/R con factor 1.0); con esfuerzos de trabajo, con las 10 de B.2.3 (0.7E), y siempre con la más desfavorable**, usando un solo método para toda la estructura.

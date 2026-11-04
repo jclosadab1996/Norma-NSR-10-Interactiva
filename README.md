@@ -13,12 +13,12 @@ Astro 7 · React (islas) · MDX + KaTeX · Tailwind CSS v4 · shadcn/ui · Recha
 ## Comandos
 | Comando | Acción |
 |---|---|
-| `npm install` | Instala dependencias |
-| `npm run dev` | Servidor de desarrollo (`http://localhost:4321`) |
-| `npm run build` | Compila a `dist/` e indexa la búsqueda (Pagefind) |
-| `npm run preview` | Sirve `dist/` (la búsqueda solo funciona aquí o en producción) |
-| `npm run test` | Pruebas de la lógica de cálculo y de los datos transcritos |
-| `npm run check` | Verificación de tipos (`astro check`) |
+| `pnpm install` | Instala dependencias |
+| `pnpm dev` | Servidor de desarrollo (`http://localhost:4321`) |
+| `pnpm build` | Compila a `dist/` e indexa la búsqueda (Pagefind) |
+| `pnpm preview` | Sirve `dist/` (la búsqueda solo funciona aquí o en producción) |
+| `pnpm test` | Pruebas de la lógica de cálculo y de los datos transcritos |
+| `pnpm check` | Verificación de tipos (`astro check`) |
 
 ## Estructura
 - `Norma/` — PDF oficial (fuera de `public/`, no se publica).

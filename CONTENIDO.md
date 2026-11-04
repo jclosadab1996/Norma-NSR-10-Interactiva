@@ -1,4 +1,4 @@
-# Guía de autoría — contenido del Título A
+# Guía de autoría — contenido de los Títulos A y B
 
 Cada capítulo/apéndice es **un archivo MDX** en `src/content/titulo-a/`. El capítulo de referencia es
 [`a2.mdx`](src/content/titulo-a/a2.mdx): léelo primero y sigue su estilo y estructura.
@@ -73,7 +73,27 @@ Longitud orientativa: capítulos densos (A.3, A.4, A.6, A.9, A.10) 350–700 lí
 - Unidades del SI como la norma (kN, m, s); decimales con punto (como el PDF).
 
 ## Calidad y entrega
-- Verifica `npx astro build` (sin errores) y `npx vitest run` (si añadiste tests) antes de reportar.
+- Verifica `pnpm exec astro build` (sin errores) y `pnpm exec vitest run` (si añadiste tests) antes de reportar.
 - No edites archivos fuera de tus capítulos/figuras/lib nuevo. No hagas commits.
 - En tu reporte: lista de archivos, secciones cubiertas, **dudas/anomalías del PDF** (erratas, valores raros), calculadoras o
   funciones que echaste en falta, y qué verificaste visualmente.
+
+
+---
+
+# Título B (Cargas) — diferencias respecto al Título A
+
+Gestor de paquetes: **pnpm** (`pnpm exec vitest run`, `pnpm exec astro build`; nunca `npm`/`npx`).
+
+- Colección: `src/content/titulo-b/` (colección `titulo-b`, misma forma de frontmatter). Ids: `b1`, `b2`, `b3`, `b4`, `b5`, `b6a`, `b6b`, `b6c`
+  (B.6 es muy largo y se divide en tres archivos: **b6a** = B.6.1–B.6.4, **b6b** = B.6.5.1–B.6.5.10, **b6c** = B.6.5.11 en adelante + B.6.6).
+  `codigo` en el frontmatter: `B.1`…`B.5`, `B.6a`, `B.6b`, `B.6c` (la columna del sidebar es angosta). `tipo: capitulo`. `orden`: B.1=1 … B.5=5, b6a=6, b6b=7, b6c=8.
+- **Páginas:** página PDF = página impresa "B-n" + **219** (B-1 = PDF 220; B-82 = PDF 301). `paginaPdf` y los `pag="B-n"` de los componentes usan estas reglas.
+- **Texto por página:** `.cache/texto-b/pNNN.txt` (PDF 220–301). Regenerable con `python -I scripts/extraer-texto.py --titulo b`.
+- **Imágenes de página** (verificación visual de tablas/ecuaciones): `C:/Users/Juan Camilo Losada/AppData/Local/Temp/nsrv/Scripts/python.exe scripts/render-paginas.py <pág> [<pág_fin>] --zoom 2` → `.cache/img/pNNN.png` (ábrelas con Read).
+- **Figuras:** `.../python.exe scripts/recortar-figura.py <pág> <nombre> --titulo b --bbox x0 y0 x1 y1` → `public/img/titulo-b/<nombre>.png`; en MDX: `<Figura src="/img/titulo-b/<nombre>.png" … />`.
+- **Mapa de páginas de B.6:** texto B.6.1–B.6.6 en PDF 240–257; figuras y tablas de B.6.4 en PDF 258–265; figuras B.6.5-1…19 en PDF ~266–297; Tablas B.6.5-1…4 en PDF 298–301.
+- Las constantes/tablas van en `src/data/<tema>.ts` y la lógica pura en `src/lib/nsr10/<tema>.ts` (+ `<tema>.test.ts`). **No edites `src/lib/nsr10/index.ts`.**
+- **Calculadoras de B** (ya registradas en `src/data/calculadoras.ts` y en `CalculadoraEmbed.astro`; hay *stubs* en `src/components/calc/`): cada agente **reemplaza el contenido del archivo stub que le corresponde** (mismo nombre, `export default function`), **sin editar** `calculadoras.ts`, `CalculadoraEmbed.astro` ni otros archivos compartidos. Reutiliza `components/calc/ui.tsx` (`useNum`, `Campo`, `Valor`, `Grupo`, `Aviso`, `PieCalc`…) y `components/ui/chart.tsx` + Recharts. Sigue el patrón de `EspectroDiseno.tsx` / `FuerzaHorizontal.tsx`.
+- Los ejemplos y las calculadoras deben compartir las mismas funciones de `src/lib/nsr10`.
+- No inventes valores: si una tabla o figura no se puede leer con certeza en la imagen, dilo en el reporte y no la incluyas como dato.

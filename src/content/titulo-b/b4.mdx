@@ -1,0 +1,428 @@
+---
+codigo: 'B.4'
+tipo: capitulo
+titulo: 'Cargas vivas'
+resumen: 'Las cargas que produce el uso de la edificación: valores mínimos por ocupación y por tipo de cubierta, barandas, impacto, reducción por área aferente y por número de pisos, puentes grúa, efectos dinámicos, empozamiento de agua y granizo.'
+objetivos:
+  - 'Escoger la carga viva mínima uniforme de un uso y de una cubierta'
+  - 'Reducir la carga viva por área aferente o por número de pisos cuando la norma lo permite'
+  - 'Aplicar los incrementos por impacto y las fuerzas en barandas y puentes grúa'
+  - 'Calcular las cargas de empozamiento de agua y de granizo en cubiertas'
+paginasNorma: 'B-15 a B-18'
+paginaPdf: 234
+orden: 4
+calculadoras: ['reduccion-carga-viva', 'empozamiento-granizo']
+nivel: 'intermedio'
+---
+
+import { areaInfluencia, areaParaFraccion, cargaGranizo, coeficientePisos, empozamientoPorProfundidad, empozamientoPorVolumen, factorEcuacionB451, pesoAguaEmpozada, reduccionAreaAferente, reduccionPorPisosUniforme } from '../../lib/nsr10/cargasVivas';
+
+export const f = (ai) => factorEcuacionB451(ai).toFixed(3);
+
+export const ej1 = (() => {
+  const l0 = 2.0, panel = 42;
+  const borde = reduccionAreaAferente(l0, areaInfluencia('viga-borde', panel), 1);
+  const central = reduccionAreaAferente(l0, areaInfluencia('viga-central', panel), 1);
+  const col = reduccionAreaAferente(l0, areaInfluencia('columna-central', panel), 1);
+  const col3 = reduccionAreaAferente(l0, areaInfluencia('columna-central', panel, 3), 3);
+  const col10 = reduccionAreaAferente(l0, areaInfluencia('columna-central', panel, 10), 10);
+  const resi = reduccionAreaAferente(1.8, 168, 1);
+  return { l0, panel, borde, central, col, col3, col10, resi, aiBorde: areaInfluencia('viga-borde', panel), aiCentral: areaInfluencia('viga-central', panel), aiCol: areaInfluencia('columna-central', panel), aiCol3: areaInfluencia('columna-central', panel, 3), aiCol10: areaInfluencia('columna-central', panel, 10) };
+})();
+
+export const ej2 = (() => {
+  const n = 12, l0 = 2.0, aTrib = 36;
+  const li = l0 * aTrib;
+  const p = reduccionPorPisosUniforme(n, li);
+  const area = reduccionAreaAferente(l0, aTrib * n, n);
+  return { n, l0, aTrib, li, p, area, aiTot: aTrib * n, totalArea: area.l * aTrib * n };
+})();
+
+export const ej3 = (() => {
+  const a = 20 * 15, h = 0.1;
+  const le = empozamientoPorProfundidad(h);
+  const v = a * h;
+  return { a, h, le, v, w: pesoAguaEmpozada(v), leVol: empozamientoPorVolumen(v, a), le25: empozamientoPorProfundidad(0.25), g5: cargaGranizo({ alturaMsnm: 2600, inclinacionGrados: 5 }), g20: cargaGranizo({ alturaMsnm: 2600, inclinacionGrados: 20 }), gBaja: cargaGranizo({ alturaMsnm: 1200, inclinacionGrados: 5 }) };
+})();
+
+## Idea central del capítulo
+
+La **carga viva** es el peso de lo que *usa* la edificación: personas, muebles, equipos, vehículos, mercancía almacenada. A diferencia de la carga muerta, **cambia de lugar y de valor** con el tiempo, y por eso la norma no pide calcularla pieza por pieza sino adoptar **valores mínimos uniformemente repartidos** según el uso. El capítulo B.4 contesta cuatro preguntas:
+
+1. **¿Cuánto vale la carga viva mínima?** → Tablas B.4.2.1-1 (por ocupación) y B.4.2.1-2 (cubiertas).
+2. **¿Qué otras acciones horizontales o dinámicas genera el uso?** → barandas, impacto, puentes grúa, excitación del público.
+3. **¿Cuándo se puede reducir?** → por área aferente (B.4.5.1) o por número de pisos (B.4.5.2), con condiciones estrictas.
+4. **¿Qué pasa en la cubierta?** → empozamiento de agua y granizo (B.4.8).
+
+<Callout tipo="importante" titulo="Mínimos, no máximos">
+La norma dice que las cargas vivas de diseño deben ser **las máximas que se espera ocurran** por el uso de la edificación y que **nunca pueden ser menores** que las de las tablas (<NormaRef s="B.4.2.1" pag="B-15" />). Si tu proyecto va a tener archivos densos, equipos pesados o un uso distinto al de la tabla, el valor de la tabla es solo el piso, no el techo.
+</Callout>
+
+## B.4.1 — Definición
+
+- **B.4.1.1** — Las cargas vivas son las producidas por el **uso y la ocupación**; **no incluyen** cargas ambientales como viento y sismo (<NormaRef s="B.4.1.1" pag="B-15" />).
+- **B.4.1.2** — En **cubiertas**, son las causadas por (a) los materiales, equipos y trabajadores del **mantenimiento** de la cubierta y (b) objetos móviles (materas, objetos decorativos) y las personas que tengan acceso a ella (<NormaRef s="B.4.1.2" pag="B-15" />).
+
+## B.4.2 — Cargas vivas uniformemente repartidas
+
+### B.4.2.1 — Cargas vivas requeridas
+
+La Tabla B.4.2.1-1 da la carga mínima **por metro cuadrado de área en planta** para cada ocupación. La norma publica dos columnas (kN/m² y kgf/m²); aquí se muestran ambas porque en la práctica todavía se usan los kgf/m². La equivalencia es 1 kN/m² = 100 kgf/m².
+
+<TablaNorma numero="Tabla B.4.2.1-1" titulo="Cargas vivas mínimas uniformemente distribuidas" pag="B-15" nota="Cargas por m² de área en planta. Transcripción de las 32 filas de la norma, verificada contra la imagen de la página.">
+
+| Ocupación | Uso | kN/m² | kgf/m² |
+|---|---|---:|---:|
+| **Reunión** | Balcones | 5.0 | 500 |
+| | Corredores y escaleras | 5.0 | 500 |
+| | Silletería fija (fijada al piso) | 3.0 | 300 |
+| | Gimnasios | 5.0 | 500 |
+| | Vestíbulos | 5.0 | 500 |
+| | Silletería móvil | 5.0 | 500 |
+| | Áreas recreativas | 5.0 | 500 |
+| | Plataformas | 5.0 | 500 |
+| | Escenarios | 7.5 | 750 |
+| **Oficinas** | Corredores y escaleras | 3.0 | 300 |
+| | Oficinas | 2.0 | 200 |
+| | Restaurantes | 5.0 | 500 |
+| **Educativos** | Salones de clase | 2.0 | 200 |
+| | Corredores y escaleras | 5.0 | 500 |
+| | Bibliotecas — salones de lectura | 2.0 | 200 |
+| | Bibliotecas — estanterías | 7.0 | 700 |
+| **Fábricas** | Industrias livianas | 5.0 | 500 |
+| | Industrias pesadas | 10.0 | 1000 |
+| **Institucional** | Cuartos de cirugía, laboratorios | 4.0 | 400 |
+| | Cuartos privados | 2.0 | 200 |
+| | Corredores y escaleras | 5.0 | 500 |
+| **Comercio** | Minorista | 5.0 | 500 |
+| | Mayorista | 6.0 | 600 |
+| **Residencial** | Balcones | 5.0 | 500 |
+| | Cuartos privados y sus corredores | 1.8 | 180 |
+| | Escaleras | 3.0 | 300 |
+| **Almacenamiento** | Liviano | 6.0 | 600 |
+| | Pesado | 12.0 | 1200 |
+| **Garajes** | Garajes para automóviles de pasajeros | 2.5 | 250 |
+| | Garajes para vehículos de carga de hasta 2.000 kg de capacidad | 5.0 | 500 |
+| **Coliseos y Estadios** | Graderías | 5.0 | 500 |
+| | Escaleras | 5.0 | 500 |
+
+</TablaNorma>
+
+Algunas lecturas útiles de la tabla:
+
+- Los **espacios de circulación y de reunión** (corredores, escaleras, balcones, vestíbulos) llevan **5.0 kN/m²**, salvo en oficinas y residencial, donde corredores y escaleras bajan a 3.0 kN/m².
+- Una **vivienda** (cuartos privados y sus corredores) usa **1.8 kN/m²**, el valor más bajo de la tabla; sus balcones, en cambio, 5.0 kN/m².
+- Los usos que **acumulan peso** (bibliotecas con estanterías, industria pesada, almacenamiento) son los más altos: 7.0, 10.0 y 12.0 kN/m².
+- Un garaje de automóviles de pasajeros usa 2.5 kN/m²; si puede entrar un vehículo de carga de hasta 2 000 kg, sube a 5.0 kN/m². **Para vehículos más pesados la tabla no sirve** y hay que analizar la carga real.
+
+<Detalle titulo="Ver la tabla tal como está impresa en la norma">
+
+<Figura src="/img/titulo-b/tabla-b4-2-1-1-original.png" alt="Tabla B.4.2.1-1 de la NSR-10: cargas vivas mínimas uniformemente distribuidas" numero="Tabla B.4.2.1-1" pie="Imagen de la norma, para comparar con la transcripción anterior." pag="B-15" />
+
+</Detalle>
+
+### Cargas vivas en cubiertas
+
+Las cubiertas tienen su propia tabla. La clave está en la primera fila: una azotea o terraza **no puede tener menos carga que el resto de la edificación**.
+
+<TablaNorma numero="Tabla B.4.2.1-2" titulo="Cargas vivas mínimas en cubiertas" pag="B-16" nota="Nota-1: la carga viva de la cubierta no debe ser menor que el máximo valor de las cargas vivas usadas en el resto de la edificación y, cuando esta tenga uso mixto, debe ser la mayor de las cargas vivas correspondientes a los diferentes usos.">
+
+| Tipo de cubierta | kN/m² | kgf/m² |
+|---|---:|---:|
+| Cubiertas, azoteas y terrazas | la misma del resto de la edificación (Nota-1) | la misma del resto de la edificación (Nota-1) |
+| Cubiertas usadas para jardines de cubierta o para reuniones | 5.00 | 500 |
+| Cubiertas inclinadas con **más de 15°** de pendiente, en estructura metálica o de madera, con imposibilidad física de verse sometidas a cargas superiores a la aquí estipulada | 0.35 | 35 |
+| Cubiertas inclinadas con pendiente de **15° o menos**, en estructura metálica o de madera, con imposibilidad física de verse sometidas a cargas superiores a la aquí estipulada | 0.50 | 50 |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Los 0.35 y 0.50 kN/m² tienen condiciones">
+Solo valen para cubiertas **inclinadas, metálicas o de madera**, y únicamente si hay **imposibilidad física** de que reciban más carga (nadie la usa como terraza, no se almacena nada encima). Una losa de concreto plana, aunque sea de "cubierta", cae en la primera fila: la carga del resto de la edificación.
+</Callout>
+
+### B.4.2.2 — Empuje en pasamanos y antepechos
+
+Barandas, pasamanos de escaleras y balcones, barras auxiliares (interiores y exteriores) y antepechos deben resistir una **fuerza horizontal en su parte superior** y poder transferirla, a través de los soportes, a la estructura (<NormaRef s="B.4.2.2" pag="B-16" />).
+
+| Elemento | Carga mínima |
+|---|---|
+| Barandas, pasamanos y antepechos (general) | 1.00 kN/m (100 kgf/m), horizontal, en el borde superior |
+| Viviendas unifamiliares | 0.4 kN/m (40 kgf/m) |
+| Estadios y coliseos | 2.5 kN/m (250 kgf/m) como mínimo, y **prueba de carga** dirigida y documentada por el Supervisor Técnico antes de entrar en servicio (también en otros escenarios públicos) |
+| Barandas intermedias (todas menos los pasamanos) y paneles de relleno | 0.25 kN (25 kgf) normal, sobre un área que no exceda 0.3 m de lado, incluyendo aberturas y espacios entre barandas |
+| Barreras para vehículos (automóviles de pasajeros) | Una sola carga de 30 kN (3 000 kgf) horizontal, en cualquier dirección, a una altura mínima de 0.5 m sobre el piso o rampa, sobre un área de hasta 0.3 m de lado |
+
+Estas cargas **no se superponen** entre sí: la de las barandas intermedias no se suma a la del pasamanos, y la de la barrera vehicular no actúa junto con las de pasamanos o protección. Los valores de barreras **no cubren** garajes de transporte público ni de camiones: allí hay que hacer un análisis propio.
+
+## B.4.3 — Carga parcial
+
+Cuando cargar **solo una parte** de la luz de un elemento produce un efecto **más desfavorable** que cargarla toda, ese caso debe considerarse en el diseño (<NormaRef s="B.4.3" pag="B-16" />). El ejemplo clásico es un voladizo continuo con un apoyo: cargar solo el voladizo aumenta el momento negativo en el apoyo, o cargar luces alternas de una viga continua maximiza el momento positivo. Como la carga viva puede *no estar*, el patrón de carga desfavorable es parte del diseño.
+
+## B.4.4 — Impacto
+
+Cuando la carga viva produce **impacto**, se incrementa por los porcentajes siguientes (<NormaRef s="B.4.4" pag="B-16" />):
+
+<TablaNorma numero="B.4.4" titulo="Incrementos de la carga viva por impacto" pag="B-16">
+
+| Literal | Elemento | Incremento |
+|:---:|---|---:|
+| (a) | Soportes de elevadores y ascensores | 100 % |
+| (b) | Vigas de puentes grúas con cabina de operación y sus conexiones | 25 % |
+| (c) | Vigas de puentes grúas operados por control remoto y sus conexiones | 10 % |
+| (d) | Apoyos de maquinaria liviana, movida mediante motor eléctrico o por un eje | 20 % |
+| (e) | Apoyos de maquinaria de émbolo o movida por motor a pistón | no menos de 50 % |
+| (f) | Tensores que sirvan de apoyo a pisos o balcones suspendidos y escaleras | 33 % |
+
+</TablaNorma>
+
+El incremento se aplica **a la carga viva** y se multiplica así: $L_{\text{impacto}} = L\,(1 + p/100)$. Por ejemplo, un soporte de ascensor con una carga viva de 10 kN se diseña para $10 \times (1 + 1.00) = 20$ kN. Los literales (b) y (c) se combinan con la fuerza horizontal de B.4.6, y las combinaciones de carga del Capítulo B.2 incluyen el impacto dentro de $L$ (<NormaRef s="B.2.4.2.6" pag="B-7" />).
+
+## B.4.5 — Reducción de la carga viva
+
+La probabilidad de que **todo** el área de influencia de un elemento esté cargada simultáneamente con el valor máximo disminuye cuanto mayor es esa área. Por eso la norma permite reducir la carga viva, **solo en dos situaciones** y con condiciones estrictas.
+
+### B.4.5.1 — Reducción por área aferente
+
+La carga viva puede reducirse con la ecuación B.4.5-1 **solo si se cumplen las dos condiciones**:
+
+1. El área de influencia del elemento es **mayor o igual a 35 m²**.
+2. La carga viva sin reducir es **superior a 1.80 kN/m² e inferior a 3.00 kN/m²** (180 a 300 kgf/m², extremos excluidos).
+
+<Ecuacion num="B.4.5-1" titulo="Carga viva reducida por área de influencia">
+
+$$
+L = L_0\left(0.25+\frac{4.6}{\sqrt{A_i}}\right)
+$$
+
+- $L$: carga viva reducida (kN/m²).
+- $L_0$: carga viva sin reducir (kN/m²).
+- $A_i$: área de influencia del elemento (m²).
+
+</Ecuacion>
+
+<Callout tipo="importante" titulo="¿Qué usos admiten esta reducción?">
+La condición $1.80 < L_0 < 3.00$ kN/m² es **estricta** (<NormaRef s="B.4.5.1" pag="B-17" />). Mirando la Tabla B.4.2.1-1, solo la cumplen **2.0 kN/m²** (oficinas, salones de clase, salones de lectura de biblioteca, cuartos privados institucionales) y **2.5 kN/m²** (garajes de automóviles de pasajeros). **No** la cumplen la vivienda (1.8: no es *superior* a 1.80) ni los corredores y escaleras de oficinas o residencial (3.0: no es *inferior* a 3.00), ni los usos de 5.0 kN/m² o más.
+</Callout>
+
+**Límites a la reducción** (<NormaRef s="B.4.5.1.1" pag="B-17" />): la carga reducida **no puede ser menor** que
+
+- **50 % de $L_0$** en elementos que soportan **un piso**, ni
+- **40 % de $L_0$** en elementos que soportan **dos o más pisos**.
+
+La ecuación llega a 50 % con $A_i$ = {areaParaFraccion(0.5).toFixed(0)} m² y a 40 % con $A_i$ = {areaParaFraccion(0.4).toFixed(0)} m²; más allá de esas áreas gobierna el mínimo.
+
+<TablaNorma numero="B.4.5-1" titulo="Fracción L / L0 que da la ecuación (valores calculados)" pag="B-17" nota="Calculado con la ecuación B.4.5-1 antes de aplicar los mínimos de B.4.5.1.1.">
+
+| $A_i$ (m²) | 35 | 50 | 100 | 200 | 400 | 800 |
+|---|---:|---:|---:|---:|---:|---:|
+| $0.25 + 4.6/\sqrt{A_i}$ | {f(35)} | {f(50)} | {f(100)} | {f(200)} | {f(400)} | {f(800)} |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Una rareza de la ecuación cerca de 35 m²">
+Con $A_i$ entre 35 y {areaParaFraccion(1).toFixed(1)} m² la ecuación da un factor **mayor que 1** (con 35 m² resulta {f(35)}): "reducir" aumentaría la carga. La norma no dice nada al respecto; como el texto habla de una reducción que "puede" hacerse, en esta web (y en la calculadora) la carga reducida nunca supera $L_0$. En la práctica la reducción real empieza cerca de {areaParaFraccion(1).toFixed(0)} m².
+</Callout>
+
+**Área de influencia** (<NormaRef s="B.4.5.1.2" pag="B-17" />). Es el área de los paneles de placa adyacentes que "tocan" el elemento:
+
+| Elemento | $A_i$ = área de |
+|---|---|
+| Vigas centrales | dos paneles |
+| Vigas de borde | un panel |
+| Columnas centrales | cuatro paneles |
+| Columnas de borde | dos paneles |
+| Columnas de esquina | un panel |
+
+Para elementos que **soportan más de un piso se suman las áreas de influencia** de los diferentes pisos (una columna que recibe 3 pisos con 4 paneles cada uno tiene $A_i$ = 12 paneles).
+
+<Ejemplo numero={1} titulo="Reducción por área aferente en un edificio de oficinas">
+Un edificio de oficinas tiene paneles de placa de 6 m × 7 m = {ej1.panel} m². Calcular la carga viva reducida de una viga de borde, una viga central, una columna central de un piso y una columna central que soporta 3 y 10 pisos.
+
+<Paso titulo="Carga viva sin reducir y condición de aplicación" ref="Tabla B.4.2.1-1, B.4.5.1">
+Para oficinas, $L_0$ = {ej1.l0.toFixed(1)} kN/m², que está entre 1.80 y 3.00 kN/m²: **se puede reducir** si $A_i$ ≥ 35 m². (Si fuera vivienda, con 1.80 kN/m², no se podría.)
+</Paso>
+<Paso titulo="Áreas de influencia" ref="B.4.5.1.2">
+- Viga de borde: un panel, $A_i$ = **{ej1.aiBorde} m²**.
+- Viga central: dos paneles, $A_i$ = **{ej1.aiCentral} m²**.
+- Columna central de un piso: cuatro paneles, $A_i$ = **{ej1.aiCol} m²**.
+- Columna central de 3 pisos: 3 × 168 = **{ej1.aiCol3} m²**.
+- Columna central de 10 pisos: 10 × 168 = **{ej1.aiCol10} m²**.
+</Paso>
+<Paso titulo="Viga de borde y viga central" ref="B.4.5-1">
+
+$$
+\frac{L}{L_0}=0.25+\frac{4.6}{\sqrt{42}}
+\qquad\text{y}\qquad
+\frac{L}{L_0}=0.25+\frac{4.6}{\sqrt{84}}
+$$
+
+- Viga de borde: $L/L_0$ = {ej1.borde.factorEcuacion.toFixed(3)}, **$L$ = {ej1.borde.l.toFixed(3)} kN/m²** (apenas 4 % menos).
+- Viga central: $L/L_0$ = {ej1.central.factorEcuacion.toFixed(3)}, **$L$ = {ej1.central.l.toFixed(3)} kN/m²**.
+
+</Paso>
+<Paso titulo="Columnas" ref="B.4.5-1, B.4.5.1.1">
+- Columna central de un piso: $L/L_0$ = {ej1.col.factorEcuacion.toFixed(3)} (mayor que el mínimo de 50 %), **$L$ = {ej1.col.l.toFixed(3)} kN/m²**.
+- Columna central de 3 pisos: $L/L_0$ = {ej1.col3.factorEcuacion.toFixed(3)} (mayor que el mínimo de 40 %), **$L$ = {ej1.col3.l.toFixed(3)} kN/m²**.
+- Columna central de 10 pisos: la ecuación da {ej1.col10.factorEcuacion.toFixed(3)}, menor que 0.40; gobierna el **mínimo de 40 %**, **$L$ = {ej1.col10.l.toFixed(3)} kN/m²**.
+</Paso>
+<Resultado>
+Cuanto mayor el área, menor la carga: de {ej1.l0.toFixed(2)} kN/m² sin reducir se pasa a {ej1.borde.l.toFixed(2)} (viga de borde), {ej1.central.l.toFixed(2)} (viga central), {ej1.col.l.toFixed(2)} (columna central de un piso), {ej1.col3.l.toFixed(2)} (3 pisos) y {ej1.col10.l.toFixed(2)} kN/m² (10 pisos, límite del 40 %). Pruébalo con la calculadora.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="reduccion-carga-viva" />
+
+### B.4.5.2 — Reducción por número de pisos
+
+**Alternativamente** a la reducción por área, en **edificios de cinco pisos o más** la carga viva para el diseño de **columnas y cimentación** puede tomarse como la **suma de las cargas vivas de cada piso multiplicadas por el coeficiente $r$** de ese piso (<NormaRef s="B.4.5.2" pag="B-17" />). Aquí $n$ es el número de pisos del edificio e $i$ el número del piso (con $i = n$ en el piso superior):
+
+<Ecuacion num="B.4.5.2" titulo="Coeficiente r por piso">
+
+$$
+r=\begin{cases}
+1.0 & i=n \ \text{a}\ i=n-4 \ \text{(cinco pisos superiores)}\\[4pt]
+1.0+0.10\,(i-n+4) & i=n-5 \ \text{a}\ i=n-8\\[4pt]
+0.5 & i=n-9 \ \text{en adelante}
+\end{cases}
+$$
+
+- $n$: número de pisos del edificio.
+- $i$: número del piso donde se aplica el coeficiente $r$.
+
+</Ecuacion>
+
+<TablaNorma numero="B.4.5.2" titulo="Valores de r según la posición del piso" pag="B-17" nota="Calculado con la expresión de B.4.5.2; contando desde el piso superior (i = n).">
+
+| Piso | $i$ | $r$ |
+|---|---|---:|
+| Superior y los 4 siguientes (5 pisos) | $n$ a $n-4$ | 1.0 |
+| Sexto desde arriba | $n-5$ | {coeficientePisos(7, 12).toFixed(1)} |
+| Séptimo | $n-6$ | {coeficientePisos(6, 12).toFixed(1)} |
+| Octavo | $n-7$ | {coeficientePisos(5, 12).toFixed(1)} |
+| Noveno | $n-8$ | {coeficientePisos(4, 12).toFixed(1)} |
+| Décimo y los demás hacia abajo | $n-9$ en adelante | 0.5 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Una errata de impresión en B.4.5.2">
+En el PDF la expresión del tramo intermedio aparece impresa como "1.0 + 0.10(in + 4)", **sin el signo menos** entre $i$ y $n$. La lectura correcta es $1.0 + 0.10\,(i - n + 4)$: es la única que empalma con $r = 1.0$ en $i = n-4$ y con $r = 0.5$ en $i = n-9$ (da 0.9, 0.8, 0.7, 0.6 en los pisos intermedios). Es la que usan esta web y su calculadora.
+</Callout>
+
+Dos aclaraciones prácticas:
+
+- La reducción por número de pisos es una **alternativa**: se elige un método y se aplica; no se combinan.
+- Solo sirve para **columnas y cimentación** (acumulan las cargas de muchos pisos), no para vigas ni placas. La norma no dice cómo contar la cubierta; en la calculadora se trata como un piso más.
+
+<Ejemplo numero={2} titulo="Reducción por número de pisos en una columna de 12 pisos">
+Una columna de un edificio de oficinas de $n$ = {ej2.n} pisos tiene un área tributaria de {ej2.aTrib} m² en cada piso. Con $L_0$ = {ej2.l0.toFixed(1)} kN/m² la carga viva por piso en la columna es {ej2.l0.toFixed(1)} × {ej2.aTrib} = {ej2.li.toFixed(0)} kN. Calcular la carga viva acumulada con B.4.5.2 y compararla con el método de área aferente.
+
+<Paso titulo="Coeficiente r de cada piso" ref="B.4.5.2">
+Los 5 pisos superiores (12, 11, 10, 9 y 8) tienen $r$ = 1.0. Después: piso 7, $r$ = {coeficientePisos(7, 12).toFixed(1)}; piso 6, {coeficientePisos(6, 12).toFixed(1)}; piso 5, {coeficientePisos(5, 12).toFixed(1)}; piso 4, {coeficientePisos(4, 12).toFixed(1)}; y los pisos 3, 2 y 1, $r$ = 0.5.
+</Paso>
+<Paso titulo="Suma ponderada" ref="B.4.5.2">
+
+$$
+\sum r_i\,L_i = L\,(5\times 1.0 + 0.9 + 0.8 + 0.7 + 0.6 + 3\times 0.5)=72\times 9.5
+$$
+
+Sin reducir: {ej2.p.sinReducir.toFixed(0)} kN. Reducida: **{ej2.p.reducida.toFixed(0)} kN** ({(ej2.p.factorGlobal * 100).toFixed(1)} % del total).
+
+</Paso>
+<Paso titulo="Comparación con el método de área aferente" ref="B.4.5.1">
+Para la misma columna, $A_i$ = {ej2.aiTot} m² (suma de 12 pisos), por encima de 35 m² y con $L_0$ = 2.0 kN/m² dentro del rango. Factor de la ecuación: {ej2.area.factorEcuacion.toFixed(3)} (mayor que el mínimo de 40 %), así que $L$ = {ej2.area.l.toFixed(3)} kN/m² y la carga acumulada es {ej2.area.l.toFixed(3)} × {ej2.aiTot} = **{ej2.totalArea.toFixed(0)} kN**.
+</Paso>
+<Resultado>
+Por número de pisos: {ej2.p.reducida.toFixed(0)} kN; por área aferente: {ej2.totalArea.toFixed(0)} kN; sin reducir: {ej2.p.sinReducir.toFixed(0)} kN. Para oficinas ($L_0$ = 2.0 kN/m²), donde ambos métodos son válidos, el de área aferente reduce más en este caso. Con usos de 5.0 kN/m² o más **solo** queda el método por número de pisos.
+</Resultado>
+</Ejemplo>
+
+## B.4.6 — Puentes grúa
+
+En el diseño de las **vigas carrilera** de puentes grúa se deben considerar dos fuerzas horizontales (<NormaRef s="B.4.6" pag="B-17" />):
+
+- **Fuerza transversal:** por lo menos el **20 %** de la suma de los pesos de la grúa y de la carga levantada (sin incluir las partes estacionarias del puente grúa). Se supone en la parte superior de los rieles, normal a ellos, y se distribuye entre las vigas según la **rigidez lateral** de la estructura que soporta los rieles.
+- **Fuerza longitudinal:** igual al **10 %** de las cargas máximas de rueda de la grúa, aplicada en el tope del riel.
+
+Además, las vigas carrilera llevan el incremento por impacto de B.4.4 (25 % con cabina, 10 % con control remoto).
+
+## B.4.7 — Efectos dinámicos
+
+Estadios, coliseos, teatros, gimnasios, pistas de baile, centros de reunión y similares reciben **excitaciones dinámicas del público** (saltos, palmas, movimiento rítmico). Deben diseñarse para que su **frecuencia natural vertical sea de 5 Hz o más** (período natural vertical menor de 0.2 s) (<NormaRef s="B.4.7" pag="B-18" />). Es un requisito de **rigidez**: una gradería o placa muy flexible puede entrar en resonancia con el público aunque resista la carga estática.
+
+## B.4.8 — Cargas de empozamiento de agua y de granizo
+
+### B.4.8.1 — Generalidades
+
+El **empozamiento** ocurre cuando se obstruye el drenaje (residuos, hojas, granizo): el agua se acumula, la cubierta se deflecta, cabe más agua y la carga crece. Por eso toda cubierta debe tener un **sistema auxiliar de evacuación** del exceso de agua (gárgolas, rebosaderos u otros) que la evacue de forma confiable cuando las bajantes normales se obstruyan. La carga de empozamiento $L_e$ se calcula con el **volumen de agua que cabe hasta el nivel del sistema auxiliar** (<NormaRef s="B.4.8.1" pag="B-18" />).
+
+### B.4.8.2 — Carga por empozamiento de agua
+
+- El **proyecto hidráulico** diseña el sistema de drenaje normal y el auxiliar, y define el **volumen de agua** que puede acumularse antes de que opere el auxiliar. El **constructor que suscribe la licencia** aprueba ese proyecto y entrega el volumen al diseñador estructural (<NormaRef s="B.4.8.2.1" pag="B-18" />).
+- El **diseñador estructural** determina las cargas de ese volumen, su distribución a los elementos de soporte y diseña para resistirlas sin fallar (<NormaRef s="B.4.8.2.2" />).
+- En **cubiertas metálicas**, la revisión incluye lo indicado en F.2.2.3.9 (<NormaRef s="B.4.8.2.3" />).
+
+La norma **no da una profundidad ni una fórmula**: la carga es simplemente el peso del agua. Con el peso unitario del agua dulce de la Tabla B.3.2-1 (1 000 kg/m³ × 9.8 m/s² = 9.8 kN/m³, <NormaRef s="B.3.2" pag="B-9" />):
+
+$$
+L_e=\gamma_w\,h=9.8\,h \quad (\text{kN/m}^2,\ h\ \text{en m})
+$$
+
+donde $h$ es la profundidad de agua hasta el nivel del elemento auxiliar de evacuación. Cada 10 cm de agua pesan unos 0.98 kN/m² (≈ 100 kgf/m²).
+
+### B.4.8.3 — Carga de granizo
+
+- Se considera en regiones con **más de 2 000 m de altura** sobre el nivel del mar, o en lugares más bajos donde la **autoridad municipal o distrital** lo exija (<NormaRef s="B.4.8.3.1" pag="B-18" />).
+- Su valor es $G$ = **1.0 kN/m²** (100 kgf/m²). En cubiertas con **inclinación mayor de 15°** puede reducirse a **0.5 kN/m²** (50 kgf/m²) (<NormaRef s="B.4.8.3.2" />).
+
+<TablaNorma numero="B.4.8.3" titulo="Carga de granizo G" pag="B-18">
+
+| Condición | G (kN/m²) | G (kgf/m²) |
+|---|---:|---:|
+| Altura ≤ 2 000 m y sin exigencia de la autoridad | no se considera | — |
+| Más de 2 000 m (o exigencia de la autoridad), inclinación ≤ 15° | 1.0 | 100 |
+| Más de 2 000 m (o exigencia de la autoridad), inclinación > 15° | 0.5 | 50 |
+
+</TablaNorma>
+
+<Ejemplo numero={3} titulo="Cargas de cubierta de una bodega en la sabana de Bogotá">
+Una bodega de {ej3.a} m² (20 m × 15 m) en un municipio a 2 600 m s. n. m. tiene cubierta metálica con 5° de pendiente y rebosaderos a {(ej3.h * 100).toFixed(0)} cm sobre la cubierta. Nadie la usa como terraza. Determinar $L_r$, $G$ y $L_e$.
+
+<Paso titulo="Carga viva de cubierta" ref="Tabla B.4.2.1-2">
+Cubierta inclinada de 15° o menos, metálica, con imposibilidad física de recibir más carga: $L_r$ = **0.50 kN/m²** (50 kgf/m²).
+</Paso>
+<Paso titulo="Granizo" ref="B.4.8.3">
+2 600 m es mayor que 2 000 m: se considera granizo. Con 5° de inclinación (no mayor de 15°) no hay reducción: $G$ = **{ej3.g5.g.toFixed(1)} kN/m²**. Si la pendiente fuera de 20°, $G$ = {ej3.g20.g.toFixed(1)} kN/m². A 1 200 m de altura y sin exigencia municipal, no se consideraría granizo.
+</Paso>
+<Paso titulo="Empozamiento de agua" ref="B.4.8.2">
+Si el rebosadero está {(ej3.h * 100).toFixed(0)} cm por encima de la cubierta, el volumen acumulable es 300 m² × {ej3.h.toFixed(2)} m = **{ej3.v.toFixed(0)} m³**, con un peso de 9.8 × {ej3.v.toFixed(0)} = **{ej3.w.toFixed(0)} kN**, equivalente a una carga uniforme
+
+$$
+L_e = \frac{294\ \text{kN}}{300\ \text{m}^2}
+$$
+
+Resultado: $L_e$ = **{ej3.leVol.toFixed(2)} kN/m²** (igual a 9.8 × {ej3.h.toFixed(2)}). Si el rebosadero estuviera a 25 cm, $L_e$ = {ej3.le25.toFixed(2)} kN/m²: **casi cinco veces $L_r$**.
+</Paso>
+<Resultado>
+$L_r$ = 0.50 kN/m², $G$ = {ej3.g5.g.toFixed(1)} kN/m² y $L_e$ = {ej3.leVol.toFixed(2)} kN/m². Son cargas distintas: en las combinaciones B.2.4-2 a B.2.4-4 entran como alternativas ($L_r$ ó $G$ ó $L_e$) y rige la que produzca el efecto más desfavorable (<NormaRef s="B.2.4" pag="B-6" />). Aquí $G$ = 1.0 kN/m² queda apenas por encima de $L_e$ = {ej3.leVol.toFixed(2)} kN/m²; con un rebosadero más alto gobernaría $L_e$.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="empozamiento-granizo" />
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Usar el valor de la tabla como **máximo**: es el mínimo; el uso real puede exigir más (B.4.2.1).
+- Reducir la carga viva de una **vivienda** (1.80 kN/m²) o de **corredores y escaleras de oficinas** (3.00 kN/m²) por área aferente: los extremos están excluidos (<NormaRef s="B.4.5.1" pag="B-17" />).
+- Olvidar los **mínimos** de 50 % (un piso) y 40 % (dos o más pisos), o no **sumar las áreas de los pisos** en una columna que soporta varios.
+- Combinar la reducción por área y la reducción por número de pisos: la segunda es una **alternativa** de la primera.
+- Aplicar la reducción por número de pisos a **vigas o placas**: es solo para columnas y cimentación, y en edificios de cinco pisos o más.
+- Tratar una **terraza de concreto** como "cubierta liviana" de 0.50 kN/m²: ese valor es para cubiertas inclinadas metálicas o de madera con imposibilidad física de cargas mayores.
+- Olvidar el **impacto** en soportes de ascensores y maquinaria, o la **fuerza horizontal** de baranda, que no se suma con otras cargas de baranda.
+- Ignorar el **empozamiento**: una cubierta sin sistema auxiliar de evacuación incumple B.4.8.1, y cada 10 cm de agua son 0.98 kN/m².
+- Dejar de considerar el **granizo** a más de 2 000 m de altura.
+</Callout>
+
+## Resumen en una línea
+
+**Toma la carga viva mínima de la tabla de tu ocupación (nunca menos), súmale impacto y fuerzas de baranda donde apliquen, redúcela solo si cumples las condiciones de área (35 m² y 1.8 < L0 < 3.0 kN/m²) o de número de pisos (5 o más), y en cubiertas revisa empozamiento y granizo por separado.**

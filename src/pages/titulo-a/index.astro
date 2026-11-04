@@ -1,9 +1,9 @@
 ---
 import { getCollection } from 'astro:content';
-import TituloALayout from '../../layouts/TituloALayout.astro';
+import TituloLayout from '../../layouts/TituloLayout.astro';
 import { buttonVariants } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
-import { CALCULADORAS } from '../../data/calculadoras';
+import { calculadorasDe } from '../../data/calculadoras';
 
 const todos = (await getCollection('titulo-a')).sort((a, b) => a.data.orden - b.data.orden);
 const capitulos = todos.filter((e) => e.data.tipo === 'capitulo');
@@ -25,7 +25,7 @@ const flujo = [
 ] as const;
 ---
 
-<TituloALayout
+<TituloLayout titulo="a"
   title="Título A — Requisitos generales de diseño y construcción sismo resistente"
   description="Guía interactiva del Título A de la NSR-10: amenaza sísmica, espectro de diseño, sistemas estructurales, fuerzas sísmicas, deriva, elementos no estructurales y más."
 >
@@ -109,7 +109,7 @@ const flujo = [
     <h2 id="h-calc" class="text-xl font-bold tracking-tight">Herramientas interactivas</h2>
     <ul class="mt-4 grid gap-2 sm:grid-cols-2">
       {
-        CALCULADORAS.map((c) => (
+        calculadorasDe('a').map((c) => (
           <li class="flex items-start gap-3 rounded-lg border bg-card p-3 text-sm">
             <span class="mt-0.5 rounded bg-chart-2/25 px-1.5 py-0.5 font-mono text-xs">{c.secciones.split(' ')[0]}</span>
             <div>
@@ -122,4 +122,4 @@ const flujo = [
     </ul>
     <a href="/titulo-a/calculadoras" class="mt-4 inline-block text-sm font-medium text-primary hover:underline">Abrir todas las calculadoras →</a>
   </section>
-</TituloALayout>
+</TituloLayout>

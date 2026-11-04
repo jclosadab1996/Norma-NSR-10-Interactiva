@@ -1,7 +1,7 @@
-"""Recorta una figura/tabla de una página del PDF y la guarda como PNG en public/img/titulo-a/.
+"""Recorta una figura/tabla de una página del PDF y la guarda como PNG en public/img/titulo-<letra>/ (por defecto titulo-a).
 
 Uso:
-  <python-con-pymupdf> scripts/recortar-figura.py <pagina_pdf> <nombre> [--bbox x0 y0 x1 y1] [--zoom 2]
+  <python-con-pymupdf> scripts/recortar-figura.py <pagina_pdf> <nombre> [--titulo b] [--bbox x0 y0 x1 y1] [--zoom 2]
 
 - <pagina_pdf>: página PDF (1-based).
 - <nombre>: nombre de salida sin extensión (p. ej. figura-a2-3-2-mapa-aa).
@@ -16,14 +16,15 @@ import pymupdf
 
 RAIZ = Path(__file__).resolve().parent.parent
 PDF = RAIZ / "Norma" / "Norma-Sismo-Resistente-NSR-10.pdf"
-SALIDA = RAIZ / "public" / "img" / "titulo-a"
 
 ap = argparse.ArgumentParser()
 ap.add_argument("pagina", type=int)
 ap.add_argument("nombre")
 ap.add_argument("--bbox", type=float, nargs=4, default=[0.04, 0.06, 0.96, 0.94])
 ap.add_argument("--zoom", type=float, default=2.0)
+ap.add_argument("--titulo", default="a", help="letra del Título (a, b, ...): carpeta public/img/titulo-<letra>")
 a = ap.parse_args()
+SALIDA = RAIZ / "public" / "img" / f"titulo-{a.titulo.lower()}"
 
 SALIDA.mkdir(parents=True, exist_ok=True)
 doc = pymupdf.open(PDF)

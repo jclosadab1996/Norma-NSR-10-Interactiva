@@ -6,7 +6,7 @@ type PagefindApi = {
   search: (q: string) => Promise<{ results: Array<{ data: () => Promise<{ url: string; excerpt: string; meta: { title?: string } }> }> }>;
 };
 
-/** Búsqueda de texto completo con Pagefind (el índice se genera en `npm run build`). */
+/** Búsqueda de texto completo con Pagefind (el índice se genera en `pnpm build`). */
 export default function Buscador() {
   const [q, setQ] = useState('');
   const [res, setRes] = useState<Resultado[]>([]);
@@ -54,13 +54,13 @@ export default function Buscador() {
         autoFocus
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Busca: deriva, espectro, Fa, perfil de suelo, A.4.2…"
+        placeholder="Busca: deriva, espectro, combinaciones de carga, viento, B.2.3…"
         className="h-11 text-base"
         aria-label="Buscar en el sitio"
       />
       {estado === 'sin-indice' && (
         <p className="rounded-lg border border-warn/50 bg-warn/10 p-3 text-sm">
-          El índice de búsqueda se genera al construir el sitio. Ejecuta <code>npm run build</code> y <code>npm run preview</code> para usarlo.
+          El índice de búsqueda se genera al construir el sitio. Ejecuta <code>pnpm build</code> y <code>pnpm preview</code> para usarlo.
         </p>
       )}
       {buscando && <p className="text-sm text-muted-foreground">Buscando…</p>}

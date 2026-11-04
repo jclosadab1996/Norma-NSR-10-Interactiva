@@ -1,0 +1,45 @@
+---
+/**
+ * Layout con sidebar de capítulos para todas las páginas de un Título (A, B…).
+ * Usado por: portada de capítulo, calculadoras, glosario y herramientas propias de cada Título.
+ */
+import { getCollection } from 'astro:content';
+import BaseLayout from './BaseLayout.astro';
+import CapituloSidebar from '../components/layout/CapituloSidebar.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Letra del Título en minúscula: 'a' | 'b'. */
+  titulo?: 'a' | 'b';
+  /** id del capítulo activo (a2, apendice-a4, b6…). */
+  actual?: string;
+  /** Ancho máximo del contenedor central. */
+  ancho?: 'prosa' | 'amplio';
+}
+const { title, description, titulo = 'a', actual, ancho = 'prosa' } = Astro.props;
+
+const coleccion = titulo === 'b' ? 'titulo-b' : 'titulo-a';
+const todos = (await getCollection(coleccion)).sort((a, b) => a.data.orden - b.data.orden);
+const items = todos.map((e) => ({ id: e.id, codigo: e.data.codigo, titulo: e.data.titulo, tipo: e.data.tipo }));
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="mx-auto flex max-w-7xl gap-8 px-4 py-6 sm:px-6 lg:py-8">
+    <aside class="sticky top-[6.5rem] hidden h-[calc(100dvh-7.5rem)] w-64 shrink-0 overflow-y-auto pr-2 lg:block">
+      <CapituloSidebar items={items} actual={actual} titulo={titulo} />
+    </aside>
+    <div class="min-w-0 flex-1">
+      <!-- Navegación móvil -->
+      <details class="mb-5 rounded-lg border bg-card lg:hidden">
+        <summary class="cursor-pointer list-none px-4 py-3 text-sm font-semibold marker:hidden [&::-webkit-details-marker]:hidden">
+          ☰ Capítulos del Título {titulo.toUpperCase()}
+        </summary>
+        <div class="border-t p-2"><CapituloSidebar items={items} actual={actual} titulo={titulo} /></div>
+      </details>
+      <div class:list={[ancho === 'prosa' ? 'max-w-none' : 'max-w-none']}>
+        <slot />
+      </div>
+    </div>
+  </div>
+</BaseLayout>

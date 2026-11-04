@@ -1,0 +1,155 @@
+---
+codigo: 'B.1'
+tipo: capitulo
+titulo: 'Requisitos generales'
+resumen: 'Qué debe cumplir toda estructura frente a las cargas del Título B: resistir con seguridad, funcionar bien, soportar deformaciones impuestas, tener integridad estructural y una trayectoria de cargas continua hasta la cimentación.'
+objetivos:
+  - 'Explicar el alcance del Título B y su relación con el Título A (sismo)'
+  - 'Distinguir los requisitos de resistencia, funcionamiento, deformaciones impuestas y análisis'
+  - 'Describir qué es la integridad estructural y cómo evita el colapso progresivo'
+  - 'Trazar la trayectoria de cargas de una edificación desde su punto de aplicación hasta la cimentación'
+paginasNorma: 'B-1 a B-2'
+paginaPdf: 220
+orden: 1
+calculadoras: []
+nivel: 'basico'
+---
+
+## Idea central del capítulo
+
+El Título B responde una pregunta previa a cualquier cálculo: **¿qué cargas tiene que resistir la estructura, además del sismo?** Este primer capítulo no da valores numéricos; fija las **reglas de juego** para todo el Título: la estructura debe ser **resistente**, **funcional**, estar **unida** de forma que un daño local no la derribe, y tener una **trayectoria continua** por donde viajen las cargas hasta el suelo.
+
+<Callout tipo="importante" titulo="El diseño se hace para la combinación crítica">
+Las cargas del Título B (muertas, vivas, empuje, viento…) se suman al sismo del Título A. Los elementos se diseñan para la **combinación de carga crítica**, es decir, la que produce el efecto más desfavorable (<NormaRef s="B.1.1" pag="B-1" />). Cómo se arman esas combinaciones se explica en el capítulo [B.2](/titulo-b/b2).
+</Callout>
+
+## B.1.1 — Alcance
+
+El Título B da los **requisitos mínimos de carga** que deben cumplir las edificaciones, **diferentes a las fuerzas o efectos del sismo** (que se tratan en el Título A). Una estructura sismo resistente solo cumple su objetivo si, además de los efectos sísmicos, soporta las cargas prescritas aquí (<NormaRef s="B.1.1" pag="B-1" />).
+
+| Título | Qué aporta |
+|---|---|
+| **A** | Fuerzas sísmicas (ya mayoradas, a nivel de resistencia) |
+| **B** | Cargas muertas (B.3), vivas (B.4), empuje de tierra y agua (B.5), viento (B.6) y las combinaciones (B.2) |
+
+## B.1.2 — Requisitos básicos
+
+Además de lo exigido por razones sísmicas en el Título A, la estructura y **todas sus partes** deben cumplir cuatro requisitos (<NormaRef s="B.1.2.1" pag="B-1" />):
+
+### B.1.2.1.1 — Resistencia
+
+Los materiales de los elementos y de sus **conexiones** deben soportar con seguridad todas las cargas del Título B. Hay dos maneras de garantizarlo (<NormaRef s="B.1.2.1.1" pag="B-1" />):
+
+- **Método de la resistencia:** se **mayoran** las cargas con coeficientes de carga y no se exceden las *resistencias de diseño*.
+- **Método de los esfuerzos de trabajo:** se usan las cargas **sin mayorar** y no se exceden los *esfuerzos admisibles*.
+
+### B.1.2.1.2 — Funcionamiento
+
+La estructura debe tener **rigidez adecuada** para limitar (<NormaRef s="B.1.2.1.2" pag="B-1" />):
+
+1. las **deflexiones verticales** de los elementos,
+2. la **deriva** ante sismo y viento,
+3. las **vibraciones**,
+4. cualquier otra deformación que afecte el funcionamiento de la edificación.
+
+Es decir, no basta con que no se caiga: también debe ser **usable** (sin pisos que se flecten de más, fachadas que se agrieten o vibraciones molestas).
+
+### B.1.2.1.3 — Fuerzas causadas por deformaciones impuestas
+
+Hay que tener en cuenta las fuerzas que aparecen cuando se **impide** que la estructura se deforme libremente (<NormaRef s="B.1.2.1.3" pag="B-1" />):
+
+- **Asentamientos diferenciales** contemplados en el Título H (geotecnia).
+- **Restricción de cambios dimensionales:** variación de temperatura, expansión por humedad, retracción de fraguado, flujo plástico y efectos similares.
+
+En las combinaciones de B.2 estos efectos se agrupan en la carga **T**.
+
+### B.1.2.1.4 — Análisis
+
+Los efectos de las cargas en elementos y conexiones se determinan con **métodos aceptados de análisis estructural**, respetando (<NormaRef s="B.1.2.1.4" pag="B-1" />):
+
+- el **equilibrio** y la **estabilidad general**,
+- la **compatibilidad de deformaciones**,
+- las **propiedades de los materiales** a corto y a largo plazo.
+
+En los elementos que acumulan deformaciones residuales bajo cargas de servicio sostenidas (**flujo plástico**), el análisis debe considerar sus efectos durante toda la vida útil.
+
+## B.1.3 — Unidad e integridad estructural general
+
+### B.1.3.1 — Amarre adicional al del Título A
+
+Además de los requisitos de amarre entre partes de la estructura exigidos por razones sísmicas en el Título A, deben cumplirse los requisitos de esta sección. En estructuras de **concreto reforzado** se consultan también los de C.7.13 (<NormaRef s="B.1.3.1" pag="B-1" />).
+
+### B.1.3.2 — Por qué hace falta integridad
+
+Por accidente, o porque la edificación se usa para fines distintos de los previstos, puede fallar un elemento o una porción pequeña. Para que eso no arrastre al resto, los elementos y miembros deben estar **unidos** de forma que la estructura (<NormaRef s="B.1.3.2" pag="B-1" />):
+
+- admita **daño local** sin perder su estabilidad general,
+- **no extienda** el daño a otros elementos,
+- evite el **colapso progresivo**.
+
+### B.1.3.3 — Cómo se logra
+
+El método más común es disponer los elementos de modo que den **estabilidad general**, con **continuidad** y suficiente **ductilidad, capacidad de absorción y de disipación de energía**, para **redistribuir cargas** desde la zona dañada hacia las regiones adyacentes sin colapso (<NormaRef s="B.1.3.3" pag="B-2" />).
+
+<Callout tipo="nota" titulo="Integridad estructural y colapso progresivo">
+La *integridad estructural* es la capacidad de la estructura de **evitar un colapso generalizado cuando ocurre un daño localizado** (definición de <NormaRef s="B.2.1.1" pag="B-3" />). El colapso progresivo es lo contrario: la falla de un elemento sobrecarga a los vecinos, que fallan a su vez, en cadena.
+</Callout>
+
+## B.1.4 — Trayectorias de cargas
+
+Una carga solo está “resuelta” si hay un **camino continuo** por el cual llegar al suelo. La norma exige tres cosas:
+
+- **B.1.4.1** — El sistema estructural debe tener una **trayectoria continua para todas las cargas** y solicitaciones del diseño (<NormaRef s="B.1.4.1" pag="B-2" />).
+- **B.1.4.2** — La trayectoria debe poder resistir las fuerzas **desde su punto de aplicación (o de origen) a través de los elementos estructurales hasta la cimentación** u otros apoyos (<NormaRef s="B.1.4.2" pag="B-2" />).
+- **B.1.4.3** — En estructuras sometidas a fuerzas horizontales (viento, sismo, empuje de tierras…), los elementos de la trayectoria deben resistir las fuerzas aplicadas sobre la superficie de otros elementos, ya sean **cargas distribuidas** o **efectos inerciales** de la masa de esos elementos. La trayectoria **incluye los diafragmas** cuando se requieran para llevar las fuerzas horizontales a los elementos verticales del sistema de resistencia lateral (<NormaRef s="B.1.4.3" pag="B-2" />).
+
+<Detalle titulo="Ejemplo de trayectoria vertical y horizontal" abierto>
+
+| Tipo de carga | Se aplica en… | Camino hasta el suelo |
+|---|---|---|
+| **Vertical** (peso, carga viva) | Losa de entrepiso | Losa → viga secundaria → viga principal → columna → zapata → suelo |
+| **Viento** | Fachada | Fachada → elementos de fachada → diafragma (losa) → muros o pórticos → cimentación |
+| **Sismo** | Masa de cada piso (inercia) | Masa → diafragma → muros o pórticos → cimentación |
+| **Empuje de tierra** | Muro de sótano | Muro → diafragmas de piso y cimentación |
+
+</Detalle>
+
+<Ejemplo numero={1} titulo="Revisión de requisitos generales en un edificio de oficinas de 5 pisos">
+Un diseñador va a estructurar un edificio de oficinas de 5 pisos con sótano, en concreto reforzado. Antes de calcular nada, ordena su revisión con los requisitos de B.1.
+
+<Paso titulo="Definir qué cargas intervienen" ref="B.1.1">
+Además del sismo (Título A), identifica las cargas del Título B: **muertas** (peso propio, acabados, muros divisorios), **vivas** (ocupación, cubierta), **empuje lateral** del suelo sobre el muro del sótano, **viento** y las deformaciones impuestas. Todas entran a las combinaciones de B.2 y el diseño se hace para la **combinación crítica**.
+</Paso>
+<Paso titulo="Escoger el método de diseño" ref="B.1.2.1.1">
+El concreto reforzado se diseña por el **método de la resistencia** (<NormaRef s="B.2.3.1" pag="B-5" />): se mayoran las cargas y se comparan con las resistencias de diseño del Título C.
+</Paso>
+<Paso titulo="Verificar el funcionamiento" ref="B.1.2.1.2">
+Además de la resistencia, hay que revisar **deflexiones** de losas y vigas, **deriva** ante sismo y viento y **vibraciones** de los pisos de oficina.
+</Paso>
+<Paso titulo="Considerar deformaciones impuestas" ref="B.1.2.1.3">
+El edificio tiene una losa de cubierta larga expuesta al sol (variación de temperatura y retracción) y el suelo tiene riesgo de **asentamiento diferencial** según el estudio geotécnico (Título H). Esos efectos se incluyen como carga **T**.
+</Paso>
+<Paso titulo="Trazar la trayectoria de cargas" ref="B.1.4">
+Comprueba que cada carga tenga camino hasta la cimentación: losa → vigas → columnas → zapatas; y para las fuerzas horizontales, losas rígidas como **diafragma** → pórticos o muros → cimentación. Un muro de sótano recibe el empuje de tierra y lo transmite a las losas y a su base.
+</Paso>
+<Paso titulo="Asegurar la integridad estructural" ref="B.1.3">
+Verifica **continuidad** del refuerzo, amarres entre vigas, columnas y losas (con los requisitos de C.7.13 para concreto) y **ductilidad** suficiente para que, si una columna del primer piso resultara dañada, las cargas se **redistribuyan** a las adyacentes sin colapso progresivo.
+</Paso>
+<Resultado>
+La revisión B.1 no produce un número: produce **decisiones** (método de diseño, qué cargas y deformaciones considerar, camino de cargas y detalles de amarre). Esas decisiones son la base de las combinaciones del capítulo B.2.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Diseñar solo con la carga vertical y “el sismo del Título A”, olvidando viento, empuje lateral o deformaciones impuestas cuando corresponden.
+- Verificar únicamente resistencia y olvidar **deflexiones, deriva y vibraciones** (<NormaRef s="B.1.2.1.2" pag="B-1" />).
+- Ignorar la retracción, la temperatura o los asentamientos diferenciales por considerarlos “efectos secundarios” (<NormaRef s="B.1.2.1.3" pag="B-1" />).
+- Dejar elementos sin continuidad ni amarre: un daño local puede convertirse en colapso progresivo (<NormaRef s="B.1.3.2" pag="B-1" />).
+- Olvidar el **diafragma** como parte de la trayectoria de las cargas horizontales (<NormaRef s="B.1.4.3" pag="B-2" />).
+</Callout>
+
+## Resumen en una línea
+
+**Toda estructura debe resistir las cargas del Título B (más el sismo), funcionar bien, soportar las deformaciones impuestas, tener integridad estructural y una trayectoria de cargas continua hasta la cimentación**, y se diseña para la combinación de carga crítica de B.2.

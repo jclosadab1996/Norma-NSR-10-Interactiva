@@ -1,0 +1,904 @@
+---
+codigo: 'B.6a'
+tipo: capitulo
+titulo: 'Fuerzas de viento (I): alcance, definiciones y procedimiento simplificado'
+resumen: 'Qué cubre el capítulo de viento, el vocabulario y los símbolos que usa, y el Método 1 (B.6.4): presiones de diseño del SPRFV y de componentes y revestimientos para edificios cerrados, regulares y de hasta 18 m.'
+objetivos:
+  - 'Distinguir los tres procedimientos de viento y saber cuándo aplica cada uno'
+  - 'Clasificar un edificio (cerrado, parcialmente cerrado, abierto, bajo, rígido) con las definiciones de B.6.2'
+  - 'Verificar si un edificio cumple las condiciones del Método 1 (B.6.4.1)'
+  - 'Calcular presiones del SPRFV y de componentes y revestimientos con ps = λ·Kzt·I·ps10 y pnet = λ·Kzt·I·pnet10'
+  - 'Aplicar las presiones mínimas de 0.40 kN/m²'
+paginasNorma: 'B-21 a B-27 y B-39 a B-46'
+paginaPdf: 240
+orden: 6
+calculadoras: ['viento-simplificado']
+nivel: 'intermedio'
+---
+
+import {
+  alturaCumbreraDosAguas,
+  alturaMediaCubierta,
+  anchoZonaBorde,
+  cargaMinimaSprfv,
+  factorImportanciaViento,
+  factorLambda,
+  fuerzaHorizontalTotal,
+  presionNetaComponentes,
+  presionesSprfv,
+  pnet10,
+} from '../../lib/nsr10/vientoSimplificado';
+import { PRESION_MINIMA, ZONAS_SPRFV } from '../../data/vientoSimplificado';
+
+export const fmt2 = (x) => (x > 0 ? '+' : '') + x.toFixed(2);
+export const fmt3 = (x) => (x > 0 ? '+' : '') + x.toFixed(3);
+
+export const e1 = (() => {
+  const v = 28, theta = 15, he = 6, ancho = 12, largo = 24, exposicion = 'C';
+  const cumbrera = alturaCumbreraDosAguas(he, ancho, theta);
+  const h = alturaMediaCubierta(he, cumbrera, theta);
+  const i = factorImportanciaViento('I');
+  const r = presionesSprfv({ v, theta, h, exposicion, i, kzt: 1 });
+  const c = r.casos[0];
+  const a = anchoZonaBorde(ancho, h);
+  const alza = cumbrera - he;
+  const areas = { A: 2 * a * he, B: 2 * a * alza, C: (largo - 2 * a) * he, D: (largo - 2 * a) * alza };
+  const areaTotal = areas.A + areas.B + areas.C + areas.D;
+  const fCalc = fuerzaHorizontalTotal(c.ps, areas);
+  const fNota7 = fuerzaHorizontalTotal(c.ps, areas, { ceroEnBD: true });
+  const fMin = cargaMinimaSprfv(areaTotal);
+  return { v, theta, he, ancho, largo, cumbrera, h, i, r, c, a, alza, areas, areaTotal, fCalc, fNota7, fMin, fGob: Math.max(fCalc, fNota7, fMin) };
+})();
+
+export const e2 = (() => {
+  const base = { v: 28, h: e1.h, exposicion: 'C', i: e1.i, kzt: 1 };
+  const muro = presionNetaComponentes({ ...base, superficie: 'muro', zona: 5, area: 2 });
+  const techo = presionNetaComponentes({ ...base, superficie: 'cubierta', zona: 3, area: 3, theta: 15, tipo: 'dos-aguas' });
+  const techoMenor = presionNetaComponentes({ ...base, superficie: 'cubierta', zona: 3, area: 3, theta: 15, tipo: 'dos-aguas', modoArea: 'menor' });
+  const alero = presionNetaComponentes({ ...base, superficie: 'cubierta', zona: 3, area: 1, theta: 15, tipo: 'dos-aguas', alero: true });
+  const t2 = pnet10(28, 'c7-27', 3, 2);
+  const t5 = pnet10(28, 'c7-27', 3, 5);
+  return { muro, techo, techoMenor, alero, t2, t5, lam: factorLambda(e1.h, 'C') };
+})();
+
+export const e3 = (() => {
+  const v = 22, theta = 27, h = 9, exposicion = 'B';
+  const i = factorImportanciaViento('III');
+  const r = presionesSprfv({ v, theta, h, exposicion, i, kzt: 1 });
+  return { v, theta, h, i, r };
+})();
+
+## Idea central del capítulo
+
+El Capítulo B.6 responde una pregunta: **¿qué presión ejerce el viento sobre la edificación y cómo la transformo en cargas de diseño?** La norma ofrece tres caminos —uno simple y conservador para edificios sencillos, uno analítico para la mayoría de los casos y uno experimental— y esta primera parte del capítulo cubre:
+
+1. **El alcance y los procedimientos permitidos** (B.6.1), incluida la carga mínima de 0.40 kN/m².
+2. **El vocabulario** (B.6.2) y **los símbolos** (B.6.3) que se usan en todo el capítulo.
+3. **El Método 1, procedimiento simplificado** (B.6.4): para edificios cerrados, regulares y de hasta 18 m de altura se leen las presiones directamente de tablas (en función de la velocidad básica, el ángulo de cubierta y el área de viento) y se corrigen con un solo factor, $\lambda K_{zt} I$.
+
+<Callout tipo="importante" titulo="Cómo se ordena el viento en la norma">
+Las presiones de las tablas del Método 1 están calculadas para **exposición B, altura de 10 m, $I = 1.0$ y $K_{zt} = 1.0$**. Todo lo demás (otra exposición, otra altura, otro grupo de uso, una colina cercana) entra por el factor de ajuste $\lambda K_{zt} I$. La velocidad básica $V$ se toma del mapa de la Figura B.6.4-1 y no se interpola: solo existen cinco valores (17, 22, 28, 33 y 36 m/s).
+</Callout>
+
+Si el edificio no cumple las condiciones del Método 1, el camino es el procedimiento analítico (Método 2, B.6.5) o el túnel de viento (Método 3, B.6.6); ambos se desarrollan en las siguientes partes del capítulo ([B.6 (II)](/titulo-b/b6b) y [B.6 (III)](/titulo-b/b6c)).
+
+## B.6.1 — Alcance
+
+El capítulo da métodos para calcular las fuerzas de viento con que se diseñan el **sistema principal de resistencia de fuerzas de viento (SPRFV)** de las edificaciones y sus **componentes y elementos de revestimiento** (<NormaRef s="B.6.1" pag="B-21" />).
+
+**No aplica** a:
+
+- estructuras de **forma o localización especiales**, que requieren investigación apropiada;
+- estructuras que puedan sufrir **oscilaciones graves inducidas por el viento**;
+- **puentes**.
+
+Si existen **resultados de túnel de viento**, pueden usarse en lugar de los del capítulo siempre que los apruebe la Comisión Asesora Permanente para el Régimen de Construcciones Sismo Resistentes.
+
+### B.6.1.1 — Procedimientos permitidos
+
+Las cargas de diseño de edificios y otras estructuras (SPRFV, componentes y revestimientos) se determinan con **uno** de estos procedimientos (<NormaRef s="B.6.1.1" pag="B-21" />):
+
+| Método | Procedimiento | Sección | Para qué edificios |
+|:-:|---|:-:|---|
+| 1 | **Simplificado** | B.6.4 | Los que cumplen las condiciones de B.6.4.1 (cerrados, regulares, bajos…) |
+| 2 | **Analítico** | B.6.5 | Los que cumplen las condiciones de B.6.5.1 (regulares, sin respuesta aerodinámica especial) |
+| 3 | **Túnel de viento** | B.6.6 | Cualquier edificio, cuando el procedimiento analítico no basta |
+
+### B.6.1.2 — Presiones en caras opuestas
+
+Para las cargas de diseño del SPRFV se toma la **suma algebraica de las presiones que actúan en caras opuestas** de cada superficie del edificio (<NormaRef s="B.6.1.2" pag="B-21" />). Es decir: presión de barlovento (que empuja) más succión de sotavento (que jala) suman, no se restan; y la presión interior se combina con la exterior con su signo.
+
+### B.6.1.3 — Carga de viento de diseño mínima
+
+Cualquiera sea el método, la carga de diseño no puede ser menor que (<NormaRef s="B.6.1.3" pag="B-21" />):
+
+| Elemento | Mínimo | Sección |
+|---|---|:-:|
+| **SPRFV** de edificación cerrada, parcialmente cerrada o cualquier estructura | $0.40$ kN/m² × área de la edificación proyectada en un plano **vertical normal a la dirección del viento** | B.6.1.3.1 |
+| **Componentes y revestimientos** | presión neta de $0.40$ kN/m² actuando en **cualquier dirección normal a la superficie** | B.6.1.3.2 |
+
+<Callout tipo="practica" titulo="Un piso mínimo que sí gobierna">
+En edificios bajos y de baja velocidad de viento (regiones 1 y 2 del mapa) las presiones de las tablas son pequeñas (a menudo menores que 0.20 kN/m²) y el mínimo de 0.40 kN/m² es el que **realmente controla**. El Ejemplo 1 más abajo lo muestra.
+</Callout>
+
+## B.6.2 — Definiciones
+
+La norma define 27 términos (<NormaRef s="B.6.2" pag="B-21" />). Aquí están **todos**, agrupados por tema; los más largos o con ecuaciones van en desplegables.
+
+### Geometría y alturas
+
+| Término | Qué significa |
+|---|---|
+| **Altura de la cornisa, $h_e$** | Distancia desde el suelo adyacente hasta la cornisa de una pared dada. Si la cornisa varía a lo largo de la pared, se toma la altura promedio. |
+| **Altura media de cubierta, $h$** | Promedio entre la altura a la cornisa y la altura al punto más alto de la cubierta. Con inclinación $\theta \le 10°$, $h$ es la **altura de la cornisa**. |
+| **Área efectiva** | El área con la que se entra a las tablas de $GC_p$ (y, en el Método 1, de $p_{net10}$). En componentes y paneles de revestimiento: **longitud de luz × ancho efectivo**, con ancho efectivo no menor que un tercio de la luz. Para elementos de amarre del revestimiento, no mayor que el área tributaria de un amarre. |
+| **Colina** | Para los efectos topográficos de B.6.5.7: superficie de terreno con un cambio notable de relieve en cualquier dirección horizontal. |
+| **Escarpe** | Para los efectos de B.6.5.7: acantilado o pendiente fuerte que separa dos niveles de terreno (Figura B.6.5-1). |
+
+### Clasificación de los edificios
+
+<Detalle titulo="Edificio abierto, parcialmente cerrado y cerrado (con sus ecuaciones)" abierto>
+
+Se clasifican según la proporción de **aberturas** (vanos del cerramiento que permanecen abiertos durante el viento de diseño) en la pared que recibe presión positiva exterior. Las definiciones se usan después para escoger la presión interna (<NormaRef s="B.6.5.9" pag="B-31" />).
+
+- **Edificio abierto**: aberturas de al menos 80 % del área en cada una de las paredes del cerramiento (fachadas y cubiertas):
+
+$$
+A_o \ge 0.8\,A_g
+$$
+
+- **Edificio parcialmente cerrado**: cumple (a) las aberturas de una pared con presión externa positiva exceden en más de 10 % la suma de las aberturas del resto del revestimiento, y (b) esas aberturas superan 0.37 m² o el 1 % del área de esa pared (el menor), y el porcentaje de aberturas del resto del revestimiento no excede 20 %:
+
+$$
+A_o > 1.10\,A_{oi}\qquad
+A_o > 0.37\ \text{m}^2\ \text{o}\ A_o > 0.01\,A_g\ \text{(el menor)}\qquad
+\frac{A_{oi}}{A_{gi}} \le 0.20
+$$
+
+- **Edificio cerrado**: el que **no** cumple los requisitos de edificio abierto ni de parcialmente cerrado.
+
+Donde:
+
+- $A_o$ = área total de aberturas en una pared que reciba presión positiva externa (m²).
+- $A_g$ = área total de la pared a la que se refiere $A_o$ (m²).
+- $A_{oi}$ = suma de las áreas de aberturas del revestimiento (paredes y cubierta) sin incluir $A_o$ (m²).
+- $A_{gi}$ = suma de las áreas brutas del revestimiento (paredes y cubierta) sin incluir $A_g$ (m²).
+
+</Detalle>
+
+| Término | Qué significa |
+|---|---|
+| **Aberturas** | Vanos o espacios del cerramiento que permiten el paso del aire y que se consideran “abiertos” durante los vientos de diseño. |
+| **Edificio bajo** | Edificio **cerrado o parcialmente cerrado** que cumple: (a) altura media de cubierta $h \le 18$ m (60 ft) y (b) $h$ **no excede la menor dimensión horizontal** del edificio. |
+| **Edificio de diafragma simple** | Edificio en el que las cargas de barlovento y sotavento se transmiten, por los diafragmas de piso y cubierta, a un **mismo SPRFV** (no tiene separaciones estructurales). |
+| **Estructura o edificio de forma regular** | Edificio u otra estructura sin geometría irregular en su forma espacial. |
+| **Estructura o edificio rígido** | Frecuencia fundamental **mayor o igual a 1 Hz**. |
+| **Edificio u otra estructura flexible** | Edificios u otras estructuras esbeltas con frecuencia natural fundamental **menor a 1 Hz**. |
+| **Cubierta libre** | Cubierta de configuración similar a las Figuras B.6.5-15A a B.6.5-15D (a una, dos aguas o en artesa) sobre un edificio abierto, sin paredes de cerramiento bajo ella. |
+
+### Sistemas y elementos
+
+| Término | Qué significa |
+|---|---|
+| **Sistema principal resistente a cargas de viento (SPRFV)** | Conjunto de elementos estructurales que da apoyo y estabilidad a la estructura completa. Generalmente recibe las cargas de viento de **más de una superficie** (pórticos, muros de cortante, diafragmas). |
+| **Componentes y revestimientos** | Elementos que **no** forman parte del SPRFV: fachadas, ventanas, correas, tejas, amarres… Se diseñan con presiones locales, más altas. |
+| **Revestimiento del edificio** | Componentes que cierran el edificio: cubiertas, claraboyas, paredes exteriores, puertas y ventanas. |
+| **Revestimiento resistente a impactos** | Cerramiento diseñado para proteger los materiales para vidriados (por ejemplo, de proyectiles arrastrados por el viento). |
+| **Material para vidriado** | Vidrio recocido, con recubrimiento orgánico, templado, laminado o armado; láminas de plástico o combinaciones de estos usados en vidriados (véase K.4.1.2). |
+| **Vidriera** | Vidrio o láminas translúcidas de plástico usadas en ventanas, puertas, claraboyas o cerramientos. |
+
+### Acciones del viento
+
+| Término | Qué significa |
+|---|---|
+| **Velocidad de viento, $V$** | Velocidad de una **ráfaga de 3 segundos** medida a **10 m** sobre el suelo en **exposición C** (B.6.5.4 y B.6.5.6.3). |
+| **Factor de importancia, $I$** | Factor que tiene en cuenta el grado de amenaza a la vida humana y de daño a la propiedad. |
+| **Presión de diseño, $p$** | Presión estática equivalente usada para determinar las cargas de viento de edificios. |
+| **Fuerza de diseño, $F$** | Fuerza estática equivalente usada para determinar las cargas de viento en **edificios abiertos** y otras estructuras. |
+
+### Términos administrativos
+
+| Término | Qué significa |
+|---|---|
+| **Aprobado** | Aceptado por la autoridad competente. |
+| **Literatura reconocida** | Investigaciones publicadas o documentos técnicos que han sido aprobados. |
+
+<Callout tipo="atencion" titulo="Edificio “bajo” no es solo cuestión de 18 m">
+La definición exige dos condiciones: $h \le 18$ m **y** $h$ no mayor que la **menor dimensión horizontal**. Una torre esbelta de 15 m con planta de 10 m × 12 m **no es** un edificio bajo, aunque no pase de 18 m, y por eso su SPRFV no puede diseñarse con el Método 1 (<NormaRef s="B.6.4.1.1" pag="B-25" />).
+</Callout>
+
+## B.6.3 — Nomenclatura
+
+La nomenclatura reúne las variables de **todo** el capítulo (<NormaRef s="B.6.3" pag="B-23" />). Primero los símbolos que necesitarás en el Método 1; después el resto, agrupado por tema. Las presiones se definen en N/m² en la norma, pero las tablas del Método 1 están en **kN/m²**: usa siempre el valor y la unidad de la tabla.
+
+### Símbolos del Método 1
+
+| Símbolo | Significado |
+|---|---|
+| $V$ | Velocidad básica de viento de la Fig. B.6.4-1, en m/s: ráfaga de 3 s a 10 m de altura en terreno de exposición C |
+| $I$ | Factor de importancia (Tabla B.6.5-1) |
+| $K_{zt}$ | Factor topográfico definido en B.6.5.7 |
+| $\lambda$ | Factor de ajuste por altura y exposición del edificio (Figs. B.6.4-2 y B.6.4-3) |
+| $h$ | Altura media del edificio o altura de otra estructura; se usa la altura a la cornisa si $\theta \le 10°$ (m) |
+| $h_e$ | Altura de la cornisa en una pared dada, o promedio si varía a lo largo de la estructura (m) |
+| $\theta$ | Ángulo de inclinación de la cubierta, en grados |
+| $a$ | Ancho de la zona para coeficiente de presión (m) |
+| $A$ | Área efectiva para viento (m²) |
+| $p_{s}$ | Presión neta de diseño de la Ec. B.6.4-1 (SPRFV) |
+| $p_{s10}$ | Presión de diseño simplificada para exposición B, $h = 10$ m, de la Fig. B.6.4-2 |
+| $p_{net}$ | Presión neta de diseño de la Ec. B.6.4-2 (componentes y revestimientos) |
+| $p_{net10}$ | Presión neta de diseño para exposición B a $h = 10.0$ m |
+| $p$ | Presión de diseño usada en el cálculo de cargas de viento para edificios |
+
+<Detalle titulo="Áreas y aberturas">
+
+| Símbolo | Significado |
+|---|---|
+| $A_f$ | Área de un edificio u otra estructura abierta; puede referirse al área normal a la dirección del viento o al área proyectada en un plano normal a ella (m²) |
+| $A_g$ | Área bruta a la cual hace referencia $A_o$ (m²) |
+| $A_{gi}$ | Suma de las áreas brutas de toda la superficie del envolvente (paredes y cubierta) sin incluir $A_g$ (m²) |
+| $A_o$ | Área total de aberturas en una pared que recibe presión positiva externa (m²) |
+| $A_{oi}$ | Suma del área de aberturas de toda la superficie del envolvente (paredes y cubierta) sin incluir $A_o$ (m²) |
+| $A_{og}$ | Área total de aberturas en toda la superficie del cerramiento (paredes y cubierta) del edificio (m²) |
+| $A_g$ (muros libres) | La norma repite el símbolo $A_g$ para el área bruta de la pared sólida libre o de la valla rígida (m²) |
+
+</Detalle>
+
+<Detalle titulo="Dimensiones del edificio y de la estructura">
+
+| Símbolo | Significado |
+|---|---|
+| $B$ | Dimensión horizontal del edificio medida en dirección normal a la del viento (m) |
+| $L$ | Dimensión horizontal del edificio medida en dirección paralela a la del viento (m) |
+| $D$ | Diámetro de una estructura o miembro circular (m) |
+| $D'$ | Profundidad de elementos sobresalientes como nervaduras y cornisas (m) |
+| $s$ | Dimensión vertical de un muro libre o una valla maciza de la Fig. B.6.5-17 (m) |
+| $L_r$ | Dimensión horizontal de la esquina de retorno de un muro libre o valla maciza de la Fig. B.6.5-17 (m) |
+| $W$ | Ancho del edificio en las Figs. B.6.5-9 y B.6.5-11A y B; ancho de la luz en las Figs. B.6.5-10 y B.6.5-12 (m) |
+| $X$ | Distancia hasta el centro de presión desde el borde a barlovento (m) |
+| $x$ | Distancia desde la cima en dirección de barlovento o sotavento, en la Fig. B.6.5-1 (m) |
+| $H$ | Altura de la colina o escarpe en la Fig. B.6.5-1 (m) |
+| $L_h$ | Distancia viento arriba de la cresta de la colina o escarpe, en la Fig. B.6.5-1, donde la diferencia de elevación del terreno es la mitad de la altura de la colina o escarpe (m) |
+| $z$ | Altura por encima del terreno (m) |
+| $\bar z$ | Altura equivalente de la estructura (m) |
+| $V_i$ | Volumen interno sin particiones (m³) |
+| $\nu$ | Cociente alto/ancho para vallas macizas |
+| $\varepsilon$ | Coeficiente de área sólida vs. área bruta para muros libres, vallas macizas, vallas abiertas, torres de celosía y otras estructuras de celosía |
+
+</Detalle>
+
+<Detalle titulo="Coeficientes de presión y fuerza, factor de ráfaga">
+
+| Símbolo | Significado |
+|---|---|
+| $C_p$ | Coeficiente de presión externa para el cálculo de cargas de viento en edificios |
+| $C_f$ | Coeficiente de fuerza para el cálculo de cargas de viento en estructuras diferentes a edificios |
+| $C_N$ | Coeficiente de presión neta para el cálculo de cargas de viento en edificios abiertos |
+| $GC_p$ | Producto del coeficiente de presión externa y el factor de efecto ráfaga, para edificios |
+| $GC_{pf}$ | Producto del coeficiente equivalente de presión externa y el factor de efecto ráfaga, para el SPRFV de edificios bajos |
+| $GC_{pi}$ | Producto del coeficiente de presión interna y el factor de efecto ráfaga, para edificios |
+| $GC_{pn}$ | Coeficiente de presión combinada para un parapeto |
+| $G$ | Factor de efecto ráfaga |
+| $G_f$ | Factor de efecto ráfaga para el SPRFV de edificios flexibles y otras estructuras |
+| $F$ | Fuerza de viento de diseño para estructuras diferentes a edificios (N) |
+
+</Detalle>
+
+<Detalle titulo="Presiones por velocidad y presiones de diseño">
+
+| Símbolo | Significado |
+|---|---|
+| $q$ | Presión por velocidad (N/m²) |
+| $q_z$ | Presión por velocidad evaluada a una altura $z$ sobre el terreno (N/m²) |
+| $q_h$ | Presión por velocidad evaluada a la altura $z = h$ (N/m²) |
+| $q_i$ | Presión por velocidad para la determinación de la presión interna (N/m²) |
+| $q_p$ | Presión por velocidad en la parte superior del parapeto (N/m²) |
+| $p_w$ | Presión de viento actuando en la cara a barlovento, Fig. B.6.5-6 (N/m²) |
+| $p_L$ | Presión de viento actuando en la cara a sotavento, Fig. B.6.5-6 (N/m²) |
+
+</Detalle>
+
+<Detalle titulo="Exposición, velocidad, topografía y parámetros de la capa límite">
+
+| Símbolo | Significado |
+|---|---|
+| $K_d$ | Factor de direccionalidad del viento (Tabla B.6.5-4) |
+| $K_z$ | Coeficiente de exposición de presión por velocidad evaluado a la altura $z$ |
+| $K_h$ | Coeficiente de exposición de presión por velocidad evaluado en $z = h$ |
+| $K_1, K_2, K_3$ | Factores de multiplicación de la Fig. B.6.5-1 usados para calcular $K_{zt}$ |
+| $\bar V_{\bar z}$ | Velocidad de viento promedio por hora a una altura $\bar z$ (m/s) |
+| $\hat b$ | Factor de velocidad de ráfaga de 3 s, de la Tabla B.6.5-2 |
+| $\bar b$ | Factor de velocidad media de viento horaria de la Ec. B.6.5-12, Tabla B.6.5-2 |
+| $c$ | Factor de intensidad de turbulencia de la Ec. B.6.5-3, Tabla B.6.5-2 |
+| $I_{\bar z}$ | Intensidad de turbulencia de la Ec. B.6.5-6 |
+| $L_{\bar z}$ | Longitud integral a escala de la turbulencia, para modelos a escala en túnel de viento (m) |
+| $\ell$ | Factor de escala de longitud integral de la Tabla B.6.5-2 (m) |
+| $\bar\varepsilon$ | Exponente de la ley potencial de la escala de longitud integral en la Ec. B.6.5-5, Tabla B.6.5-2 |
+| $\alpha$ | Exponente de la ley potencial de la velocidad de ráfaga de 3 s, Tabla B.6.5-2 |
+| $\hat\alpha$ | Inversa de $\alpha$, Tabla B.6.5-2 |
+| $\bar\alpha$ | Exponente de la ley potencial de la velocidad media horaria, Ec. B.6.5-12, Tabla B.6.5-2 |
+| $z_g$ | Altura nominal de la capa atmosférica límite usada en este código (Tabla B.6.5-2) |
+| $z_{min}$ | Altura mínima de exposición de la Tabla B.6.5-2 |
+
+</Detalle>
+
+<Detalle titulo="Respuesta dinámica del edificio flexible">
+
+| Símbolo | Significado |
+|---|---|
+| $g_Q$ | Factor pico para respuesta del entorno, Ecs. B.6.5-2 y B.6.5-6 |
+| $g_R$ | Factor pico para respuesta de resonancia, Ec. B.6.5-6 |
+| $g_\nu$ | Factor pico para respuesta de viento, Ecs. B.6.5-2 y B.6.5-6 |
+| $Q$ | Factor de respuesta del entorno, Ec. B.6.5-4 |
+| $R$ | Factor de respuesta de resonancia, Ec. B.6.5-8 |
+| $R_B, R_h, R_L$ | Valores de la Ec. B.6.5-8 |
+| $R_n$ | Valor de la Ec. B.6.5-9 |
+| $R_i$ | Factor de reducción de la Ec. B.6.5-14 |
+| $N_1$ | Frecuencia reducida de la Ec. B.6.5-10 |
+| $n_1$ | Frecuencia natural del edificio (Hz) |
+| $\beta$ | Coeficiente de amortiguamiento, porcentaje del crítico, para edificios y otras estructuras |
+| $\eta$ | Valor usado en la Ec. B.6.5-11A (véase B.6.5.8.2) |
+
+</Detalle>
+
+<Callout tipo="nota" titulo="Erratas menores del texto de la norma">
+En las páginas B-21 a B-27 aparecen detalles de edición que no cambian el sentido: el ángulo de la cubierta aparece una vez como “e” en lugar de θ (definición de $h$, B-24), el factor de importancia se escribe con una “l” (B-24 y B-26), la sección B.6.4.2.2 remite a B.6.2 para definir $I$ cuando debería remitir a B.6.5.5, y la nomenclatura da $p_s$ y $p_{net}$ en N/m² mientras las tablas del Método 1 están en kN/m².
+</Callout>
+
+## B.6.4 — Procedimiento simplificado (Método 1)
+
+El Método 1 reemplaza el cálculo de presiones por velocidad y coeficientes por **tablas listas para usar**. Es el más corto, pero tiene un campo de aplicación estrecho y es **conservador** frente al método analítico.
+
+### B.6.4.1 — Alcance
+
+Para usar el Método 1 el edificio debe cumplir las condiciones de **B.6.4.1.1** (si se diseña el SPRFV) o de **B.6.4.1.2** (si solo se diseñan componentes y revestimientos). Si cumple únicamente las de B.6.4.1.2, los componentes y revestimientos se diseñan con el Método 1 pero el **SPRFV debe diseñarse con el Método 2 o el Método 3** (<NormaRef s="B.6.4.1" pag="B-25" />).
+
+<TablaNorma numero="B.6.4.1" titulo="Condiciones de alcance del Método 1" pag="B-25 y B-26">
+
+| Condición | SPRFV (B.6.4.1.1) | Componentes y revestimientos (B.6.4.1.2) |
+|---|---|---|
+| Altura | Edificio **bajo** (h ≤ 18 m y h ≤ menor dimensión horizontal) | Altura promedio h ≤ 18.0 m |
+| Cerramiento | **Cerrado** y con las provisiones de zonas propensas a huracanes (B.6.5.9.3) | **Cerrado** y con las provisiones de zonas propensas a huracanes (B.6.5.9.3) |
+| Forma | De **forma regular** | De **forma regular** |
+| Sistema estructural | De **diafragma simple**; **no flexible** | — |
+| Respuesta aerodinámica | Sin cargas transversales de viento, desprendimiento de vórtices, inestabilidad por golpeteo o aleteo, ni efectos de canalización o estela de obstrucciones a barlovento que obliguen a consideraciones especiales | — |
+| Cubierta | Sección transversal aproximadamente simétrica en cada dirección; cubierta **plana** o **a dos o cuatro aguas** con θ ≤ 45° | Cubierta **plana**, **a dos aguas** con θ ≤ 45° o **a cuatro aguas** con θ ≤ 27° |
+| Torsión | Exento de los casos de carga torsional de la nota 5 de la Fig. B.6.5-7, o que estos no controlen el diseño de ningún elemento del SPRFV | — |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Las zonas propensas a huracanes">
+Ambas listas exigen cumplir B.6.5.9.3: en zonas propensas a huracanes los **vidrios** deben protegerse con una cobertura resistente a impacto o ser vidrios resistentes a impacto (normas ASTM E1886 y ASTM E1996 u otros ensayos aprobados). Se exceptúan los edificios de categoría I y los de categorías II, III o IV con vidrios a más de 18.0 m sobre el suelo y a más de 9.0 m sobre cubiertas con agregado a 450 m al interior del edificio (<NormaRef s="B.6.5.9.3" pag="B-31" />).
+</Callout>
+
+### B.6.4.2 — Procedimiento de diseño
+
+Los pasos que fija la norma son cuatro (<NormaRef s="B.6.4.2" pag="B-26" />):
+
+1. **(a) Velocidad básica $V$** (B.6.5.4): se lee en el mapa de la Figura B.6.4-1. Se supone que el viento puede venir de **cualquier dirección horizontal**.
+2. **(b) Factor de importancia $I$** (B.6.5.5): Tabla B.6.5-1, según el grupo de uso de A.2.5.
+3. **(c) Categoría de exposición** (B.6.5.6): B, C o D según la rugosidad del terreno.
+4. **(d) Coeficiente de ajuste $\lambda$** por altura y exposición, de la Figura B.6.4-2 (continuación).
+
+Con estos datos se aplican las ecuaciones B.6.4-1 (SPRFV) o B.6.4-2 (componentes y revestimientos).
+
+#### (a) Velocidad básica: el mapa de amenaza eólica
+
+<Figura src="/img/titulo-b/figura-b6-4-1-mapa-amenaza-eolica.png" alt="Mapa de Colombia con cinco regiones de velocidad básica de viento, de 17 a 36 m/s, y ciudades principales" numero="Figura B.6.4-1" pie="Zonas de amenaza eólica: la región del mapa da la velocidad básica del viento. En las zonas no estudiadas (sur y oriente del país) se recomienda ser conservador y, mientras no haya datos confiables, usar 28 m/s (100 km/h)." pag="B-39" />
+
+<TablaNorma numero="Figura B.6.4-1" titulo="Velocidad básica del viento según la región del mapa" pag="B-39">
+
+| Región | Velocidad básica $V$ |
+|:-:|---|
+| 1 | 17 m/s (60 km/h) |
+| 2 | 22 m/s (80 km/h) |
+| 3 | 28 m/s (100 km/h) |
+| 4 | 33 m/s (120 km/h) |
+| 5 | 36 m/s (130 km/h) |
+
+</TablaNorma>
+
+Las velocidades se refieren a una **ráfaga de 3 s a 10 m de altura en exposición C**. La velocidad puede **aumentarse** donde haya registros o experiencia de vientos mayores (terrenos montañosos, precipicios, regiones especiales), y puede usarse información climática regional solo con aprobación de la autoridad competente y con procedimientos estadísticos de valores extremos aprobados (<NormaRef s="B.6.5.4.1" pag="B-27" />). Los tornados no están considerados (<NormaRef s="B.6.5.4.3" pag="B-28" />).
+
+<Callout tipo="nota" titulo="Sin interpolar en V">
+Las tablas del Método 1 tienen columnas solo para 17, 22, 28, 33 y 36 m/s. La norma no indica interpolar entre ellas; si el proyecto cae en una zona con una velocidad distinta de esas cinco, la autoridad habrá fijado un valor local y conviene pasar al Método 2.
+</Callout>
+
+#### (b) Factor de importancia y (c) exposición
+
+El factor de importancia de viento se toma de la Tabla B.6.5-1 (se desarrolla en [B.6 (II)](/titulo-b/b6b)). En Colombia, con $V \le 36$ m/s, se usa la columna de regiones **no propensas a huracanes**:
+
+<TablaNorma numero="Tabla B.6.5-1" titulo="Factor de importancia I (cargas de viento)" pag="B-79" nota="Las categorías de los edificios y estructuras se listan en la sección A.2.5. Atención: el grupo I (ocupación normal) recibe I = 0.87, y el II (ocupación especial) recibe 1.00.">
+
+| Categoría (grupo de uso) | Regiones no propensas a huracanes y regiones con huracanes de V = 40–45 m/s | Regiones con huracanes y V > 45 m/s |
+|:-:|:-:|:-:|
+| I | 0.87 | 0.77 |
+| II | 1.00 | 1.00 |
+| III | 1.15 | 1.15 |
+| IV | 1.15 | 1.15 |
+
+</TablaNorma>
+
+Las categorías de exposición (<NormaRef s="B.6.5.6.3" pag="B-28" />) dependen de la rugosidad del terreno viento arriba:
+
+- **Exposición B**: áreas urbanas y suburbanas, boscosas u otros terrenos con numerosas obstrucciones del tamaño de una vivienda unifamiliar o mayores y poca separación entre ellas. Aplica si esa rugosidad prevalece por al menos 800 m o 20 veces la altura del edificio (la mayor); para $h \le 9.0$ m basta con 460 m.
+- **Exposición C**: terreno abierto con pocas obstrucciones de menos de 9.0 m (campos planos, praderas y superficies de agua en zonas propensas a huracanes). Aplica en todos los casos donde no aplican B ni D.
+- **Exposición D**: áreas planas y no obstruidas y superficies de agua fuera de regiones propensas a huracanes (pantanos, salinas, hielo), con esa rugosidad por más de 1500 m o 20 veces la altura del edificio (la mayor).
+
+En una zona de transición entre categorías se usa la que produzca **mayores** fuerzas de diseño (<NormaRef s="B.6.5.6.3" pag="B-29" />).
+
+El **factor topográfico** $K_{zt}$ vale $(1 + K_1K_2K_3)^2$ (Ec. B.6.5-1) cuando el edificio está sobre una colina o escarpe que cumple las condiciones de B.6.5.7.1; **en caso contrario $K_{zt} = 1.0$** (<NormaRef s="B.6.5.7.2" pag="B-30" />).
+
+#### (d) Factor de ajuste λ por altura y exposición
+
+<TablaNorma numero="Figura B.6.4-2 (cont.)" titulo="Factor de ajuste por altura del edificio y exposición, λ" pag="B-42" nota="El mismo cuadro se repite, con idénticos valores, al final de las tablas de componentes y revestimientos (B-46). La norma no indica cómo tratar alturas intermedias: lo habitual es interpolar linealmente entre filas, o usar la fila de altura mayor para quedar del lado seguro.">
+
+| Altura media del edificio (m) | Exposición B | Exposición C | Exposición D |
+|---:|---:|---:|---:|
+| 4.5 | 1.00 | 1.21 | 1.47 |
+| 6.0 | 1.00 | 1.29 | 1.55 |
+| 7.5 | 1.00 | 1.35 | 1.61 |
+| 9.0 | 1.00 | 1.40 | 1.66 |
+| 10.5 | 1.05 | 1.45 | 1.70 |
+| 12.0 | 1.09 | 1.49 | 1.74 |
+| 13.5 | 1.12 | 1.53 | 1.78 |
+| 15.0 | 1.16 | 1.56 | 1.81 |
+| 16.5 | 1.19 | 1.59 | 1.84 |
+| 18.0 | 1.22 | 1.62 | 1.87 |
+
+</TablaNorma>
+
+$\lambda$ sube con la altura (el viento es más fuerte lejos del suelo) y con la **rugosidad decreciente** del terreno: en terreno abierto (C) o plano (D) el viento llega con más velocidad cerca del suelo que en una ciudad (B). Con exposición B y $h \le 9$ m, $\lambda = 1.00$ y las tablas se usan tal cual.
+
+### B.6.4.2.1 — SPRFV
+
+Las **presiones de diseño simplificadas $p_s$** son presiones **netas** (suma de las internas y externas) que se aplican a las **proyecciones horizontales y verticales** de las superficies del edificio según la Figura B.6.4-2. Para la presión horizontal (zonas A, B, C y D), $p_s$ combina las presiones netas de barlovento y sotavento (<NormaRef s="B.6.4.2.1" pag="B-26" />).
+
+<Ecuacion num="B.6.4-1" titulo="Presión de viento de diseño simplificada, SPRFV">
+
+$$
+p_s = \lambda\, K_{zt}\, I\, p_{s10}
+$$
+
+- $\lambda$: factor de ajuste por altura y exposición (Figura B.6.4-2, continuación).
+- $K_{zt}$: factor topográfico (B.6.5.7), evaluado a la altura media de cubierta $h$ (Ec. B.6.5-1).
+- $I$: factor de importancia (B.6.5.5).
+- $p_{s10}$: presión simplificada para exposición B, $h = 10$ m, de la Figura B.6.4-2.
+
+</Ecuacion>
+
+#### Zonas de presión del SPRFV
+
+<Figura src="/img/titulo-b/figura-b6-4-2-zonas-sprfv.png" alt="Esquemas transversal y longitudinal de un edificio con cubierta a dos aguas y las zonas de presión A a H" numero="Figura B.6.4-2" pie="Zonas de presión del SPRFV para viento transversal y longitudinal. Las zonas A–D son presiones horizontales sobre la proyección vertical; E–H son presiones verticales sobre la proyección horizontal. El ancho de las zonas de borde es 2a." pag="B-40" />
+
+| Zona | Dónde actúa | Tipo de presión |
+|:-:|---|---|
+| **A** | Zona final del muro | Horizontal (suma barlovento + sotavento) sobre la proyección vertical |
+| **B** | Zona final de la cubierta | Horizontal, sobre la proyección vertical |
+| **C** | Zona interior del muro | Horizontal, sobre la proyección vertical |
+| **D** | Zona interior de la cubierta | Horizontal, sobre la proyección vertical |
+| **E** | Zona final de cubierta a barlovento | Vertical, sobre la proyección horizontal |
+| **F** | Zona final de cubierta a sotavento | Vertical, sobre la proyección horizontal |
+| **G** | Zona interior de cubierta a barlovento | Vertical, sobre la proyección horizontal |
+| **H** | Zona interior de cubierta a sotavento | Vertical, sobre la proyección horizontal |
+| **E<sub>OH</sub>, G<sub>OH</sub>** | Aleros a barlovento, bajo las zonas E y G | Vertical sobre la proyección horizontal del alero |
+
+<Detalle titulo="Notas de la Figura B.6.4-2 (resumen fiel de las 10 notas)">
+
+1. Las presiones se aplican a las proyecciones verticales y horizontales para exposición B, $h = 10.0$ m, $I = 1.0$ y $K_{zt} = 1.0$. Para otras condiciones se usa la Ec. B.6.4-1.
+2. Los patrones de carga se aplican a **cada esquina** del edificio, tomando cada una como esquina de referencia (véase Figura B.6.5-7).
+3. Para el SPRFV **longitudinal** se usa $\theta = 0°$ y se ubica la zona de borde E/F, G/H a la **mitad de la longitud** del edificio.
+4. Los casos de carga 1 y 2 deben verificarse para $25° < \theta \le 45°$. El caso 2 a 25° se da solo para interpolar entre 25° y 30°.
+5. Signo positivo = presión sobre la superficie; negativo = succión.
+6. Se permite **interpolación lineal** para pendientes distintas de las mostradas.
+7. La carga horizontal total no será menor que la determinada suponiendo $p_s = 0$ en las zonas B y D.
+8. Definición de zonas (A a H), como en la tabla anterior.
+9. Cuando las zonas E o G se ubiquen en el alero del lado a sotavento, se usan $E_{OH}$ y $G_{OH}$ para la presión en la proyección horizontal del alero. La presión de los aleros del lado de sotavento y de los costados es la presión básica de la zona.
+10. Notación: **$a$** = 10 % de la menor dimensión horizontal o $0.4h$, la que sea menor; no menor que 4 % de la menor dimensión horizontal ni que 0.9 m. **$h$** = altura media de cubierta (m); con $\theta \le 10°$ se usa la altura hasta el alero. **$\theta$** = ángulo de inclinación de la cubierta, en grados.
+
+</Detalle>
+
+#### Tabla de presiones básicas ps10
+
+La tabla se organiza por **velocidad básica**, **ángulo de cubierta** y **caso de carga**. Las filas “0 a 5” y “30 a 45” valen para todo el rango indicado; entre filas se **interpola linealmente** (nota 6). El **caso de carga 2** solo existe para 25° y para “30 a 45”: a 25° se da únicamente para interpolar entre 25° y 30°, y las celdas de las zonas A–D y de los aleros quedan sin valor (----). En la fila “30 a 45” esas zonas tienen en el caso 2 los mismos valores que en el caso 1, de modo que solo las zonas E a H cambian de un caso al otro.
+
+<TablaNorma numero="Figura B.6.4-2 (cont.)" titulo="Presión básica ps10 (kN/m²) — V = 17 m/s (60 km/h)" pag="B-41" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Los guiones (----) son celdas sin valor en la norma.">
+
+| θ (°) | Caso | A | B | C | D | E | F | G | H | EOH | GOH |
+|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 a 5 | 1 | 0.11 | -0.05 | 0.07 | -0.03 | -0.13 | -0.07 | -0.09 | -0.06 | -0.18 | -0.14 |
+| 10 | 1 | 0.12 | -0.05 | 0.08 | -0.03 | -0.13 | -0.08 | -0.09 | -0.06 | -0.18 | -0.14 |
+| 15 | 1 | 0.13 | -0.04 | 0.09 | -0.02 | -0.13 | -0.08 | -0.09 | -0.06 | -0.18 | -0.14 |
+| 20 | 1 | 0.15 | -0.04 | 0.10 | -0.02 | -0.13 | -0.09 | -0.09 | -0.07 | -0.18 | -0.14 |
+| 25 | 1 | 0.13 | 0.02 | 0.10 | 0.02 | -0.06 | -0.08 | -0.04 | -0.06 | -0.11 | -0.09 |
+| 25 | 2 | ---- | ---- | ---- | ---- | -0.02 | -0.04 | -0.01 | -0.03 | ---- | ---- |
+| 30 a 45 | 1 | 0.12 | 0.08 | 0.09 | 0.06 | 0.01 | -0.07 | 0.00 | -0.06 | -0.04 | -0.05 |
+| 30 a 45 | 2 | 0.12 | 0.08 | 0.09 | 0.06 | 0.05 | -0.04 | 0.04 | -0.03 | -0.04 | -0.05 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.4-2 (cont.)" titulo="Presión básica ps10 (kN/m²) — V = 22 m/s (80 km/h)" pag="B-41" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Los guiones (----) son celdas sin valor en la norma.">
+
+| θ (°) | Caso | A | B | C | D | E | F | G | H | EOH | GOH |
+|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 a 5 | 1 | 0.19 | -0.10 | 0.12 | -0.06 | -0.23 | -0.13 | -0.16 | -0.10 | -0.32 | -0.25 |
+| 10 | 1 | 0.21 | -0.09 | 0.14 | -0.05 | -0.23 | -0.14 | -0.16 | -0.11 | -0.32 | -0.25 |
+| 15 | 1 | 0.24 | -0.08 | 0.16 | -0.04 | -0.23 | -0.15 | -0.16 | -0.11 | -0.32 | -0.25 |
+| 20 | 1 | 0.26 | -0.07 | 0.17 | -0.04 | -0.23 | -0.16 | -0.16 | -0.12 | -0.32 | -0.25 |
+| 25 | 1 | 0.24 | 0.04 | 0.17 | 0.04 | -0.10 | -0.14 | -0.08 | -0.11 | -0.19 | -0.17 |
+| 25 | 2 | ---- | ---- | ---- | ---- | -0.04 | -0.08 | -0.01 | -0.05 | ---- | ---- |
+| 30 a 45 | 1 | 0.21 | 0.14 | 0.17 | 0.11 | 0.02 | -0.13 | 0.00 | -0.11 | -0.07 | -0.09 |
+| 30 a 45 | 2 | 0.21 | 0.14 | 0.17 | 0.11 | 0.08 | -0.06 | 0.07 | -0.05 | -0.07 | -0.09 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.4-2 (cont.)" titulo="Presión básica ps10 (kN/m²) — V = 28 m/s (100 km/h)" pag="B-41" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Los guiones (----) son celdas sin valor en la norma.">
+
+| θ (°) | Caso | A | B | C | D | E | F | G | H | EOH | GOH |
+|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 a 5 | 1 | 0.29 | -0.15 | 0.19 | -0.09 | -0.35 | -0.20 | -0.25 | -0.16 | -0.49 | -0.39 |
+| 10 | 1 | 0.33 | -0.14 | 0.22 | -0.08 | -0.35 | -0.21 | -0.25 | -0.17 | -0.49 | -0.39 |
+| 15 | 1 | 0.37 | -0.12 | 0.25 | -0.07 | -0.35 | -0.23 | -0.25 | -0.18 | -0.49 | -0.39 |
+| 20 | 1 | 0.41 | -0.11 | 0.27 | -0.06 | -0.35 | -0.25 | -0.25 | -0.19 | -0.49 | -0.39 |
+| 25 | 1 | 0.37 | 0.06 | 0.27 | 0.06 | -0.16 | -0.22 | -0.12 | -0.18 | -0.30 | -0.26 |
+| 25 | 2 | ---- | ---- | ---- | ---- | -0.06 | -0.12 | -0.02 | -0.08 | ---- | ---- |
+| 30 a 45 | 1 | 0.33 | 0.23 | 0.26 | 0.18 | 0.03 | -0.20 | 0.01 | -0.17 | -0.12 | -0.13 |
+| 30 a 45 | 2 | 0.33 | 0.23 | 0.26 | 0.18 | 0.13 | -0.10 | 0.11 | -0.07 | -0.12 | -0.13 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.4-2 (cont.)" titulo="Presión básica ps10 (kN/m²) — V = 33 m/s (120 km/h)" pag="B-41" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Los guiones (----) son celdas sin valor en la norma.">
+
+| θ (°) | Caso | A | B | C | D | E | F | G | H | EOH | GOH |
+|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 a 5 | 1 | 0.42 | -0.22 | 0.28 | -0.13 | -0.51 | -0.29 | -0.35 | -0.22 | -0.71 | -0.56 |
+| 10 | 1 | 0.48 | -0.20 | 0.32 | -0.11 | -0.51 | -0.31 | -0.35 | -0.24 | -0.71 | -0.56 |
+| 15 | 1 | 0.53 | -0.18 | 0.35 | -0.10 | -0.51 | -0.33 | -0.35 | -0.25 | -0.71 | -0.56 |
+| 20 | 1 | 0.59 | -0.15 | 0.39 | -0.08 | -0.51 | -0.35 | -0.35 | -0.27 | -0.71 | -0.56 |
+| 25 | 1 | 0.53 | 0.08 | 0.38 | 0.09 | -0.24 | -0.32 | -0.17 | -0.26 | -0.44 | -0.37 |
+| 25 | 2 | ---- | ---- | ---- | ---- | -0.09 | -0.17 | -0.03 | -0.11 | ---- | ---- |
+| 30 a 45 | 1 | 0.48 | 0.32 | 0.38 | 0.26 | 0.04 | -0.29 | 0.01 | -0.25 | -0.17 | -0.19 |
+| 30 a 45 | 2 | 0.48 | 0.32 | 0.38 | 0.26 | 0.18 | -0.14 | 0.16 | -0.10 | -0.17 | -0.19 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.4-2 (cont.)" titulo="Presión básica ps10 (kN/m²) — V = 36 m/s (130 km/h)" pag="B-41" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Los guiones (----) son celdas sin valor en la norma.">
+
+| θ (°) | Caso | A | B | C | D | E | F | G | H | EOH | GOH |
+|---|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 a 5 | 1 | 0.50 | -0.26 | 0.33 | -0.15 | -0.60 | -0.34 | -0.41 | -0.26 | -0.83 | -0.65 |
+| 10 | 1 | 0.56 | -0.23 | 0.37 | -0.13 | -0.60 | -0.36 | -0.41 | -0.28 | -0.83 | -0.65 |
+| 15 | 1 | 0.62 | -0.21 | 0.41 | -0.12 | -0.60 | -0.39 | -0.41 | -0.30 | -0.83 | -0.65 |
+| 20 | 1 | 0.69 | -0.18 | 0.46 | -0.10 | -0.60 | -0.41 | -0.41 | -0.32 | -0.83 | -0.65 |
+| 25 | 1 | 0.62 | 0.10 | 0.45 | 0.10 | -0.28 | -0.38 | -0.20 | -0.30 | -0.51 | -0.44 |
+| 25 | 2 | ---- | ---- | ---- | ---- | -0.10 | -0.20 | -0.03 | -0.13 | ---- | ---- |
+| 30 a 45 | 1 | 0.56 | 0.38 | 0.44 | 0.30 | 0.04 | -0.34 | 0.01 | -0.29 | -0.19 | -0.22 |
+| 30 a 45 | 2 | 0.56 | 0.38 | 0.44 | 0.30 | 0.22 | -0.17 | 0.19 | -0.12 | -0.19 | -0.22 |
+
+</TablaNorma>
+
+#### Cómo leer la tabla de ps10
+
+1. Entra con la **velocidad básica** (fila grande) y el **ángulo de la cubierta** θ.
+2. Si θ está entre dos filas, **interpola linealmente** cada zona (por ejemplo, θ = 12° entre las filas de 10° y 15°).
+3. Para θ mayor que 25° verifica **los dos casos de carga** y usa el más desfavorable para cada elemento.
+4. Multiplica por $\lambda K_{zt} I$ (Ec. B.6.4-1).
+5. Para el viento **longitudinal** usa θ = 0° (nota 3).
+
+Las zonas A–D (horizontales) son positivas en el muro de barlovento; las B y D de la cubierta suelen ser **negativas** (succión) con pendientes pequeñas y pasan a **positivas** con pendientes fuertes (a partir de 25° B y D tienen presión). Las zonas E–H (verticales) son succión en pendientes bajas y esa succión se va reduciendo; en la fila de 30 a 45 la zona E ya es ligeramente positiva (y G prácticamente nula en el caso 1), porque el viento empieza a empujar la cubierta de barlovento.
+
+### B.6.4.2.1.1 — Presiones mínimas del SPRFV
+
+Los efectos de carga de las presiones $p_s$ **no pueden ser menores** que los del caso de carga mínima de B.6.1.3.1, suponiendo presiones $p_s$ de **+0.40 kN/m²** en las zonas A, B, C y D y de **0 kN/m²** en las zonas E, F, G y H (<NormaRef s="B.6.4.2.1.1" pag="B-26" />).
+
+<Callout tipo="importante" titulo="El mínimo es un caso de carga adicional, no un recorte celda por celda">
+No se sube a 0.40 cada $p_s$ calculado. Se hace una **verificación adicional**: se carga el edificio con 0.40 kN/m² sobre las proyecciones verticales de las zonas A–D (y nada en E–H) y se compara el efecto resultante (por ejemplo, el cortante en la base) con el que dan las presiones calculadas; **gobierna el mayor**. Junto con la nota 7 de la Figura B.6.4-2 (la fuerza horizontal total no será menor que la obtenida con $p_s = 0$ en B y D), son tres comprobaciones que conviene escribir en la memoria de cálculo.
+</Callout>
+
+<Ejemplo numero={1} titulo="SPRFV de una bodega de dos aguas con ajuste por altura y exposición">
+
+Bodega de planta rectangular de {e1.ancho} m × {e1.largo} m, cerrada y regular, con cubierta a dos aguas de $\theta$ = {e1.theta}° y altura a la cornisa $h_e$ = {e1.he} m. Está en la región 3 del mapa de viento ($V$ = {e1.v} m/s), terreno abierto (exposición C), grupo de uso I y sin efectos topográficos ($K_{zt}$ = 1.0). Hallar las presiones $p_s$ del SPRFV y comprobar el viento transversal.
+
+<Paso titulo="Verificar el alcance" ref="B.6.4.1.1">
+El edificio es cerrado, regular y de diafragma simple. La altura media de cubierta debe ser $h \le 18$ m y no exceder la menor dimensión horizontal ({e1.ancho} m): la cumbrera está a $h_e + (B/2)\tan\theta$ = {e1.cumbrera.toFixed(3)} m y como $\theta > 10°$ la altura media es el promedio entre cornisa y cumbrera: $h$ = ({e1.he} + {e1.cumbrera.toFixed(3)})/2 = **{e1.h.toFixed(3)} m**. Cumple ambas condiciones y $\theta \le 45°$: se puede usar el Método 1.
+</Paso>
+<Paso titulo="Factores de ajuste" ref="B.6.4.2, Tabla B.6.5-1">
+- $I$ = **{e1.i.toFixed(2)}** (grupo I, Tabla B.6.5-1).
+- $\lambda$ con exposición C y $h$ = {e1.h.toFixed(3)} m: la Figura B.6.4-2 da 1.29 para 6.0 m y 1.35 para 7.5 m; interpolando linealmente, $\lambda$ = **{e1.r.lambda.toFixed(3)}**.
+- Factor total: $\lambda K_{zt} I$ = {e1.r.lambda.toFixed(3)} × 1.0 × {e1.i.toFixed(2)} = **{e1.r.factor.toFixed(3)}**.
+</Paso>
+<Paso titulo="Leer ps10 para V = 28 m/s y θ = 15°" ref="Figura B.6.4-2">
+La fila de 15° (caso 1) da, en kN/m²: A = {fmt2(e1.c.ps10.A)}, B = {fmt2(e1.c.ps10.B)}, C = {fmt2(e1.c.ps10.C)}, D = {fmt2(e1.c.ps10.D)}, E = {fmt2(e1.c.ps10.E)}, F = {fmt2(e1.c.ps10.F)}, G = {fmt2(e1.c.ps10.G)}, H = {fmt2(e1.c.ps10.H)}, E<sub>OH</sub> = {fmt2(e1.c.ps10.EOH)} y G<sub>OH</sub> = {fmt2(e1.c.ps10.GOH)}. Con $\theta \le 25°$ solo se verifica el caso de carga 1.
+</Paso>
+<Paso titulo="Presiones de diseño ps" ref="B.6.4-1">
+
+$$
+p_s = \lambda\,K_{zt}\,I\,p_{s10}
+$$
+
+| Zona | A | B | C | D | E | F | G | H | E<sub>OH</sub> | G<sub>OH</sub> |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| $p_{s10}$ (kN/m²) | {fmt2(e1.c.ps10.A)} | {fmt2(e1.c.ps10.B)} | {fmt2(e1.c.ps10.C)} | {fmt2(e1.c.ps10.D)} | {fmt2(e1.c.ps10.E)} | {fmt2(e1.c.ps10.F)} | {fmt2(e1.c.ps10.G)} | {fmt2(e1.c.ps10.H)} | {fmt2(e1.c.ps10.EOH)} | {fmt2(e1.c.ps10.GOH)} |
+| $p_s$ (kN/m²) | {fmt3(e1.c.ps.A)} | {fmt3(e1.c.ps.B)} | {fmt3(e1.c.ps.C)} | {fmt3(e1.c.ps.D)} | {fmt3(e1.c.ps.E)} | {fmt3(e1.c.ps.F)} | {fmt3(e1.c.ps.G)} | {fmt3(e1.c.ps.H)} | {fmt3(e1.c.ps.EOH)} | {fmt3(e1.c.ps.GOH)} |
+
+</Paso>
+<Paso titulo="Viento transversal: ancho de zonas y áreas proyectadas" ref="Figura B.6.4-2, nota 10">
+El ancho de las zonas de borde es el menor entre 10 % de la menor dimensión (1.2 m) y $0.4h$ ({(0.4 * e1.h).toFixed(2)} m), sin bajar de 4 % de la menor dimensión ni de 0.9 m: $a$ = **{e1.a.toFixed(2)} m**, así que $2a$ = {(2 * e1.a).toFixed(2)} m. La cubierta se levanta {e1.alza.toFixed(3)} m sobre la cornisa. Para un patrón con las zonas de borde en un extremo, las áreas proyectadas verticales son:
+
+- Zona A: {(2 * e1.a).toFixed(2)} × {e1.he} = {e1.areas.A.toFixed(2)} m² · Zona B: {(2 * e1.a).toFixed(2)} × {e1.alza.toFixed(3)} = {e1.areas.B.toFixed(2)} m²
+- Zona C: {(e1.largo - 2 * e1.a).toFixed(2)} × {e1.he} = {e1.areas.C.toFixed(2)} m² · Zona D: {(e1.largo - 2 * e1.a).toFixed(2)} × {e1.alza.toFixed(3)} = {e1.areas.D.toFixed(2)} m²
+- Total: {e1.areaTotal.toFixed(2)} m²
+
+</Paso>
+<Paso titulo="Fuerza horizontal y comprobación de los mínimos" ref="B.6.4.2.1.1, B.6.1.3.1, nota 7">
+- Con las presiones calculadas: $F_H$ = Σ $p_s \cdot A$ = **{e1.fCalc.toFixed(1)} kN**.
+- Nota 7 (zonas B y D con $p_s = 0$): $F_H$ = **{e1.fNota7.toFixed(1)} kN**, mayor que el anterior porque B y D son succiones que restaban.
+- Caso de carga mínimo (0.40 kN/m² en A–D) = 0.40 × {e1.areaTotal.toFixed(2)} = **{e1.fMin.toFixed(1)} kN**.
+
+</Paso>
+<Resultado>
+Gobierna el **caso de carga mínimo**: $F_H$ = {e1.fGob.toFixed(1)} kN, aproximadamente {(e1.fGob / e1.fCalc).toFixed(2)} veces la fuerza que dan las tablas. Es habitual en edificios bajos con viento moderado. Las presiones verticales (E–H, aleros) se usan con los valores de la tabla de $p_s$ para dimensionar los anclajes de la cubierta; los efectos de **levantamiento** de esas succiones se combinan con las cargas permanentes según el Capítulo B.2.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Colegio con cubierta de 27°: dos casos de carga e interpolación en θ">
+
+Un colegio (grupo de uso III) está en la región 2 ($V$ = {e3.v} m/s), terreno urbano (exposición B), con altura media de cubierta $h$ = {e3.h} m y cubierta a dos aguas de $\theta$ = {e3.theta}°. Hallar las presiones del SPRFV.
+
+<Paso titulo="Factores" ref="Tabla B.6.5-1, Figura B.6.4-2">
+Grupo III: $I$ = **{e3.i.toFixed(2)}**. Exposición B con $h$ = 9.0 m: $\lambda$ = **{e3.r.lambda.toFixed(2)}**. Factor total $\lambda K_{zt} I$ = **{e3.r.factor.toFixed(3)}**.
+</Paso>
+<Paso titulo="Casos de carga" ref="Figura B.6.4-2, nota 4">
+Como $25° < \theta \le 45°$ hay que verificar los **dos casos de carga**. Para θ = 27° se interpola entre las filas de 25° y de 30 a 45 (factor de interpolación (27 − 25)/(30 − 25) = 0.4). En el caso 2 las zonas A–D y los aleros, que a 25° no tienen valor en la tabla, coinciden con los del caso 1 en la fila “30 a 45”.
+</Paso>
+<Paso titulo="Presiones ps10 y ps" ref="B.6.4-1">
+
+<table>
+<thead>
+<tr><th>Zona</th><th>ps10 caso 1</th><th>ps caso 1</th><th>ps10 caso 2</th><th>ps caso 2</th></tr>
+</thead>
+<tbody>
+{ZONAS_SPRFV.map((z) => (
+  <tr key={z}>
+    <td>{z}</td>
+    <td>{fmt2(e3.r.casos[0].ps10[z])}</td>
+    <td>{fmt3(e3.r.casos[0].ps[z])}</td>
+    <td>{fmt2(e3.r.casos[1].ps10[z])}</td>
+    <td>{fmt3(e3.r.casos[1].ps[z])}</td>
+  </tr>
+))}
+</tbody>
+</table>
+
+Valores en kN/m².
+
+</Paso>
+<Resultado>
+Con esta pendiente las zonas E y G de barlovento están **casi neutras** (el caso 1 es todavía una pequeña succión y el caso 2 es una pequeña presión), mientras que las zonas B y D ya son presión positiva. Cada elemento del SPRFV se diseña con el caso que le resulte más desfavorable, y siempre se comparan con el caso mínimo de B.6.4.2.1.1.
+</Resultado>
+</Ejemplo>
+
+### B.6.4.2.2 — Elementos de revestimiento y componentes
+
+Para componentes y revestimientos, las presiones netas $p_{net}$ (suma de internas y externas) se aplican en **dirección normal a cada superficie** del edificio como muestra la Figura B.6.4-3 (<NormaRef s="B.6.4.2.2" pag="B-26" />).
+
+<Ecuacion num="B.6.4-2" titulo="Presión neta de diseño, componentes y revestimientos">
+
+$$
+p_{net} = \lambda\, K_{zt}\, I\, p_{net10}
+$$
+
+- $\lambda$: factor de ajuste por altura y exposición (Figura B.6.4-2).
+- $K_{zt}$: factor topográfico (B.6.5.7) a la altura media de cubierta $h$.
+- $I$: factor de importancia (B.6.5.5).
+- $p_{net10}$: presión neta para exposición B, $h = 10.0$ m, de las tablas de la Figura B.6.4-3.
+
+</Ecuacion>
+
+#### Zonas de componentes y revestimientos
+
+<Figura src="/img/titulo-b/figura-b6-4-3-zonas-componentes.png" alt="Cuatro esquemas de edificios (cubierta plana, a cuatro aguas, a dos aguas hasta 7 grados y a dos aguas hasta 45 grados) con las zonas 1 a 5 sombreadas" numero="Figura B.6.4-3" pie="Zonas de presión para componentes y revestimientos. Zonas interiores: cubiertas zona 1, muros zona 4. Zonas finales: cubiertas zona 2, muros zona 5. Zonas esquineras: cubiertas zona 3. Las franjas tienen ancho a." pag="B-43" />
+
+| Zona | Dónde está | Se aplica a |
+|:-:|---|---|
+| **1** | Interior de la cubierta | Cubierta |
+| **2** | Franja final (borde) de la cubierta, de ancho $a$ | Cubierta |
+| **3** | Esquinas de la cubierta, de $a \times a$ | Cubierta |
+| **4** | Interior del muro | Muros |
+| **5** | Franjas de esquina del muro, de ancho $a$ | Muros |
+
+<Detalle titulo="Notas de la Figura B.6.4-3 y el ancho a" abierto>
+
+1. Las presiones se aplican en dirección **normal a la superficie**, para exposición B, $h = 10.0$ m, $I = 1.0$ y $K_{zt} = 1.0$. Para otras condiciones se usa la Ec. B.6.4-2 (la figura cita “B.6.4.2”: errata de edición).
+2. Positivo = presión; negativo = succión.
+3. Para cubiertas a **cuatro aguas con $\theta \le 25°$**, la zona 3 se trata como **zona 2**.
+4. Para áreas efectivas entre las tabuladas, se permite **interpolar** o usar el valor asociado al **área de viento efectivamente menor** (que da la presión de mayor magnitud: es la opción conservadora).
+5. **$a$** = 10 % de la menor dimensión horizontal o $0.4h$, la que sea menor; no menor que 4 % de la menor dimensión horizontal ni que 0.9 m. **$h$** = altura media de cubierta; con $\theta \le 10°$ se usa la altura hasta el alero. **$\theta$** = ángulo de inclinación de la cubierta.
+
+El **área efectiva** es la luz del elemento por un ancho efectivo no menor que un tercio de la luz (B.6.2). Una correa de 6 m de luz tiene un área efectiva de al menos 6 × 2 = 12 m², aunque el espaciamiento entre correas sea menor.
+
+</Detalle>
+
+<Callout tipo="atencion" titulo="Cuál tabla corresponde a cada cubierta">
+Las **tablas de $p_{net10}$** se agrupan por ángulo: $\theta \le 7°$ (cubiertas planas y casi planas), $7° < \theta \le 27°$ (a cuatro aguas, y a dos aguas hasta 27°) y $27° < \theta \le 45°$ (solo a dos aguas). Las cubiertas a dos aguas de $27°$ a $45°$ usan la tercera tabla, en la que las zonas 2 y 3 coinciden. Para las **cubiertas a cuatro aguas** el límite del Método 1 es $\theta \le 27°$ (B.6.4.1.2).
+</Callout>
+
+#### Presiones netas pnet10
+
+Cada tabla da, por **zona** y **área efectiva de viento**, la presión (+) y la succión (−) para las cinco velocidades básicas. Verificadas contra las imágenes de B-44 a B-46.
+
+<TablaNorma numero="Figura B.6.4-3 (cont.)" titulo="Presión neta pnet10 (kN/m²) — Cubierta con θ hasta 7°" pag="B-44" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Cada velocidad da presión (+) y succión (−). Área efectiva de viento en m².">
+
+| Zona | Área (m²) | 17 m/s (+) | 17 m/s (−) | 22 m/s (+) | 22 m/s (−) | 28 m/s (+) | 28 m/s (−) | 33 m/s (+) | 33 m/s (−) | 36 m/s (+) | 36 m/s (−) |
+|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1 | 0.05 | -0.12 | 0.09 | -0.21 | 0.14 | -0.33 | 0.20 | -0.48 | 0.23 | -0.56 |
+| 1 | 2 | 0.05 | -0.12 | 0.08 | -0.21 | 0.13 | -0.32 | 0.18 | -0.47 | 0.22 | -0.55 |
+| 1 | 5 | 0.04 | -0.11 | 0.07 | -0.20 | 0.12 | -0.30 | 0.17 | -0.45 | 0.19 | -0.53 |
+| 1 | 10 | 0.04 | -0.11 | 0.07 | -0.19 | 0.11 | -0.30 | 0.15 | -0.44 | 0.18 | -0.51 |
+| 2 | 1 | 0.05 | -0.20 | 0.09 | -0.36 | 0.14 | -0.56 | 0.20 | -0.80 | 0.23 | -0.94 |
+| 2 | 2 | 0.05 | -0.18 | 0.08 | -0.32 | 0.13 | -0.50 | 0.18 | -0.72 | 0.22 | -0.84 |
+| 2 | 5 | 0.04 | -0.15 | 0.07 | -0.27 | 0.12 | -0.42 | 0.17 | -0.60 | 0.19 | -0.71 |
+| 2 | 10 | 0.04 | -0.13 | 0.07 | -0.23 | 0.11 | -0.36 | 0.15 | -0.52 | 0.18 | -0.61 |
+| 3 | 1 | 0.05 | -0.30 | 0.09 | -0.54 | 0.14 | -0.84 | 0.20 | -1.21 | 0.23 | -1.42 |
+| 3 | 2 | 0.05 | -0.25 | 0.08 | -0.45 | 0.13 | -0.70 | 0.18 | -1.00 | 0.22 | -1.18 |
+| 3 | 5 | 0.04 | -0.18 | 0.07 | -0.32 | 0.12 | -0.50 | 0.17 | -0.73 | 0.19 | -0.85 |
+| 3 | 10 | 0.04 | -0.13 | 0.07 | -0.23 | 0.11 | -0.36 | 0.15 | -0.52 | 0.18 | -0.61 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.4-3 (cont.)" titulo="Presión neta pnet10 (kN/m²) — Cubierta con θ mayor que 7° y hasta 27°" pag="B-44" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Cada velocidad da presión (+) y succión (−). Área efectiva de viento en m².">
+
+| Zona | Área (m²) | 17 m/s (+) | 17 m/s (−) | 22 m/s (+) | 22 m/s (−) | 28 m/s (+) | 28 m/s (−) | 33 m/s (+) | 33 m/s (−) | 36 m/s (+) | 36 m/s (−) |
+|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1 | 0.07 | -0.11 | 0.12 | -0.19 | 0.19 | -0.30 | 0.28 | -0.44 | 0.32 | -0.51 |
+| 1 | 2 | 0.06 | -0.11 | 0.11 | -0.19 | 0.17 | -0.30 | 0.25 | -0.43 | 0.29 | -0.50 |
+| 1 | 5 | 0.06 | -0.10 | 0.10 | -0.18 | 0.15 | -0.28 | 0.22 | -0.41 | 0.26 | -0.48 |
+| 1 | 10 | 0.05 | -0.10 | 0.09 | -0.18 | 0.14 | -0.28 | 0.20 | -0.40 | 0.23 | -0.47 |
+| 2 | 1 | 0.07 | -0.19 | 0.12 | -0.34 | 0.19 | -0.53 | 0.28 | -0.76 | 0.32 | -0.89 |
+| 2 | 2 | 0.06 | -0.17 | 0.11 | -0.31 | 0.17 | -0.49 | 0.25 | -0.70 | 0.29 | -0.82 |
+| 2 | 5 | 0.06 | -0.16 | 0.10 | -0.28 | 0.15 | -0.43 | 0.22 | -0.62 | 0.26 | -0.73 |
+| 2 | 10 | 0.05 | -0.14 | 0.09 | -0.25 | 0.14 | -0.39 | 0.20 | -0.56 | 0.23 | -0.66 |
+| 3 | 1 | 0.07 | -0.28 | 0.12 | -0.50 | 0.19 | -0.78 | 0.28 | -1.13 | 0.32 | -1.32 |
+| 3 | 2 | 0.06 | -0.26 | 0.11 | -0.47 | 0.17 | -0.73 | 0.25 | -1.05 | 0.29 | -1.24 |
+| 3 | 5 | 0.06 | -0.24 | 0.10 | -0.43 | 0.15 | -0.67 | 0.22 | -0.96 | 0.26 | -1.12 |
+| 3 | 10 | 0.05 | -0.22 | 0.09 | -0.39 | 0.14 | -0.61 | 0.20 | -0.88 | 0.23 | -1.04 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.4-3 (cont.)" titulo="Presión neta pnet10 (kN/m²) — Cubierta con θ mayor que 27° y hasta 45°" pag="B-44" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Cada velocidad da presión (+) y succión (−). Área efectiva de viento en m².">
+
+| Zona | Área (m²) | 17 m/s (+) | 17 m/s (−) | 22 m/s (+) | 22 m/s (−) | 28 m/s (+) | 28 m/s (−) | 33 m/s (+) | 33 m/s (−) | 36 m/s (+) | 36 m/s (−) |
+|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1 | 0.11 | -0.12 | 0.19 | -0.21 | 0.30 | -0.33 | 0.44 | -0.48 | 0.51 | -0.56 |
+| 1 | 2 | 0.11 | -0.11 | 0.19 | -0.20 | 0.30 | -0.31 | 0.43 | -0.45 | 0.50 | -0.53 |
+| 1 | 5 | 0.10 | -0.11 | 0.18 | -0.19 | 0.28 | -0.29 | 0.41 | -0.42 | 0.48 | -0.50 |
+| 1 | 10 | 0.10 | -0.10 | 0.18 | -0.18 | 0.28 | -0.28 | 0.40 | -0.40 | 0.47 | -0.47 |
+| 2 | 1 | 0.11 | -0.14 | 0.19 | -0.25 | 0.30 | -0.39 | 0.44 | -0.56 | 0.51 | -0.66 |
+| 2 | 2 | 0.11 | -0.13 | 0.19 | -0.24 | 0.30 | -0.37 | 0.43 | -0.53 | 0.50 | -0.63 |
+| 2 | 5 | 0.10 | -0.13 | 0.18 | -0.22 | 0.28 | -0.35 | 0.41 | -0.50 | 0.48 | -0.59 |
+| 2 | 10 | 0.10 | -0.12 | 0.18 | -0.21 | 0.28 | -0.33 | 0.40 | -0.48 | 0.47 | -0.56 |
+| 3 | 1 | 0.11 | -0.14 | 0.19 | -0.25 | 0.30 | -0.39 | 0.44 | -0.56 | 0.51 | -0.66 |
+| 3 | 2 | 0.11 | -0.13 | 0.19 | -0.24 | 0.30 | -0.37 | 0.43 | -0.53 | 0.50 | -0.63 |
+| 3 | 5 | 0.10 | -0.13 | 0.18 | -0.22 | 0.28 | -0.35 | 0.41 | -0.50 | 0.48 | -0.59 |
+| 3 | 10 | 0.10 | -0.12 | 0.18 | -0.21 | 0.28 | -0.33 | 0.40 | -0.48 | 0.47 | -0.56 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.4-3 (cont.)" titulo="Presión neta pnet10 (kN/m²) — Muros" pag="B-44 y B-45" nota="Exposición B, h = 10 m, Kzt = 1.0, I = 1.0. Cada velocidad da presión (+) y succión (−). Área efectiva de viento en m².">
+
+| Zona | Área (m²) | 17 m/s (+) | 17 m/s (−) | 22 m/s (+) | 22 m/s (−) | 28 m/s (+) | 28 m/s (−) | 33 m/s (+) | 33 m/s (−) | 36 m/s (+) | 36 m/s (−) |
+|:-:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 4 | 1 | 0.12 | -0.13 | 0.21 | -0.23 | 0.33 | -0.36 | 0.48 | -0.52 | 0.56 | -0.61 |
+| 4 | 2 | 0.11 | -0.12 | 0.20 | -0.22 | 0.32 | -0.35 | 0.46 | -0.50 | 0.54 | -0.58 |
+| 4 | 5 | 0.11 | -0.12 | 0.19 | -0.21 | 0.30 | -0.32 | 0.43 | -0.47 | 0.50 | -0.55 |
+| 4 | 10 | 0.10 | -0.11 | 0.18 | -0.20 | 0.28 | -0.31 | 0.41 | -0.45 | 0.48 | -0.53 |
+| 4 | 50 | 0.09 | -0.10 | 0.16 | -0.18 | 0.25 | -0.28 | 0.36 | -0.40 | 0.42 | -0.47 |
+| 5 | 1 | 0.12 | -0.16 | 0.21 | -0.28 | 0.33 | -0.45 | 0.48 | -0.64 | 0.56 | -0.75 |
+| 5 | 2 | 0.11 | -0.15 | 0.20 | -0.27 | 0.32 | -0.41 | 0.46 | -0.60 | 0.54 | -0.70 |
+| 5 | 5 | 0.11 | -0.14 | 0.19 | -0.24 | 0.30 | -0.38 | 0.43 | -0.54 | 0.50 | -0.64 |
+| 5 | 10 | 0.10 | -0.12 | 0.18 | -0.22 | 0.28 | -0.35 | 0.41 | -0.50 | 0.48 | -0.58 |
+| 5 | 50 | 0.09 | -0.10 | 0.16 | -0.18 | 0.25 | -0.28 | 0.36 | -0.40 | 0.42 | -0.47 |
+
+</TablaNorma>
+<TablaNorma numero="Figura B.6.4-3 (cont.)" titulo="Presión neta de alero pnet10 (kN/m²), solo succión" pag="B-46" nota="Exposición B, h = 10 m, I = 1.0. Cuatro columnas de velocidad en m/s (km/h entre paréntesis en la norma: 60, 80, 100, 120 y 130).">
+
+| Cubierta | Zona | Área (m²) | 17 m/s | 22 m/s | 28 m/s | 33 m/s | 36 m/s |
+|---|:-:|---:|---:|---:|---:|---:|---:|
+| 0 &lt; θ ≤ 7° | 2 | 1 | -0.17 | -0.31 | -0.48 | -0.69 | -0.81 |
+| 0 &lt; θ ≤ 7° | 2 | 2 | -0.17 | -0.30 | -0.47 | -0.68 | -0.79 |
+| 0 &lt; θ ≤ 7° | 2 | 5 | -0.17 | -0.29 | -0.46 | -0.66 | -0.77 |
+| 0 &lt; θ ≤ 7° | 2 | 10 | -0.16 | -0.29 | -0.45 | -0.65 | -0.76 |
+| 0 &lt; θ ≤ 7° | 3 | 1 | -0.28 | -0.51 | -0.79 | -1.14 | -1.33 |
+| 0 &lt; θ ≤ 7° | 3 | 2 | -0.22 | -0.40 | -0.62 | -0.89 | -1.04 |
+| 0 &lt; θ ≤ 7° | 3 | 5 | -0.14 | -0.25 | -0.39 | -0.57 | -0.67 |
+| 0 &lt; θ ≤ 7° | 3 | 10 | -0.08 | -0.15 | -0.23 | -0.33 | -0.39 |
+| 7° &lt; θ ≤ 27° | 2 | 1 | -0.22 | -0.40 | -0.62 | -0.89 | -1.05 |
+| 7° &lt; θ ≤ 27° | 2 | 2 | -0.22 | -0.40 | -0.62 | -0.89 | -1.05 |
+| 7° &lt; θ ≤ 27° | 2 | 5 | -0.22 | -0.40 | -0.62 | -0.89 | -1.05 |
+| 7° &lt; θ ≤ 27° | 2 | 10 | -0.22 | -0.40 | -0.62 | -0.89 | -1.05 |
+| 7° &lt; θ ≤ 27° | 3 | 1 | -0.38 | -0.67 | -1.04 | -1.50 | -1.76 |
+| 7° &lt; θ ≤ 27° | 3 | 2 | -0.34 | -0.60 | -0.94 | -1.35 | -1.59 |
+| 7° &lt; θ ≤ 27° | 3 | 5 | -0.29 | -0.52 | -0.81 | -1.16 | -1.36 |
+| 7° &lt; θ ≤ 27° | 3 | 10 | -0.25 | -0.45 | -0.70 | -1.02 | -1.19 |
+| 27° &lt; θ ≤ 45° | 2 | 1 | -0.20 | -0.36 | -0.56 | -0.81 | -0.95 |
+| 27° &lt; θ ≤ 45° | 2 | 2 | -0.20 | -0.35 | -0.55 | -0.79 | -0.93 |
+| 27° &lt; θ ≤ 45° | 2 | 5 | -0.19 | -0.34 | -0.52 | -0.76 | -0.89 |
+| 27° &lt; θ ≤ 45° | 2 | 10 | -0.18 | -0.32 | -0.51 | -0.73 | -0.86 |
+| 27° &lt; θ ≤ 45° | 3 | 1 | -0.20 | -0.36 | -0.56 | -0.81 | -0.95 |
+| 27° &lt; θ ≤ 45° | 3 | 2 | -0.20 | -0.35 | -0.55 | -0.79 | -0.93 |
+| 27° &lt; θ ≤ 45° | 3 | 5 | -0.19 | -0.34 | -0.52 | -0.76 | -0.89 |
+| 27° &lt; θ ≤ 45° | 3 | 10 | -0.18 | -0.32 | -0.51 | -0.73 | -0.86 |
+
+</TablaNorma>
+
+### B.6.4.2.2.1 — Presiones mínimas de componentes y revestimientos
+
+Las presiones de diseño **positivas y negativas** $p_{net}$ no serán menores que **+0.4 kN/m²** y **−0.4 kN/m²**, respectivamente (<NormaRef s="B.6.4.2.2.1" pag="B-27" />). Es decir: si la presión calculada es positiva pero menor que 0.40, se diseña con +0.40; si la succión calculada es menor (en valor absoluto) que 0.40, se diseña con −0.40. Aquí sí se corrige cada valor, porque se trata de presiones locales sobre elementos individuales (a diferencia del SPRFV, donde el mínimo es un caso de carga).
+
+<Ejemplo numero={3} titulo="Componentes y revestimientos de la bodega del Ejemplo 1">
+
+Misma bodega del Ejemplo 1 ($V$ = 28 m/s, exposición C, grupo I, $h$ = {e1.h.toFixed(3)} m, $\theta$ = 15° a dos aguas). Hallar las presiones de diseño de (a) un panel de ventana de 2 m² en la zona de esquina del muro, (b) un panel de cubierta de 3 m² en una esquina de la cubierta y (c) el alero en esa misma esquina con 1 m² de área efectiva.
+
+<Paso titulo="Factor de ajuste" ref="B.6.4-2">
+Igual que en el Ejemplo 1: $\lambda$ = {e2.lam.toFixed(3)}, $I$ = {e1.i.toFixed(2)}, $K_{zt}$ = 1.0, de modo que $\lambda K_{zt} I$ = **{e2.muro.factor.toFixed(3)}**.
+</Paso>
+<Paso titulo="(a) Muro, zona 5, A = 2 m²" ref="Figura B.6.4-3, p. B-45">
+Con $V$ = 28 m/s la tabla da $p_{net10}$ = +{e2.muro.pnet10.pos.toFixed(2)} / {e2.muro.pnet10.neg.toFixed(2)} kN/m². Entonces $p_{net}$ = {e2.muro.factor.toFixed(3)} × (+{e2.muro.pnet10.pos.toFixed(2)}) = **+{e2.muro.pnet.pos.toFixed(3)}** y {e2.muro.factor.toFixed(3)} × ({e2.muro.pnet10.neg.toFixed(2)}) = **{e2.muro.pnet.neg.toFixed(3)} kN/m²**. La presión positiva queda por debajo del mínimo, así que se diseña con **+{e2.muro.diseno.pos.toFixed(2)} kN/m²** y con **{e2.muro.diseno.neg.toFixed(3)} kN/m²** de succión.
+</Paso>
+<Paso titulo="(b) Cubierta, zona 3, A = 3 m²" ref="Figura B.6.4-3, nota 4">
+Para $7° < \theta \le 27°$ la tabla da, en la zona 3 y con 28 m/s: +{e2.t2.pos.toFixed(2)} / {e2.t2.neg.toFixed(2)} kN/m² con 2 m² y +{e2.t5.pos.toFixed(2)} / {e2.t5.neg.toFixed(2)} kN/m² con 5 m². El área de 3 m² no está tabulada; la nota 4 permite dos caminos:
+
+- **Interpolar**: $p_{net10}$ = +{e2.techo.pnet10.pos.toFixed(3)} / {e2.techo.pnet10.neg.toFixed(3)} kN/m², y $p_{net}$ = {e2.techo.factor.toFixed(3)} × $p_{net10}$ = +{e2.techo.pnet.pos.toFixed(3)} / **{e2.techo.pnet.neg.toFixed(3)} kN/m²**.
+- **Usar el área menor** (2 m²): $p_{net}$ = +{e2.techoMenor.pnet.pos.toFixed(3)} / **{e2.techoMenor.pnet.neg.toFixed(3)} kN/m²**, algo más conservador.
+
+En ambos casos la presión positiva queda por debajo del mínimo y se diseña con **+{e2.techo.diseno.pos.toFixed(2)} kN/m²**; la succión de diseño es **{e2.techo.diseno.neg.toFixed(3)} kN/m²** (interpolando) o **{e2.techoMenor.diseno.neg.toFixed(3)} kN/m²** (área menor).
+</Paso>
+<Paso titulo="(c) Alero, zona 3, A = 1 m²" ref="Figura B.6.4-3, p. B-46">
+La tabla de aleros (solo succión) da para $7° < \theta \le 27°$, zona 3, 1 m² y 28 m/s: {(e2.alero.pnet10.neg).toFixed(2)} kN/m². Entonces $p_{net}$ = {e2.alero.factor.toFixed(3)} × ({e2.alero.pnet10.neg.toFixed(2)}) = **{e2.alero.pnet.neg.toFixed(3)} kN/m²**.
+</Paso>
+<Resultado>
+Panel de muro en esquina: +0.40 / {e2.muro.diseno.neg.toFixed(2)} kN/m². Panel de cubierta en esquina: +0.40 / {e2.techo.diseno.neg.toFixed(2)} kN/m². Alero en esquina: {e2.alero.diseno.neg.toFixed(2)} kN/m². Las succiones de la esquina de la cubierta y del alero son varias veces mayores que la del muro: por eso las esquinas y los bordes concentran los fallos de revestimientos.
+</Resultado>
+</Ejemplo>
+
+## B.6.4.3 — Revestimiento permeable
+
+Las cargas de la Figura B.6.4-3 se usan para **todos los revestimientos permeables**, a menos que se demuestre con datos experimentales aprobados u otra literatura reconocida que las cargas son menores para el tipo de revestimiento considerado (<NormaRef s="B.6.4.3" pag="B-27" />). En la práctica: una cubierta o fachada con juntas abiertas, celosías o paneles perforados no recibe por defecto una presión reducida; hay que sustentar la reducción con ensayos.
+
+### Resumen del Método 1 paso a paso
+
+<Callout tipo="practica" titulo="Lista de verificación">
+1. **¿Cumple el alcance?** Cerrado, regular, $h \le 18$ m (y, para el SPRFV, bajo, de diafragma simple, no flexible, cubierta plana o hasta 45°) — B.6.4.1.
+2. Lee **$V$** en el mapa (B.6.4-1): 17, 22, 28, 33 o 36 m/s.
+3. Determina la **exposición** (B, C o D), el **grupo de uso** ($I$) y $K_{zt}$.
+4. Calcula la **altura media $h$** y toma **$\lambda$** de la Fig. B.6.4-2.
+5. Calcula el **ancho $a$** de las zonas de borde.
+6. **SPRFV**: lee $p_{s10}$ por θ (interpolando) y aplica $p_s = \lambda K_{zt} I p_{s10}$; verifica los casos de carga 1 y 2 si θ > 25°, el caso mínimo de 0.40 kN/m² y la nota 7.
+7. **Componentes y revestimientos**: lee $p_{net10}$ por zona, ángulo y área efectiva; aplica $p_{net} = \lambda K_{zt} I p_{net10}$ y los mínimos de ±0.40 kN/m².
+</Callout>
+
+## Calculadora
+
+La calculadora aplica las ecuaciones B.6.4-1 y B.6.4-2 con las tablas completas de este capítulo (las mismas funciones que producen los números de los ejemplos). Elige la velocidad por región del mapa, la exposición, el grupo de uso, la altura media y el ángulo, y revisa las presiones por zona.
+
+<CalculadoraEmbed id="viento-simplificado" />
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Usar las tablas de $p_{s10}$ o $p_{net10}$ **sin multiplicar por $\lambda K_{zt} I$**: están dadas para exposición B, 10 m, $I = 1.0$ y $K_{zt} = 1.0$.
+- **Interpolar la velocidad** entre regiones del mapa o usar km/h en lugar de m/s: las tablas tienen cinco columnas (17, 22, 28, 33 y 36 m/s).
+- Tomar $h$ como la altura de la cornisa con cubiertas de $\theta > 10°$ (se usa el promedio entre cornisa y cumbrera), o con $\theta \le 10°$ usar la cumbrera.
+- Aplicar el Método 1 a edificios que **no son “bajos”** (h mayor que la menor dimensión horizontal), flexibles, irregulares o no cerrados.
+- **Ignorar el caso de carga 2** cuando $25° < \theta \le 45°$, o no interpolar el ángulo entre las filas de la tabla.
+- Subir cada $p_s$ a 0.40 kN/m² en vez de verificar el **caso de carga mínimo** (+0.40 en A–D, 0 en E–H); o, al revés, olvidar el mínimo en edificios de baja velocidad.
+- Olvidar que en componentes y revestimientos el mínimo sí se aplica a cada presión: **+0.40 y −0.40 kN/m²**.
+- Entrar a la tabla de componentes con el **área del panel** en lugar del **área efectiva** (luz × ancho efectivo, no menor que un tercio de la luz), o usar la tabla de otro rango de ángulos.
+- No tratar la zona 3 como zona 2 en cubiertas a **cuatro aguas con $\theta \le 25°$** (nota 3).
+- Suponer $I = 1.0$ para cualquier edificio: según la Tabla B.6.5-1 el grupo I usa **0.87** y los grupos III y IV, **1.15**.
+- Olvidar el **factor topográfico** $K_{zt}$ en edificios sobre colinas o escarpes (B.6.5.7).
+</Callout>
+
+## Resumen en una línea
+
+**Para un edificio cerrado, regular y de hasta 18 m, lee $V$ en el mapa, entra a las tablas del Método 1 con el ángulo de cubierta (y el área efectiva para revestimientos), corrige con $\lambda K_{zt} I$ y respeta los mínimos de 0.40 kN/m²**; si el edificio se sale del alcance, pasa al Método 2.

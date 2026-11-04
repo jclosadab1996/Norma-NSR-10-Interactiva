@@ -7,6 +7,7 @@ import { getCollection } from 'astro:content';
 import { cn } from '../lib/utils';
 
 const capitulos = (await getCollection('titulo-a')).filter((c) => c.data.tipo === 'capitulo');
+const capitulosB = (await getCollection('titulo-b')).filter((c) => c.data.tipo === 'capitulo');
 
 const pilares = [
   {
@@ -26,7 +27,7 @@ const pilares = [
 
 <BaseLayout
   title="NSR-10 Interactiva — entiende el Reglamento Colombiano de Construcción Sismo Resistente"
-  description="Web interactiva para detallar y entender más fácil la NSR-10: explicaciones, ejemplos resueltos y calculadoras. Título A disponible."
+  description="Web interactiva para detallar y entender más fácil la NSR-10: explicaciones, ejemplos resueltos y calculadoras. Títulos A y B disponibles."
 >
   <!-- Hero -->
   <section class="relative overflow-hidden border-b">
@@ -34,7 +35,7 @@ const pilares = [
     <div class="mx-auto grid max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.15fr_0.85fr] md:py-20">
       <div>
         <p class="mb-3 inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
-          <span class="size-1.5 rounded-full bg-ok"></span> Título A disponible · Títulos B–K en camino
+          <span class="size-1.5 rounded-full bg-ok"></span> Títulos A y B disponibles · C–K en camino
         </p>
         <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
           Entiende la <span class="text-primary">NSR-10</span> sin perderte en el texto de la norma
@@ -46,10 +47,10 @@ const pilares = [
         </p>
         <div class="mt-8 flex flex-wrap gap-3">
           <a href="/titulo-a" class={cn(buttonVariants({ size: 'lg' }))}>Empezar con el Título A</a>
-          <a href="/titulo-a/calculadoras" class={cn(buttonVariants({ size: 'lg', variant: 'outline' }))}>Ver calculadoras</a>
+          <a href="/titulo-b" class={cn(buttonVariants({ size: 'lg', variant: 'outline' }))}>Título B · Cargas</a>
         </div>
         <dl class="mt-10 grid max-w-xl grid-cols-3 gap-4 text-sm">
-          <div><dt class="text-muted-foreground">Capítulos del Título A</dt><dd class="text-2xl font-bold">{capitulos.length || 13}</dd></div>
+          <div><dt class="text-muted-foreground">Capítulos (Títulos A y B)</dt><dd class="text-2xl font-bold">{capitulos.length + capitulosB.length}</dd></div>
           <div><dt class="text-muted-foreground">Calculadoras</dt><dd class="text-2xl font-bold">{CALCULADORAS.length}</dd></div>
           <div><dt class="text-muted-foreground">Títulos de la norma</dt><dd class="text-2xl font-bold">{TITULOS.length}</dd></div>
         </dl>
@@ -98,7 +99,8 @@ const pilares = [
         </p>
         <p class="mt-3 text-muted-foreground">
           Está dividida en <strong class="text-foreground">11 Títulos (A a K)</strong>. El Título A es la base de todos: define cuánto
-          tiembla el suelo en cada lugar, cómo se transforma eso en fuerzas sobre la edificación y qué verificaciones deben cumplirse.
+          tiembla el suelo en cada lugar, cómo se transforma eso en fuerzas sobre la edificación y qué verificaciones deben cumplirse. El Título B
+          define las cargas (muertas, vivas, viento, empuje de tierra) y cómo combinarlas.
         </p>
       </div>
       <ul class="grid gap-4">
@@ -121,7 +123,7 @@ const pilares = [
       <div class="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 class="text-2xl font-bold tracking-tight sm:text-3xl">Los Títulos de la norma</h2>
-          <p class="mt-2 text-muted-foreground">Cada Título tiene su propia pestaña. Por ahora el Título A está completo.</p>
+          <p class="mt-2 text-muted-foreground">Cada Título tiene su propia pestaña. Por ahora están completos el Título A y el Título B.</p>
         </div>
         <a href="/titulos" class="text-sm font-medium text-primary hover:underline">Ver todos →</a>
       </div>
@@ -159,6 +161,7 @@ const pilares = [
     <div class="mt-8 flex flex-wrap items-center gap-3">
       <a href="/titulo-a" class={cn(buttonVariants({ size: 'lg' }))}>Ir al Título A</a>
       <a href="/titulo-a/municipios" class={cn(buttonVariants({ size: 'lg', variant: 'ghost' }))}>Buscar mi municipio →</a>
+      <a href="/titulo-b" class={cn(buttonVariants({ size: 'lg', variant: 'ghost' }))}>Ir al Título B (Cargas) →</a>
     </div>
   </section>
 </BaseLayout>

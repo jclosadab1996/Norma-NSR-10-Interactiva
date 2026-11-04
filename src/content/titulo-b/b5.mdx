@@ -1,0 +1,172 @@
+---
+codigo: 'B.5'
+tipo: capitulo
+titulo: 'Empuje de tierra y presión hidrostática'
+resumen: 'Las cargas que el terreno y el agua subterránea ejercen sobre muros y losas enterradas: empuje lateral con sobrecarga, presión hidrostática, subpresión, suelos expansivos y zonas inundables.'
+objetivos:
+  - 'Identificar qué efectos del suelo y del agua debe cubrir el diseño de un sótano'
+  - 'Construir el diagrama de presiones sobre un muro con sobrecarga y nivel freático'
+  - 'Calcular la subpresión sobre la losa de piso de un sótano'
+  - 'Reconocer qué decide el geotecnista (el coeficiente K) y qué remite al Título H'
+paginasNorma: 'B-19'
+paginaPdf: 238
+orden: 5
+calculadoras: ['empuje-tierra']
+nivel: 'basico'
+---
+
+import { empujeMuro, subpresion, presionesEnProfundidad } from '../../lib/nsr10/empuje';
+
+export const ej = (() => {
+  const p = { alturaM: 3.5, k: 0.5, gamma: 18, gammaSat: 20, nivelFreaticoM: 1.5, sobrecarga: 10, gammaW: 9.8 };
+  const r = empujeMuro(p);
+  const seco = empujeMuro({ ...p, nivelFreaticoM: null });
+  return {
+    p, r, seco,
+    nf: presionesEnProfundidad(1.5, p),
+    base: presionesEnProfundidad(3.5, p),
+    u: subpresion(3.5, 1.5, 9.8),
+    gSum: r.gammaSumergido,
+  };
+})();
+
+## Idea central del capítulo
+
+Todo lo que está **bajo tierra** recibe cargas del suelo y del agua que lo rodean. El Capítulo B.5 es corto —cuatro numerales— y su papel es **recordar qué efectos hay que incluir** en el diseño de sótanos, losas enterradas, tanques y edificios en zonas inundables. Casi no da números: **remite al Título H (geotecnia)** y al criterio del ingeniero geotecnista.
+
+<Callout tipo="importante" titulo="Lo que la norma da y lo que no da">
+La norma **sí** fija *qué cargas* considerar: el empuje lateral del suelo, las cargas vivas y muertas sobre el terreno adyacente, el suelo **sumergido más la presión hidrostática completa** bajo el nivel freático, la subpresión sobre las losas y los movimientos de los suelos expansivos. **No** da valores numéricos de los coeficientes de empuje: el coeficiente ($K$) lo elige el **ingeniero geotecnista** según la deformabilidad del muro (<NormaRef s="B.5.1.2" pag="B-19" />). Nada de esto se puede resolver "con una tabla de la norma".
+</Callout>
+
+## B.5.1 — Empuje en muros de contención de sótanos
+
+### B.5.1.1 — Qué debe tenerse en cuenta
+
+En el diseño de los muros de contención de sótanos y de otras estructuras **aproximadamente verticales localizadas bajo tierra** (<NormaRef s="B.5.1.1" pag="B-19" />) debe considerarse:
+
+1. El **empuje lateral del suelo adyacente**.
+2. Las posibles **cargas vivas y muertas** sobre la parte superior del suelo adyacente (andenes, vías, parqueaderos, edificaciones vecinas): la **sobrecarga** $q$.
+3. Si parte o toda la estructura del sótano está **por debajo del nivel freático**, el empuje se calcula con el **peso del suelo sumergido** y la **totalidad de la presión hidrostática**.
+4. Consultar los requisitos del **Título H**.
+
+Traducido a presiones horizontales (mecánica de suelos elemental; la norma no escribe fórmulas): a una profundidad $z$ medida desde la superficie,
+
+$$
+\sigma_h = K\,\sigma'_v + u
+\qquad
+\sigma'_v = q + \gamma\,z\ \ (\text{sobre el N. F.}),\quad
+\sigma'_v = q + \gamma\,z_w + \gamma'\,(z - z_w)\ \ (\text{bajo el N. F.})
+$$
+
+con $\gamma' = \gamma_{sat} - \gamma_w$ (peso sumergido), $u = \gamma_w\,(z - z_w)$ (presión hidrostática) y $z_w$ la profundidad del nivel freático. El agua **no** se multiplica por $K$: la presión hidrostática actúa **completa**, igual en todas las direcciones. Para $\gamma_w$ se usa 9.8 kN/m³ (1 000 kg/m³ × 9.8 m/s², Tabla B.3.2-1, <NormaRef s="B.3.2" pag="B-9" />).
+
+### B.5.1.2 — Elección del coeficiente de empuje
+
+El coeficiente de empuje depende de **cuánto se puede deformar el muro** (<NormaRef s="B.5.1.2" pag="B-19" />):
+
+| Condición del muro | Coeficiente que puede asignarse |
+|---|---|
+| Libertad de **giro y de traslación** (el muro cede al empuje) | Coeficiente de **empuje activo** |
+| Sin esa libertad (muro de sótano rígido, arriostrado por las losas) | Coeficiente **de reposo** o uno **mayor**, hasta el valor del **pasivo** |
+
+La decisión es del **ingeniero geotecnista**, de acuerdo con la geometría de la estructura y de los taludes adyacentes, y cumpliendo los requisitos adicionales del Título H. Un muro de sótano de edificio, sujeto arriba por la placa de entrepiso y abajo por la losa de piso, **no tiene libertad de giro**; por eso el coeficiente activo suele ser **no conservador** en ese caso, y la norma lo reserva para estructuras que sí puedan moverse.
+
+<Callout tipo="atencion" titulo="K es un dato de entrada">
+En esta web la calculadora y los ejemplos tratan a $K$ como un **dato que ingresas** (el valor de 0.5 del ejemplo es **solo ilustrativo**). La NSR-10 no lo da en B.5; debe venir del estudio geotécnico del proyecto (Título H).
+</Callout>
+
+<Ejemplo numero={1} titulo="Empuje sobre un muro de sótano con sobrecarga y nivel freático">
+Un muro de sótano de **H = {ej.p.alturaM} m** retiene un suelo con $\gamma$ = {ej.p.gamma} kN/m³ sobre el nivel freático y $\gamma_{sat}$ = {ej.p.gammaSat} kN/m³ bajo él. El nivel freático está a **{ej.p.nivelFreaticoM} m** de la superficie, hay una **sobrecarga** $q$ = {ej.p.sobrecarga} kN/m² en el terreno adyacente y el geotecnista indica un coeficiente **K = {ej.p.k}** (dato supuesto). Calcular el diagrama de presiones, el empuje total por metro de muro y su punto de aplicación.
+
+<Paso titulo="Peso sumergido" ref="B.5.1.1">
+
+$$
+\gamma' = \gamma_{sat}-\gamma_w = 20 - 9.8
+$$
+
+Resultado: $\gamma'$ = **{ej.gSum.toFixed(1)} kN/m³**.
+
+</Paso>
+<Paso titulo="Presiones horizontales en los puntos clave" ref="B.5.1.1">
+
+- En la superficie ($z$ = 0): solo la sobrecarga, $K q$ = {ej.p.k} × {ej.p.sobrecarga} = **{ej.r.superficie.total.toFixed(1)} kPa**.
+- En el nivel freático ($z$ = 1.5 m): $K(q + \gamma z)$ = {ej.p.k} × (10 + 18 × 1.5) = **{ej.nf.total.toFixed(1)} kPa** (aún sin agua).
+- En la base ($z$ = 3.5 m): suelo $K(q + \gamma z_w + \gamma' \cdot 2)$ = {ej.p.k} × (10 + 27 + 20.4) = {ej.base.empujeSuelo.toFixed(1)} kPa, más agua $\gamma_w \cdot 2$ = 9.8 × 2 = {ej.base.hidrostatica.toFixed(1)} kPa. Total: **{ej.r.base.total.toFixed(1)} kPa**.
+
+</Paso>
+<Paso titulo="Empuje por componentes (por metro de muro)" ref="B.5.1.1">
+
+El diagrama es una poligonal; se integra por tramos (rectángulos y triángulos):
+
+- Sobrecarga (rectángulo): {ej.r.sobrecarga.fuerza.toFixed(2)} kN/m, aplicada a {ej.r.sobrecarga.alturaDesdeBase.toFixed(2)} m de la base.
+- Peso del suelo: {ej.r.suelo.fuerza.toFixed(2)} kN/m, a {ej.r.suelo.alturaDesdeBase.toFixed(2)} m de la base.
+- Agua (triángulo de 2 m): $\tfrac12 \times 19.6 \times 2$ = {ej.r.agua.fuerza.toFixed(2)} kN/m, a {ej.r.agua.alturaDesdeBase.toFixed(2)} m de la base (un tercio de su altura).
+
+</Paso>
+<Paso titulo="Resultante total">
+
+$$
+R = 17.5 + 47.325 + 19.6
+$$
+
+Resultado: $R$ = **{ej.r.total.fuerza.toFixed(2)} kN/m**, aplicada a **{ej.r.total.alturaDesdeBase.toFixed(2)} m** sobre la base, con un momento en la base de {ej.r.total.momentoBase.toFixed(1)} kN·m/m.
+
+</Paso>
+<Paso titulo="Efecto del nivel freático y subpresión en la losa" ref="B.5.1.1, B.5.2">
+Sin nivel freático (suelo seco hasta la base) el mismo muro recibiría {ej.seco.total.fuerza.toFixed(1)} kN/m: el agua aumenta el empuje en **{((ej.r.total.fuerza / ej.seco.total.fuerza - 1) * 100).toFixed(0)} %**. Además, la losa de piso a 3.5 m soporta una subpresión de $u$ = 9.8 × (3.5 − 1.5) = **{ej.u.toFixed(1)} kPa** hacia arriba.
+</Paso>
+<Resultado>
+$R$ = {ej.r.total.fuerza.toFixed(1)} kN/m a {ej.r.total.alturaDesdeBase.toFixed(2)} m de la base; presión máxima {ej.r.base.total.toFixed(1)} kPa en la base. Estos valores son **efectos de carga $H$** de las combinaciones del Capítulo B.2: allí se fijan sus factores y se anula $H$ cuando contribuye a resistir (<NormaRef s="B.2.4.2.5" pag="B-7" />). Compruébalo y cambia $K$, $q$ o el nivel freático con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="empuje-tierra" />
+
+## B.5.2 — Presión ascendente (subpresión) en losas de piso de sótanos
+
+En el diseño de la **losa de piso de sótano** y de otras estructuras **aproximadamente horizontales bajo tierra** se debe considerar la **totalidad de la presión hidrostática ascendente** aplicada sobre el área. La **cabeza de presión** se mide **desde el nivel freático**. La misma consideración se hace para **tanques y piscinas** (véase el Capítulo C.23) (<NormaRef s="B.5.2" pag="B-19" />).
+
+$$
+u=\gamma_w\,h
+$$
+
+con $h$ la distancia vertical entre el nivel freático y la cara inferior de la losa. Cada metro de columna de agua equivale a 9.8 kN/m² (≈ 1 000 kgf/m²) hacia arriba. Esa presión actúa sobre **toda el área** de la losa y debe ser resistida por la losa (flexión y punzonamiento en las columnas) y por su anclaje o su peso: para un sótano con la losa a 3.5 m y el nivel freático a 1.5 m, $u$ = {ej.u.toFixed(1)} kN/m².
+
+<Callout tipo="practica" titulo="Un tanque vacío puede flotar">
+La subpresión es crítica **cuando el sótano o el tanque están vacíos** (o poco cargados), porque no hay peso que contrarreste el empuje del agua. Revisa siempre la condición *vacío con nivel freático alto*; la norma no da un factor de seguridad en B.5, así que ese margen lo define el geotecnista (Título H).
+</Callout>
+
+## B.5.3 — Suelos expansivos
+
+Si hay **suelos expansivos** bajo la cimentación o bajo losas apoyadas sobre el terreno, la cimentación, las losas y demás elementos deben diseñarse para (<NormaRef s="B.5.3" pag="B-19" />):
+
+- **tolerar los movimientos** que se presenten **y resistir las presiones ascendentes** causadas por la expansión del suelo, **o bien**
+- retirar o **estabilizar** el suelo expansivo debajo y alrededor de la edificación,
+
+siempre de acuerdo con las indicaciones del **ingeniero geotecnista** y consultando el Título H. La norma no da valores de presión de expansión: se miden o se estiman en el estudio de suelos.
+
+## B.5.4 — Zonas inundables
+
+En las zonas **designadas por la autoridad competente como inundables**, el sistema estructural debe diseñarse y construirse para resistir los efectos de **flotación** y de **desplazamiento lateral** causados por los efectos (<NormaRef s="B.5.4" pag="B-19" />):
+
+- **hidrostáticos** (presión del agua en reposo, empuje, subpresión),
+- **hidrodinámicos** (agua en movimiento), y
+- de **impacto de objetos flotantes**.
+
+También aquí la norma exige el efecto, no la magnitud: la altura de inundación y la velocidad del agua las fija la autoridad o el estudio hidrológico.
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Inventar K**: tomar un valor "de libro" sin que lo respalde el estudio geotécnico. B.5.1.2 reserva esa decisión al geotecnista.
+- Usar el coeficiente **activo** en un muro de sótano rígido, sin libertad de giro: debe usarse el de reposo o uno mayor, según el geotecnista.
+- **Olvidar la sobrecarga** del terreno adyacente (andén, vía, edificio vecino): B.5.1.1 la exige.
+- Bajo el nivel freático, usar el **peso total del suelo** en vez del **sumergido**, o **multiplicar la presión del agua por K**: el agua actúa completa.
+- **Omitir la subpresión** en la losa de piso, o revisarla solo con el sótano lleno y no vacío.
+- Dejar de consultar el **Título H** para suelos expansivos o para los requisitos adicionales de empuje.
+- Ignorar los efectos de **flotación y empuje lateral** en zonas inundables, aunque la edificación no tenga sótano.
+</Callout>
+
+## Resumen en una línea
+
+**Bajo tierra hay que diseñar para el empuje del suelo (con el $K$ que defina el geotecnista), la sobrecarga adyacente, el suelo sumergido más toda la presión del agua bajo el nivel freático, la subpresión en las losas, los suelos expansivos y las inundaciones, y todo detalle numérico remite al Título H.**

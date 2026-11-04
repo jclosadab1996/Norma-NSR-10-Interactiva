@@ -3,10 +3,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Buscador from '../components/calc/Buscador';
 ---
 
-<BaseLayout title="Buscar" description="Busca en todo el contenido del Título A de la NSR-10 interactiva.">
+<BaseLayout title="Buscar" description="Busca en todo el contenido de los Títulos A y B de la NSR-10 interactiva.">
   <div class="mx-auto max-w-3xl px-4 py-10 sm:px-6">
     <h1 class="text-3xl font-bold tracking-tight">Buscar</h1>
-    <p class="mt-2 text-muted-foreground">Busca en los capítulos del Título A: conceptos, secciones (por ejemplo «A.4.2») o símbolos.</p>
+    <p class="mt-2 text-muted-foreground">Busca en los capítulos de los Títulos A y B: conceptos, secciones (por ejemplo «A.4.2» o «B.2.3») o símbolos.</p>
     <div class="mt-6"><Buscador client:load /></div>
   </div>
 </BaseLayout>

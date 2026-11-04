@@ -1,0 +1,24 @@
+---
+import TituloLayout from '../../layouts/TituloLayout.astro';
+import GlosarioB from '../../components/calc/GlosarioB';
+import { definicionesB, simbolosB } from '../../data/glosarioB';
+---
+
+<TituloLayout
+  titulo="b"
+  title="Glosario y nomenclatura del Título B"
+  description="Definiciones y símbolos de los capítulos B.2 (combinaciones de carga) y B.6 (fuerzas de viento) del Título B de la NSR-10, con búsqueda, filtro por tema e índice alfabético."
+  ancho="amplio"
+>
+  <header class="mb-6">
+    <p class="text-sm font-semibold uppercase tracking-wider text-primary">Título B · B.2 y B.6</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Glosario y nomenclatura</h1>
+    <p class="mt-3 max-w-3xl text-muted-foreground">
+      Las <strong>{definicionesB.length} definiciones</strong> (B.2.1.1 y B.6.2) y los <strong>{simbolosB.length} símbolos</strong> (B.2.2 y B.6.3) del
+      Título B, tal como los escribe la norma. Busca por término, por símbolo (D, L, Kz, GCpi…) o por cualquier palabra de la definición.
+      Los capítulos <a href="/titulo-b/b2" class="font-medium text-primary underline-offset-4 hover:underline">B.2</a> y
+      <a href="/titulo-b/b6a" class="font-medium text-primary underline-offset-4 hover:underline">B.6</a> los explican.
+    </p>
+  </header>
+  <GlosarioB client:load />
+</TituloLayout>

@@ -1,0 +1,563 @@
+---
+codigo: 'B.3'
+tipo: capitulo
+titulo: 'Cargas muertas'
+resumen: 'Qué es carga muerta, cómo se obtiene a partir de las densidades de los materiales y de las tablas de la norma (cielo raso, pisos, cubiertas, muros, particiones, fachadas) y cuándo se pueden usar los valores mínimos alternativos por tipo de ocupación.'
+objetivos:
+  - 'Distinguir qué se considera carga muerta (estructura, acabados, muros, equipos fijos)'
+  - 'Calcular cargas a partir de la densidad de masa y el espesor de cada material'
+  - 'Usar las tablas B.3.4.1 y B.3.4.2 para elementos no estructurales horizontales y verticales'
+  - 'Convertir cargas por m² de muro en cargas lineales (kN/m) y repartirlas en planta'
+  - 'Aplicar los valores mínimos alternativos de la Tabla B.3.4.3-1 sabiendo cuándo valen'
+paginasNorma: 'B-9 a B-14'
+paginaPdf: 228
+orden: 3
+calculadoras: ['carga-muerta']
+nivel: 'basico'
+---
+
+import { buscarComponente, buscarMaterial, buscarMuro, buscarValorAlternativo } from '../../data/cargasMuertas';
+import { cargaAlternativa, cargaComponente, cargaLineal, cargaMuroMamposteria, cargaPorEspesor, kNm2AKgfm2, kNm2AKgfm2Exacto, pesoEspecifico, pesoPropioLosaMaciza, repartirEnPlanta, sumarCargasMuertas } from '../../lib/nsr10/cargasMuertas';
+
+export const conc = buscarMaterial('concreto-reforzado').densidad;
+
+export const e1 = (() => {
+  const area = 120;
+  const losa = pesoPropioLosaMaciza(0.12);
+  const baldosa = cargaComponente(buscarComponente('pi-baldosa-20-mortero-25'));
+  const canales = cargaComponente(buscarComponente('cr-canales-acero'));
+  const yeso = cargaComponente(buscarComponente('cr-tableros-yeso'), 12);
+  const qPart = buscarComponente('pl-poste-yeso-12-ambos-lados').kN;
+  const linealPart = cargaLineal(qPart, 2.4);
+  const part = repartirEnPlanta(qPart, 2.4, 30, area);
+  const qMuro = cargaMuroMamposteria(buscarMuro('mb-arcilla-panetado'), 150);
+  const fachada = cargaLineal(qMuro, 2.4);
+  const d = sumarCargasMuertas([
+    { nombre: 'losa', valor: losa },
+    { nombre: 'baldosa', valor: baldosa },
+    { nombre: 'cielo', valor: canales + yeso },
+    { nombre: 'particiones', valor: part },
+  ]);
+  return { area, losa, gamma: pesoEspecifico(conc), baldosa, canales, yeso, cielo: canales + yeso, qPart, linealPart, part, qMuro, fachada, total: d.total, totalKgf: d.totalKgf, noEstr: d.total - losa };
+})();
+
+export const e2 = (() => {
+  const losa = pesoPropioLosaMaciza(0.12);
+  const alt = cargaAlternativa('va-residencial-mamposteria');
+  const total = losa + alt.total;
+  const det = cargaComponente(buscarComponente('pi-baldosa-20-mortero-25')) + cargaComponente(buscarComponente('cr-panete-yeso-concreto')) + repartirEnPlanta(cargaMuroMamposteria(buscarMuro('mb-arcilla-panetado'), 100), 2.5, 30, 100);
+  const aof = cargaAlternativa('va-oficinas-moviles');
+  return { losa, alt, total, totalKgf: kNm2AKgfm2(total), det, aof, totalOf: losa + aof.total };
+})();
+
+export const e3 = (() => {
+  const rho = buscarMaterial('mamposteria-ladrillo-macizo').densidad;
+  const porDensidad = cargaPorEspesor(rho, 0.15);
+  const tabla = cargaMuroMamposteria(buscarMuro('mm-arcilla-sin-panetar'), 150);
+  const bloque = cargaMuroMamposteria(buscarMuro('mb-arcilla-panetado'), 150);
+  return { rho, porDensidad, tabla, bloque, lineal: cargaLineal(tabla, 2.4), linealBloque: cargaLineal(bloque, 2.4) };
+})();
+
+## Idea central del capítulo
+
+La **carga muerta** es el peso de todo lo que está en la edificación de forma permanente: la propia estructura, los muros, los pisos y sus acabados, la cubierta, el cielo raso, las escaleras y los equipos fijos. Es la primera carga que se calcula y la que aparece, con factor distinto, en **todas** las combinaciones del Capítulo B.2. El Capítulo B.3 enseña a obtenerla de tres maneras:
+
+1. **A partir de la densidad de masa** del material (Tabla B.3.2-1) por el espesor, y por $g = 9.8$ m/s².
+2. **Con las tablas de elementos no estructurales** (B.3.4.1 y B.3.4.2), que dan el peso de acabados, cielos rasos, cubiertas, muros, particiones, enchapes y ventanas.
+3. **Con los valores mínimos alternativos** de la Tabla B.3.4.3-1, según el tipo de ocupación, cuando la altura entre pisos es menor de 3 m y no se hace un análisis detallado.
+
+<Callout tipo="importante" titulo="Ojo con las unidades">
+Las tablas de acabados traen cada valor en **kN/m²** y en **kgf/m²** (la columna de kgf es siempre 100 veces la de kN). Los elementos **horizontales** se dan por m² de **área en planta**; los **verticales** (muros, particiones, fachadas) por m² de **superficie vertical**: hay que multiplicar por la altura para obtener kN/m (<NormaRef s="B.3.4.2" pag="B-12" />).
+</Callout>
+
+## B.3.1 — Definición
+
+La carga muerta cubre todas las cargas de **elementos permanentes de construcción**: estructura, muros, pisos, cubiertas, cielos rasos, escaleras, equipos fijos y toda carga que **no** sea causada por la ocupación y el uso de la edificación. Las **fuerzas netas de preesfuerzo** también se incluyen dentro de la carga muerta (<NormaRef s="B.3.1" pag="B-9" />).
+
+| Es carga muerta | No es carga muerta (ver B.4) |
+|---|---|
+| Peso propio de losas, vigas, columnas | Personas, muebles movibles |
+| Acabados de piso, afinados, rellenos | Almacenamiento variable |
+| Cielo raso, ductos, instalaciones fijas | Maquinaria móvil |
+| Muros y particiones permanentes, fachadas | Cargas de mantenimiento de cubiertas |
+| Equipos fijos (ascensores, bombas, transformadores) | Viento, sismo, empuje de tierras |
+| Fuerzas netas de preesfuerzo | |
+
+## B.3.2 — Masas y pesos de los materiales
+
+Para calcular cargas muertas se usan las **densidades de masa reales** (kg/m³) multiplicadas por la aceleración de la gravedad, $g = 9.8$ m/s², para obtener pesos en N/m³ (<NormaRef s="B.3.2" pag="B-9" />). La Tabla B.3.2-1 trae las densidades de los materiales de uso más frecuente.
+
+<Ecuacion num="B.3.2 (texto)" titulo="Peso por unidad de volumen y carga de una capa">
+
+$$
+\gamma = \rho\, g \qquad\qquad q = \gamma\, e = \rho\, g\, e
+$$
+
+- $\rho$: densidad de masa del material (kg/m³), Tabla B.3.2-1.
+- $g$: 9.8 m/s². Con $\rho$ en kg/m³ se obtiene $\gamma$ en N/m³; se divide entre 1000 para pasar a kN/m³.
+- $e$: espesor de la capa (m). Con $\gamma$ en kN/m³ y $e$ en m, $q$ resulta en kN/m² de superficie.
+
+</Ecuacion>
+
+Por ejemplo, el concreto reforzado ($\rho$ = {conc} kg/m³) pesa $\gamma$ = {e1.gamma.toFixed(2)} kN/m³, y una losa maciza de 12 cm aporta {e1.losa.toFixed(3)} kN/m².
+
+<TablaNorma numero="Tabla B.3.2-1" titulo="Masas de los materiales" pag="B-9" nota="La norma presenta la tabla en dos columnas de 28 materiales; aquí va en una sola lista, en el mismo orden (columna izquierda y luego derecha). La columna γ es derivada (ρ·9.8/1000), no de la norma. Madera seca: la norma da el rango 450-750 kg/m³.">
+
+| Material | Densidad ρ (kg/m³) | Peso γ = ρ·9.8 (kN/m³) |
+|---|---:|---:|
+| Acero | 7800 | 76.44 |
+| Agua: Dulce | 1000 | 9.80 |
+| Agua: Marina | 1030 | 10.09 |
+| Aluminio | 2700 | 26.46 |
+| Arena: Limpia y seca | 1440 | 14.11 |
+| Arena: Seca de río | 1700 | 16.66 |
+| Baldosa cerámica | 2400 | 23.52 |
+| Bronce | 8850 | 86.73 |
+| Cal: Hidratada suelta | 500 | 4.90 |
+| Cal: Hidratada compacta | 730 | 7.15 |
+| Carbón, apilado | 800 | 7.84 |
+| Carbón vegetal | 200 | 1.96 |
+| Cemento pórtland, a granel | 1440 | 14.11 |
+| Cobre | 9000 | 88.20 |
+| Concreto simple | 2300 | 22.54 |
+| Concreto reforzado | 2400 | 23.52 |
+| Corcho, comprimido | 250 | 2.45 |
+| Estaño | 7360 | 72.13 |
+| Grava seca | 1660 | 16.27 |
+| Hielo | 920 | 9.02 |
+| Hierro: Fundido | 7200 | 70.56 |
+| Hierro: Forjado | 7700 | 75.46 |
+| Latón | 8430 | 82.61 |
+| Madera laminada | 600 | 5.88 |
+| Madera seca | 450–750 | 4.41–7.35 |
+| Mampostería de concreto | 2150 | 21.07 |
+| Mampostería de ladrillo macizo | 1850 | 18.13 |
+| Mampostería de piedra | 2200 | 21.56 |
+| Mortero de inyección para mampostería | 2250 | 22.05 |
+| Mortero de pega para mampostería | 2100 | 20.58 |
+| Piedra: Caliza, mármol, cuarzo | 2700 | 26.46 |
+| Piedra: Basalto, granito, gneis | 2850 | 27.93 |
+| Piedra: Arenisca | 2200 | 21.56 |
+| Piedra: Pizarra | 2600 | 25.48 |
+| Plomo | 11400 | 111.72 |
+| Productos bituminosos: Asfalto y alquitrán | 1300 | 12.74 |
+| Productos bituminosos: Gasolina | 700 | 6.86 |
+| Productos bituminosos: Grafito | 2160 | 21.17 |
+| Productos bituminosos: Parafina | 900 | 8.82 |
+| Productos bituminosos: Petróleo | 850 | 8.33 |
+| Relleno de ceniza | 920 | 9.02 |
+| Tableros de madera aglutinada | 750 | 7.35 |
+| Terracota: Poros saturados | 1950 | 19.11 |
+| Terracota: Poros no saturados | 1150 | 11.27 |
+| Tierra: Arcilla húmeda | 1750 | 17.15 |
+| Tierra: Arcilla seca | 1100 | 10.78 |
+| Tierra: Arcilla y grava seca | 1600 | 15.68 |
+| Tierra: Arena y grava húmeda | 1900 | 18.62 |
+| Tierra: Arena y grava seca apisonada | 1750 | 17.15 |
+| Tierra: Arena y grava seca suelta | 1600 | 15.68 |
+| Tierra: Limo húmedo consolidado | 1550 | 15.19 |
+| Tierra: Limo húmedo suelto | 1250 | 12.25 |
+| Vidrio | 2600 | 25.48 |
+| Yeso en tableros para muros | 800 | 7.84 |
+| Yeso suelto | 1150 | 11.27 |
+| Zinc en láminas enrolladas | 7200 | 70.56 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Sobre la transcripción de la tabla">
+En la norma, bajo «Productos bituminosos» aparecen sangrados asfalto y alquitrán, gasolina, grafito, parafina y petróleo; se transcribió tal cual (la sangría de la tabla los muestra bajo ese encabezado, lo que puede ser un simple desorden de formato del original). Los valores se verificaron contra la imagen de la página.
+</Callout>
+
+## B.3.3 — Cargas muertas mínimas
+
+Al calcular las cargas muertas deben usarse las **masas reales** de los materiales. Hay que ser cuidadoso al elegir masas representativas: se usa el **peso especificado por el fabricante** o, si no existe, se determina **analítica o experimentalmente** (<NormaRef s="B.3.3" pag="B-10" />).
+
+<Callout tipo="practica">
+Las tablas de la norma son **valores mínimos promedio**. Si un fabricante publica el peso de su losa aligerada, de su fachada prefabricada o de su teja, ese dato (y no la tabla) es el que debe usarse. Para losas **aligeradas** o nervadas, la norma no da una tabla: usa los datos del proyecto o del fabricante (en la calculadora, la opción «Valor propio»).
+</Callout>
+
+## B.3.4 — Elementos no estructurales
+
+Para las cargas de materiales de construcción **no estructurales**, los elementos se dividen en **horizontales** y **verticales** (<NormaRef s="B.3.4" pag="B-10" />).
+
+### B.3.4.1 — Elementos no estructurales horizontales
+
+Son aquellos cuya dimensión vertical es **mucho menor** que las horizontales y que están aplicados, soportados, fijados o anclados a las losas o a la cubierta (<NormaRef s="B.3.4.1" pag="B-10" />). Incluyen formaleta permanente, morteros de afinado, rellenos de piso, acabados de piso, rellenos en cubiertas inclinadas, elementos de cubierta, tejas, membranas impermeables, aislamientos térmicos, claraboyas, cielo raso, alistados y ductos de servicios.
+
+Según la nota del texto:
+
+- Se consideran como **cargas verticales uniformes por unidad de área** de superficie o de proyección horizontal, aplicadas en las zonas donde se localizan.
+- Debe usarse la **densidad real** del material y un **espesor realista**. Como guía pueden usarse las densidades de la Tabla B.3.2-1 (multiplicadas por $g$ y por el espesor en m dan N/m²).
+- Las tablas B.3.4.1-1 a B.3.4.1-4 dan valores **mínimos promedio**; hay que considerar la variación por materiales locales y práctica constructiva.
+
+Cuando la norma da la carga **por milímetro de espesor** (o por centímetro en la columna de kgf), se multiplica por el espesor real: por ejemplo, 50 mm de relleno de arena aportan $0.0150 \times 50$ = {(0.015*50).toFixed(2)} kN/m².
+
+<TablaNorma numero="Tabla B.3.4.1-1" titulo="Cargas muertas mínimas de elementos no estructurales horizontales — Cielo raso" pag="B-10" nota="Por m² de área en planta. Tableros de yeso: 0.0080 kN/m² por mm de espesor (8 kgf/m² por cm).">
+
+| Componente | Carga (kN/m²) | Carga (kgf/m²) |
+|---|---:|---:|
+| Canales suspendidas de acero | 0.10 | 10 |
+| Ductos mecánicos | 0.20 | 20 |
+| Entramado metálico suspendido afinado en cemento | 0.70 | 70 |
+| Entramado metálico suspendido afinado en yeso | 0.50 | 50 |
+| Fibras acústicas | 0.10 | 10 |
+| Pañete en yeso o concreto | 0.25 | 25 |
+| Pañete en entramado de madera | 0.80 | 80 |
+| Tableros de yeso | 0.0080 (por mm de espesor) | 8 (por cm de espesor) |
+| Sistema de suspensión de madera | 0.15 | 15 |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla B.3.4.1-2" titulo="Cargas muertas mínimas de elementos no estructurales horizontales — Relleno de pisos" pag="B-10" nota="Por m² de área en planta, por mm de espesor (kN/m²) o por cm de espesor (kgf/m²).">
+
+| Componente | Carga (kN/m²) | Carga (kgf/m²) |
+|---|---:|---:|
+| Arena | 0.0150 (por mm de espesor) | 15 (por cm de espesor) |
+| Concreto con escoria | 0.0200 (por mm de espesor) | 20 (por cm de espesor) |
+| Concreto con piedra | 0.0250 (por mm de espesor) | 25 (por cm de espesor) |
+| Concreto ligero | 0.0150 (por mm de espesor) | 15 (por cm de espesor) |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla B.3.4.1-3" titulo="Cargas muertas mínimas de elementos no estructurales horizontales — Pisos y acabados" pag="B-11" nota="Por m² de área en planta. El acabado de piso en concreto y la pizarra se dan por espesor; el resto son valores para el espesor indicado en el nombre.">
+
+| Componente | Carga (kN/m²) | Carga (kgf/m²) |
+|---|---:|---:|
+| Acabado de piso en concreto | 0.0200 (por mm de espesor) | 20 (por cm de espesor) |
+| Afinado (25 mm) sobre concreto de agregado pétreo | 1.50 | 150 |
+| Baldosa cerámica (20 mm) sobre 12 mm de mortero | 0.80 | 80 |
+| Baldosa cerámica (20 mm) sobre 25 mm de mortero | 1.10 | 110 |
+| Baldosa sobre 25 mm de mortero | 1.10 | 110 |
+| Bloque de asfalto (50 mm), sobre 12 mm de mortero | 1.50 | 150 |
+| Bloque de madera (75 mm) sin relleno | 0.50 | 50 |
+| Bloque de madera (75 mm) sobre 12 mm de mortero | 0.80 | 80 |
+| Durmientes de madera, 20 mm | 0.15 | 15 |
+| Madera densa, 25 mm | 0.20 | 20 |
+| Mármol y mortero sobre concreto de agregado pétreo | 1.60 | 160 |
+| Piso asfáltico o linóleo, 6 mm | 0.05 | 5 |
+| Pizarra | 0.030 (por mm de espesor) | 30 (por cm de espesor) |
+| Terrazzo (25 mm), concreto 50 mm | 1.50 | 150 |
+| Terrazzo (40 mm) directamente sobre la losa | 0.90 | 90 |
+| Terrazzo (25 mm) sobre afinado en concreto | 1.50 | 150 |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla B.3.4.1-4" titulo="Cargas muertas mínimas de elementos no estructurales horizontales — Cubiertas" pag="B-11" nota="Por m² de área en planta. Los aislantes, el entablado y la madera laminada se dan por espesor.">
+
+| Componente | Carga (kN/m²) | Carga (kgf/m²) |
+|---|---:|---:|
+| Cobre o latón | 0.05 | 5 |
+| Cubiertas aislantes: Fibra de vidrio | 0.0020 (por mm de espesor) | 2.0 (por cm de espesor) |
+| Cubiertas aislantes: Tableros de fibra | 0.0030 (por mm de espesor) | 3.0 (por cm de espesor) |
+| Cubiertas aislantes: Perlita | 0.0015 (por mm de espesor) | 1.5 (por cm de espesor) |
+| Cubiertas aislantes: Espuma de poliestireno | 0.0005 (por mm de espesor) | 0.5 (por cm de espesor) |
+| Cubiertas aislantes: Espuma de poliuretano | 0.0010 (por mm de espesor) | 1.0 (por cm de espesor) |
+| Cubiertas corrugadas de asbesto-cemento | 0.20 | 20 |
+| Entablado de madera | 0.0060 (por mm de espesor) | 6.0 (por cm de espesor) |
+| Láminas de yeso, 12 mm | 0.10 | 10 |
+| Madera laminada (según el espesor) | 0.0100 (por mm de espesor) | 10.0 (por cm de espesor) |
+| Membranas impermeables: Bituminosa, cubierta de grava | 0.25 | 25 |
+| Membranas impermeables: Bituminosa, superficie lisa | 0.10 | 10 |
+| Membranas impermeables: Líquido aplicado | 0.05 | 5 |
+| Membranas impermeables: Tela asfáltica de una capa | 0.03 | 3 |
+| Marquesinas, marco metálico, vidrio de 10 mm | 0.40 | 40 |
+| Tableros de fibra, 12 mm | 0.05 | 5 |
+| Tableros de madera, 50 mm | 0.25 | 25 |
+| Tableros de madera, 75 mm | 0.40 | 40 |
+| Tablero metálico, calibre 20 (0.9 mm de espesor nominal) | 0.08 | 8 |
+| Tablero metálico, calibre 18 (1.2 mm de espesor nominal) | 0.08 | 8 |
+| Tablillas (shingles) de asbesto-cemento | 0.20 | 20 |
+| Tablillas (shingles) de asfalto | 0.10 | 10 |
+| Tablillas (shingles) de madera | 0.15 | 15 |
+| Teja de arcilla, incluyendo el mortero | 0.80 | 80 |
+
+</TablaNorma>
+
+### B.3.4.2 — Elementos no estructurales verticales
+
+Son aquellos cuya dimensión vertical es **mucho mayor** que su mínima dimensión horizontal y que están erguidos libremente, soportados por elementos estructurales verticales, fijados a ellos o anclados **solamente a las losas de entrepiso**. Incluyen fachadas, muros no estructurales, particiones, recubrimientos de muros, enchapes, ornamentación arquitectónica, ventanas, puertas y ductos verticales de servicios (<NormaRef s="B.3.4.2" pag="B-12" />).
+
+<Callout tipo="atencion" titulo="Particiones: siempre hay que preverlas">
+En edificaciones donde puedan disponerse particiones, **se debe hacer provisión de carga para ellas**, figuren o no en los planos arquitectónicos (<NormaRef s="B.3.4.2" pag="B-12" />). Un entrepiso diseñado «sin muros» que luego se subdivide es una causa clásica de sobrecarga.
+</Callout>
+
+Los valores de las tablas B.3.4.2-1 a B.3.4.2-5 están en **kN por m² de superficie vertical**. Para obtener la carga distribuida en kN/m se multiplican por la **altura del elemento** en m.
+
+<Ecuacion num="B.3.4.2 (nota)" titulo="Carga lineal de un elemento vertical">
+
+$$
+w\ (\mathrm{kN/m}) = q_v\ (\mathrm{kN/m^2}) \times h\ (\mathrm{m})
+$$
+
+- $q_v$: carga por m² de superficie vertical de las Tablas B.3.4.2-x.
+- $h$: altura del elemento no estructural (m).
+
+</Ecuacion>
+
+<TablaNorma numero="Tabla B.3.4.2-1" titulo="Cargas muertas mínimas de elementos no estructurales verticales — Recubrimiento de muros" pag="B-12" nota="Por m² de superficie vertical (multiplicar por la altura del elemento en m para obtener kN/m).">
+
+| Componente | Carga (kN/m²) | Carga (kgf/m²) |
+|---|---:|---:|
+| Baldosín de cemento | 0.80 | 80 |
+| Entablado de madera | 0.0060 (por mm de espesor) | 6.0 (por cm de espesor) |
+| Madera laminada (según el espesor) | 0.0100 (por mm de espesor) | 10.0 (por cm de espesor) |
+| Tableros aislantes para muros: Espuma de poliestireno | 0.0005 (por mm de espesor) | 0.5 (por cm de espesor) |
+| Tableros aislantes para muros: Espuma de poliuretano | 0.0010 (por mm de espesor) | 1.0 (por cm de espesor) |
+| Tableros aislantes para muros: Fibra o acrílico | 0.0020 (por mm de espesor) | 2.0 (por cm de espesor) |
+| Tableros aislantes para muros: Perlita | 0.0015 (por mm de espesor) | 1.5 (por cm de espesor) |
+| Tableros aislantes para muros: Tableros de fibra | 0.0030 (por mm de espesor) | 3.0 (por cm de espesor) |
+| Tableros de fibra, 12 mm | 0.05 | 5 |
+| Tableros de yeso, 12 mm | 0.10 | 10 |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla B.3.4.2-2" titulo="Cargas muertas mínimas de elementos no estructurales verticales — Particiones livianas" pag="B-12" nota="Por m² de superficie vertical (multiplicar por la altura del elemento en m para obtener kN/m).">
+
+| Componente | Carga (kN/m²) | Carga (kgf/m²) |
+|---|---:|---:|
+| Particiones móviles de acero (altura parcial) | 0.50 | 50 |
+| Particiones móviles de acero (altura total) | 0.20 | 20 |
+| Poste en madera o acero, yeso de 12 mm a cada lado | 0.90 | 90 |
+| Poste en madera, 50 x 100, sin pañetar | 0.30 | 30 |
+| Poste en madera, 50 x 100, pañete por un lado | 0.60 | 60 |
+| Poste en madera, 50 x 100, pañete por ambos lados | 2.00 | 200 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Un valor que llama la atención">
+En la Tabla B.3.4.2-2 la partición de poste en madera 50 × 100 con pañete por **ambos** lados aparece con 2.00 kN/m² (200 kgf/m²), mientras que con pañete por **un** lado es 0.60 y sin pañetar 0.30. Se transcribió tal como está impreso en el PDF; el salto es mayor que el esperado por simple suma de capas, así que conviene verificarlo con el fabricante o con un cálculo propio si la partición es decisiva.
+</Callout>
+
+<TablaNorma numero="Tabla B.3.4.2-3" titulo="Cargas muertas mínimas de elementos no estructurales verticales — Enchapes" pag="B-12" nota="Por m² de superficie vertical y por mm de espesor (kN/m²) o por cm de espesor (kgf/m²).">
+
+| Componente | Carga (kN/m²) | Carga (kgf/m²) |
+|---|---:|---:|
+| Enchape cerámico | 0.015 (por mm de espesor) | 15 (por cm de espesor) |
+| Enchape en arenisca | 0.013 (por mm de espesor) | 13 (por cm de espesor) |
+| Enchape en caliza | 0.015 (por mm de espesor) | 15 (por cm de espesor) |
+| Enchape en granito | 0.017 (por mm de espesor) | 17 (por cm de espesor) |
+
+</TablaNorma>
+
+<TablaNorma numero="Tabla B.3.4.2-4" titulo="Cargas muertas mínimas de elementos no estructurales verticales — Muros (kN/m²)" pag="B-13" nota="Por m² de superficie vertical, según el espesor del muro (100 a 300 mm). Las celdas vacías (—) no tienen valor en la tabla: con relleno de celdas no se da el espesor de 100 mm. La norma imprime también la columna en kgf/m² (ver más abajo).">
+
+| Muro | Valor único | 100 mm | 150 mm | 200 mm | 250 mm | 300 mm |
+|---|---:|---:|---:|---:|---:|---:|
+| Exteriores de paneles (postes de acero o madera): Yeso de 15 mm, aislado, entablado de 10 mm | 1.00 | | | | | |
+| Exteriores de paneles (postes de acero o madera): Exteriores con enchape en ladrillo | 2.50 | | | | | |
+| Mampostería de bloque de arcilla: Pañetado en ambas caras | | 1.80 | 2.50 | 3.10 | 3.80 | 4.40 |
+| Mampostería de bloque de arcilla: Sin pañetar | | 1.30 | 2.00 | 2.60 | 3.30 | 3.90 |
+| Mampostería de bloque de concreto: Sin relleno | | 1.40 | 1.45 | 1.90 | 2.25 | 2.60 |
+| Mampostería de bloque de concreto: Relleno cada 1.2 m | | — | 1.70 | 2.25 | 2.70 | 3.15 |
+| Mampostería de bloque de concreto: Relleno cada 1.0 m | | — | 1.80 | 2.30 | 2.80 | 3.30 |
+| Mampostería de bloque de concreto: Relleno cada 0.8 m | | — | 1.80 | 2.40 | 3.00 | 3.45 |
+| Mampostería de bloque de concreto: Relleno cada 0.6 m | | — | 2.00 | 2.60 | 3.20 | 3.75 |
+| Mampostería de bloque de concreto: Relleno cada 0.4 m | | — | 2.20 | 2.90 | 3.60 | 4.30 |
+| Mampostería de bloque de concreto: Todas las celdas llenas | | — | 3.00 | 4.00 | 5.00 | 6.10 |
+| Mampostería maciza de arcilla: Sin pañetar | | 1.90 | 2.90 | 3.80 | 4.70 | 5.50 |
+| Mampostería maciza de concreto: Sin pañetar | | 2.00 | 3.10 | 4.20 | 5.30 | 6.40 |
+
+</TablaNorma>
+
+<Detalle titulo="Tabla B.3.4.2-4 en kgf/m² (columna de la norma)">
+
+<TablaNorma numero="Tabla B.3.4.2-4 (kgf)" titulo="Muros — carga en kgf/m² por m² de superficie vertical" pag="B-13" nota="Espesor del muro en cm. Cada valor es 100 veces el de la tabla en kN/m².">
+
+| Muro | Valor único | 10 cm | 15 cm | 20 cm | 25 cm | 30 cm |
+|---|---:|---:|---:|---:|---:|---:|
+| Exteriores de paneles (postes de acero o madera): Yeso de 15 mm, aislado, entablado de 10 mm | 100 | | | | | |
+| Exteriores de paneles (postes de acero o madera): Exteriores con enchape en ladrillo | 250 | | | | | |
+| Mampostería de bloque de arcilla: Pañetado en ambas caras | | 180 | 250 | 310 | 380 | 440 |
+| Mampostería de bloque de arcilla: Sin pañetar | | 130 | 200 | 260 | 330 | 390 |
+| Mampostería de bloque de concreto: Sin relleno | | 140 | 145 | 190 | 225 | 260 |
+| Mampostería de bloque de concreto: Relleno cada 1.2 m | | — | 170 | 225 | 270 | 315 |
+| Mampostería de bloque de concreto: Relleno cada 1.0 m | | — | 180 | 230 | 280 | 330 |
+| Mampostería de bloque de concreto: Relleno cada 0.8 m | | — | 180 | 240 | 300 | 345 |
+| Mampostería de bloque de concreto: Relleno cada 0.6 m | | — | 200 | 260 | 320 | 375 |
+| Mampostería de bloque de concreto: Relleno cada 0.4 m | | — | 220 | 290 | 360 | 430 |
+| Mampostería de bloque de concreto: Todas las celdas llenas | | — | 300 | 400 | 500 | 610 |
+| Mampostería maciza de arcilla: Sin pañetar | | 190 | 290 | 380 | 470 | 550 |
+| Mampostería maciza de concreto: Sin pañetar | | 200 | 310 | 420 | 530 | 640 |
+
+</TablaNorma>
+
+</Detalle>
+
+<TablaNorma numero="Tabla B.3.4.2-5" titulo="Cargas muertas mínimas de elementos no estructurales verticales — Ventanas" pag="B-13" nota="Por m² de superficie vertical (multiplicar por la altura del elemento en m para obtener kN/m).">
+
+| Componente | Carga (kN/m²) | Carga (kgf/m²) |
+|---|---:|---:|
+| Muros cortina de vidrio, entramado y marco | 0.50 | 50 |
+| Ventanas, vidrio, entramado y marco | 0.45 | 45 |
+
+</TablaNorma>
+
+#### Cómo se aplican las cargas verticales
+
+Las notas del texto (<NormaRef s="B.3.4.2" pag="B-13" />) dicen que:
+
+- Las cargas de elementos verticales se consideran como **cargas concentradas o distribuidas por unidad de longitud** del elemento no estructural. Como guía se pueden usar las densidades de la Tabla B.3.2-1 ($\rho \cdot g \cdot e \cdot h$, en N/m).
+- La carga de elementos **internos** (muros y particiones interiores) **puede tratarse como carga uniforme vertical por unidad de área** si los elementos secundarios del sistema de piso son capaces de soportar las cargas concentradas o distribuidas que causan, **sin afectar su resistencia o servicio**.
+- Si los elementos verticales tienen **más de un nivel de altura**, sus cargas deben considerarse como concentradas o distribuidas, no como uniformes.
+- La carga de **fachadas y elementos de cerramiento** debe considerarse como **carga distribuida sobre el borde de la losa**.
+
+Para repartir un muro interior en planta se divide su peso total entre el área de la placa:
+
+$$
+q_{\text{planta}} = \frac{q_v \; h \; L}{A_{\text{planta}}}
+$$
+
+con $L$ la longitud total de muro (m) y $A_{\text{planta}}$ el área del entrepiso (m²).
+
+<Ejemplo numero={1} titulo="Carga muerta de un entrepiso de oficinas, con acabados y particiones">
+Un entrepiso de 120 m² en planta tiene losa maciza de concreto reforzado de 12 cm, piso de baldosa cerámica (20 mm) sobre 25 mm de mortero, cielo raso de canales de acero suspendidas con tableros de yeso de 12 mm, y 30 m de partición de poste en madera o acero con yeso de 12 mm a cada lado, de 2.4 m de altura. El perímetro tiene fachada de bloque de arcilla pañetado en ambas caras, de 150 mm y 2.4 m de altura. Calcular la carga muerta uniforme y la carga lineal de la fachada.
+
+<Paso titulo="Peso propio de la losa" ref="B.3.2">
+
+$$
+q_{\text{losa}} = \rho\, g\, e = 2400 \times 9.8 \times 0.12 \times 10^{-3}
+$$
+
+Resultado: $\gamma$ = {e1.gamma.toFixed(2)} kN/m³ → **{e1.losa.toFixed(3)} kN/m²**.
+
+</Paso>
+<Paso titulo="Acabado de piso" ref="Tabla B.3.4.1-3">
+Baldosa cerámica (20 mm) sobre 25 mm de mortero: **{e1.baldosa.toFixed(2)} kN/m²** (valor fijo de la tabla).
+</Paso>
+<Paso titulo="Cielo raso" ref="Tabla B.3.4.1-1">
+Canales suspendidas de acero: {e1.canales.toFixed(2)} kN/m². Tableros de yeso: 0.0080 kN/m² por mm × 12 mm = {e1.yeso.toFixed(3)} kN/m². Suma: **{e1.cielo.toFixed(3)} kN/m²**.
+</Paso>
+<Paso titulo="Particiones repartidas en planta" ref="Tabla B.3.4.2-2, B.3.4.2 nota">
+
+La tabla da {e1.qPart.toFixed(2)} kN/m² de superficie vertical, que por la altura de 2.4 m es {e1.linealPart.toFixed(2)} kN/m de partición. Repartida en los 120 m² de planta:
+
+$$
+q_{\text{part}} = \frac{0.90 \times 2.4 \times 30}{120}
+$$
+
+Resultado: **{e1.part.toFixed(3)} kN/m²** (válido si el sistema de piso resiste las cargas lineales de las particiones).
+
+</Paso>
+<Paso titulo="Carga muerta uniforme total" ref="B.3.1">
+Estructura {e1.losa.toFixed(3)} + baldosa {e1.baldosa.toFixed(2)} + cielo raso {e1.cielo.toFixed(3)} + particiones {e1.part.toFixed(3)} = **{e1.total.toFixed(3)} kN/m²**, es decir, unos {e1.totalKgf.toFixed(0)} kgf/m² con el factor ×100 de las tablas. Los elementos no estructurales aportan {e1.noEstr.toFixed(3)} kN/m² ({(100 * e1.noEstr / e1.total).toFixed(0)} % del total).
+</Paso>
+<Paso titulo="Fachada: carga lineal en el borde" ref="Tabla B.3.4.2-4">
+Bloque de arcilla pañetado en ambas caras, 150 mm: {e1.qMuro.toFixed(2)} kN/m² de superficie × 2.4 m = **{e1.fachada.toFixed(2)} kN/m**, aplicada como carga distribuida sobre el borde de la losa (no se reparte en el área).
+</Paso>
+<Resultado>
+Carga muerta uniforme D = {e1.total.toFixed(2)} kN/m² (placa + acabados + cielo raso + particiones) y carga lineal de fachada de {e1.fachada.toFixed(2)} kN/m sobre el borde. Compruébalo y cámbialo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="carga-muerta" />
+
+### B.3.4.3 — Valores mínimos alternativos para cargas muertas de elementos no estructurales
+
+En edificaciones con **alturas entre pisos terminados menores de 3 m**, se pueden usar los valores de la Tabla B.3.4.3-1, en kN/m² de **área horizontal en planta** y según el tipo de ocupación, **en vez** de los obtenidos con el análisis detallado de los elementos no estructurales (<NormaRef s="B.3.4.3" pag="B-14" />). La tabla separa dos conceptos:
+
+- **Fachada y particiones**: el aporte de muros divisorios y de cerramiento.
+- **Afinado de piso y cubierta**: el aporte de morteros de afinado, rellenos y acabados.
+
+Ambos se **suman** al peso propio de la estructura (que no está en la tabla).
+
+<TablaNorma numero="Tabla B.3.4.3-1" titulo="Valores mínimos alternativos de carga muerta de elementos no estructurales cuando no se efectúe un análisis más detallado" pag="B-14" nota="Por m² de área en planta. Solo para alturas entre pisos terminados menores de 3 m.">
+
+| Ocupación | Descripción | Fachada y particiones (kN/m²) | Afinado de piso y cubierta (kN/m²) | Fachada y particiones (kgf/m²) | Afinado de piso y cubierta (kgf/m²) |
+|---|---|---:|---:|---:|---:|
+| Reunión | Edificaciones con un salón de reunión para menos de 100 personas y sin escenarios | 1.0 | 1.8 | 100 | 180 |
+| Oficinas | Particiones móviles de altura total | 1.0 | 1.8 | 100 | 180 |
+| Oficinas | Particiones fijas de mampostería | 2.0 | 1.8 | 200 | 180 |
+| Educativos | Salones de clase | 2.0 | 1.5 | 200 | 150 |
+| Fábricas | Industrias livianas | 0.8 | 1.6 | 80 | 160 |
+| Institucional | Internados con atención a los residentes | 2.0 | 1.6 | 200 | 160 |
+| Institucional | Prisiones, cárceles, reformatorios y centros de detención | 2.5 | 1.8 | 250 | 180 |
+| Institucional | Guarderías | 2.0 | 1.6 | 200 | 160 |
+| Comercio | Exhibición y venta de mercancías | 1.5 | 1.4 | 150 | 140 |
+| Residencial | Fachada y particiones de mampostería | 3.0 | 1.6 | 300 | 160 |
+| Residencial | Fachada y particiones livianas | 2.0 | 1.4 | 200 | 140 |
+| Almacenamiento | Almacenamiento de materiales livianos | 1.5 | 1.5 | 150 | 150 |
+| Garajes | Garajes para vehículos con capacidad de hasta 2000 kg | 0.2 | 1.0 | 20 | 100 |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Cuándo NO usarla">
+Con altura entre pisos de **3 m o más**, la tabla no es aplicable: hay que hacer el análisis detallado con las tablas B.3.4.1 y B.3.4.2. Tampoco reemplaza el **peso propio de la estructura**, ni los **equipos fijos** (B.3.5).
+</Callout>
+
+<Ejemplo numero={2} titulo="Entrepiso de vivienda con valores mínimos alternativos">
+Un entrepiso residencial con muros de mampostería tiene losa maciza de 12 cm y altura entre pisos terminados de 2.5 m. Calcular la carga muerta con la Tabla B.3.4.3-1 y compararla con la de una oficina con particiones móviles.
+
+<Paso titulo="Verificar que se puede usar la tabla" ref="B.3.4.3">
+Altura entre pisos terminados = 2.5 m, menor de 3 m: **se permite**.
+</Paso>
+<Paso titulo="Valores de la tabla (Residencial, fachada y particiones de mampostería)" ref="Tabla B.3.4.3-1">
+Fachada y particiones: **{e2.alt.fachadaParticiones.toFixed(1)} kN/m²**. Afinado de piso y cubierta: **{e2.alt.afinado.toFixed(1)} kN/m²**. Suma: {e2.alt.total.toFixed(1)} kN/m².
+</Paso>
+<Paso titulo="Sumar el peso propio de la losa" ref="B.3.2">
+Losa maciza de 12 cm: {e2.losa.toFixed(3)} kN/m². Carga muerta total: {e2.losa.toFixed(3)} + {e2.alt.total.toFixed(1)} = **{e2.total.toFixed(3)} kN/m²** (≈ {e2.totalKgf.toFixed(0)} kgf/m²).
+</Paso>
+<Paso titulo="Comparación con otra ocupación" ref="Tabla B.3.4.3-1">
+Para la misma losa en **oficinas con particiones móviles de altura total** la tabla da {e2.aof.fachadaParticiones.toFixed(1)} + {e2.aof.afinado.toFixed(1)} = {e2.aof.total.toFixed(1)} kN/m²: carga total {e2.totalOf.toFixed(3)} kN/m². La mampostería divisoria aporta {(e2.alt.total - e2.aof.total).toFixed(1)} kN/m² más.
+</Paso>
+<Paso titulo="Contraste con un análisis detallado" ref="Tablas B.3.4.1-3, B.3.4.1-1, B.3.4.2-4">
+Con baldosa sobre 25 mm de mortero (1.10), pañete en yeso o concreto en el cielo (0.25) y 30 m de muro de bloque de arcilla pañetado de 100 mm y 2.5 m de altura repartidos en 100 m², el análisis detallado da unos **{e2.det.toFixed(2)} kN/m²** de elementos no estructurales, frente a {e2.alt.total.toFixed(1)} de la tabla alternativa. Aquí la tabla da un valor mayor porque equivale a más muro y acabado del que supusimos. Si se conoce el proyecto arquitectónico, el cálculo detallado puede dar menos, pero entonces esa cantidad de muro y acabado debe respetarse en obra (B.3.6).
+</Paso>
+<Resultado>
+Vivienda con mampostería: **D = {e2.total.toFixed(2)} kN/m²** (losa 12 cm + {e2.alt.total.toFixed(1)} de elementos no estructurales). Oficina con particiones móviles: {e2.totalOf.toFixed(2)} kN/m².
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Peso de un muro: por densidad o con la tabla">
+Calcular la carga por m² de un muro de mampostería de ladrillo macizo de 150 mm, de dos formas, y su carga lineal con 2.4 m de altura.
+
+<Paso titulo="Con la densidad de masa" ref="B.3.2, B.3.4.2 nota">
+
+$$
+q_v = \rho\, g\, e = 1850 \times 9.8 \times 0.15
+$$
+
+Con $\rho$ = {e3.rho} kg/m³ (mampostería de ladrillo macizo, Tabla B.3.2-1): **{e3.porDensidad.toFixed(2)} kN/m²**.
+
+</Paso>
+<Paso titulo="Con la tabla de muros" ref="Tabla B.3.4.2-4">
+Mampostería maciza de arcilla sin pañetar, 150 mm: **{e3.tabla.toFixed(2)} kN/m²**. La tabla da un valor {(100 * (e3.tabla / e3.porDensidad - 1)).toFixed(0)} % mayor que el de la densidad; la norma no detalla la razón (probablemente refleja el mortero de pega y las variaciones constructivas) y ambos son valores mínimos promedio.
+</Paso>
+<Paso titulo="Carga lineal" ref="B.3.4.2 nota">
+Con la tabla: {e3.tabla.toFixed(2)} × 2.4 = **{e3.lineal.toFixed(2)} kN/m**. Un muro de bloque de arcilla pañetado de 150 mm ({e3.bloque.toFixed(2)} kN/m² en la tabla) pesaría {e3.linealBloque.toFixed(2)} kN/m: es más liviano que el muro de ladrillo macizo.
+</Paso>
+<Resultado>
+El valor de la tabla ({e3.tabla.toFixed(2)} kN/m²) es el de uso normal; el cálculo por densidad sirve de verificación o para materiales que la tabla no incluye.
+</Resultado>
+</Ejemplo>
+
+## B.3.5 — Equipos fijos
+
+Dentro de las cargas muertas debe incluirse la **masa de todos los equipos fijos** apoyados sobre elementos estructurales: ascensores, bombas hidráulicas, transformadores, equipos de aire acondicionado y ventilación, y otros (<NormaRef s="B.3.5" pag="B-14" />). La norma no da una tabla para ellos: en la práctica el peso lo suministra el fabricante. Como buena práctica (no es texto de la norma), conviene considerar el equipo en operación y la posición real de sus apoyos, normalmente como cargas concentradas o lineales.
+
+<Callout tipo="practica">
+Los equipos de cubierta (condensadores, tanques, ascensores y su cuarto de máquinas) son los que más se olvidan. En la calculadora puedes sumarlos, repartidos en el área, con «Otras cargas permanentes», pero es mejor modelarlos como cargas puntuales en su ubicación real.
+</Callout>
+
+## B.3.6 — Consideraciones especiales
+
+Los profesionales que participan en la construcción y en la supervisión técnica, y el propietario, deben ser **conscientes de los valores de carga muerta usados en el diseño** y tomar las precauciones necesarias para **verificar en obra** que los pesos de los materiales **no superen** los valores usados en el diseño. Es responsabilidad de quien suscribe como constructor la licencia de construcción el cumplimiento de este requisito (<NormaRef s="B.3.6" pag="B-14" />; ver también <NormaRef s="A.1.3.6.5" />).
+
+Esto significa que la carga muerta de diseño es también un **límite de obra**: sobrecargar con rellenos más gruesos, enchapes pesados o muros adicionales exige revisar la estructura.
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **No multiplicar por la altura** los valores de las tablas verticales: están en kN por m² de superficie, no por metro de muro.
+- **Confundir «por mm» con «por cm»**: en kN/m² los aislantes y rellenos se dan por mm de espesor, y en kgf/m² por cm. Mezclar columnas multiplica o divide por 10.
+- **Olvidar el peso propio** al usar la Tabla B.3.4.3-1: esa tabla solo cubre fachada, particiones y afinados.
+- **Usar los valores alternativos con altura de 3 m o más**: no está permitido (<NormaRef s="B.3.4.3" pag="B-14" />).
+- **No prever particiones** porque «no están en los planos»: la norma exige provisión de carga para ellas.
+- **Repartir la fachada en el área**: debe tratarse como carga distribuida sobre el borde de la losa, igual que los muros de más de un nivel.
+- **Ignorar equipos fijos y preesfuerzo**: son parte de la carga muerta (B.3.1 y B.3.5).
+- **Tomar espesores nominales en lugar de reales** de afinados y rellenos, que en obra casi siempre son mayores.
+- **Usar kgf como si fuera kN**: 1 kN ≈ {kNm2AKgfm2Exacto(1).toFixed(1)} kgf; las tablas redondean a 100.
+</Callout>
+
+## Resumen en una línea
+
+**Carga muerta = estructura (ρ·g·e) + acabados y cielo raso (tablas B.3.4.1) + muros, particiones y fachada (tablas B.3.4.2, por m² de superficie × altura) + equipos fijos, o bien los valores alternativos de la Tabla B.3.4.3-1 si la altura entre pisos es menor de 3 m**, y en obra no se debe superar lo supuesto en el diseño.

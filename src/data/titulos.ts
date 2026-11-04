@@ -30,9 +30,9 @@ export const TITULOS: readonly Titulo[] = [
     letra: 'B',
     slug: 'titulo-b',
     nombre: 'Cargas',
-    resumen: 'Cargas muertas, vivas, de viento, empuje de tierra y combinaciones de carga.',
+    resumen: 'Requisitos generales, combinaciones de carga, cargas muertas, vivas, empuje de tierra y fuerzas de viento.',
     paginasNorma: 'B-1',
-    estado: 'proximamente',
+    estado: 'disponible',
     acento: 'text-chart-2',
   },
   {

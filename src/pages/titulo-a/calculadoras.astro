@@ -1,10 +1,12 @@
 ---
-import TituloALayout from '../../layouts/TituloALayout.astro';
+import TituloLayout from '../../layouts/TituloLayout.astro';
 import CalculadoraEmbed from '../../components/content/CalculadoraEmbed.astro';
-import { CALCULADORAS } from '../../data/calculadoras';
+import { calculadorasDe } from '../../data/calculadoras';
+
+const CALCULADORAS = calculadorasDe('a');
 ---
 
-<TituloALayout title="Calculadoras del Título A" description="Calculadoras interactivas basadas en las fórmulas y tablas del Título A de la NSR-10: espectro, período, fuerza horizontal equivalente, deriva y más." ancho="amplio">
+<TituloLayout titulo="a" title="Calculadoras del Título A" description="Calculadoras interactivas basadas en las fórmulas y tablas del Título A de la NSR-10: espectro, período, fuerza horizontal equivalente, deriva y más." ancho="amplio">
   <header class="mb-8">
     <p class="text-sm font-semibold uppercase tracking-wider text-primary">Título A</p>
     <h1 class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Calculadoras</h1>
@@ -19,4 +21,4 @@ import { CALCULADORAS } from '../../data/calculadoras';
   <div class="space-y-2">
     {CALCULADORAS.map((c) => <CalculadoraEmbed id={c.id} />)}
   </div>
-</TituloALayout>
+</TituloLayout>

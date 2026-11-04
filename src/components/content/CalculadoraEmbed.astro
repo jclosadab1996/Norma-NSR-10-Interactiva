@@ -16,6 +16,14 @@ import DerivaCheck from '../calc/DerivaCheck';
 import SeparacionSismica from '../calc/SeparacionSismica';
 import UmbralDano from '../calc/UmbralDano';
 import Municipios from '../calc/Municipios';
+import CombinacionesCarga from '../calc/CombinacionesCarga';
+import CargaMuerta from '../calc/CargaMuerta';
+import ReduccionCargaViva from '../calc/ReduccionCargaViva';
+import EmpozamientoGranizo from '../calc/EmpozamientoGranizo';
+import EmpujeTierra from '../calc/EmpujeTierra';
+import VientoSimplificado from '../calc/VientoSimplificado';
+import VientoExposicion from '../calc/VientoExposicion';
+import VientoPresion from '../calc/VientoPresion';
 
 interface Props {
   id: string;
@@ -39,6 +47,14 @@ const meta = calculadoraPorId(id);
       {id === 'separacion-sismica' && <SeparacionSismica client:visible />}
       {id === 'umbral-dano' && <UmbralDano client:visible />}
       {id === 'municipios' && <Municipios client:visible />}
+      {id === 'combinaciones-carga' && <CombinacionesCarga client:visible />}
+      {id === 'carga-muerta' && <CargaMuerta client:visible />}
+      {id === 'reduccion-carga-viva' && <ReduccionCargaViva client:visible />}
+      {id === 'empozamiento-granizo' && <EmpozamientoGranizo client:visible />}
+      {id === 'empuje-tierra' && <EmpujeTierra client:visible />}
+      {id === 'viento-simplificado' && <VientoSimplificado client:visible />}
+      {id === 'viento-exposicion' && <VientoExposicion client:visible />}
+      {id === 'viento-presion' && <VientoPresion client:visible />}
     </div>
   ) : (
     <section id={`calc-${id}`} class="not-prose my-8 scroll-mt-24 rounded-2xl border border-chart-2/40 bg-card shadow-sm" aria-label={`Calculadora: ${meta?.nombre ?? id}`}>
@@ -49,15 +65,23 @@ const meta = calculadoraPorId(id);
       </header>
       <div class="p-4 sm:p-5">
         {id === 'zona-amenaza' && <ZonaAmenaza client:visible />}
-        {id === 'efectos-locales' && <EfectosLocales client:visible />}
-        {id === 'espectro-diseno' && <EspectroDiseno client:visible />}
-        {id === 'coeficiente-r' && <CoeficienteR client:visible />}
-        {id === 'periodo-fundamental' && <PeriodoFundamental client:visible />}
-        {id === 'fuerza-horizontal' && <FuerzaHorizontal client:visible />}
-        {id === 'deriva' && <DerivaCheck client:visible />}
-        {id === 'separacion-sismica' && <SeparacionSismica client:visible />}
-        {id === 'umbral-dano' && <UmbralDano client:visible />}
-        {id === 'municipios' && <Municipios client:visible />}
+      {id === 'efectos-locales' && <EfectosLocales client:visible />}
+      {id === 'espectro-diseno' && <EspectroDiseno client:visible />}
+      {id === 'coeficiente-r' && <CoeficienteR client:visible />}
+      {id === 'periodo-fundamental' && <PeriodoFundamental client:visible />}
+      {id === 'fuerza-horizontal' && <FuerzaHorizontal client:visible />}
+      {id === 'deriva' && <DerivaCheck client:visible />}
+      {id === 'separacion-sismica' && <SeparacionSismica client:visible />}
+      {id === 'umbral-dano' && <UmbralDano client:visible />}
+      {id === 'municipios' && <Municipios client:visible />}
+      {id === 'combinaciones-carga' && <CombinacionesCarga client:visible />}
+      {id === 'carga-muerta' && <CargaMuerta client:visible />}
+      {id === 'reduccion-carga-viva' && <ReduccionCargaViva client:visible />}
+      {id === 'empozamiento-granizo' && <EmpozamientoGranizo client:visible />}
+      {id === 'empuje-tierra' && <EmpujeTierra client:visible />}
+      {id === 'viento-simplificado' && <VientoSimplificado client:visible />}
+      {id === 'viento-exposicion' && <VientoExposicion client:visible />}
+      {id === 'viento-presion' && <VientoPresion client:visible />}
       </div>
       {meta && <p class="border-t px-5 py-2 text-xs text-muted-foreground">{meta.descripcion}</p>}
     </section>

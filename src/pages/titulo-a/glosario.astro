@@ -1,10 +1,10 @@
 ---
-import TituloALayout from '../../layouts/TituloALayout.astro';
+import TituloLayout from '../../layouts/TituloLayout.astro';
 import Glosario from '../../components/calc/Glosario';
 import { definiciones, simbolos } from '../../data/glosario';
 ---
 
-<TituloALayout
+<TituloLayout titulo="a"
   title="Glosario y nomenclatura del Título A"
   description="Todas las definiciones (A.13.1) y los símbolos (A.13.2) del Título A de la NSR-10, con búsqueda, filtro por tema e índice alfabético."
   actual="a13"
@@ -20,4 +20,4 @@ import { definiciones, simbolos } from '../../data/glosario';
     </p>
   </header>
   <Glosario client:load />
-</TituloALayout>
+</TituloLayout>

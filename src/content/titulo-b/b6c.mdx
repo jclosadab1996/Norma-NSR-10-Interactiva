@@ -1,0 +1,864 @@
+---
+codigo: 'B.6c'
+tipo: capitulo
+titulo: 'Fuerzas de viento (III): coeficientes de presión, fuerzas de diseño y túnel de viento'
+resumen: 'Cómo convertir la presión por velocidad en presiones de diseño: coeficientes de presión interna y externa, ecuaciones p = q·G·Cp − qi·GCpi para edificios cerrados y parcialmente cerrados, edificios abiertos, muros libres, otras estructuras y cuándo recurrir al túnel de viento.'
+objetivos:
+  - 'Clasificar el cerramiento y elegir el coeficiente de presión interna GCpi'
+  - 'Leer Cp en muros y cubiertas y armar la presión de diseño del SPRFV de un edificio rígido'
+  - 'Distinguir las ecuaciones del SPRFV, de edificios bajos, de componentes y revestimientos, parapetos y aleros'
+  - 'Calcular fuerzas en edificios abiertos, muros libres, vallas y otras estructuras con coeficientes netos o de fuerza'
+  - 'Saber cuándo se exige el ensayo en túnel de viento y qué condiciones debe cumplir'
+paginasNorma: 'B-32 a B-38 (figuras en B-49 a B-78)'
+paginaPdf: 251
+orden: 8
+calculadoras: ['viento-presion']
+nivel: 'avanzado'
+---
+
+import { kz, presionVelocidad, factorImportanciaViento } from '../../lib/nsr10/viento';
+import {
+  presionesEdificioRigido,
+  cpCubiertaBarlovento,
+  cpMuroSotavento,
+  gcpf,
+  gcpMuro,
+  anchoZonaA,
+  presionBajaAltura,
+  presionComponentes,
+  presionParapeto,
+  presionAleroBarlovento,
+  cfMuroLibreAB,
+  fuerzaMuroLibre,
+  reduccionRi,
+  momentoTorsional,
+  factorEquipoCubierta,
+  G_RIGIDA,
+} from '../../lib/nsr10/vientoPresiones';
+
+export const ej1 = (() => {
+  const V = 30, h = 12, L = 20, B = 40, theta = 15, Kzt = 1, Kd = 0.85;
+  const I = factorImportanciaViento('II');
+  const Kh = kz('B', h);
+  const qh = presionVelocidad({ V, Kz: Kh, Kzt, Kd, I });
+  const kz6 = kz('B', 6);
+  const qz6 = presionVelocidad({ V, Kz: kz6, Kzt, Kd, I });
+  const res = presionesEdificioRigido({ qh, qzBarlovento: qh, cerramiento: 'cerrado', L, B, h, theta, direccion: 'normal' });
+  const f = (id) => res.filas.find((x) => x.clave === id);
+  const pb6 = G_RIGIDA * 0.8 * qz6;
+  const pbh = G_RIGIDA * 0.8 * qh;
+  const qp = presionVelocidad({ V, Kz: kz('B', 13), Kzt, Kd, I });
+  return {
+    V, h, L, B, theta, I, Kh, qh, kz6, qz6, pb6, pbh, hl: h / L, lb: L / B, res, qp,
+    bar: f('barlovento'), sot: f('sotavento'), lat: f('lateral'), cb: f('cubierta-barlovento'), cs: f('cubierta-sotavento'),
+    cpb: cpCubiertaBarlovento(h / L, theta), cpSot: cpMuroSotavento(L / B),
+    pParBar: presionParapeto(qp, 'barlovento'), pParSot: presionParapeto(qp, 'sotavento'),
+    pAlero: presionAleroBarlovento(qh),
+  };
+})();
+
+export const ej2 = (() => {
+  const { qh, qz6, h, L, B, theta } = ej1;
+  const res = presionesEdificioRigido({ qh, qzBarlovento: qh, qiPositiva: qz6, cerramiento: 'parcial', L, B, h, theta, direccion: 'normal' });
+  const f = (id) => res.filas.find((x) => x.clave === id);
+  const resCons = presionesEdificioRigido({ qh, qzBarlovento: qh, cerramiento: 'parcial', L, B, h, theta, direccion: 'normal' });
+  const g = (id) => resCons.filas.find((x) => x.clave === id);
+  const ri = reduccionRi(40, L * B * h);
+  return { res, bar: f('barlovento'), cb: f('cubierta-barlovento'), cs: f('cubierta-sotavento'), sot: f('sotavento'), consCb: g('cubierta-barlovento'), ri };
+})();
+
+export const ej3 = (() => {
+  const V = 30, h = 6, L = 20, B = 30, theta = 20, Kd = 0.85;
+  const I = factorImportanciaViento('I');
+  const Kh = kz('C', h, 1);
+  const qh = presionVelocidad({ V, Kz: Kh, Kd, I });
+  const gci = 0.18;
+  const zonas = ['1', '2', '2E', '3'].map((z) => {
+    const g = gcpf(z, theta);
+    return { z, g, pMas: presionBajaAltura({ qh, gcpf: g, gcpi: gci }), pMenos: presionBajaAltura({ qh, gcpf: g, gcpi: -gci }) };
+  });
+  const a = anchoZonaA(Math.min(L, B), h);
+  const area = 2;
+  const gm = gcpMuro(area, '5', theta);
+  const pPos = presionComponentes({ qh, gcp: gm.positivo, gcpi: -gci }); // presión externa + presión interna negativa
+  const pNeg = presionComponentes({ qh, gcp: gm.negativo, gcpi: gci }); // succión externa + presión interna positiva
+  const hl = h / L;
+  return { V, h, L, B, theta, I, Kh, qh, zonas, a, area, gm, pPos, pNeg, hl };
+})();
+
+export const ej4 = (() => {
+  const V = 30, h = 5, Bv = 12, s = 3;
+  const Kh = kz('C', h);
+  const qh = presionVelocidad({ V, Kz: Kh, Kd: 0.85, I: 1 });
+  const sh = s / h, bs = Bv / s;
+  const cf = cfMuroLibreAB(sh, bs);
+  const As = Bv * s;
+  const F = fuerzaMuroLibre({ qh, g: G_RIGIDA, cf, as: As });
+  return { V, h, Bv, s, Kh, qh, sh, bs, cf, As, F };
+})();
+
+export const ejEquipo = factorEquipoCubierta(15, 40, 12);
+export const ejTorsion = (() => {
+  const { bar, sot, B } = ej1;
+  // Presión de barlovento y sotavento (valores con GCpi = +0.18 → los de la condición gobernante de cada cara)
+  const pw = bar.casos[0].pConGcpiMenos;
+  const pl = Math.abs(sot.casos[0].pConGcpiMas);
+  return { pw, pl, mt2: momentoTorsional(2, pw, pl, B), mt4: momentoTorsional(4, pw, pl, B) };
+})();
+
+## Idea central del capítulo
+
+El Método 2 de B.6.5 (procedimiento analítico) ya te dio la **presión por velocidad** $q_z$ (ecuación B.6.5-13, vista en B.6a/B.6b) y el factor de efecto de ráfaga $G$. Este tramo del capítulo responde la pregunta práctica que sigue: **¿qué presión neta actúa sobre cada superficie del edificio?** La respuesta se arma con tres ingredientes:
+
+1. **La clasificación del cerramiento** (cerrado, parcialmente cerrado o abierto) → coeficiente de presión interna $GC_{pi}$ (Figura B.6.5-2).
+2. **El coeficiente de presión externa** $C_p$ (o $GC_p$, $GC_{pf}$, $C_N$, $C_f$ según el caso) que depende de la forma, de la relación $h/L$, de $L/B$ y del ángulo de cubierta $\theta$ (Figuras B.6.5-3 a B.6.5-19).
+3. **La ecuación de combinación** de B.6.5.12 a B.6.5.15, que multiplica y suma lo anterior con el signo correcto.
+
+<Callout tipo="importante" titulo="Convención de signos y combinación">
+Una presión **positiva** actúa **hacia** la superficie y una **negativa** actúa **hacia afuera** (<NormaRef s="B.6.5.12.1.1" pag="B-33" />). Las presiones internas y externas **se combinan algebraicamente** para hallar el caso más crítico (<NormaRef s="B.6.5.12.1.2" pag="B-33" />): por eso casi siempre hay que evaluar **dos** condiciones, una con $+GC_{pi}$ y otra con $-GC_{pi}$.
+</Callout>
+
+Dos conceptos de estructura recorren todo el texto:
+
+- **SPRFV** (Sistema Principal de Resistencia a Fuerzas de Viento): pórticos, muros de cortante, diafragmas… que reciben la carga **global** del edificio. Se calcula con $C_p$ y se aplica sobre áreas grandes.
+- **Componentes y revestimientos**: fachadas, vidrios, correas, paneles de cubierta, anclajes… que reciben presiones **locales** más intensas. Se calculan con $GC_p$, que ya incluye el efecto de ráfaga y depende del **área efectiva** de viento.
+
+<Callout tipo="nota" titulo="Mapa de coeficientes y figuras (Método 2)">
+
+| Caso | Qué se calcula | Ecuación | Figura de coeficientes |
+|---|---|---|---|
+| Edificio cerrado o parcialmente cerrado, SPRFV, rígido | $p$ en muros y cubiertas | B.6.5-15 | $C_p$: B.6.5-3 (cubiertas en arco: B.6.5-5; domos: B.6.5-4) |
+| Edificio bajo, SPRFV | $p$ por zonas | B.6.5-16 | $GC_{pf}$: B.6.5-7 |
+| Edificio flexible, SPRFV | $p$ con $G_f$ | B.6.5-17 | $C_p$: B.6.5-3 |
+| Componentes y revestimientos, $h \le 18$ m | $p$ por zonas y área | B.6.5-20 | $GC_p$: B.6.5-8A a B.6.5-13 |
+| Componentes y revestimientos, $h > 18$ m | $p$ por zonas y área | B.6.5-21 | $GC_p$: B.6.5-14 |
+| Edificio abierto con cubierta libre | $p$ neta | B.6.5-23 y B.6.5-24 | $C_N$: B.6.5-15A a B.6.5-16C |
+| Muros libres y vallas macizas | Fuerza $F$ | B.6.5-25 | $C_f$: B.6.5-17 |
+| Otras estructuras (chimeneas, tanques, vallas abiertas, torres) | Fuerza $F$ | B.6.5-26 | $C_f$: B.6.5-18 y B.6.5-19 |
+
+</Callout>
+
+## Del capítulo anterior: presión por velocidad $q_z$
+
+Para situar el resto, recuerda que la presión por velocidad a la altura $z$ se calcula con la ecuación B.6.5-13 (<NormaRef s="B.6.5.10" pag="B-32" />): $q_z = 0.613\,K_z K_{zt} K_d V^2 I$ en N/m² con $V$ en m/s, y que $q_h$ es el mismo valor evaluado a la altura media de la cubierta $h$. El coeficiente 0.613 se usa siempre que no haya registros climáticos suficientes para justificar otro valor. También recuerda la regla de clasificaciones múltiples (<NormaRef s="B.6.5.9.4" pag="B-31" />): si un edificio cumple a la vez las definiciones de "abierto" y "parcialmente cerrado", se clasifica como **abierto**; si no cumple ninguna de las dos, es **cerrado**.
+
+## B.6.5.11 — Coeficientes de presión y fuerza
+
+### B.6.5.11.1 — Coeficiente de presión interna
+
+Los coeficientes $GC_{pi}$ se leen de la Figura B.6.5-2 según la clasificación del cerramiento de B.6.5.9 (<NormaRef s="B.6.5.11.1" pag="B-32" />):
+
+<TablaNorma numero="Figura B.6.5-2" titulo="Coeficientes de presión interna GCpi" pag="B-49" nota="Signo positivo: presión sobre las superficies internas; negativo: succión. Los valores se usan con qz o qh según B.6.5.12 (nota 2). Se deben considerar dos casos: (i) un valor positivo de GCpi sobre todas las superficies internas y (ii) un valor negativo de GCpi sobre todas las superficies internas (nota 3).">
+
+| Clasificación del cerramiento | $GC_{pi}$ |
+|---|---|
+| Edificios abiertos | 0.00 |
+| Edificios parcialmente cerrados | +0.55 y −0.55 |
+| Edificios cerrados | +0.18 y −0.18 |
+
+</TablaNorma>
+
+Un edificio **parcialmente cerrado** es el que tiene una gran abertura en la pared a barlovento (por ejemplo, una puerta rota o abierta durante la tormenta): la presión interna se "infla" y casi triplica la de un edificio cerrado. De ahí que la clasificación pese tanto en el diseño. Las condiciones formales (<NormaRef s="B.6.2" pag="B-22" />) son $A_o > 1.10\,A_{oi}$, $A_o > 0.37$ m² o $A_o > 0.01\,A_g$ (el menor) y $A_{oi}/A_{gi} \le 0.20$; el edificio es **abierto** si $A_o \ge 0.8\,A_g$ en cada pared.
+
+<Figura src="/img/titulo-b/figura-b6-5-2-gcpi.png" alt="Tabla de la Figura B.6.5-2 con los coeficientes de presión interna según la clasificación del cerramiento" numero="Figura B.6.5-2" pie="Coeficientes de presión interna GCpi (PDF)." pag="B-49" />
+
+#### B.6.5.11.1.1 — Factor de reducción $R_i$ para edificios de gran volumen
+
+Si el edificio es **parcialmente cerrado** y tiene **un solo espacio sin particiones** (una bodega, un coliseo), el aire interior tiene tanto volumen que la presión interna no alcanza a desarrollarse completamente: $GC_{pi}$ se multiplica por $R_i \le 1.0$ (<NormaRef s="B.6.5.11.1.1" pag="B-32" />).
+
+<Ecuacion num="B.6.5-14" titulo="Factor de reducción Ri por gran volumen">
+
+$$
+R_i = 0.5\left(1+\frac{1}{\sqrt{1+\dfrac{V_i}{11000\,A_{og}}}}\right)\le 1.0
+$$
+
+- $A_{og}$: área total de aberturas en el cerramiento (paredes y cubierta), en m².
+- $V_i$: volumen interno sin particiones, en m³.
+
+</Ecuacion>
+
+$R_i$ vale 1.0 cuando el volumen es pequeño frente a las aberturas y tiende a 0.5 cuando es muy grande. En el edificio del Ejemplo 2 ($A_{og}$ = 40 m², $V_i$ = {(ej1.L * ej1.B * ej1.h).toFixed(0)} m³) $R_i$ = {ej2.ri.toFixed(3)}: casi no reduce.
+
+<Callout tipo="atencion" titulo="Constante 11000 impresa en el PDF">
+El PDF imprime el coeficiente **11000** en el denominador. La fórmula equivalente de ASCE 7 en unidades SI usa un número menor (≈ 6950); no se corrige aquí porque el texto de la NSR-10 es claro, pero conviene que el diseñador lo tenga presente: con 11000 la reducción es algo menos fuerte que con 6950.
+</Callout>
+
+### B.6.5.11.2 — Coeficientes de presión externa
+
+**SPRFV** (<NormaRef s="B.6.5.11.2.1" pag="B-32" />): los $C_p$ salen de las Figuras B.6.5-3 (muros y cubiertas), B.6.5-4 (domos) y B.6.5-5 (cubiertas en arco). Para edificios bajos se dan combinados con el factor de ráfaga en la Figura B.6.5-7 ($GC_{pf}$).
+
+**Componentes y revestimientos** (<NormaRef s="B.6.5.11.2.2" pag="B-32" />): los $GC_p$ salen de las Figuras B.6.5-8A a B.6.5-14.
+
+<Callout tipo="importante" titulo="No separes G de Cp en los coeficientes combinados">
+Los productos $GC_{pf}$ (Fig. B.6.5-7) y $GC_p$ (Figs. B.6.5-8A a B.6.5-14) **ya incluyen** el efecto de ráfaga. No les apliques $G$ de nuevo ni los descompongas en $G$ y $C_p$ (<NormaRef s="B.6.5.11.2.1" pag="B-32" />, <NormaRef s="B.6.5.9" pag="B-31" />).
+</Callout>
+
+#### Coeficientes $C_p$ para el SPRFV (Figura B.6.5-3)
+
+Se usan con $q_z$ (muro a barlovento) o con $q_h$ (el resto). Los muros se leen con $L/B$, donde $L$ es la dimensión paralela al viento y $B$ la normal al viento:
+
+<TablaNorma numero="Figura B.6.5-3 (muros)" titulo="Coeficientes de presión externa Cp en muros" pag="B-51" nota="L: dimensión horizontal paralela al viento; B: normal al viento. Se permite interpolar linealmente en L/B (nota 2). En el PDF la columna 'Usar con' del barlovento dice q2; se entiende qz.">
+
+| Superficie | $L/B$ | $C_p$ | Usar con |
+|---|---|---:|---|
+| Muro a barlovento | Todos los valores | 0.8 | $q_z$ |
+| Muro a sotavento | 0 a 1 | −0.5 | $q_h$ |
+| Muro a sotavento | 2 | −0.3 | $q_h$ |
+| Muro a sotavento | 4 o más | −0.2 | $q_h$ |
+| Muros laterales | Todos los valores | −0.7 | $q_h$ |
+
+</TablaNorma>
+
+Para las **cubiertas** se usa siempre $q_h$. Con el viento **normal a la cumbrera** y $\theta \ge 10°$ la norma da, para cada $h/L$, **dos filas** de valores a barlovento (una de succión fuerte y otra de succión menor o presión): las dos deben investigarse, porque la cubierta a barlovento puede estar sometida a presión o a succión y debe diseñarse para ambas (nota 3).
+
+<TablaNorma numero="Figura B.6.5-3 (cubierta a barlovento)" titulo="Cp en cubiertas a barlovento, viento normal a la cumbrera, θ ≥ 10°" pag="B-51" nota="Cada h/L tiene dos filas (1 y 2): ambas se investigan. El 0.0 (*) se da para fines de interpolación. Se interpola linealmente en h/L y θ solo entre valores del mismo signo; donde no hay valores del mismo signo, se toma 0.0 (nota 2). (**) −1.3 puede reducirse linealmente con el área de aplicación: factor 1.0 para menos de 10 m², 0.9 para 20 m² y 0.8 para más de 100 m². (#) Para θ ≥ 60°, Cp = 0.01·θ.">
+
+| $h/L$ | Fila | $\theta$ = 10° | 15° | 20° | 25° | 30° | 35° | 45° | ≥ 60° |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ≤ 0.25 | 1 | −0.70 | −0.50 | −0.30 | −0.20 | −0.20 | 0.0* | 0.40 | 0.01·θ |
+| ≤ 0.25 | 2 | −0.18 | 0.0* | 0.20 | 0.30 | −0.30 (¹) | 0.40 | 0.40 | 0.01·θ |
+| 0.50 | 1 | −0.90 | −0.70 | −0.40 | −0.30 | −0.20 | −0.20 | 0.0* | 0.01·θ |
+| 0.50 | 2 | −0.18 | −0.18 | 0.0* | 0.20 | 0.20 | 0.30 | 0.40 | 0.01·θ |
+| ≥ 1.0 | 1 | −1.3** | −1.00 | −0.70 | −0.50 | −0.30 | −0.20 | 0.0* | 0.01·θ |
+| ≥ 1.0 | 2 | −0.18 | −0.18 | −0.18 | 0.0* | 0.20 | 0.20 | 0.30 | 0.01·θ |
+
+</TablaNorma>
+
+(¹) **Anomalía del PDF:** en $h/L \le 0.25$ y $\theta$ = 30° la fila 2 imprime −0.30, rompiendo la tendencia de la fila (0.30 a 25° y 0.40 a 35°); la Figura 6-6 de ASCE 7-05 da +0.30. La calculadora y la librería usan el **valor impreso** y avisan cuando el cálculo toca esa celda.
+
+<TablaNorma numero="Figura B.6.5-3 (cubierta a sotavento)" titulo="Cp en cubiertas a sotavento, viento normal a la cumbrera, θ ≥ 10°" pag="B-51" nota="La columna ≥ 20° vale para cualquier ángulo mayor. Se interpola linealmente en h/L y θ.">
+
+| $h/L$ | $\theta$ = 10° | 15° | ≥ 20° |
+|---|---:|---:|---:|
+| ≤ 0.25 | −0.30 | −0.50 | −0.60 |
+| 0.50 | −0.50 | −0.50 | −0.60 |
+| ≥ 1.0 | −0.70 | −0.60 | −0.60 |
+
+</TablaNorma>
+
+Si el viento es **normal a la cumbrera con $\theta$ menor de 10°** o es **paralelo a la cumbrera para cualquier $\theta$**, la cubierta se divide en franjas medidas desde el borde de barlovento:
+
+<TablaNorma numero="Figura B.6.5-3 (viento normal a la cumbrera con θ menor de 10° o paralelo a la cumbrera)" titulo="Cp por franjas desde el borde de barlovento" pag="B-51" nota="Cada franja tiene dos condiciones (succión y −0.18). (**) −1.3 es reducible con el área, igual que en la tabla anterior. Para h/L entre 0.5 y 1.0 se interpola (nota 2). Con θ ≤ 10° se usa la altura del alero como h.">
+
+| Franja (distancia desde el borde de barlovento) | $h/L \le 0.5$ | $h/L \ge 1.0$ |
+|---|---|---|
+| 0 a $h/2$ | −0.9 y −0.18 | −1.3** y −0.18 |
+| $h/2$ a $h$ | −0.9 y −0.18 | −0.7 y −0.18 |
+| $h$ a $2h$ | −0.5 y −0.18 | −0.7 y −0.18 |
+| mayor que $2h$ | −0.3 y −0.18 | −0.7 y −0.18 |
+
+</TablaNorma>
+
+<Detalle titulo="Notas de la Figura B.6.5-3 que conviene recordar">
+
+- Para cubiertas de **una sola pendiente**, toda la superficie es de barlovento o de sotavento (nota 4).
+- Para **edificios flexibles** se usa $G_f$ en lugar de $G$ (nota 5, <NormaRef s="B.6.5.8.2" />).
+- **Domos** (superficies abovedadas) usan la Figura B.6.5-4 y **cubiertas en arco** la B.6.5-5 (nota 6).
+- En **mansardas** (cubiertas con superficie horizontal superior y otra inclinada a sotavento) la superior y la inclinada a sotavento se consideran superficie a sotavento (nota 8).
+- Para el SPRFV en la cubierta de **pórticos resistentes a momento**, el cortante horizontal total no debe ser menor que el calculado despreciando las fuerzas de viento sobre las superficies de la cubierta (nota 9).
+- **Pendientes muy altas:** la nota "#" del PDF dice "para cubiertas con ángulo θ ≤ 80° usar Cp = 0.8". Es una errata evidente: entre 60° y 80° rige $0.01\,\theta$ (0.6 a 0.8) y $C_p = 0.8$ se toma solo para $\theta > 80°$; así lo implementan la librería y la calculadora.
+
+</Detalle>
+
+<Figura src="/img/titulo-b/figura-b6-5-3-esquema.png" alt="Esquemas de presiones qz·G·Cp y qh·G·Cp sobre muros y cubiertas a dos aguas, de una pendiente y mansarda" numero="Figura B.6.5-3" pie="Distribución de presiones del SPRFV: qz·G·Cp en el muro a barlovento (variable con la altura z) y qh·G·Cp en el resto." pag="B-50" />
+
+<Figura src="/img/titulo-b/figura-b6-5-3-tabla-cp.png" alt="Tablas de Cp de muros y cubiertas de la Figura B.6.5-3 y sus notas" numero="Figura B.6.5-3 (continuación)" pie="Tabla original de Cp en muros y cubiertas con sus notas." pag="B-51" />
+
+#### Cubiertas en arco (Figura B.6.5-5)
+
+Para arcos, $C_p$ depende de la relación flecha/luz $r$ y se da por cuartos: a barlovento, medio central y a sotavento. Se usan con $q_h$ y sirven para las cargas promedio del SPRFV (nota 1).
+
+<TablaNorma numero="Figura B.6.5-5" titulo="Cp en cubiertas en arco" pag="B-53" nota="r = altura (flecha) / luz. (*) Para 0.2 ≤ r ≤ 0.3 también se puede usar 6r − 2.1 en el cuarto de barlovento. Para viento paralelo a la cumbrera use la Figura B.6.5-3 con el viento paralelo a la cumbrera (nota 3). Para componentes: en el perímetro, los GCp de las Figuras B.6.5-8; en el resto, los Cp de esta tabla multiplicados por 0.87 (nota 4).">
+
+| Condición | Relación $r$ | Cuarto a barlovento | Medio central | Cuarto a sotavento |
+|---|---|---|---|---|
+| Cubierta sobre estructura elevada | 0 &lt; r &lt; 0.2 | −0.9 | −0.7 − r | −0.5 |
+| Cubierta sobre estructura elevada | 0.2 ≤ r &lt; 0.3* | 1.5r − 0.3 | −0.7 − r | −0.5 |
+| Cubierta sobre estructura elevada | 0.3 ≤ r &lt; 0.6 | 2.75r − 0.7 | −0.7 − r | −0.5 |
+| Cubierta con arranque desde el piso | 0 &lt; r ≤ 0.6 | 1.4r | −0.7 − r | −0.5 |
+
+</TablaNorma>
+
+Los **domos** (Figura B.6.5-4) tienen $C_p$ variable con $f/D$ y $h_D/D$ para tres puntos del casquete (A, B y C) y se usan con $q$ evaluada a la altura de la clave del domo; la figura se reproduce más abajo por la complejidad de sus curvas.
+
+<Figura src="/img/titulo-b/figura-b6-5-4-domos.png" alt="Gráfica de Cp para domos en función de la relación f/D, con curvas A, B y C para distintas relaciones hD/D" numero="Figura B.6.5-4" pie="Cp para domos (cubiertas abovedadas). Se leen en las curvas A, B y C según la ubicación en el casquete; para f/D menor de 0.05 se usa la Figura B.6.5-3." pag="B-52" />
+
+#### $GC_{pf}$ para edificios bajos (Figura B.6.5-7)
+
+Para el SPRFV de **edificios bajos** (cerrados o parcialmente cerrados con $h \le 18$ m y $h$ menor o igual que la menor dimensión horizontal), la norma da directamente $GC_{pf}$ por **zonas** de la cubierta y los muros. La figura define 6 zonas "interiores" y 4 zonas de esquina (1E a 4E) cuyo ancho es $a$, con 8 patrones de carga según la esquina de referencia.
+
+<TablaNorma numero="Figura B.6.5-7" titulo="Coeficientes GCpf, edificios bajos totalmente o parcialmente cerrados" pag="B-56" nota="Se permite interpolación lineal para ángulos distintos de los mostrados (nota 2). a = 10 % de la menor dimensión horizontal o 0.4h (el menor), pero no menos de 4 % de la menor dimensión ni de 1.0 m. h = altura media de la cubierta (altura del alero para θ ≤ 10°).">
+
+| $\theta$ (°) | 1 | 2 | 3 | 4 | 5 | 6 | 1E | 2E | 3E | 4E |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0–5 | 0.40 | −0.69 | −0.37 | −0.29 | −0.45 | −0.45 | 0.61 | −1.07 | −0.53 | −0.43 |
+| 20 | 0.53 | −0.69 | −0.48 | −0.43 | −0.45 | −0.45 | 0.80 | −1.07 | −0.69 | −0.64 |
+| 30–45 | 0.56 | 0.21 | −0.43 | −0.37 | −0.45 | −0.45 | 0.69 | 0.27 | −0.53 | −0.48 |
+| 90 | 0.56 | 0.56 | −0.37 | −0.37 | −0.45 | −0.45 | 0.69 | 0.69 | −0.48 | −0.48 |
+
+</TablaNorma>
+
+<Detalle titulo="Notas esenciales de la Figura B.6.5-7">
+
+- El edificio debe diseñarse para **todas las direcciones del viento** usando los **8 patrones de carga** mostrados, aplicados a cada esquina de referencia (nota 3).
+- Las combinaciones con presión interna (Figura B.6.5-2) se evalúan para obtener las condiciones más severas (nota 4).
+- **Casos torsionales:** las zonas "T" (1T, 2T, 3T, 4T) toman el **25 %** de las presiones totales de diseño de las zonas 1, 2, 3 y 4. Quedan **exentos** los edificios de un nivel con $h \le 9.0$ m, los de dos niveles o menos con construcción liviana y los de dos niveles o menos con diafragmas flexibles (nota 5).
+- Excepto en pórticos resistentes a momento, el **cortante horizontal total** no puede ser menor que el obtenido despreciando las fuerzas de viento sobre la cubierta (nota 6).
+- Para el SPRFV en la dirección **paralela a la cumbrera** (o cubiertas planas) use $\theta = 0°$ y ubique el límite de las zonas 2 y 3 a la mitad de la longitud del edificio (nota 7).
+- Si $GC_{pf}$ es **negativo en la zona 2 o 2E**, se aplica en esa zona hasta una distancia desde el borde de la cubierta igual a $0.5$ veces la dimensión horizontal paralela al SPRFV evaluado o a $2.5$ veces la altura del alero, el menor; el resto de la zona 2/2E hasta la cumbrera usa el coeficiente de la zona 3/3E (nota 8).
+
+</Detalle>
+
+<Figura src="/img/titulo-b/figura-b6-5-7-zonas-gcpf.png" alt="Isometrías de un edificio bajo con las zonas 1 a 6 y 1E a 4E para viento transversal y longitudinal" numero="Figura B.6.5-7" pie="Zonas de presión del SPRFV de edificios bajos (dirección transversal y longitudinal)." pag="B-55" />
+
+<Figura src="/img/titulo-b/figura-b6-5-7-tabla-gcpf.png" alt="Tabla de GCpf por ángulo de cubierta y zona, con sus notas" numero="Figura B.6.5-7 (continuación)" pie="Tabla original de GCpf y notas." pag="B-56" />
+
+### B.6.5.11.3 — Coeficientes de fuerza
+
+Para estructuras que no son edificios (muros libres, vallas, chimeneas, tanques, torres, avisos) se usan **coeficientes de fuerza** $C_f$ de las Figuras B.6.5-17 a B.6.5-19 (<NormaRef s="B.6.5.11.3" pag="B-33" />). La fuerza se calcula con las ecuaciones B.6.5-25 y B.6.5-26 (secciones B.6.5.14 y B.6.5.15, más adelante).
+
+### B.6.5.11.4 — Cornisas de cubiertas (aleros)
+
+- **SPRFV** (<NormaRef s="B.6.5.11.4.1" pag="B-33" />): los aleros **a barlovento** se diseñan con una presión positiva en su cara inferior igual a $q_h\,G\,C_p$ con $C_p = 0.8$ (y las presiones de las Figuras B.6.5-3 y B.6.5-5 en la cara superior). Con los datos del Ejemplo 1: $q_h G \cdot 0.8$ = **{ej1.pAlero.toFixed(0)} N/m²**.
+- **Componentes y revestimientos** (<NormaRef s="B.6.5.11.4.2" pag="B-33" />): los aleros se diseñan con los $GC_p$ de las Figuras B.6.5-8B, 8C y 8D (el PDF las cita por error como "B.5.6-8B, C y D"). En esas figuras los valores para aleros **ya incluyen las contribuciones de presión de las superficies superior e inferior** (nota 6 de la Figura B.6.5-8B).
+
+### B.6.5.11.5 — Parapetos
+
+- **SPRFV** (<NormaRef s="B.6.5.11.5.1" pag="B-33" />): el efecto de los parapetos sobre las cargas globales se calcula con B.6.5.12.2.4 (más adelante).
+- **Componentes y revestimientos** (<NormaRef s="B.6.5.11.5.2" pag="B-33" />): los coeficientes para diseñar los elementos del parapeto salen de las tablas de cubiertas y muros según B.6.5.12.4.4.
+
+## B.6.5.12 — Fuerzas de viento de diseño en edificios cerrados o parcialmente cerrados
+
+### B.6.5.12.1 — General
+
+Tres reglas generales (<NormaRef s="B.6.5.12.1" pag="B-33" />):
+
+1. **Signos:** positiva = hacia la superficie; negativa = hacia afuera.
+2. **Carga crítica:** las presiones internas y externas se combinan algebraicamente.
+3. **Áreas aferentes mayores de 65 m²:** los elementos de revestimiento y componentes con área aferente mayor de 65 m² se pueden diseñar con las reglas del SPRFV.
+
+### B.6.5.12.2 — Sistemas principales de resistencia a fuerzas de viento
+
+#### B.6.5.12.2.1 — Edificios rígidos de cualquier altura
+
+<Ecuacion num="B.6.5-15" titulo="Presión de diseño del SPRFV, edificios rígidos">
+
+$$
+p = q\,G\,C_p - q_i\,(GC_{pi})\qquad \text{en N/m}^2
+$$
+
+- $q = q_z$ para **muros a barlovento**, evaluada a la altura $z$ sobre el terreno.
+- $q = q_h$ para **muros a sotavento, muros laterales y cubiertas**, evaluada a la altura $h$.
+- $q_i = q_h$ para **todas** las superficies de edificios **cerrados** y para presiones internas **negativas** en parcialmente cerrados.
+- $q_i = q_z$ para presiones internas **positivas** en parcialmente cerrados, con $z$ = nivel de la **abertura más alta** que podría afectar la presión interna positiva (puede tomarse conservadoramente $q_i = q_h$).
+- $G$: factor de efecto de ráfaga (B.6.5.8; 0.85 para rígidos).
+- $C_p$: Figuras B.6.5-3 o B.6.5-5. $GC_{pi}$: Figura B.6.5-2.
+
+</Ecuacion>
+
+La exposición para $q$ y $q_i$ es la definida en B.6.5.6.3, y las presiones se aplican **simultáneamente** en muros a barlovento y sotavento y en cubiertas (<NormaRef s="B.6.5.12.2.1" pag="B-33" />). Si el sitio puede tener **arrastre de fragmentos** por el viento, los vidrios de los 20 m inferiores que no sean resistentes al impacto ni estén protegidos se tratan como **aberturas** (<NormaRef s="B.6.5.9.3" pag="B-31" />), lo que puede convertir un edificio cerrado en parcialmente cerrado.
+
+<Ejemplo numero={1} titulo="Presiones del SPRFV en un edificio cerrado">
+Edificio rígido de oficinas (grupo de uso II) en exposición B con $V$ = {ej1.V} m/s, $K_{zt}$ = 1.0 y $K_d$ = 0.85. Altura media de cubierta $h$ = {ej1.h} m, $L$ = {ej1.L} m (paralela al viento), $B$ = {ej1.B} m, cubierta a dos aguas con $\theta$ = {ej1.theta}° y **viento normal a la cumbrera**. Es un edificio **cerrado** ($GC_{pi}$ = ±0.18). Calcular las presiones de diseño con $G$ = 0.85.
+
+<Paso titulo="Presión por velocidad a la altura media" ref="B.6.5-13, Tabla B.6.5-1">
+$K_h$ = {ej1.Kh.toFixed(3)} (exposición B, $z$ = {ej1.h} m); $I$ = {ej1.I.toFixed(2)}. Entonces $q_h = 0.613\,K_h\,K_{zt}\,K_d\,V^2\,I$ = 0.613 × {ej1.Kh.toFixed(3)} × 1.0 × 0.85 × {ej1.V}² × {ej1.I.toFixed(2)} = **{ej1.qh.toFixed(1)} N/m²**.
+</Paso>
+<Paso titulo="Coeficientes Cp" ref="Figura B.6.5-3">
+- Muro a barlovento: $C_p$ = 0.8 (con $q_z$).
+- $L/B$ = {ej1.lb.toFixed(2)} → muro a sotavento: $C_p$ = {ej1.cpSot.toFixed(2)}. Muros laterales: $C_p$ = −0.7.
+- $h/L$ = {ej1.hl.toFixed(2)}, $\theta$ = {ej1.theta}° → cubierta a barlovento (interpolando entre $h/L$ = 0.5 y 1.0): fila 1 = {ej1.cpb.fila1.toFixed(3)}; fila 2 = {ej1.cpb.fila2.toFixed(3)}. Cubierta a sotavento: $C_p$ = {ej1.cs.cps[0].toFixed(3)}.
+</Paso>
+<Paso titulo="Presión en el muro a barlovento" ref="B.6.5-15">
+
+En la **parte alta** ($z = h$): $q_z = q_h$ y $q\,G\,C_p$ = {ej1.qh.toFixed(1)} × 0.85 × 0.8 = {ej1.pbh.toFixed(1)} N/m². En $z$ = 6 m: $q_z$ = {ej1.qz6.toFixed(1)} N/m² y $q\,G\,C_p$ = {ej1.pb6.toFixed(1)} N/m². La presión sobre el muro **crece con la altura**.
+
+Restando $q_i\,GC_{pi}$ con $q_i = q_h$:
+- Con $+GC_{pi}$ (+0.18): $p$ = {ej1.bar.casos[0].pConGcpiMas.toFixed(1)} N/m² (en la parte alta).
+- Con $-GC_{pi}$ (−0.18): $p$ = {ej1.bar.casos[0].pConGcpiMenos.toFixed(1)} N/m².
+
+</Paso>
+<Paso titulo="Muros a sotavento y laterales" ref="B.6.5-15">
+Con $q_h$ y $G$ = 0.85 (ambas condiciones de $GC_{pi}$):
+- Sotavento: de {ej1.sot.pMin.toFixed(1)} a {ej1.sot.pMax.toFixed(1)} N/m² (succión en todo caso).
+- Laterales: de {ej1.lat.pMin.toFixed(1)} a {ej1.lat.pMax.toFixed(1)} N/m².
+</Paso>
+<Paso titulo="Cubierta" ref="B.6.5-15">
+- Barlovento, fila 1 ($C_p$ = {ej1.cb.cps[0].toFixed(3)}): de {Math.min(ej1.cb.casos[0].pConGcpiMas, ej1.cb.casos[0].pConGcpiMenos).toFixed(1)} a {Math.max(ej1.cb.casos[0].pConGcpiMas, ej1.cb.casos[0].pConGcpiMenos).toFixed(1)} N/m².
+- Barlovento, fila 2 ($C_p$ = {ej1.cb.cps[1].toFixed(3)}): de {Math.min(ej1.cb.casos[1].pConGcpiMas, ej1.cb.casos[1].pConGcpiMenos).toFixed(1)} a {Math.max(ej1.cb.casos[1].pConGcpiMas, ej1.cb.casos[1].pConGcpiMenos).toFixed(1)} N/m². Esta fila puede dar **presión positiva** sobre la cubierta: hay que investigarla.
+- Sotavento ($C_p$ = {ej1.cs.cps[0].toFixed(3)}): de {ej1.cs.pMin.toFixed(1)} a {ej1.cs.pMax.toFixed(1)} N/m².
+</Paso>
+<Resultado>
+Envolvente del SPRFV: barlovento **+{ej1.bar.pMin.toFixed(0)} a +{ej1.bar.pMax.toFixed(0)} N/m²**, sotavento y laterales en succión (hasta {ej1.lat.pMin.toFixed(0)} N/m²) y cubierta a barlovento entre {ej1.cb.pMin.toFixed(0)} y {ej1.cb.pMax.toFixed(0)} N/m². Verifica los números con la calculadora (usa los mismos datos por defecto salvo $\theta$ = 15° y $V$ = 30 m/s):
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Efecto de la clasificación: de edificio cerrado a parcialmente cerrado">
+Mismo edificio del Ejemplo 1, pero una puerta de gran tamaño en el muro de barlovento ($A_o$ = 40 m² de aberturas) hace que el edificio sea **parcialmente cerrado** ($GC_{pi}$ = ±0.55). La abertura más alta está a 6 m del suelo.
+
+<Paso titulo="Presión interna positiva" ref="B.6.5.12.2.1, Figura B.6.5-2">
+Para presiones internas **positivas**, $q_i = q_z$ a la altura de la abertura más alta (6 m): $q_i$ = {ej1.qz6.toFixed(1)} N/m². Para presiones internas **negativas**, $q_i = q_h$ = {ej1.qh.toFixed(1)} N/m². Con $R_i$ = {ej2.ri.toFixed(3)} (casi 1) se usa $GC_{pi}$ = ±0.55 sin reducir.
+</Paso>
+<Paso titulo="Cubierta a barlovento" ref="B.6.5-15">
+Fila 1 ($C_p$ = {ej1.cb.cps[0].toFixed(3)}): el cerrado daba de {Math.min(ej1.cb.casos[0].pConGcpiMas, ej1.cb.casos[0].pConGcpiMenos).toFixed(0)} a {Math.max(ej1.cb.casos[0].pConGcpiMas, ej1.cb.casos[0].pConGcpiMenos).toFixed(0)} N/m²; el parcialmente cerrado da de {Math.min(ej2.cb.casos[0].pConGcpiMas, ej2.cb.casos[0].pConGcpiMenos).toFixed(0)} a {Math.max(ej2.cb.casos[0].pConGcpiMas, ej2.cb.casos[0].pConGcpiMenos).toFixed(0)} N/m². La succión neta sobre la cubierta pasa de unos {ej1.cb.pMin.toFixed(0)} a {ej2.cb.pMin.toFixed(0)} N/m².
+</Paso>
+<Paso titulo="Muros" ref="B.6.5-15">
+Sotavento: de {ej2.sot.pMin.toFixed(0)} a {ej2.sot.pMax.toFixed(0)} N/m² (cerrado: de {ej1.sot.pMin.toFixed(0)} a {ej1.sot.pMax.toFixed(0)}). Barlovento: de {ej2.bar.pMin.toFixed(0)} a {ej2.bar.pMax.toFixed(0)} N/m² (cerrado: de {ej1.bar.pMin.toFixed(0)} a {ej1.bar.pMax.toFixed(0)}).
+</Paso>
+<Resultado>
+Pasar de $GC_{pi}$ = ±0.18 a ±0.55 aumenta la succión neta de la cubierta a barlovento de {ej1.cb.pMin.toFixed(0)} a {ej2.cb.pMin.toFixed(0)} N/m² ({((ej2.cb.pMin / ej1.cb.pMin - 1) * 100).toFixed(0)} % más). Una abertura dominante en barlovento aumenta de forma notable las cargas sobre la cubierta y cambia el signo de las presiones en muros: por eso la clasificación del cerramiento es una decisión de diseño que se documenta.
+</Resultado>
+</Ejemplo>
+
+<Callout tipo="nota" titulo="Pruébalo con la calculadora">
+Cambia la clasificación del cerramiento y verás cómo se multiplica la presión interna: el efecto sobre la cubierta y los muros de sotavento es inmediato. La calculadora usa $K_z$ y $q_h$ de la librería del Método 2 y la ecuación B.6.5-15, con los mismos datos por defecto del Ejemplo 1 salvo $	heta$ = 15°.
+</Callout>
+
+<CalculadoraEmbed id="viento-presion" />
+
+#### B.6.5.12.2.2 — Edificios bajos
+
+<Ecuacion num="B.6.5-16" titulo="Presión de diseño del SPRFV, edificios bajos">
+
+$$
+p = q_h\left[(GC_{pf}) - (GC_{pi})\right]\qquad \text{en N/m}^2
+$$
+
+- $q_h$: presión por velocidad a la altura media de la cubierta con la exposición de B.6.5.6.3.
+- $GC_{pf}$: coeficientes de la Figura B.6.5-7. $GC_{pi}$: Figura B.6.5-2.
+
+</Ecuacion>
+
+Es la alternativa **simplificada** para edificios bajos: se calcula con un solo $q_h$ y los coeficientes combinados de la Figura B.6.5-7 (<NormaRef s="B.6.5.12.2.2" pag="B-34" />).
+
+#### B.6.5.12.2.3 — Edificios flexibles
+
+<Ecuacion num="B.6.5-17" titulo="Presión de diseño del SPRFV, edificios flexibles">
+
+$$
+p = q\,G_f\,C_p - q_i\,(GC_{pi})\qquad \text{en N/m}^2
+$$
+
+- $q$, $q_i$ y $GC_{pi}$ se definen igual que en B.6.5.12.2.1; $G_f$ es el factor de efecto de ráfaga de B.6.5.8.2.
+
+</Ecuacion>
+
+Se aplica a edificios con frecuencia fundamental menor de 1 Hz, donde las ráfagas excitan la resonancia (<NormaRef s="B.6.5.12.2.3" pag="B-34" />).
+
+#### B.6.5.12.2.4 — Parapetos
+
+Los parapetos de edificios rígidos, bajos o flexibles con cubiertas planas, a dos aguas o a cuatro aguas aumentan las cargas del SPRFV con una presión neta combinada sobre el parapeto:
+
+<Ecuacion num="B.6.5-18" titulo="Presión neta combinada en parapetos (SPRFV)">
+
+$$
+p_p = q_p\,GC_{pn}
+$$
+
+- $p_p$: presión neta combinada de las caras anterior y posterior del parapeto (positiva hacia el frente del parapeto, negativa hacia afuera). El PDF imprime la unidad "N/m", pero es una **presión** en N/m².
+- $q_p$: presión por velocidad evaluada en la parte más alta del parapeto.
+- $GC_{pn}$ = **+1.5** para el parapeto a barlovento y **−1.0** para el parapeto a sotavento.
+
+</Ecuacion>
+
+Para el edificio del Ejemplo 1 con parapeto cuyo borde superior está a 13 m: $q_p$ = {ej1.qp.toFixed(1)} N/m², de modo que $p_p$ = **{ej1.pParBar.toFixed(0)} N/m²** a barlovento y **{ej1.pParSot.toFixed(0)} N/m²** a sotavento.
+
+### B.6.5.12.3 — Casos de carga de viento de diseño
+
+El SPRFV de edificios de cualquier altura, con cargas de B.6.5.12.2.1 y B.6.5.12.2.3, se diseña para los **cuatro casos de carga** de la Figura B.6.5-6 (<NormaRef s="B.6.5.12.3" pag="B-34" />). Sirven para tener en cuenta que el viento real no llega perfectamente distribuido: puede incidir en diagonal y generar **torsión**.
+
+<TablaNorma numero="Figura B.6.5-6" titulo="Casos de carga de viento de diseño" pag="B-54" nota="PWX, PWY: presión de barlovento en el eje x o y; PLX, PLY: presión de sotavento; e: excentricidad; MT: momento torsional por unidad de altura. BX, BY: dimensiones del edificio normales a cada eje.">
+
+| Caso | Descripción | Torsión |
+|---|---|---|
+| 1 | 100 % de la presión de diseño sobre el área proyectada normal a cada eje principal, considerada por separado | No |
+| 2 | 75 % de la presión de diseño sobre cada eje principal, por separado, con momento torsional | MT = 0.75(PWX + PLX)·BX·eX, con eX = ± 0.15 BX (e igual en y) |
+| 3 | Caso 1 actuando simultáneamente en x e y con 75 % de cada valor | No |
+| 4 | Caso 2 actuando simultáneamente en x e y con 75 % del valor especificado (es decir 56.3 % de la presión) | MT = 0.563(PWX + PLX)·BX·eX + 0.563(PWY + PLY)·BY·eY |
+
+</TablaNorma>
+
+La excentricidad $e$ de **estructuras rígidas** se mide desde el centro geométrico de la cara del edificio en cada eje ($e_x$, $e_y$) y vale ± 0.15 de la dimensión. Para el edificio del Ejemplo 1, con $p_W$ = {ejTorsion.pw.toFixed(0)} N/m² a barlovento y $|p_L|$ = {ejTorsion.pl.toFixed(0)} N/m² a sotavento y $B$ = {ej1.B} m, el caso 2 da $M_T$ = **{(ejTorsion.mt2 / 1000).toFixed(1)} kN·m por metro de altura** y el caso 4, {(ejTorsion.mt4 / 1000).toFixed(1)} kN·m/m.
+
+<Figura src="/img/titulo-b/figura-b6-5-6-casos-carga.png" alt="Cuatro casos de carga de viento en planta con factores 1.0, 0.75 y 0.563 y momentos torsionales" numero="Figura B.6.5-6" pie="Casos de carga de viento de diseño para el SPRFV." pag="B-54" />
+
+Para **estructuras flexibles** la excentricidad se calcula con la ecuación B.6.5-19, para cada eje principal:
+
+<Ecuacion num="B.6.5-19" titulo="Excentricidad e de estructuras flexibles">
+
+$$
+e=\frac{e_Q+1.7\,I_{\bar z}\sqrt{(g_Q Q e_Q)^2+(g_R R e_R)^2}}{1+1.7\,I_{\bar z}\sqrt{(g_Q Q)^2+(g_R R)^2}}
+$$
+
+- $e_Q$: excentricidad $e$ de estructuras rígidas según la Figura B.6.5-6.
+- $e_R$: distancia entre el centro de cortante elástico y el centro de masa de cada piso.
+- $I_{\bar z}$, $g_Q$, $Q$, $g_R$ y $R$: definidos en B.6.5.8.
+
+</Ecuacion>
+
+La excentricidad $e$ se toma positiva o negativa, la que produzca el efecto más severo. **Excepción** (<NormaRef s="B.6.5.12.3" pag="B-35" />): los edificios de **un piso con $h$ menor de 9.0 m**, los de **dos pisos o menos con pórticos de construcción liviana** y los de dos pisos o menos con **diafragmas flexibles** pueden diseñarse solo con los casos 1 y 3.
+
+### B.6.5.12.4 — Elementos de revestimiento y componentes
+
+#### B.6.5.12.4.1 — Edificios bajos y edificios con $h \le 18.0$ m
+
+<Ecuacion num="B.6.5-20" titulo="Presión de diseño en componentes y revestimientos, h ≤ 18 m">
+
+$$
+p = q_h\left[(GC_p) - (GC_{pi})\right]\qquad \text{en N/m}^2
+$$
+
+- $q_h$: presión por velocidad a la altura media del edificio, exposición de B.6.5.6.3.
+- $GC_p$: coeficientes de las Figuras B.6.5-8 a B.6.5-13 (según la forma de cubierta y el área efectiva).
+- $GC_{pi}$: Figura B.6.5-2.
+
+</Ecuacion>
+
+(El título del PDF dice "h menor de 18.0 m" pero el texto dice "$h \le 18.0$ m": rige $h \le 18$ m.) Los $GC_p$ se leen en gráficas **log-lineales** de $GC_p$ contra el **área efectiva de viento** $A$ (m²): cuanto más pequeño el elemento, mayor la succión. Para **muros** (Figura B.6.5-8A, zonas 4 interior y 5 de esquina de ancho $a$) la norma da:
+
+<TablaNorma numero="Figura B.6.5-8A" titulo="GCp en muros, edificios con h ≤ 18 m (puntos de la gráfica)" pag="B-57" nota="La gráfica es log-lineal en el área efectiva: los valores son constantes para A ≤ 1 m² y para A ≥ 50 m², y entre ambos varían en línea recta sobre el eje logarítmico. Se usan con qh. Los GCp de muros se reducen 10 % cuando θ ≤ 10° (nota 5).">
+
+| Zona | Presión (+) para A ≤ 1 m² | Presión (+) para A ≥ 50 m² | Succión (−) para A ≤ 1 m² | Succión (−) para A ≥ 50 m² |
+|---|---:|---:|---:|---:|
+| 4 (interior del muro) | +1.0 | +0.7 | −1.1 | −0.8 |
+| 5 (esquinas, ancho a) | +1.0 | +0.7 | −1.4 | −0.8 |
+
+</TablaNorma>
+
+<Figura src="/img/titulo-b/figura-b6-5-8a-muros.png" alt="Zonas 4 y 5 de los muros y gráfica de GCp contra área efectiva de viento" numero="Figura B.6.5-8A" pie="GCp en muros, edificios con h ≤ 18 m." pag="B-57" />
+
+Las Figuras B.6.5-8B a B.6.5-13 dan los $GC_p$ de **cubiertas** (zonas 1, 2, 3 y aleros) y no se transcriben como datos: son gráficas con varias curvas por zona. Se muestran como imagen para que las leas con el área efectiva y el ángulo de tu cubierta:
+
+<Detalle titulo="Figuras B.6.5-8B a B.6.5-13: GCp de cubiertas (componentes y revestimientos, h ≤ 18 m)">
+
+Cómo leerlas: (1) identifica la **forma** y el rango de $\theta$ de tu cubierta; (2) calcula $a$ y ubica la **zona** (1, 2, 3; los aleros aparecen aparte) donde está el elemento; (3) entra con el **área efectiva** (en m²) y lee $GC_p$ positivo y negativo en las curvas de esa zona; (4) aplica $p = q_h[(GC_p) - (GC_{pi})]$ con ambos signos de $GC_{pi}$. Los valores de la zona 3 (esquinas) son los más críticos.
+
+<Figura src="/img/titulo-b/figura-b6-5-8b-cubierta-dos-aguas-7.png" alt="GCp en cubiertas a dos aguas con ángulo hasta 7 grados" numero="Figura B.6.5-8B" pie="Cubiertas a dos aguas, θ ≤ 7°. Con parapeto de 1.0 m o más, los GCp negativos de la zona 3 igualan a los de la zona 2 (nota 5)." pag="B-58" />
+
+<Figura src="/img/titulo-b/figura-b6-5-8c-cubierta-7-27.png" alt="GCp en cubiertas a dos y cuatro aguas con ángulo entre 7 y 27 grados" numero="Figura B.6.5-8C" pie="Cubiertas a dos y cuatro aguas, 7° < θ ≤ 27°." pag="B-59" />
+
+<Figura src="/img/titulo-b/figura-b6-5-8d-cubierta-27-45.png" alt="GCp en cubiertas a dos aguas con ángulo entre 27 y 45 grados" numero="Figura B.6.5-8D" pie="Cubiertas a dos aguas, 27° < θ ≤ 45°." pag="B-60" />
+
+<Figura src="/img/titulo-b/figura-b6-5-9-escalonadas.png" alt="GCp en cubiertas escalonadas" numero="Figura B.6.5-9" pie="Cubiertas escalonadas." pag="B-61" />
+
+<Figura src="/img/titulo-b/figura-b6-5-10-varias-luces.png" alt="GCp en cubiertas a dos aguas de varias luces" numero="Figura B.6.5-10" pie="Cubiertas a dos aguas de varias luces." pag="B-62" />
+
+<Figura src="/img/titulo-b/figura-b6-5-11a-una-pendiente-3-10.png" alt="GCp en cubiertas de una pendiente con ángulo entre 3 y 10 grados" numero="Figura B.6.5-11A" pie="Cubiertas de una pendiente, 3° < θ ≤ 10°." pag="B-63" />
+
+<Figura src="/img/titulo-b/figura-b6-5-11b-una-pendiente-10-30.png" alt="GCp en cubiertas de una pendiente con ángulo entre 10 y 30 grados" numero="Figura B.6.5-11B" pie="Cubiertas de una pendiente, 10° < θ ≤ 30°." pag="B-64" />
+
+<Figura src="/img/titulo-b/figura-b6-5-12-aserradas.png" alt="GCp en cubiertas aserradas" numero="Figura B.6.5-12" pie="Cubiertas aserradas (diente de sierra)." pag="B-65" />
+
+<Figura src="/img/titulo-b/figura-b6-5-13-domos.png" alt="GCp en cubiertas en domo" numero="Figura B.6.5-13" pie="Cubiertas en domo, todas las alturas: −0.9 en succión, +0.9 en presión (θ de 0 a 60°) y +0.5 (θ de 61 a 90°), con la presión por velocidad a la clave del domo." pag="B-66" />
+
+</Detalle>
+
+<Ejemplo numero={3} titulo="Edificio bajo: SPRFV con GCpf y un panel de fachada">
+Bodega de un piso, grupo de uso I, exposición C, $V$ = {ej3.V} m/s, $K_d$ = 0.85, $K_{zt}$ = 1.0. Altura media $h$ = {ej3.h} m, $L$ = {ej3.L} m, $B$ = {ej3.B} m, cubierta a dos aguas con $\theta$ = {ej3.theta}°. Es **cerrada** ($GC_{pi}$ = ±0.18) y cumple la definición de edificio bajo ($h \le 18$ m y $h$ menor que la menor dimensión). Hallar las presiones del SPRFV en algunas zonas y la presión sobre un panel de muro de {ej3.area} m² en una esquina.
+
+<Paso titulo="Presión por velocidad" ref="B.6.5-13, Tabla B.6.5-3 (caso 1)">
+$K_h$ = {ej3.Kh.toFixed(3)} y $q_h$ = **{ej3.qh.toFixed(1)} N/m²**.
+</Paso>
+<Paso titulo="SPRFV con GCpf" ref="B.6.5-16, Figura B.6.5-7">
+
+Con $\theta$ = 20° se lee la fila de 20° de la Figura B.6.5-7 y se calcula $p = q_h\,[GC_{pf} - GC_{pi}]$ con ambos signos de $GC_{pi}$:
+
+| Zona | $GC_{pf}$ | $p$ con +0.18 (N/m²) | $p$ con −0.18 (N/m²) |
+|---|---:|---:|---:|
+| 1 | {ej3.zonas[0].g.toFixed(2)} | {ej3.zonas[0].pMas.toFixed(0)} | {ej3.zonas[0].pMenos.toFixed(0)} |
+| 2 | {ej3.zonas[1].g.toFixed(2)} | {ej3.zonas[1].pMas.toFixed(0)} | {ej3.zonas[1].pMenos.toFixed(0)} |
+| 2E | {ej3.zonas[2].g.toFixed(2)} | {ej3.zonas[2].pMas.toFixed(0)} | {ej3.zonas[2].pMenos.toFixed(0)} |
+| 3 | {ej3.zonas[3].g.toFixed(2)} | {ej3.zonas[3].pMas.toFixed(0)} | {ej3.zonas[3].pMenos.toFixed(0)} |
+
+</Paso>
+<Paso titulo="Ancho de las zonas de esquina" ref="Figura B.6.5-7, nota 9">
+$a$ = el menor entre 0.1 × {ej3.L} = {(0.1 * ej3.L).toFixed(2)} m y $0.4h$ = {(0.4 * ej3.h).toFixed(2)} m, pero no menos de 4 % de la menor dimensión ni de 1.0 m: $a$ = **{ej3.a.toFixed(2)} m**.
+</Paso>
+<Paso titulo="Panel de muro en la zona 5" ref="B.6.5-20, Figura B.6.5-8A">
+Con área efectiva de {ej3.area} m² (entre 1 y 50 m², interpolación log-lineal): $GC_p$ = +{ej3.gm.positivo.toFixed(3)} y {ej3.gm.negativo.toFixed(3)}. Entonces:
+- **Succión crítica** (GCp negativo con $+GC_{pi}$, que empuja la fachada hacia afuera): $p = q_h\,(GC_p - GC_{pi})$ = {ej3.qh.toFixed(1)} × ({ej3.gm.negativo.toFixed(3)} − 0.18) = **{ej3.pNeg.toFixed(0)} N/m²**.
+- **Presión crítica** (GCp positivo con $-GC_{pi}$, es decir succión interna que se suma): $p$ = {ej3.qh.toFixed(1)} × ({ej3.gm.positivo.toFixed(3)} + 0.18) = **{ej3.pPos.toFixed(0)} N/m²**.
+</Paso>
+<Resultado>
+En la zona 2E del SPRFV la succión llega a {ej3.zonas[2].pMas.toFixed(0)} N/m² (con $+GC_{pi}$). El panel de esquina (zona 5, {ej3.area} m²) debe resistir una succión de {ej3.pNeg.toFixed(0)} N/m² y una presión de {ej3.pPos.toFixed(0)} N/m²; se diseña para la mayor de las dos. Fíjate en que la succión local de componentes supera a la del SPRFV: los elementos pequeños sufren picos que el sistema global promedia.
+</Resultado>
+</Ejemplo>
+
+#### B.6.5.12.4.2 — Edificios con $h > 18.0$ m
+
+<Ecuacion num="B.6.5-21" titulo="Presión de diseño en componentes y revestimientos, h mayor de 18 m">
+
+$$
+p = q\,(GC_p) - q_i\,(GC_{pi})\qquad \text{en N/m}^2
+$$
+
+- $q = q_z$ en muros a barlovento (altura $z$); $q = q_h$ en muros a sotavento, laterales y cubiertas.
+- $q_i = q_h$ en edificios cerrados y para presiones internas negativas en parcialmente cerrados; $q_i = q_z$ ($z$ = abertura más alta) para presiones internas positivas en parcialmente cerrados (se puede usar $q_h$).
+- $GC_p$: Figura B.6.5-14. $GC_{pi}$: Figura B.6.5-2.
+
+</Ecuacion>
+
+La Figura B.6.5-14 da $GC_p$ para muros (zonas 4 y 5) y cubiertas (zonas 1, 2 y 3, para $\theta \le 10°$) contra el área efectiva; se usan $q_z$ con los valores positivos de $GC_p$ y $q_h$ con los negativos (nota 4). Si hay un parapeto de 1.0 m o más con $\theta \le 10°$, la zona 3 se trata como zona 2 (nota 7). Las curvas se muestran como imagen porque las etiquetas numéricas del margen derecho de la gráfica no coinciden con los extremos de varias curvas, así que no se transcribe como dato.
+
+<Figura src="/img/titulo-b/figura-b6-5-14-altura-18.png" alt="Zonas de cubierta y muro y gráfica de GCp contra área efectiva para edificios con h mayor de 18 m" numero="Figura B.6.5-14" pie="GCp de componentes y revestimientos de edificios con h mayor de 18 m (muros y cubiertas)." pag="B-67" />
+
+#### B.6.5.12.4.3 — Alternativa para h entre 18.0 y 27 m
+
+Como alternativa a B.6.5.12.4.2, para edificios con altura media **mayor de 18.0 m y menor de 27 m** se pueden usar los valores de las Figuras B.6.5-8 a B.6.5-14 con la ecuación B.6.5-20 siempre que la **relación altura/ancho sea 1 o menor** (salvo lo permitido por la nota 6 de la Figura B.6.5-14) (<NormaRef s="B.6.5.12.4.3" pag="B-36" />).
+
+#### B.6.5.12.4.4 — Parapetos
+
+<Ecuacion num="B.6.5-22" titulo="Presión de diseño en componentes de parapetos">
+
+$$
+p = q_p\,(GC_p - GC_{pi})
+$$
+
+- $q_p$: presión por velocidad en la parte superior del parapeto.
+- $GC_p$: coeficientes de las Figuras B.6.5-8 a B.6.5-14, para el ángulo de cubierta y el área efectiva apropiados (el PDF cita "figs. B.6-11 a B.6-17", referencia heredada de otra numeración).
+- $GC_{pi}$: Figura B.6.5-2, según la **porosidad** del revestimiento del parapeto.
+
+</Ecuacion>
+
+Se consideran **dos casos de carga** (<NormaRef s="B.6.5.12.4.4" pag="B-36" />):
+
+- **Caso A:** presión **positiva** de muros (Fig. B.6.5-8A o B.6.5-14) sobre la superficie **frontal** del parapeto, con la presión **negativa** de borde o esquina (Figs. B.6.5-8 a B.6.5-14) sobre la superficie **posterior**.
+- **Caso B:** presión positiva de muros sobre la superficie **posterior** y presión negativa de muros sobre la superficie **frontal**.
+
+Si hay presión interna se evalúan ambos casos con presiones internas **negativas y positivas**.
+
+## B.6.5.13 — Cargas de viento de diseño en edificios abiertos con cubiertas a una, dos aguas y en artesa
+
+### B.6.5.13.1 — General
+
+Signos como en B.6.5.12.1.1 (positiva hacia la superficie). Los coeficientes de presión **neta** $C_N$ ya incluyen las contribuciones de las superficies **superior e inferior**, y se deben investigar **todos los casos de carga** mostrados para cada ángulo de cubierta (<NormaRef s="B.6.5.13.1" pag="B-36" />).
+
+### B.6.5.13.2 — SPRFV
+
+<Ecuacion num="B.6.5-23" titulo="Presión neta del SPRFV en cubiertas libres">
+
+$$
+p = q_h\,G\,C_N
+$$
+
+- $q_h$: presión por velocidad a la altura media de la cubierta, con la exposición que dé las mayores cargas para cualquier dirección del viento del sitio.
+- $G$: factor de efecto de ráfaga (B.6.5.8).
+- $C_N$: coeficiente de presión neta de las Figuras B.6.5-15A a B.6.5-15D.
+
+</Ecuacion>
+
+Para cubiertas libres con $\theta \le 5°$ que tengan **paneles de fascia**, se tratan como un **parapeto invertido**: su aporte al SPRFV se calcula con B.6.5.12.2.4 usando $q_p = q_h$ (<NormaRef s="B.6.5.13.2" pag="B-37" />).
+
+### B.6.5.13.3 — Componentes y revestimientos
+
+<Ecuacion num="B.6.5-24" titulo="Presión neta en componentes de cubiertas libres">
+
+$$
+p = q_h\,G\,C_N
+$$
+
+- $C_N$: Figuras B.6.5-16A a B.6.5-16C (con zonas 1, 2 y 3 y el área efectiva en múltiplos de $a^2$). Mismas definiciones de $q_h$ y $G$ que B.6.5-23.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Cómo leer las Figuras B.6.5-15 y B.6.5-16">
+Las tablas dan $C_{NW}$ y $C_{NL}$ (presión neta en la **mitad a barlovento** y en la **mitad a sotavento** de la cubierta), para dos **casos de carga** (A y B) y para **flujo libre** (bloqueo bajo la cubierta de 50 % o menos) o **flujo obstruido** (más de 50 %, por mercancías, vehículos o equipos). Entre 7.5° y 45° se interpola linealmente; con menos de 7.5° se usan los valores de 0°. Se transcriben como imagen porque en la tabla de la Figura B.6.5-15A el PDF rotula una de las filas de ángulos como "36º" entre 22.5° y 37.5° (probablemente 30°), duda que no puede resolverse con certeza.
+</Callout>
+
+<Detalle titulo="Figuras B.6.5-15A a B.6.5-16C: coeficientes netos CN de edificios abiertos">
+
+<Figura src="/img/titulo-b/figura-b6-5-15a-libre-una-pendiente.png" alt="Tabla de CNW y CNL para cubiertas libres de una pendiente" numero="Figura B.6.5-15A" pie="SPRFV, cubiertas libres de una pendiente (0.25 ≤ h/L ≤ 1.0, θ ≤ 45°)." pag="B-68" />
+
+<Figura src="/img/titulo-b/figura-b6-5-15b-libre-dos-aguas.png" alt="Tabla de CN para cubiertas libres a dos aguas" numero="Figura B.6.5-15B" pie="SPRFV, cubiertas libres a dos aguas." pag="B-69" />
+
+<Figura src="/img/titulo-b/figura-b6-5-15c-libre-artesa.png" alt="Tabla de CN para cubiertas libres en artesa" numero="Figura B.6.5-15C" pie="SPRFV, cubiertas libres en artesa (dos aguas invertidas)." pag="B-70" />
+
+<Figura src="/img/titulo-b/figura-b6-5-15d-libre-formas.png" alt="CN por distancia desde el borde de barlovento para cubiertas libres de distintas formas" numero="Figura B.6.5-15D" pie="SPRFV, cubiertas libres de distintas formas (CN por franjas desde el borde de barlovento)." pag="B-71" />
+
+<Figura src="/img/titulo-b/figura-b6-5-16a-cc-libre-una-pendiente.png" alt="CN por zonas y área efectiva para componentes de cubiertas libres de una pendiente" numero="Figura B.6.5-16A" pie="Componentes y revestimientos, cubiertas libres de una pendiente." pag="B-72" />
+
+<Figura src="/img/titulo-b/figura-b6-5-16b-cc-libre-dos-aguas.png" alt="CN por zonas y área efectiva para componentes de cubiertas libres a dos aguas" numero="Figura B.6.5-16B" pie="Componentes y revestimientos, cubiertas libres a dos aguas." pag="B-73" />
+
+<Figura src="/img/titulo-b/figura-b6-5-16c-cc-libre-artesa.png" alt="CN por zonas y área efectiva para componentes de cubiertas libres en artesa" numero="Figura B.6.5-16C" pie="Componentes y revestimientos, cubiertas libres en artesa." pag="B-74" />
+
+</Detalle>
+
+## B.6.5.14 — Cargas de viento de diseño en muros libres y vallas macizas
+
+<Ecuacion num="B.6.5-25" titulo="Fuerza de viento en muros libres y vallas macizas">
+
+$$
+F = q_h\,G\,C_f\,A_s\qquad \text{en N}
+$$
+
+- $q_h$: presión por velocidad a la altura $h$ (definida en la Figura B.6.5-17), con la exposición de B.6.5.6.4.1.
+- $G$: factor de efecto de ráfaga (B.6.5.8).
+- $C_f$: coeficiente de fuerza neta de la Figura B.6.5-17.
+- $A_s$: área bruta del muro libre sólido o de la valla sólida, en m².
+
+</Ecuacion>
+
+La Figura B.6.5-17 define $C_f$ según la **relación de galibo** $s/h$ ($s$ = dimensión vertical del muro o valla, $h$ = altura hasta su borde superior) y la **relación de aspecto** $B/s$. Los casos A y B (viento perpendicular, con la fuerza resultante en el centro geométrico o desplazada hacia barlovento $0.2B$) usan esta tabla:
+
+<TablaNorma numero="Figura B.6.5-17 (casos A y B)" titulo="Coeficientes de fuerza Cf de muros libres y vallas macizas" pag="B-75" nota="Se permite interpolación lineal en s/h y B/s (nota 5). Las vallas con aberturas menores de 30 % del área total se consideran sólidas, y su Cf se multiplica por el factor 1 − (1 − ε)^1.5, con ε = área sólida/área total (nota 2). Para B/s ≥ 2 se debe considerar además el Caso C (viento oblicuo, página B-76), que se muestra como imagen.">
+
+| s/h ↓ · B/s → | ≤0.05 | 0.1 | 0.2 | 0.5 | 1 | 2 | 4 | 5 | 10 | 20 | 30 | ≥45 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1.0 | 1.80 | 1.70 | 1.65 | 1.55 | 1.45 | 1.40 | 1.35 | 1.35 | 1.30 | 1.30 | 1.30 | 1.30 |
+| 0.9 | 1.85 | 1.75 | 1.70 | 1.60 | 1.55 | 1.50 | 1.45 | 1.45 | 1.40 | 1.40 | 1.40 | 1.40 |
+| 0.7 | 1.90 | 1.85 | 1.75 | 1.70 | 1.65 | 1.60 | 1.60 | 1.55 | 1.55 | 1.55 | 1.55 | 1.55 |
+| 0.5 | 1.95 | 1.85 | 1.80 | 1.75 | 1.75 | 1.70 | 1.70 | 1.70 | 1.70 | 1.70 | 1.70 | 1.75 |
+| 0.3 | 1.95 | 1.90 | 1.85 | 1.80 | 1.80 | 1.80 | 1.80 | 1.80 | 1.80 | 1.85 | 1.85 | 1.85 |
+| 0.2 | 1.95 | 1.90 | 1.85 | 1.80 | 1.80 | 1.80 | 1.80 | 1.80 | 1.85 | 1.90 | 1.90 | 1.95 |
+| ≤0.16 | 1.95 | 1.90 | 1.85 | 1.85 | 1.80 | 1.80 | 1.85 | 1.85 | 1.85 | 1.90 | 1.90 | 1.95 |
+
+</TablaNorma>
+
+<Figura src="/img/titulo-b/figura-b6-5-17-muros-libres.png" alt="Esquemas de valla maciza o muro libre, casos A, B y C, y tabla de Cf casos A y B" numero="Figura B.6.5-17" pie="Muros libres y vallas macizas: geometría, casos de carga y Cf para los casos A y B." pag="B-75" />
+
+<Figura src="/img/titulo-b/figura-b6-5-17-caso-c.png" alt="Tabla de Cf del caso C y factores de reducción por esquina de retorno" numero="Figura B.6.5-17 (continuación)" pie="Caso C (viento oblicuo) y reducción por esquina de retorno; notas." pag="B-76" />
+
+<Ejemplo numero={4} titulo="Fuerza de viento sobre una valla maciza">
+Valla publicitaria maciza de {ej4.Bv} m de ancho y $s$ = {ej4.s} m de alto, cuyo borde superior está a $h$ = {ej4.h} m del suelo. Exposición C, $V$ = {ej4.V} m/s, $K_d$ = 0.85, $I$ = 1.0, $K_{zt}$ = 1.0, $G$ = 0.85. Calcular la fuerza de viento (caso A/B).
+
+<Paso titulo="Presión por velocidad a la altura h" ref="B.6.5-13">
+$K_h$ = {ej4.Kh.toFixed(3)} → $q_h$ = **{ej4.qh.toFixed(1)} N/m²**.
+</Paso>
+<Paso titulo="Relaciones geométricas y Cf" ref="Figura B.6.5-17">
+$s/h$ = {ej4.sh.toFixed(2)} y $B/s$ = {ej4.bs.toFixed(1)}. Interpolando entre las filas $s/h$ = 0.7 y 0.5 en la columna $B/s$ = 4 (1.60 y 1.70): $C_f$ = **{ej4.cf.toFixed(3)}**.
+</Paso>
+<Paso titulo="Fuerza" ref="B.6.5-25">
+
+$$
+F = q_h\,G\,C_f\,A_s
+$$
+
+Con $A_s$ = {ej4.As} m²: $F$ = {ej4.qh.toFixed(1)} × 0.85 × {ej4.cf.toFixed(3)} × {ej4.As} = **{(ej4.F / 1000).toFixed(2)} kN**.
+
+</Paso>
+<Resultado>
+Fuerza de viento de {(ej4.F / 1000).toFixed(2)} kN, aplicada en el centro geométrico (caso A) o desplazada 0.2 B a barlovento (caso B); la valla y su cimentación deben resistir ambas posiciones. Para B/s mayor o igual a 2 se revisa también el caso C.
+</Resultado>
+</Ejemplo>
+
+## B.6.5.15 — Cargas de viento de diseño en otras estructuras
+
+<Ecuacion num="B.6.5-26" titulo="Fuerza de viento en otras estructuras">
+
+$$
+F = q_z\,G\,C_f\,A_f\qquad \text{en N}
+$$
+
+- $q_z$: presión por velocidad a la altura $z$ del **centroide** del área $A_f$, con la exposición de B.6.5.6.3.
+- $G$: factor de efecto de ráfaga (B.6.5.8).
+- $C_f$: coeficientes de fuerza de las Figuras B.6.5-18 y B.6.5-19.
+- $A_f$: área proyectada normal al viento (salvo donde $C_f$ se haya especificado para la superficie real), en m².
+
+</Ecuacion>
+
+Las Figuras B.6.5-18 y B.6.5-19 cubren **chimeneas, tanques, equipo de cubierta y estructuras similares** (secciones cuadradas, hexagonales, octogonales y redondas, con $C_f$ según $h/D$ y la rugosidad) y **vallas abiertas, pórticos y torres** (miembros de lados planos o redondos según el índice de solidez $\varepsilon$). En secciones redondas el coeficiente depende además de $h/D$ y de si $D\sqrt{q_z}$ supera 5.3 (con $D$ en m y $q_z$ en N/m²; la figura también muestra el valor equivalente 2.5 en otras unidades). Se leen directamente de la imagen.
+
+<Callout tipo="atencion" titulo="Anomalía en la Figura B.6.5-18">
+En la fila "Muy rugosa (D'/D = 0.08)" de la Figura B.6.5-18 el PDF imprime **0.2** para $h/D$ = 25, que rompe la tendencia de la fila (0.8, 1.0, …) y es muy probablemente **1.2**. Por eso esa figura no se transcribe como dato: léela de la imagen y confirma el valor con la edición oficial.
+</Callout>
+
+<Figura src="/img/titulo-b/figura-b6-5-18-chimeneas.png" alt="Tabla de Cf para chimeneas, tanques, equipos de cubierta y estructuras similares según h/D" numero="Figura B.6.5-18" pie="Coeficientes de fuerza Cf de chimeneas, tanques, equipos de cubierta y estructuras similares." pag="B-77" />
+
+<Figura src="/img/titulo-b/figura-b6-5-19-vallas-porticos.png" alt="Tabla de Cf para vallas abiertas, pórticos y torres" numero="Figura B.6.5-19" pie="Coeficientes de fuerza Cf de vallas abiertas, pórticos y torres." pag="B-78" />
+
+### B.6.5.15.1 — Estructuras y equipos sobre cubiertas en edificios con $h \le 18.0$ m
+
+La fuerza sobre estructuras y equipos de cubierta con $A_f$ **menor de $0.1\,B\,h$** en edificios con $h \le 18.0$ m se calcula con la ecuación de fuerza (el PDF la cita como "Ec. B.6-38"; corresponde a B.6.5-26) **multiplicada por 1.9**. Ese factor puede reducirse linealmente de 1.9 a 1.0 a medida que $A_f$ aumenta de $0.1\,B\,h$ a $B\,h$ (<NormaRef s="B.6.5.15.1" pag="B-37" />). Para un equipo de 15 m² en un edificio de $B$ = 40 m y $h$ = 12 m ($0.1Bh$ = 48 m², $Bh$ = 480 m²) el factor es 1.9, porque 15 m² es menor que 48 m². Con $A_f$ = 100 m² valdría {factorEquipoCubierta(100, 40, 12).toFixed(2)}.
+
+## B.6.6 — Método 3: procedimiento de túnel de viento
+
+El Método 3 reemplaza los coeficientes de las figuras por **mediciones sobre un modelo a escala** del edificio y su entorno, sometido a un flujo de aire que reproduce la capa límite atmosférica. Es la herramienta para formas, entornos o respuestas fuera del alcance de los Métodos 1 y 2.
+
+### B.6.6.1 — Alcance
+
+Los ensayos de túnel de viento **deben** usarse donde lo exija B.6.5.2: edificios o estructuras que no cumplan las condiciones de regularidad de B.6.5.1, de forma irregular o con características de respuesta inusuales y que no se diseñen con literatura reconocida (<NormaRef s="B.6.6.1" pag="B-37" />). Además, el ensayo **se permite en lugar de los Métodos 1 y 2 para cualquier edificio o estructura**.
+
+### B.6.6.2 — Condiciones de ensayo
+
+Los ensayos para determinar variaciones y promedios de fuerzas y presiones con fluidos distintos del aire deben cumplir las siguientes condiciones (<NormaRef s="B.6.6.2" pag="B-38" />):
+
+<TablaNorma numero="B.6.6.2" titulo="Condiciones que debe cumplir el ensayo de túnel de viento" pag="B-38">
+
+| Numeral | Condición |
+|---|---|
+| B.6.6.2.1 | La capa límite de la atmósfera natural se modela considerando la variación de la velocidad del viento con la altura |
+| B.6.6.2.2 | Las escalas de macro y microlongitud de la turbulencia longitudinal se modelan aproximadamente a la misma escala que el modelo del edificio |
+| B.6.6.2.3 | El edificio modelado y los alrededores (estructuras y topografía) son geométricamente similares a los reales; en edificios bajos (B.6.5.1) se permite escalar una sola categoría de exposición |
+| B.6.6.2.4 | El área proyectada del modelo y sus alrededores es menor de **8 %** del área de la sección de ensayo, salvo que se corrija por bloqueo |
+| B.6.6.2.5 | Se considera el gradiente de presión longitudinal en la sección de ensayo |
+| B.6.6.2.6 | Se minimizan los efectos del número de Reynolds sobre presiones y fuerzas |
+| B.6.6.2.7 | La respuesta de la instrumentación es consistente con las mediciones requeridas |
+
+</TablaNorma>
+
+### B.6.6.3 — Respuesta dinámica
+
+Los ensayos para determinar la **respuesta dinámica** (aceleraciones, desplazamientos) deben cumplir B.6.6.2, y el modelo estructural y su análisis deben reflejar la **distribución de masa, la rigidez y el amortiguamiento** (<NormaRef s="B.6.6.3" pag="B-38" />).
+
+### B.6.6.4 — Limitaciones
+
+La **variación de la velocidad básica con la dirección** no se permite en el análisis de túnel de viento, a menos que el análisis de las velocidades de viento cumpla B.6.5.4.2 (uso de datos climáticos regionales con análisis estadístico aprobado) (<NormaRef s="B.6.6.4.1" pag="B-38" />). En otras palabras: sin esa justificación se debe suponer el viento básico igual en todas las direcciones.
+
+<Callout tipo="practica" titulo="Cuándo pensar en túnel de viento">
+Torres esbeltas y flexibles, formas curvas o muy irregulares, edificios rodeados de otros altos que canalizan el viento, cubiertas colgantes o ligeras de gran luz y estadios son candidatos típicos. El ensayo no es gratuito, así que en proyectos comunes se usa el Método 1 o 2; en los complejos, el ensayo suele reducir presiones respecto a las de las figuras, pero siempre bajo las limitaciones de B.6.6.2 y B.6.6.4.
+</Callout>
+
+## Resumen de ecuaciones del capítulo
+
+<TablaNorma numero="Resumen" titulo="Ecuaciones de presión y fuerza del Método 2 (B.6.5.12 a B.6.5.15)" pag="B-33 a B-37">
+
+| Ecuación | Caso | Expresión |
+|---|---|---|
+| B.6.5-15 | SPRFV, edificios rígidos | $p = q\,G\,C_p - q_i\,(GC_{pi})$ |
+| B.6.5-16 | SPRFV, edificios bajos | $p = q_h[(GC_{pf}) - (GC_{pi})]$ |
+| B.6.5-17 | SPRFV, edificios flexibles | $p = q\,G_f\,C_p - q_i\,(GC_{pi})$ |
+| B.6.5-18 | Parapetos (SPRFV) | $p_p = q_p\,GC_{pn}$ con +1.5 y −1.0 |
+| B.6.5-20 | Componentes, $h \le 18$ m | $p = q_h[(GC_p) - (GC_{pi})]$ |
+| B.6.5-21 | Componentes, $h > 18$ m | $p = q\,(GC_p) - q_i\,(GC_{pi})$ |
+| B.6.5-22 | Componentes de parapetos | $p = q_p\,(GC_p - GC_{pi})$ |
+| B.6.5-23, -24 | Edificios abiertos | $p = q_h\,G\,C_N$ |
+| B.6.5-25 | Muros libres y vallas | $F = q_h\,G\,C_f\,A_s$ |
+| B.6.5-26 | Otras estructuras | $F = q_z\,G\,C_f\,A_f$ |
+
+</TablaNorma>
+
+<Detalle titulo="Erratas y referencias cruzadas inexactas detectadas en el PDF de estas secciones">
+
+- **Figura B.6.5-3, cubierta a barlovento, $h/L \le 0.25$, $\theta$ = 30°, fila 2:** imprime −0.30; probablemente +0.30.
+- **Figura B.6.5-3, nota "#":** dice "θ ≤ 80°" y debe leerse "θ > 80°".
+- **Figura B.6.5-3, muro a barlovento:** "Usar con q2" por $q_z$.
+- **Ecuación B.6.5-14:** constante 11000 (ASCE 7: ≈ 6950 en SI).
+- **B.6.5.11.4.2:** cita "figs. B.5.6-8B, C y D" por B.6.5-8B, C y D.
+- **B.6.5.12.2.3:** remite a "sección 6.5.12.2.1" (falta la B).
+- **Ecuación B.6.5-18:** unidades "N/m" por N/m².
+- **B.6.5.12.4.1:** título con "h < 18.0 m" y texto con "h ≤ 18.0 m".
+- **B.6.5.12.4.4:** remite a "figs. B.6-11 a B.6-17" por B.6.5-8 a B.6.5-14.
+- **B.6.5.15.1:** remite a "Ec. B.6-38"; corresponde a B.6.5-26.
+- **Figura B.6.5-5:** el esquema del arco no se reproduce en la página del PDF (solo la tabla); la tabla es legible.
+- **Figura B.6.5-15A:** una fila de ángulo rotulada "36º" (entre 22.5° y 37.5°).
+- **Figura B.6.5-18:** "0.2" en la fila de superficie muy rugosa para $h/D$ = 25 (probablemente 1.2).
+- **Figura B.6.5-14:** las etiquetas del margen derecho (−1.8, −1.4, −1.0…) no coinciden con los extremos de las curvas a $A$ = 50 m²; por eso no se transcribe como dato.
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Aplicar **solo una** condición de $GC_{pi}$: hay que evaluar $+GC_{pi}$ y $-GC_{pi}$ y quedarse con la más crítica para cada elemento.
+- Usar $q_h$ en el muro a barlovento en vez de $q_z$ (o al revés para sotavento, laterales y cubierta): la presión en barlovento **varía con la altura**.
+- Multiplicar $GC_{pf}$ o $GC_p$ por $G$: esos coeficientes **ya incluyen** el efecto de ráfaga.
+- Olvidar la **segunda fila** de $C_p$ de la cubierta a barlovento: puede ser **presión** sobre la cubierta y gobernar el diseño de la correa o del anclaje.
+- Clasificar como cerrado un edificio con grandes ventanales sin protección en zona de arrastre de fragmentos: esos vidrios cuentan como aberturas (<NormaRef s="B.6.5.9.3" pag="B-31" />).
+- Diseñar componentes con áreas efectivas grandes (> 65 m²) sin aprovechar que pueden diseñarse como SPRFV, o usar $C_p$ del SPRFV en un clip de fachada: son sistemas distintos.
+- Olvidar los casos de carga torsionales y los de viento oblicuo (Figura B.6.5-6) en el SPRFV de edificios no exentos.
+- Usar las tablas de edificios cerrados para una cubierta libre (edificio abierto): ahí rigen los $C_N$.
+</Callout>
+
+## Resumen en una línea
+
+**Clasifica el cerramiento ($GC_{pi}$), lee $C_p$ (o $GC_{pf}$, $GC_p$, $C_N$, $C_f$) en la figura que corresponda y combina $q\,G\,C_p - q_i\,GC_{pi}$ con ambos signos de presión interna; si el edificio es irregular o inusual, recurre al túnel de viento.**

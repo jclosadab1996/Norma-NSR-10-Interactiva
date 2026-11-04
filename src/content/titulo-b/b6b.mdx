@@ -1,0 +1,753 @@
+---
+codigo: 'B.6b'
+tipo: capitulo
+titulo: 'Fuerzas de viento (II): parámetros del procedimiento analítico'
+resumen: 'Cómo el Método 2 de la NSR-10 convierte la velocidad básica del viento en presión por velocidad qz: factor de importancia, direccionalidad, exposición del terreno (Kz), efectos topográficos (Kzt), factor de efecto ráfaga (G) y clasificación del cerramiento.'
+objetivos:
+  - 'Decidir si un edificio puede analizarse con el Método 2 y qué pasos exige B.6.5.3'
+  - 'Obtener V, Kd e I y clasificar la exposición del terreno (B, C o D)'
+  - 'Calcular Kz con la tabla o con sus ecuaciones, y Kzt para colinas y escarpes'
+  - 'Calcular el factor de efecto ráfaga G (rígido) o Gf (flexible) y clasificar el cerramiento'
+  - 'Obtener la presión por velocidad qz a cualquier altura'
+paginasNorma: 'B-27 a B-32 (Tablas B.6.5-1 a B.6.5-4: B-79 a B-82; Figura B.6.5-1: B-47 y B-48)'
+paginaPdf: 246
+orden: 7
+calculadoras: ['viento-exposicion']
+nivel: 'avanzado'
+---
+
+import { kz, kzTabla, presionVelocidad, factorTopografico, factorRafagaRigido, factorRafagaFlexible } from '../../lib/nsr10/viento';
+
+export const ej1 = (() => {
+  const V = 28, Kd = 0.85, I = 1.0;
+  const filas = [10, 30, 60].map((z) => {
+    const kB = kz('B', z), kC = kz('C', z);
+    return {
+      z, kB, kC,
+      kBt: kzTabla('B', z), kCt: kzTabla('C', z),
+      qB: presionVelocidad({ V, Kz: kB, Kd, I }),
+      qC: presionVelocidad({ V, Kz: kC, Kd, I }),
+    };
+  });
+  return { V, Kd, I, filas };
+})();
+
+export const ej2 = (() => {
+  const V = 28, Kd = 0.85, I = 1.0, h = 12;
+  const base = { forma: 'loma2D', exposicion: 'C', H: 60, Lh: 150, z: h };
+  const cresta = factorTopografico({ ...base, x: 0 });
+  const lejos = factorTopografico({ ...base, x: 60 });
+  const k = kz('C', h);
+  return {
+    V, Kd, I, h, k, cresta, lejos,
+    qPlano: presionVelocidad({ V, Kz: k, Kd, I }),
+    qCresta: presionVelocidad({ V, Kz: k, Kzt: cresta.kzt, Kd, I }),
+    qLejos: presionVelocidad({ V, Kz: k, Kzt: lejos.kzt, Kd, I }),
+  };
+})();
+
+export const ej3 = (() => {
+  const rig = factorRafagaRigido({ exposicion: 'B', h: 30, B: 20 });
+  const flex = factorRafagaFlexible({ exposicion: 'C', h: 120, B: 30, L: 30, n1: 0.4, beta: 0.01, V: 28 });
+  const rigTorre = factorRafagaRigido({ exposicion: 'C', h: 120, B: 30 });
+  return { rig, flex, rigTorre };
+})();
+
+## Idea central del capítulo
+
+El **Método 2 (Procedimiento analítico)** de la sección B.6.5 es el camino general de la NSR-10 para obtener las cargas de viento de un edificio: no se limita a edificios bajos y, a cambio de más trabajo, ajusta la presión a la altura, al terreno que rodea el sitio, a la topografía y al comportamiento dinámico de la estructura. Este capítulo cubre los **diez primeros numerales** (B.6.5.1 a B.6.5.10): todo lo necesario para llegar a la **presión por velocidad** $q_z$, que luego se multiplica por coeficientes de presión (capítulo B.6c) para obtener la presión de diseño.
+
+La idea de fondo cabe en una ecuación:
+
+$$
+q_z = 0.613\,K_z\,K_{zt}\,K_d\,V^2\,I
+$$
+
+Cada factor responde a una pregunta distinta: ¿qué tan fuerte sopla el viento en la región ($V$)?, ¿qué tan importante es el edificio ($I$)?, ¿qué tan probable es que el viento más fuerte venga justo de la dirección crítica ($K_d$)?, ¿qué tan rugoso es el terreno y a qué altura estoy ($K_z$)?, ¿hay una colina que acelere el viento ($K_{zt}$)?
+
+<Callout tipo="importante" titulo="Presión de velocidad no es presión de diseño">
+$q_z$ es la presión que ejercería el viento al frenarse por completo. Para llegar a la carga sobre una pared o cubierta todavía hacen falta el factor de efecto ráfaga ($G$ o $G_f$), los coeficientes de presión externa ($C_p$) e interna ($GC_{pi}$), que se estudian en el capítulo B.6c (B.6.5.11 en adelante).
+</Callout>
+
+## B.6.5.1 — Alcance
+
+Un edificio solo puede diseñarse con esta sección si cumple dos condiciones (<NormaRef s="B.6.5.1" pag="B-27" />):
+
+1. Es de **forma regular** (como se define en <NormaRef s="B.6.2" pag="B-22" />, es decir, sin geometría espacial irregular).
+2. **No tiene características de respuesta** que den lugar a cargas transversales al viento, generación de vórtices, inestabilidad por golpeteo o aleteo, ni está ubicado donde deban considerarse efectos de **canalización** o de **sacudimiento por la estela** de obstrucciones a barlovento.
+
+## B.6.5.2 — Limitaciones
+
+El Método 2 ya incluye el aumento de carga por la **resonancia entre ráfagas y las vibraciones en la dirección del viento** de edificios flexibles. Si el edificio no cumple B.6.5.1, o tiene forma irregular o una respuesta inusual, la norma exige recurrir a **literatura reconocida** que documente esos efectos, o al **ensayo en túnel de viento** de B.6.6 (<NormaRef s="B.6.5.2" pag="B-27" />).
+
+- **B.6.5.2.1 — Protección de otras edificaciones.** No se permite reducir las presiones de velocidad por el **apantallamiento** de estructuras vecinas ni por las características del terreno (<NormaRef s="B.6.5.2.1" pag="B-27" />). Un edificio rodeado de torres más altas se diseña como si estuvieran ausentes.
+- **B.6.5.2.2 — Revestimientos permeables.** Las cargas sobre revestimientos permeables se calculan con B.6.5, salvo que ensayos aprobados o literatura reconocida demuestren cargas menores (<NormaRef s="B.6.5.2.2" pag="B-27" />).
+
+## B.6.5.3 — Procedimiento de diseño
+
+La norma enumera los pasos en orden. La tabla los reúne con el numeral que desarrolla cada uno y dónde se estudia en esta web (<NormaRef s="B.6.5.3" pag="B-27" />):
+
+| Paso | Qué se determina | Numeral | Capítulo |
+|---|---|---|---|
+| (a) | Velocidad básica $V$ y factor de direccionalidad $K_d$ | B.6.5.4 | B.6b (este) |
+| (b) | Factor de importancia $I$ | B.6.5.5 | B.6b (este) |
+| (c) | Categoría(s) de exposición y coeficiente $K_z$ o $K_h$ | B.6.5.6 | B.6b (este) |
+| (d) | Factor topográfico $K_{zt}$ | B.6.5.7 | B.6b (este) |
+| (e) | Factor de efecto ráfaga $G$ o $G_f$ | B.6.5.8 | B.6b (este) |
+| (f) | Clasificación del cerramiento | B.6.5.9 | B.6b (este) |
+| (g) | Coeficiente de presión interna $GC_{pi}$ | B.6.5.11.1 | B.6c |
+| (h) | Coeficientes de presión externa $C_p$, $GC_{pf}$ o de fuerza $C_f$ | B.6.5.11.2 y B.6.5.11.3 | B.6c |
+| (i) | Presión por velocidad $q_z$ o $q_h$ | B.6.5.10 | B.6b (este) |
+| (j) | Carga de viento de diseño $p$ o $F$ | B.6.5.12 a B.6.5.15 | B.6c |
+
+<Callout tipo="nota">
+La norma redacta el paso (c) como "categorías de exposición $K_z$ y coeficiente $K_h$": en realidad la **categoría** (B, C o D) es una decisión del diseñador y $K_z$ o $K_h$ es el **coeficiente** que se lee con ella. También cita B.6.5.3 en B.6.5.6.6 donde quiere decir B.6.5.6.3 (categorías de exposición).
+</Callout>
+
+## B.6.5.4 — Velocidad de viento básica
+
+La velocidad básica $V$ se toma del **mapa de la Figura B.6.4-1** (la misma del Método 1), que divide el país en cinco regiones. Se supone que el viento puede venir de **cualquier dirección horizontal** (<NormaRef s="B.6.5.4" pag="B-27" />).
+
+<Figura src="/img/titulo-b/figura-b6-4-1-mapa-velocidad-basica.png" alt="Mapa de Colombia con cinco regiones de velocidad básica del viento, de 17 a 36 m/s" numero="Figura B.6.4-1" pie="Zonas de amenaza eólica: velocidad del viento básico por región. Las zonas sin región numerada (Véase la Nota) no han sido estudiadas y se calculan con 28 m/s." pag="B-39" />
+
+<TablaNorma numero="Figura B.6.4-1 (leyenda)" titulo="Velocidad del viento básico por región" pag="B-39">
+
+| Región | Velocidad del viento $V$ |
+|---:|---|
+| 1 | 17 m/s (60 km/h) |
+| 2 | 22 m/s (80 km/h) |
+| 3 | 28 m/s (100 km/h) |
+| 4 | 33 m/s (120 km/h) |
+| 5 | 36 m/s (130 km/h) |
+
+</TablaNorma>
+
+### B.6.5.4.1 — Regiones especiales para viento
+
+Donde existan **registros o experiencia** de velocidades mayores que las del mapa, la velocidad básica se aumenta. Los terrenos montañosos, los precipicios y las regiones especiales del mapa deben estudiarse para detectar condiciones de viento inusuales; la **autoridad respectiva** ajusta entonces los valores del mapa con base en información meteorológica y en la estimación de B.6.5.4.2 (<NormaRef s="B.6.5.4.1" pag="B-27" />).
+
+### B.6.5.4.2 — Estimación a partir de información climática regional
+
+Los datos climáticos regionales pueden sustituir al mapa **solo si la autoridad competente** considera que se cumplieron (<NormaRef s="B.6.5.4.2" pag="B-28" />):
+
+- se usaron **procedimientos estadísticos aprobados** para el análisis de valores extremos, y
+- se tuvieron en cuenta la longitud de los registros, el error de muestreo, el tiempo promedio, la altura del anemómetro, la calidad de los datos y la exposición del terreno.
+
+### B.6.5.4.3 — Limitaciones
+
+Los **tornados** no se consideran en el cálculo de la velocidad básica (<NormaRef s="B.6.5.4.3" pag="B-28" />).
+
+### B.6.5.4.4 — Factor de direccionalidad $K_d$
+
+$K_d$ refleja que es poco probable que el viento más fuerte coincida con la dirección más desfavorable para la estructura. Se toma de la Tabla B.6.5-4 y **solo se aplica junto con las combinaciones de carga de B.2.3 y B.2.4**, con las que fue calibrado (<NormaRef s="B.6.5.4.4" pag="B-28" />).
+
+<TablaNorma numero="Tabla B.6.5-4" titulo="Factor de direccionalidad del viento Kd" pag="B-82" nota="El factor Kd ha sido calibrado con las combinaciones de carga especificadas; debe usarse cuando se usen las combinaciones B.2.3 y B.2.4 correspondientes.">
+
+| Tipo de estructura | $K_d$ |
+|---|---:|
+| **Edificios** — Sistema principal de resistencia de cargas de viento | 0.85 |
+| **Edificios** — Componentes y recubrimientos | 0.85 |
+| Cubiertas abovedadas | 0.85 |
+| **Chimeneas, tanques y estructuras similares** — cuadradas | 0.90 |
+| Chimeneas, tanques y estructuras similares — hexagonales | 0.95 |
+| Chimeneas, tanques y estructuras similares — redondas | 0.95 |
+| Avisos sólidos | 0.85 |
+| Avisos abiertos y estructura rectangular | 0.85 |
+| **Torres en celosía** — triangular, cuadrada y rectangular | 0.85 |
+| Torres en celosía — todas las otras secciones transversales | 0.95 |
+
+</TablaNorma>
+
+## B.6.5.5 — Factor de importancia
+
+El factor $I$ depende del **grupo de uso** de A.2.5 (I a IV) y de si el sitio está en una región propensa a huracanes (<NormaRef s="B.6.5.5" pag="B-28" />):
+
+<TablaNorma numero="Tabla B.6.5-1" titulo="Factor de importancia I (cargas de viento)" pag="B-79" nota="Las categorías de los edificios y de las estructuras se listan en la sección A.2.5 del Reglamento.">
+
+| Grupo de uso | Regiones no propensas a huracanes, y regiones con posibilidad de huracanes de $V$ = 40–45 m/s | Regiones con posibilidad de huracanes y $V$ > 45 m/s |
+|:---:|:---:|:---:|
+| I | 0.87 | 0.77 |
+| II | 1.00 | 1.00 |
+| III | 1.15 | 1.15 |
+| IV | 1.15 | 1.15 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Qué columna usar en Colombia">
+El mayor valor del mapa de la Figura B.6.4-1 es 36 m/s, de modo que ninguna región del país llega a los 40–45 m/s ni supera 45 m/s. En la práctica se usa la **primera columna** (grupo I: 0.87; II: 1.00; III y IV: 1.15). La norma no aclara de forma explícita el caso de la región 5 (costa Caribe y San Andrés, 36 m/s); esta lectura es una interpretación y conviene confirmarla con la autoridad o el revisor del proyecto. Nótese que el grupo I **reduce** la presión (0.87) mientras que III y IV la **aumentan** 15 %.
+</Callout>
+
+## B.6.5.6 — Exposición
+
+Para cada dirección de viento se determina la **categoría de exposición a barlovento**, según la **rugosidad** del terreno: topografía natural, vegetación y construcciones (<NormaRef s="B.6.5.6" pag="B-28" />).
+
+### B.6.5.6.1 — Direcciones de viento y sectores
+
+Para cada dirección considerada se evalúa la exposición en los **dos sectores a barlovento** que se extienden **45° a cada lado** de la dirección del viento. Se usa la exposición que produzca las **mayores cargas** (<NormaRef s="B.6.5.6.1" pag="B-28" />).
+
+### B.6.5.6.2 — Categorías de rugosidad del terreno
+
+| Rugosidad | Descripción (B.6.5.6.2) |
+|---|---|
+| **B** | Áreas urbanas y suburbanas, áreas boscosas u otros terrenos con numerosas obstrucciones del tamaño de una vivienda unifamiliar o mayores y con poca separación entre ellas. |
+| **C** | Terreno abierto con pocas obstrucciones de altura inferior a 9.0 m: campos planos abiertos, praderas y todas las superficies acuáticas en zonas propensas a huracanes. |
+| **D** | Áreas planas y no obstruidas y superficies acuáticas fuera de regiones propensas a huracanes: pantanos, salinas y superficies de hielo. |
+
+### B.6.5.6.3 — Categorías de exposición
+
+La rugosidad solo califica si **prevalece a lo largo de una distancia mínima** hacia barlovento (<NormaRef s="B.6.5.6.3" pag="B-28" />):
+
+| Exposición | Condición |
+|---|---|
+| **B** | Rugosidad B por al menos **800 m o 20 veces la altura** del edificio (la mayor). *Excepción:* si la altura media es ≤ 9.0 m, basta **460 m**. |
+| **C** | Todos los casos donde no apliquen B ni D. |
+| **D** | Rugosidad D por más de **1500 m o 20 veces la altura** (la mayor) hacia barlovento. D se extiende hacia sotavento de rugosidades B o C por **200 m o 20 veces la altura** (la mayor). |
+
+En una **zona de transición** entre categorías se usa la que produzca mayores fuerzas de diseño. Se permite una categoría intermedia solo si se determina con un proceso analítico de la literatura reconocida.
+
+<Callout tipo="practica" titulo="Cómo decidir en un caso real">
+Dibuja un círculo de radio 800 m (o 20 veces la altura, si es mayor) alrededor del edificio y mira los sectores de 45° a cada lado de cada dirección de viento. Si en todos ellos hay ciudad o bosque denso, es exposición **B**. Un edificio al borde de la ciudad, con un lado abierto, ya no cumple B para ese sector: es **C**. Ante la duda entre dos categorías, la norma manda la más desfavorable (la de mayor $K_z$).
+</Callout>
+
+### B.6.5.6.4 — Categorías de exposición para el SPRFV
+
+Las cargas del SPRFV de edificios y otras estructuras se basan en las categorías de B.6.5.6.3 para cada dirección de viento. Para **edificios bajos** diseñados con los coeficientes $GC_{pf}$ de la Figura B.6.5-7, se usa una única presión $q_h$ con la exposición que produzca las mayores cargas en cualquier dirección (<NormaRef s="B.6.5.6.4" pag="B-29" />).
+
+### B.6.5.6.5 — Componentes y elementos de revestimiento
+
+Las presiones de diseño para componentes y revestimientos se basan en la exposición que dé las **mayores cargas en cualquier dirección** del viento (<NormaRef s="B.6.5.6.5" pag="B-29" />).
+
+### B.6.5.6.6 — Coeficiente de exposición de presión por velocidad ($K_z$ o $K_h$)
+
+Con la categoría de exposición se lee $K_z$ (a la altura $z$) o $K_h$ (a la altura media de cubierta $h$) en la Tabla B.6.5-3. Cerca de un cambio de rugosidad se permiten valores intermedios solo con un método racional de la literatura reconocida (<NormaRef s="B.6.5.6.6" pag="B-29" />).
+
+<TablaNorma numero="Tabla B.6.5-3" titulo="Coeficientes de exposición para la presión dinámica, Kh y Kz" pag="B-81" nota="Caso 1: todos los componentes y recubrimientos, y el SPRFV de edificios bajos diseñados con la Fig. B.6.5-7. Caso 2: todos los SPRFV de edificios excepto los anteriores, y el SPRFV de otras estructuras. Se acepta interpolación lineal para alturas intermedias.">
+
+| Altura $z$ (m) | Exposición B, caso 1 | Exposición B, caso 2 | Exposición C (casos 1 y 2) | Exposición D (casos 1 y 2) |
+|---:|---:|---:|---:|---:|
+| 0 – 4.5 † | 0.70 | 0.57 | 0.85 | 1.03 |
+| 6.0 | 0.70 | 0.62 | 0.90 | 1.08 |
+| 7.5 | 0.70 | 0.66 | 0.94 | 1.12 |
+| 9.0 | 0.70 | 0.70 | 0.98 | 1.16 |
+| 12.0 | 0.76 | 0.76 | 1.04 | 1.22 |
+| 15.0 | 0.81 | 0.81 | 1.09 | 1.27 |
+| 18.0 | 0.85 | 0.85 | 1.13 | 1.31 |
+| 20.0 ‡ | 0.89 | 0.89 | 1.17 | 1.34 |
+| 24.5 | 0.93 | 0.93 | 1.21 | 1.38 |
+| 27.5 | 0.96 | 0.96 | 1.24 | 1.40 |
+| 30.5 | 0.99 | 0.99 | 1.26 | 1.43 |
+| 36.5 § | 1.04 | 1.04 | 1.36 | 1.52 |
+| 42.5 | 1.09 | 1.09 | 1.36 | 1.52 |
+| 49.0 | 1.13 | 1.13 | 1.39 | 1.55 |
+| 55.0 | 1.17 | 1.17 | 1.43 | 1.58 |
+| 60.0 | 1.20 | 1.20 | 1.46 | 1.61 |
+| 76.0 | 1.28 | 1.28 | 1.53 | 1.68 |
+| 90.0 | 1.35 | 1.35 | 1.59 | 1.73 |
+| 107.0 | 1.41 | 1.41 | 1.64 | 1.78 |
+| 122.0 | 1.47 | 1.47 | 1.69 | 1.82 |
+| 137.0 | 1.52 | 1.52 | 1.73 | 1.86 |
+| 152.0 | 1.56 | 1.56 | 1.77 | 1.89 |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Tres anomalías de la tabla impresa">
+Transcribimos la tabla tal como aparece en el PDF, pero al contrastarla con las ecuaciones de la nota 2 aparecen tres rarezas:
+
+- **†** La primera fila está impresa como «0 - 45»; por los valores se lee **0 a 4.5 m** (la ecuación en $z$ = 4.5 m reproduce los mismos números con diferencia de 0.004 o menos).
+- **‡** La fila «20.0» tiene los valores que la ecuación da para unos **21.3 m**; en 20.0 m la ecuación da 0.88, 1.16 y 1.33 (diferencias de 0.01).
+- **§** En la fila «36.5», los valores de C (1.36) y D (1.52) son **idénticos a los de la fila 42.5**; la ecuación da 1.31 y 1.48 en 36.5 m. Es muy probable que sea un error de transcripción; para $z$ = 36.5 m en exposición C o D conviene usar la ecuación (más favorable por 0.04–0.05).
+
+La calculadora de este capítulo usa las **ecuaciones**, que no tienen estas rarezas, y muestra el valor de tabla para contraste.
+</Callout>
+
+Las notas de la tabla dan además las **ecuaciones** con las que se puede calcular $K_z$ para cualquier altura. Los valores de $\alpha$ y $z_g$ salen de la Tabla B.6.5-2:
+
+<Ecuacion num="Nota 2, Tabla B.6.5-3" titulo="Coeficiente de exposición Kz">
+
+$$
+K_z = 2.01\left(\frac{z}{z_g}\right)^{2/\alpha}\qquad\text{para } 4.0\ \text{m} \le z \le z_g
+$$
+
+$$
+K_z = 2.01\left(\frac{4.0}{z_g}\right)^{2/\alpha}\qquad\text{para } z < 4.0\ \text{m}
+$$
+
+- $z$: altura sobre el terreno, en m. En exposición B, **caso 1**, $z$ no se toma menor que 9.0 m.
+- $\alpha$ y $z_g$: constantes de la Tabla B.6.5-2.
+
+</Ecuacion>
+
+<TablaNorma numero="Tabla B.6.5-2" titulo="Constantes de exposición del terreno" pag="B-80" nota="zmin: mínima altura usada para asegurar que la altura equivalente z̄ sea mayor de 0.6h o zmin. Para edificios con h ≤ zmin, z̄ debe tomarse como zmin. Las columnas â y b̂ no se emplean en las ecuaciones de B.6.5.">
+
+| Exposición | $\alpha$ | $z_g$ (m) | $\hat a$ | $\hat b$ | $\bar\alpha$ | $\bar b$ | $c$ | $\ell$ (m) | $\bar\epsilon$ | $z_{min}$ (m) |
+|:---:|---:|---:|:---:|---:|:---:|---:|---:|---:|:---:|---:|
+| B | 7.0 | 365.8 | 1/7.0 | 0.84 | 1/4.0 | 0.45 | 0.30 | 97.5 | 1/3 | 9.0 |
+| C | 9.5 | 274.3 | 1/9.5 | 1.00 | 1/6.5 | 0.65 | 0.20 | 152.4 | 1/5 | 4.5 |
+| D | 11.5 | 213.4 | 1/11.5 | 1.07 | 1/9.0 | 0.80 | 0.15 | 198.1 | 1/8 | 2.0 |
+
+</TablaNorma>
+
+<Ejemplo numero={1} titulo="Presión por velocidad a distintas alturas, exposiciones B y C">
+
+Un edificio del grupo II ($I$ = 1.0) está en una región con $V$ = {ej1.V} m/s (región 3 del mapa), sin efectos topográficos ($K_{zt}$ = 1.0) y se evalúa su SPRFV con $K_d$ = {ej1.Kd}. Calcular $K_z$ y $q_z$ a 10, 30 y 60 m si el terreno es de exposición **B** (urbano) o **C** (abierto).
+
+<Paso titulo="Kz con la ecuación de la nota 2" ref="Tabla B.6.5-3, nota 2">
+
+Con $\alpha$ = 7.0 y $z_g$ = 365.8 m (B), o $\alpha$ = 9.5 y $z_g$ = 274.3 m (C):
+
+$$
+K_z = 2.01\left(\frac{z}{z_g}\right)^{2/\alpha}
+$$
+
+| $z$ (m) | $K_z$ exposición B | $K_z$ exposición C | Interpolado de la tabla (B / C) |
+|---:|---:|---:|---:|
+| {ej1.filas[0].z} | {ej1.filas[0].kB.toFixed(3)} | {ej1.filas[0].kC.toFixed(3)} | {ej1.filas[0].kBt.toFixed(3)} / {ej1.filas[0].kCt.toFixed(3)} |
+| {ej1.filas[1].z} | {ej1.filas[1].kB.toFixed(3)} | {ej1.filas[1].kC.toFixed(3)} | {ej1.filas[1].kBt.toFixed(3)} / {ej1.filas[1].kCt.toFixed(3)} |
+| {ej1.filas[2].z} | {ej1.filas[2].kB.toFixed(3)} | {ej1.filas[2].kC.toFixed(3)} | {ej1.filas[2].kBt.toFixed(3)} / {ej1.filas[2].kCt.toFixed(3)} |
+
+La ecuación y la tabla coinciden en el segundo decimal.
+
+</Paso>
+<Paso titulo="Presión por velocidad" ref="B.6.5-13">
+
+$$
+q_z = 0.613\,K_z\,K_{zt}\,K_d\,V^2\,I = 0.613\,K_z\,(1.0)\,(0.85)\,(28)^2\,(1.0)\quad[\text{N/m}^2]
+$$
+
+| $z$ (m) | $q_z$ exposición B (N/m²) | $q_z$ exposición C (N/m²) |
+|---:|---:|---:|
+| {ej1.filas[0].z} | {ej1.filas[0].qB.toFixed(1)} | {ej1.filas[0].qC.toFixed(1)} |
+| {ej1.filas[1].z} | {ej1.filas[1].qB.toFixed(1)} | {ej1.filas[1].qC.toFixed(1)} |
+| {ej1.filas[2].z} | {ej1.filas[2].qB.toFixed(1)} | {ej1.filas[2].qC.toFixed(1)} |
+
+</Paso>
+<Resultado>
+A 30 m, un edificio en terreno abierto (C) recibe $q_z$ = **{ej1.filas[1].qC.toFixed(0)} N/m²** frente a **{ej1.filas[1].qB.toFixed(0)} N/m²** en terreno urbano (B): la exposición C pide un {((ej1.filas[1].qC / ej1.filas[1].qB - 1) * 100).toFixed(0)} % más de presión. En ambos casos $q_z$ crece con la altura entre 10 y 60 m: en C, de {ej1.filas[0].qC.toFixed(0)} a {ej1.filas[2].qC.toFixed(0)} N/m². Explora otros valores:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="viento-exposicion" />
+
+## B.6.5.7 — Efectos topográficos
+
+### B.6.5.7.1 — Aumento de velocidad sobre colinas o escarpes
+
+Una **colina aislada** o un **escarpe** (cambio brusco de nivel del terreno) acelera el viento al "comprimirlo" sobre la cresta. Ese efecto se incluye en el diseño **solo si se cumplen todas** estas condiciones (<NormaRef s="B.6.5.7.1" pag="B-29" />):
+
+| | Condición |
+|---|---|
+| (a) | La colina o escarpe está **aislada y sin obstrucciones** a barlovento por otros accidentes de altura cercana a 100 veces su altura (100H) o 3 km, la que sea menor. |
+| (b) | Sobresale por encima del terreno de barlovento por un factor de **2 o más** dentro de un radio de 3 km. |
+| (c) | La estructura está en la **mitad superior** de la colina o cerca de la cresta del escarpe (Fig. B.6.5-1). |
+| (d) | $H/L_h \ge 0.2$. |
+| (e) | $H \ge 4.5$ m para exposición C y D, y $H \ge 18$ m para exposición B. |
+
+### B.6.5.7.2 — Factor topográfico
+
+El efecto se introduce con el factor $K_{zt}$ (<NormaRef s="B.6.5.7.2" pag="B-30" />). Si el sitio **no** cumple las condiciones de B.6.5.7.1, $K_{zt}$ = 1.0.
+
+<Ecuacion num="B.6.5-1" titulo="Factor topográfico">
+
+$$
+K_{zt} = \left(1 + K_1 K_2 K_3\right)^2
+$$
+
+- $K_1$: depende de la forma del accidente y de la relación $H/L_h$ (efecto máximo de aceleración).
+- $K_2$: reduce el efecto al alejarse de la cresta, hacia barlovento o sotavento.
+- $K_3$: reduce el efecto al subir sobre el terreno local.
+
+</Ecuacion>
+
+La Figura B.6.5-1 define los tres multiplicadores con ecuaciones y parámetros (<NormaRef s="Figura B.6.5-1" pag="B-48" />):
+
+<Ecuacion num="Figura B.6.5-1" titulo="Multiplicadores K1, K2 y K3">
+
+$$
+K_1 = \left(\frac{K_1}{H/L_h}\right)\cdot\frac{H}{L_h}
+\qquad
+K_2 = \left(1-\frac{|x|}{\mu L_h}\right)
+\qquad
+K_3 = e^{-\gamma z/L_h}
+$$
+
+- $H$: altura de la colina o escarpe sobre el terreno de barlovento, en m.
+- $L_h$: distancia hacia barlovento, desde la cresta hasta donde el terreno está a la mitad de la altura $H$, en m.
+- $x$: distancia horizontal desde la cresta hasta el edificio (barlovento o sotavento), en m.
+- $z$: altura sobre el nivel del terreno local, en m.
+- $\mu$ y $\gamma$: factores de atenuación horizontal y en altura (tabla siguiente).
+
+</Ecuacion>
+
+<Figura src="/img/titulo-b/figura-b6-5-1-colina-escarpe.png" alt="Esquemas de un escarpe y de una loma o colina con la variación de velocidad V(z), H, Lh y x" numero="Figura B.6.5-1" pie="Esquemas de escarpe y de loma bidimensional o colina axisimétrica tridimensional: variación del viento con la altura, H, Lh y la distancia x desde la cresta." pag="B-47" />
+
+<TablaNorma numero="Figura B.6.5-1 (continuación)" titulo="Parámetros para aumento de la velocidad sobre colinas y escarpes" pag="B-48">
+
+| Forma de la colina | $K_1/(H/L_h)$ exp. B | exp. C | exp. D | $\gamma$ | $\mu$ barlovento o desde la cresta | $\mu$ sotavento o desde la cresta |
+|---|---:|---:|---:|---:|---:|---:|
+| Lomas bidimensionales (2D) o valles con $H$ negativa | 1.30 | 1.45 | 1.55 | 3 | 1.5 | 1.5 |
+| Escarpes bidimensionales (2D) | 0.75 | 0.85 | 0.95 | 2.5 | 1.5 | 4 |
+| Colina tridimensional axisimétrica | 0.95 | 1.05 | 1.15 | 4 | 1.5 | 1.5 |
+
+</TablaNorma>
+
+Para evitar calcular, la figura trae también los multiplicadores tabulados **para exposición C**. Para otros valores de $H/L_h$, $x/L_h$ y $z/L_h$ se permite interpolar linealmente.
+
+<TablaNorma numero="Figura B.6.5-1" titulo="Multiplicador K1 para exposición C" pag="B-47" nota="Para H/Lh > 0.5 se supone H/Lh = 0.5 al evaluar K1 y se sustituye Lh por 2H al evaluar K2 y K3. Los multiplicadores suponen que el viento se aproxima a la colina o escarpe en la dirección de máxima pendiente.">
+
+| $H/L_h$ | Loma 2-D | Escarpe 2-D | Colina axisimétrica 3-D |
+|---:|---:|---:|---:|
+| 0.20 | 0.29 | 0.17 | 0.21 |
+| 0.25 | 0.36 | 0.21 | 0.26 |
+| 0.30 | 0.43 | 0.26 | 0.32 |
+| 0.35 | 0.51 | 0.30 | 0.37 |
+| 0.40 | 0.58 | 0.34 | 0.42 |
+| 0.45 | 0.65 | 0.38 | 0.47 |
+| 0.50 | 0.72 | 0.43 | 0.53 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.5-1" titulo="Multiplicador K2 (según x/Lh)" pag="B-47">
+
+| $x/L_h$ | Escarpe 2-D | Todos los otros casos |
+|---:|---:|---:|
+| 0.00 | 1.00 | 1.00 |
+| 0.50 | 0.88 | 0.67 |
+| 1.00 | 0.75 | 0.33 |
+| 1.50 | 0.63 | 0.00 |
+| 2.00 | 0.50 | 0.00 |
+| 2.50 | 0.38 | 0.00 |
+| 3.00 | 0.25 | 0.00 |
+| 3.50 | 0.13 | 0.00 |
+| 4.00 | 0.00 | 0.00 |
+
+</TablaNorma>
+
+<TablaNorma numero="Figura B.6.5-1" titulo="Multiplicador K3 (según z/Lh)" pag="B-47">
+
+| $z/L_h$ | Loma 2-D | Escarpe 2-D | Colina axisimétrica 3-D |
+|---:|---:|---:|---:|
+| 0.00 | 1.00 | 1.00 | 1.00 |
+| 0.10 | 0.74 | 0.78 | 0.67 |
+| 0.20 | 0.55 | 0.61 | 0.45 |
+| 0.30 | 0.41 | 0.47 | 0.30 |
+| 0.40 | 0.30 | 0.37 | 0.20 |
+| 0.50 | 0.22 | 0.29 | 0.14 |
+| 0.60 | 0.17 | 0.22 | 0.09 |
+| 0.70 | 0.12 | 0.17 | 0.06 |
+| 0.80 | 0.09 | 0.14 | 0.04 |
+| 0.90 | 0.07 | 0.11 | 0.03 |
+| 1.00 | 0.05 | 0.08 | 0.02 |
+| 1.50 | 0.01 | 0.02 | 0.00 |
+| 2.00 | 0.00 | 0.00 | 0.00 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Cómo se relacionan las tablas con las ecuaciones">
+Las tablas son simplemente las ecuaciones evaluadas. Por ejemplo, para una loma 2-D en exposición C, $K_1 = 1.45\,H/L_h$, de modo que con $H/L_h$ = 0.20 resulta 0.29 (primera fila). En $K_2$, la columna «Escarpe 2-D» corresponde a $\mu$ = 4 (puntos hacia sotavento de la cresta del escarpe) y «Todos los otros casos» a $\mu$ = 1.5. En $K_3$, las tres columnas corresponden a $\gamma$ = 3, 2.5 y 4. La lib de cálculo de esta web (`factorTopografico`) usa las ecuaciones y reproduce las tablas con diferencias de redondeo de 0.01 o menos.
+</Callout>
+
+<Ejemplo numero={2} titulo="Un edificio de 4 pisos en la cresta de una loma">
+
+Un edificio de $h$ = {ej2.h} m, grupo II, se ubica en **exposición C** sobre una **loma bidimensional** de $H$ = 60 m con $L_h$ = 150 m. $V$ = {ej2.V} m/s y $K_d$ = {ej2.Kd}. Comparar $q_h$ con el valor sin loma, en la cresta ($x$ = 0) y a $x$ = 60 m hacia barlovento.
+
+<Paso titulo="¿Se cumplen las condiciones numéricas?" ref="B.6.5.7.1 (d) y (e)">
+$H/L_h$ = 60/150 = **0.40** ≥ 0.2 y $H$ = 60 m ≥ 4.5 m (exposición C). Suponemos que se cumplen también (a), (b) y (c): colina aislada, que sobresale el doble del terreno de alrededor y con el edificio cerca de la cresta.
+</Paso>
+<Paso titulo="Multiplicadores en la cresta (x = 0, z = h)" ref="Figura B.6.5-1">
+
+$$
+K_1 = 1.45\,(0.40) = 0.58\qquad K_2 = 1-\frac{0}{1.5\,L_h}=1\qquad K_3 = e^{-3\,(12)/(150)}
+$$
+
+Resultan $K_1$ = {ej2.cresta.k1.toFixed(2)}, $K_2$ = {ej2.cresta.k2.toFixed(2)} y $K_3$ = {ej2.cresta.k3.toFixed(3)}.
+
+$$
+K_{zt} = (1 + K_1 K_2 K_3)^2
+$$
+
+Resultado: $K_{zt}$ = **{ej2.cresta.kzt.toFixed(3)}**.
+</Paso>
+<Paso titulo="Multiplicadores a x = 60 m de la cresta" ref="Figura B.6.5-1">
+$K_2$ = 1 − 60/(1.5 × 150) = {ej2.lejos.k2.toFixed(3)} (μ = 1.5); $K_1$ y $K_3$ no cambian. Entonces $K_{zt}$ = **{ej2.lejos.kzt.toFixed(3)}**.
+</Paso>
+<Paso titulo="Presión por velocidad" ref="B.6.5-13">
+Con $K_h$ = {ej2.k.toFixed(3)} (exposición C, 12 m):
+
+| Situación | $K_{zt}$ | $q_h$ (N/m²) |
+|---|---:|---:|
+| Terreno plano | 1.000 | {ej2.qPlano.toFixed(1)} |
+| Cresta (x = 0) | {ej2.cresta.kzt.toFixed(3)} | {ej2.qCresta.toFixed(1)} |
+| A 60 m de la cresta | {ej2.lejos.kzt.toFixed(3)} | {ej2.qLejos.toFixed(1)} |
+
+</Paso>
+<Resultado>
+La loma multiplica la presión por velocidad en la cresta por **{ej2.cresta.kzt.toFixed(2)}** (de {ej2.qPlano.toFixed(0)} a {ej2.qCresta.toFixed(0)} N/m²): más del doble. A solo 60 m de la cresta el factor baja a {ej2.lejos.kzt.toFixed(2)}. Ignorar la topografía en un sitio como este subestimaría la carga a menos de la mitad.
+</Resultado>
+</Ejemplo>
+
+## B.6.5.8 — Factor de efecto ráfaga
+
+El viento no es constante: tiene ráfagas, y estas pueden entrar en **resonancia** con la vibración propia del edificio. El factor de efecto ráfaga mide cuánto sube la carga estática equivalente por ambos efectos. Depende de qué tan rígida sea la estructura, y la norma distingue (definiciones en B.6.2):
+
+- **Estructura rígida:** frecuencia fundamental $n_1 \ge 1$ Hz (<NormaRef s="B.6.2" pag="B-22" />).
+- **Estructura flexible o dinámicamente sensible:** frecuencia fundamental $n_1 < 1$ Hz (<NormaRef s="B.6.2" pag="B-23" />).
+
+### B.6.5.8.1 — Estructuras rígidas
+
+El factor de efecto ráfaga se toma como **0.85** o se calcula con la ecuación B.6.5-2 (<NormaRef s="B.6.5.8.1" pag="B-30" />):
+
+<Ecuacion num="B.6.5-2" titulo="Factor de efecto ráfaga G (estructuras rígidas)">
+
+$$
+G = 0.925\left(\frac{1 + 1.7\,g_Q\,I_{\bar z}\,Q}{1 + 1.7\,g_v\,I_{\bar z}}\right)
+$$
+
+- $g_Q = g_v = 3.4$.
+- $I_{\bar z}$: intensidad de turbulencia a la altura equivalente $\bar z$ (B.6.5-3).
+- $Q$: factor de respuesta del entorno (B.6.5-4).
+
+</Ecuacion>
+
+<Ecuacion num="B.6.5-3" titulo="Intensidad de turbulencia">
+
+$$
+I_{\bar z} = c\left(\frac{10}{\bar z}\right)^{1/6}
+$$
+
+- $\bar z$: altura equivalente de la estructura = **0.6 h**, pero no menor que $z_{min}$ (Tabla B.6.5-2), para cualquier altura de edificio $h$.
+- $c$: constante de la Tabla B.6.5-2.
+
+</Ecuacion>
+
+<Ecuacion num="B.6.5-4" titulo="Respuesta del entorno">
+
+$$
+Q = \sqrt{\dfrac{1}{1 + 0.62\left(\dfrac{B+h}{L_{\bar z}}\right)^{0.63}}}
+$$
+
+- $B$ y $h$: dimensión horizontal normal al viento y altura (definidos en B.6.3), en m.
+- $L_{\bar z}$: longitud integral de escala de la turbulencia a la altura $\bar z$, en m (B.6.5-5).
+
+</Ecuacion>
+
+<Ecuacion num="B.6.5-5" titulo="Longitud integral de escala de la turbulencia">
+
+$$
+L_{\bar z} = \ell\left(\frac{\bar z}{10}\right)^{\bar\epsilon}
+$$
+
+- $\ell$ (m) y $\bar\epsilon$: constantes de la Tabla B.6.5-2 (el texto de la norma las llama $A$ y $\varepsilon$).
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Coeficiente 0.62 en B.6.5-4">
+La imagen del PDF imprime **0.62** en la ecuación B.6.5-4, mientras que la norma estadounidense de origen usa 0.63. La diferencia es insignificante (cambia $G$ en la cuarta cifra decimal); la lib de esta web usa 0.62, como el texto de la NSR-10.
+</Callout>
+
+### B.6.5.8.2 — Estructuras flexibles o dinámicamente sensibles
+
+Para estructuras con $n_1$ < 1 Hz la respuesta resonante se suma a la de fondo (<NormaRef s="B.6.5.8.2" pag="B-30" />):
+
+<Ecuacion num="B.6.5-6" titulo="Factor de efecto ráfaga Gf (estructuras flexibles)">
+
+$$
+G_f = 0.925\left(\frac{1 + 1.7\,I_{\bar z}\sqrt{g_Q^2 Q^2 + g_R^2 R^2}}{1 + 1.7\,g_v\,I_{\bar z}}\right)
+$$
+
+- $g_Q = g_v = 3.4$; $g_R$ se calcula con B.6.5-7.
+- $R$: factor de respuesta de resonancia (B.6.5-8).
+
+</Ecuacion>
+
+<Ecuacion num="B.6.5-7" titulo="Factor pico de la respuesta resonante">
+
+$$
+g_R = \sqrt{2\ln(3600\,n_1)} + \frac{0.577}{\sqrt{2\ln(3600\,n_1)}}
+$$
+
+- $n_1$: frecuencia natural fundamental del edificio, en Hz.
+
+</Ecuacion>
+
+<Ecuacion num="B.6.5-8" titulo="Factor de respuesta de resonancia R">
+
+$$
+R = \sqrt{\frac{1}{\beta}\,R_n\,R_h\,R_B\,\left(0.53 + 0.47\,R_L\right)}
+$$
+
+- $\beta$: amortiguamiento crítico (el PDF dice «porcentaje»; en la ecuación se usa como **fracción**, p. ej. 0.01 para 1 %).
+
+</Ecuacion>
+
+<Ecuacion num="B.6.5-9 y B.6.5-10" titulo="Resonancia con el espectro de turbulencia">
+
+$$
+R_n = \frac{7.47\,N_1}{\left(1 + 10.3\,N_1\right)^{5/3}}
+\qquad
+N_1 = \frac{n_1\,L_{\bar z}}{\bar V_{\bar z}}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="B.6.5-11a y 11b" titulo="Funciones de admitancia aerodinámica Rℓ">
+
+$$
+R_\ell = \frac{1}{\eta} - \frac{1}{2\eta^2}\left(1 - e^{-2\eta}\right)\quad\text{para } \eta > 0
+\qquad
+R_\ell = 1\quad\text{para } \eta = 0
+$$
+
+El subíndice $\ell$ se reemplaza por $h$, $B$ y $L$ (dimensiones de B.6.3):
+
+- $R_\ell = R_h$ con $\eta = 4.6\,n_1 h / \bar V_{\bar z}$
+- $R_\ell = R_B$ con $\eta = 4.6\,n_1 B / \bar V_{\bar z}$
+- $R_\ell = R_L$ con $\eta = 15.4\,n_1 L / \bar V_{\bar z}$
+
+</Ecuacion>
+
+<Ecuacion num="B.6.5-12" titulo="Velocidad media horaria a la altura z̄">
+
+$$
+\bar V_{\bar z} = \bar b\left(\frac{\bar z}{10}\right)^{\bar\alpha} V
+$$
+
+- $\bar b$ y $\bar\alpha$: constantes de la Tabla B.6.5-2; $V$ es la velocidad básica en m/s.
+
+</Ecuacion>
+
+<Callout tipo="atencion" titulo="Erratas menores en este numeral">
+En el PDF, la fórmula de $R_B$ se imprime con «$4.6\,n_1\,EB/\bar V_{\bar z}$» (la «E» sobra: debe ser $B$), la ecuación B.6.5-11a se cita como «B.6-11a» y $n_1$ aparece como «$\eta_1$» en la lista de variables. Se interpretan así por consistencia con las ecuaciones.
+</Callout>
+
+### B.6.5.8.3 y B.6.5.8.4 — Análisis racional y limitaciones
+
+- **Análisis racional.** En lugar de B.6.5.8.1 y B.6.5.8.2 se puede determinar el factor de efecto ráfaga con cualquier **método racional** de la literatura reconocida (<NormaRef s="B.6.5.8.3" pag="B-31" />).
+- **Limitaciones.** Cuando las tablas de coeficientes de presión ya traen el efecto de ráfaga **combinado** ($GC_p$, $GC_{pi}$ y $GC_{pf}$), **no se calcula $G$ por separado** (<NormaRef s="B.6.5.8.4" pag="B-31" />).
+
+<Ejemplo numero={3} titulo="Factor de efecto ráfaga de un edificio rígido y de una torre flexible">
+
+**Parte A (rígido).** Edificio de $h$ = 30 m y $B$ = 20 m en exposición **B**.
+
+<Paso titulo="Altura equivalente y turbulencia" ref="B.6.5-3">
+
+$\bar z$ = máx(0.6 × 30; $z_{min}$ = 9.0) = **{ej3.rig.zBarra.toFixed(1)} m**.
+
+$$
+I_{\bar z} = 0.30\left(\frac{10}{18}\right)^{1/6}
+$$
+
+Resultado: $I_{\bar z}$ = {ej3.rig.Iz.toFixed(4)}.
+</Paso>
+<Paso titulo="Escala de la turbulencia y respuesta del entorno" ref="B.6.5-5, B.6.5-4">
+
+$$
+L_{\bar z} = 97.5\left(\frac{18}{10}\right)^{1/3}
+$$
+
+Resultado: $L_{\bar z}$ = {ej3.rig.Lz.toFixed(1)} m. Con $B + h$ = 50 m, $Q$ = **{ej3.rig.Q.toFixed(4)}**.
+</Paso>
+<Paso titulo="Factor de efecto ráfaga" ref="B.6.5-2">
+
+$$
+G = 0.925\,\frac{1 + 1.7\,(3.4)\,I_{\bar z}\,Q}{1 + 1.7\,(3.4)\,I_{\bar z}}
+$$
+
+Resultado: $G$ = **{ej3.rig.G.toFixed(4)}**, prácticamente igual al valor simplificado 0.85 que permite la norma (ligeramente menor).
+</Paso>
+
+**Parte B (flexible).** Torre de $h$ = 120 m, $B$ = $L$ = 30 m, $n_1$ = 0.4 Hz ($<$ 1 Hz), $\beta$ = 1 % de amortiguamiento, exposición **C**, $V$ = 28 m/s.
+
+<Paso titulo="Variables de resonancia" ref="B.6.5-7 a B.6.5-12">
+$\bar z$ = {ej3.flex.zBarra.toFixed(1)} m; $\bar V_{\bar z}$ = {ej3.flex.Vz.toFixed(2)} m/s; $L_{\bar z}$ = {ej3.flex.Lz.toFixed(1)} m; $N_1$ = {ej3.flex.N1.toFixed(3)}; $R_n$ = {ej3.flex.Rn.toFixed(4)}; $R_h$ = {ej3.flex.Rh.toFixed(4)}; $R_B$ = {ej3.flex.RB.toFixed(4)}; $R_L$ = {ej3.flex.RL.toFixed(4)}. Entonces $R$ = **{ej3.flex.R.toFixed(4)}** y $g_R$ = **{ej3.flex.gR.toFixed(3)}**.
+</Paso>
+<Paso titulo="Factor de efecto ráfaga flexible" ref="B.6.5-6">
+Con $I_{\bar z}$ = {ej3.flex.Iz.toFixed(4)} y $Q$ = {ej3.flex.Q.toFixed(4)}:
+
+Resultado: $G_f$ = **{ej3.flex.Gf.toFixed(4)}**.
+</Paso>
+<Resultado>
+El edificio rígido de 30 m trabaja con $G$ ≈ {ej3.rig.G.toFixed(2)} (se podría usar 0.85) y la torre flexible de 120 m con $G_f$ ≈ {ej3.flex.Gf.toFixed(2)}. Para la misma torre tratada como rígida, la ecuación B.6.5-2 daría $G$ = {ej3.rigTorre.G.toFixed(3)}: la resonancia con las ráfagas eleva el factor a $G_f$ = {ej3.flex.Gf.toFixed(3)}. Los cálculos de este ejemplo salen de las funciones `factorRafagaRigido` y `factorRafagaFlexible` de la lib de la web (y se comprueban con pruebas automáticas contra las ecuaciones).
+</Resultado>
+</Ejemplo>
+
+## B.6.5.9 — Clasificaciones de los cerramientos
+
+Para fijar el coeficiente de presión interna ($GC_{pi}$), todo edificio se clasifica como **cerrado, parcialmente cerrado o abierto** según las definiciones de B.6.2 (<NormaRef s="B.6.5.9.1" pag="B-31" />). Para ello hay que **cuantificar las aberturas** (puertas, ventanas, huecos) del cerramiento (<NormaRef s="B.6.5.9.2" pag="B-31" />).
+
+| Clasificación | Definición (B.6.2, resumida) |
+|---|---|
+| **Abierto** | Aberturas de al menos 80 % del área en **cada** pared que conforma el cerramiento (fachadas y cubiertas): $A_o \ge 0.8\,A_g$. |
+| **Parcialmente cerrado** | (a) Las aberturas de una pared que recibe presión externa positiva exceden en más de 10 % la suma de las aberturas del resto del cerramiento ($A_o > 1.10\,A_{oi}$); y (b) esas aberturas superan 0.37 m² o el 1 % del área de la pared (el menor) y las aberturas del resto no pasan del 20 % ($A_{oi}/A_{gi} \le 0.20$). |
+| **Cerrado** | Todo el que no sea abierto ni parcialmente cerrado. |
+
+### B.6.5.9.3 — Zonas propensas a huracanes
+
+Los **vidrios** de edificios en zonas propensas a huracanes deben protegerse con una cobertura resistente a impacto o ser vidrios resistentes a impactos, conforme a **ASTM E1886 y ASTM E1996** u otros métodos aprobados (<NormaRef s="B.6.5.9.3" pag="B-31" />). Quedan exceptuados (<NormaRef s="B.6.5.9.3" pag="B-32" />):
+
+- los vidrios de edificios de **grupos II, III o IV** localizados a más de 18.0 m sobre el suelo y a más de 9.0 m sobre cubiertas con superficie de agregado situadas a 450 m al interior del edificio;
+- los vidrios sin protección en edificios del **grupo I**.
+
+### B.6.5.9.4 — Clasificaciones múltiples
+
+Si un edificio cumple a la vez la definición de **abierto** y de **parcialmente cerrado**, se clasifica como **abierto**. Si no cumple ni la de abierto ni la de parcialmente cerrado, es **cerrado** (<NormaRef s="B.6.5.9.4" pag="B-32" />).
+
+<Ejemplo numero={4} titulo="Clasificar el cerramiento de una bodega con un portón abierto">
+
+Una bodega tiene, en la pared de barlovento, un portón abierto de $A_o$ = 12 m² en una pared de $A_g$ = 150 m². El resto del cerramiento (otras paredes y cubierta) suma $A_{gi}$ = 800 m² con aberturas $A_{oi}$ = 5 m².
+
+<Paso titulo="¿Es abierto?" ref="B.6.2">
+$A_o/A_g$ = 12/150 = 8 %, muy por debajo del 80 % exigido ($A_o \ge 0.8\,A_g$ = 120 m²). **No es abierto.**
+</Paso>
+<Paso titulo="¿Es parcialmente cerrado?" ref="B.6.2">
+(a) $A_o$ = 12 m² > 1.10 $A_{oi}$ = 5.5 m²: **cumple**.  
+(b) $A_o$ = 12 m² > menor entre 0.37 m² y 0.01 $A_g$ = 1.5 m² (es decir, 0.37 m²): **cumple**; y $A_{oi}/A_{gi}$ = 5/800 = 0.6 % ≤ 20 %: **cumple**.
+</Paso>
+<Resultado>
+La bodega es **parcialmente cerrada**: el coeficiente $GC_{pi}$ se tomará de la columna de edificios parcialmente cerrados de la Figura B.6.5-2 (capítulo B.6c). Si el portón se cerrara, $A_o$ bajaría de 5.5 m² y el edificio sería **cerrado**.
+</Resultado>
+</Ejemplo>
+
+## B.6.5.10 — Presión por velocidad
+
+La presión por velocidad $q_z$ a la altura $z$ se calcula con la ecuación B.6.5-13 (<NormaRef s="B.6.5.10" pag="B-32" />):
+
+<Ecuacion num="B.6.5-13" titulo="Presión por velocidad qz">
+
+$$
+q_z = 0.613\,K_z\,K_{zt}\,K_d\,V^2\,I\qquad\left[\text{N/m}^2\right],\ V\ \text{en m/s}
+$$
+
+- $K_z$: coeficiente de exposición (B.6.5.6.6).
+- $K_{zt}$: factor topográfico (B.6.5.7.2).
+- $K_d$: factor de direccionalidad (B.6.5.4.4).
+- $V$: velocidad básica, en m/s (B.6.5.4).
+- $I$: factor de importancia (B.6.5.5).
+
+</Ecuacion>
+
+$q_h$ es la presión por velocidad calculada con esta misma ecuación **a la altura media de cubierta $h$** (con $K_h$ en lugar de $K_z$). El coeficiente numérico **0.613** se usa siempre que no haya registros climáticos suficientes para justificar otro valor.
+
+<Callout tipo="practica" titulo="De dónde sale 0.613">
+Es $\tfrac{1}{2}\rho$ con la densidad del aire $\rho$ = 1.226 kg/m³: la presión que ejerce una corriente de velocidad $V$ al detenerse, $\tfrac{1}{2}\rho V^2$, con $V$ en m/s y el resultado en N/m². Para pasar a kN/m², que es la unidad de las presiones mínimas de B.6.4 (0.4 kN/m²), divide entre 1000: por ejemplo, 408.9 N/m² = 0.409 kN/m².
+</Callout>
+
+<Callout tipo="nota" titulo="Esquema de cálculo completo">
+Con los resultados de este capítulo: elige $V$ (mapa) → $K_d$ y $I$ (tablas) → categoría de exposición → $K_z$ (o $K_h$) → $K_{zt}$ si hay colina o escarpe → $q_z$. Con $q_z$, $G$ y los coeficientes de presión del capítulo B.6c se obtiene la presión de diseño $p$.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- Usar el Método 2 en un edificio **irregular** o con riesgo de vórtices, golpeteo o canalización sin recurrir a literatura reconocida o a túnel de viento (B.6.5.1 y B.6.5.2).
+- **Reducir la presión por la cercanía de otros edificios** (apantallamiento): B.6.5.2.1 lo prohíbe.
+- Elegir **exposición B** porque "hay casas alrededor" sin verificar los **800 m** (o 20 $h$) de rugosidad B a barlovento en cada sector de 45°.
+- Aplicar $K_d$ = 0.85 con combinaciones de carga distintas a las de B.2.3 y B.2.4 (la norma lo calibró solo con ellas).
+- Aplicar $K_{zt}$ sin verificar las **cinco condiciones** de B.6.5.7.1, o ignorar $K_{zt}$ en la cresta de una loma: puede duplicar la presión.
+- Mezclar **unidades**: $V$ debe estar en m/s para obtener $q_z$ en N/m² (no en km/h ni kN/m²).
+- Confundir $K_z$ **caso 1 y caso 2** de la Tabla B.6.5-3 en exposición B por debajo de 9 m, o usar $G$ por separado con coeficientes que ya lo incluyen ($GC_p$, $GC_{pi}$, $GC_{pf}$).
+- Usar $G$ = 0.85 en una estructura **flexible** ($n_1$ < 1 Hz): ahí corresponde $G_f$.
+</Callout>
+
+## Resumen en una línea
+
+**Elige $V$ del mapa, $K_d$ e $I$ de sus tablas, decide la exposición (B, C o D) y calcula $K_z$ y, si hay colina, $K_{zt}$: con ellos $q_z = 0.613\,K_z K_{zt} K_d V^2 I$ (N/m², $V$ en m/s)**, y $G$ o $G_f$ completa el paso a la carga de diseño del capítulo B.6c.

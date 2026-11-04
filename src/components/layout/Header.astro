@@ -4,6 +4,8 @@ import ThemeToggle from './ThemeToggle.astro';
 
 const path = Astro.url.pathname.replace(/\/+$/, '') || '/';
 const activo = TITULOS.find((t) => path === `/${t.slug}` || path.startsWith(`/${t.slug}/`));
+// Calculadoras y glosario apuntan al Título que se está viendo (por defecto, el A).
+const base = activo?.slug === 'titulo-b' ? '/titulo-b' : '/titulo-a';
 ---
 
 <header class="sticky top-0 z-40 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -20,8 +22,8 @@ const activo = TITULOS.find((t) => path === `/${t.slug}` || path.startsWith(`/${
     <nav aria-label="Principal" class="ml-auto hidden items-center gap-1 text-sm md:flex">
       <a href="/" class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path === '/' && 'bg-accent font-medium']}>Inicio</a>
       <a href="/titulos" class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path === '/titulos' && 'bg-accent font-medium']}>Títulos</a>
-      <a href="/titulo-a/calculadoras" class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path.startsWith('/titulo-a/calculadoras') && 'bg-accent font-medium']}>Calculadoras</a>
-      <a href="/titulo-a/glosario" class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path.startsWith('/titulo-a/glosario') && 'bg-accent font-medium']}>Glosario</a>
+      <a href={`${base}/calculadoras`} class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path.endsWith('/calculadoras') && 'bg-accent font-medium']}>Calculadoras</a>
+      <a href={`${base}/glosario`} class:list={['rounded-md px-3 py-1.5 hover:bg-accent', path.endsWith('/glosario') && 'bg-accent font-medium']}>Glosario</a>
     </nav>
     <div class="ml-auto flex items-center gap-1 md:ml-2">
       <a

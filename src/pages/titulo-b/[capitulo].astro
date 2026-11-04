@@ -1,0 +1,16 @@
+---
+import { getCollection } from 'astro:content';
+import CapituloVista from '../../components/layout/CapituloVista.astro';
+
+export async function getStaticPaths() {
+  const todos = (await getCollection('titulo-b')).sort((a, b) => a.data.orden - b.data.orden);
+  return todos.map((entry, i) => ({
+    params: { capitulo: entry.id },
+    props: { entry, anterior: todos[i - 1], siguiente: todos[i + 1] },
+  }));
+}
+
+const { entry, anterior, siguiente } = Astro.props;
+---
+
+<CapituloVista titulo="b" entry={entry} anterior={anterior} siguiente={siguiente} />
