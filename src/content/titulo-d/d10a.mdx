@@ -1,0 +1,669 @@
+---
+codigo: 'D.10a'
+tipo: capitulo
+titulo: 'Muros confinados: requisitos'
+resumen: 'Requisitos de la mampostería de muros confinados: definición y uso (DMO), resistencia mínima de las unidades (Tabla D.10.3-1), esbeltez y espesor del muro, densidad mínima de muros por nivel (Ec. D.10.3-1) y requisitos de ubicación, dimensiones, refuerzo mínimo y estribos de las columnas y vigas de confinamiento (D.10.4 a D.10.6).'
+objetivos:
+  - 'Distinguir un muro confinado que cuenta como estructural de uno que no, y ubicar el sistema en la capacidad de disipación DMO'
+  - 'Verificar la resistencia mínima de las unidades con la Tabla D.10.3-1, la esbeltez h/t ≤ 25 y el espesor mínimo de 110 mm'
+  - 'Calcular la densidad mínima de muros por nivel y dirección con la Ec. D.10.3-1, Am ≥ N Aa Ap / 20'
+  - 'Definir ubicación, dimensiones mínimas (20 000 mm²), refuerzo longitudinal mínimo (3 barras N° 3 y 0.0075 Ag) y estribos de las columnas de confinamiento'
+  - 'Definir ubicación, refuerzo mínimo y estribos de las vigas de confinamiento, la viga sobre la cimentación y las cintas de amarre'
+paginasNorma: 'D-53 a D-57'
+paginaPdf: 618
+orden: 12
+calculadoras: ['muro-confinado-refuerzo']
+nivel: 'intermedio'
+---
+
+import {
+  areaBarras,
+  areaMinimaMuros,
+  areaMuros,
+  bloqueHorizontalPermitido,
+  densidadPorNivel,
+  distanciaMaximaVigas,
+  longitudZonaConfinada,
+  resistenciaMinimaUnidad,
+  separacionMaximaColumnas,
+  separacionMaximaEstribos,
+  verificarColumna,
+  verificarDensidad,
+  verificarMuroUnidades,
+  verificarViga,
+} from '../../lib/nsr10/muroConfinadoRefuerzo';
+
+export const f = (x, d = 1) => x.toFixed(d);
+export const estado = (v) => (v.cumple ? 'cumple' : 'NO cumple');
+export const dens = (N, Aa) => ((N * Aa) / 20) * 100;
+
+export const ej1 = (() => {
+  const Aa = 0.25;
+  const Ap = 80;
+  const AmX = areaMuros([{ longitud: 18, espesor: 120 }]);
+  const AmY = areaMuros([{ longitud: 15, espesor: 120 }]);
+  const AmYmas = areaMuros([{ longitud: 18, espesor: 120 }]);
+  const AmYgrueso = areaMuros([{ longitud: 15, espesor: 140 }]);
+  const tx = densidadPorNivel({ pisos: 3, Aa, Ap, Am: AmX });
+  const ty = densidadPorNivel({ pisos: 3, Aa, Ap, Am: AmY });
+  const tyOk = densidadPorNivel({ pisos: 3, Aa, Ap, Am: AmYmas });
+  const tyGrueso = densidadPorNivel({ pisos: 3, Aa, Ap, Am: AmYgrueso });
+  const alt = densidadPorNivel({ pisos: 3, Aa, Ap, Am: AmX, convencion: 'incluye-nivel' });
+  return { Aa, Ap, AmX, AmY, AmYmas, AmYgrueso, tx, ty, tyOk, tyGrueso, alt, yNecesaria: tx[0].Amin / 0.12 };
+})();
+
+export const ej2 = (() => {
+  const base = { espesor: 120, alturaLibre: 2450 };
+  const a = verificarMuroUnidades({ ...base, tipoUnidad: 'bloque-vertical', fcu: 4.5 });
+  const b = verificarMuroUnidades({ ...base, tipoUnidad: 'bloque-vertical', fcu: 6 });
+  const h = { ...base, tipoUnidad: 'bloque-horizontal-arcilla', fcu: 4, fm: 4, Ae: 120000, Pu: 55000, pisosTotales: 4 };
+  const c = verificarMuroUnidades({ ...h, nivelDesdeArriba: 3 });
+  const d = verificarMuroUnidades({ ...h, nivelDesdeArriba: 2 });
+  const e = verificarMuroUnidades({ ...h, nivelDesdeArriba: 2, Pu: 90000 });
+  return { a, b, c, d, e, limite: 0.15 * 4 };
+})();
+
+export const ej3 = (() => {
+  const base = { ancho: 120, espesorMuro: 120, fc: 21, nBarras: 3, barraId: 'No.3', estriboId: 'No.2', sepEstribos: 150, zona: 'alta', sepEstribosExtremo: 100, sepRamas: 120, luz: 2400 };
+  const peq = verificarColumna({ ...base, largo: 150 });
+  const ok = verificarColumna({ ...base, largo: 170 });
+  const sep = separacionMaximaColumnas(120, 2400);
+  return { peq, ok, sep, sEst: separacionMaximaEstribos(120), lz: longitudZonaConfinada(170, 2400), As3: areaBarras(3, 'No.3') };
+})();
+
+export const ej4 = (() => {
+  const base = { ancho: 120, alto: 200, espesorMuro: 120, fc: 21, estriboId: '6M', sepEstribos: 150, distanciaVertical: 2400 };
+  const normal = verificarViga({ ...base, nBarras: 3, barraId: 'No.3' });
+  const losa3 = verificarViga({ ...base, nBarras: 3, barraId: 'No.3', losaMaciza: true });
+  const losa2 = verificarViga({ ...base, nBarras: 2, barraId: 'No.4', losaMaciza: true });
+  return { normal, losa3, losa2, dmax: distanciaMaximaVigas(120), sEst: separacionMaximaEstribos(120) };
+})();
+
+## Idea central del capítulo
+
+La mampostería de muros confinados es un sistema muy empleado en vivienda de pocos pisos (comentario del proyecto): primero se **levanta el muro** de mampostería y, **después**, se funden alrededor de él columnas y vigas de concreto reforzado que lo encierran y lo hacen trabajar como un solo conjunto (<NormaRef s="D.10.1.1" pag="D-54" />). El muro aporta la rigidez y la resistencia al cortante; los elementos de confinamiento le dan **continuidad, ductilidad moderada** y evitan que, una vez agrietado, se desintegre.
+
+Este capítulo se divide en dos partes. **Esta parte (D.10.0 a D.10.6, páginas D-53 a D-57)** fija los requisitos **prescriptivos**: qué unidades se permiten, cuánto muro debe haber en cada nivel, y dónde y con cuánto refuerzo mínimo se colocan las columnas y vigas de confinamiento. La parte b trata el diseño por resistencia (D.10.7 en adelante): carga axial, flexo-compresión, cortante y aplastamiento.
+
+<Callout tipo="importante" titulo="Qué es y qué no es un muro estructural confinado">
+Un muro confinado solo cuenta como **muro estructural** si es **continuo desde la cimentación hasta el último nivel y no tiene ninguna abertura** (<NormaRef s="D.10.3.1" pag="D-54" />). Los muros que no cumplan eso son **no estructurales** y se diseñan según el Capítulo A.9. El área de muros de la densidad mínima (Ec. D.10.3-1) solo puede salir de muros que sean estructurales.
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este capítulo (autoría del proyecto)">
+Los ejemplos y la calculadora usan las funciones de `src/lib/nsr10/muroConfinadoRefuerzo.ts` y las constantes de `src/data/muroConfinado.ts`. Lo rotulado **«autoría del proyecto»** (diagramas, lecturas alternativas de textos ambiguos, equivalencias de diámetro «N° n ó nM») **no es texto de la norma**. Unidades del SI: mm, mm², m², MPa. Los diagramas son esquemas propios, porque el Título D no trae figuras. La parte b del capítulo (D.10.7 en adelante) la tratan otro capítulo y otra calculadora.
+</Callout>
+
+## D.10.0 — Nomenclatura
+
+La sección D.10.0 (<NormaRef s="D.10.0" pag="D-53" />) lista los símbolos del capítulo. Los que se usan en D.10.3 a D.10.6 son:
+
+| Símbolo | Significado | Sección |
+|---|---|---|
+| $A_a$ | Coeficiente de aceleración pico efectiva, Título A | <NormaRef s="D.10.3.4" pag="D-55" /> |
+| $A_m$ | Área mínima de los muros del piso que actúan en la misma dirección en planta, **incluidas las columnas de confinamiento**, m² | <NormaRef s="D.10.3.4" pag="D-55" /> |
+| $A_p$ | Área del piso en el nivel considerado, m² | <NormaRef s="D.10.3.4" pag="D-55" /> |
+| $N$ | Número de niveles **por encima** del nivel considerado | <NormaRef s="D.10.3.4" pag="D-55" /> |
+| $A_e$ | Área efectiva de la sección de mampostería, mm² | <NormaRef s="D.10.3.2.2" pag="D-55" /> |
+| $f'_{cu}$ | Resistencia a la compresión de la unidad de mampostería, MPa | <NormaRef s="D.10.3.2.1" pag="D-54" /> |
+| $f'_m$ | Resistencia a la compresión de la mampostería, MPa | <NormaRef s="D.10.3.2.2" pag="D-55" /> |
+| $f'_c$ | Resistencia a la compresión del concreto de los elementos de confinamiento, MPa | <NormaRef s="D.10.4.1" pag="D-55" /> |
+| $f_y$ | Resistencia a la fluencia del acero de refuerzo, MPa | <NormaRef s="D.10.0" pag="D-53" /> |
+| $P_u$ | Fuerza axial de diseño solicitada en compresión sobre el muro, N | <NormaRef s="D.10.3.2.2" pag="D-55" /> |
+| $A_{ci}$ | Área de la sección de la columna de confinamiento $i$, mm² | <NormaRef s="D.10.0" pag="D-53" /> |
+| $A_{st}$ | Área total del acero de refuerzo longitudinal del elemento de confinamiento, mm² | <NormaRef s="D.10.0" pag="D-53" /> |
+| $h'$ | Longitud de la diagonal del paño de muro entre elementos de confinamiento, o altura efectiva del elemento para pandeo, mm | <NormaRef s="D.10.0" pag="D-53" /> |
+| $t$ | Espesor efectivo del elemento para evaluar efectos de pandeo, mm | <NormaRef s="D.10.0" pag="D-53" /> |
+| $\ell_w$ | Longitud horizontal total del muro, centro a centro entre columnas de borde, mm | <NormaRef s="D.10.0" pag="D-53" /> |
+| $\ell_c$ | Distancia horizontal entre columnas de confinamiento, centro a centro, para el paño de muro bajo estudio, mm | <NormaRef s="D.10.0" pag="D-53" /> |
+
+<Detalle titulo="Resto de la nomenclatura de D.10.0 (símbolos de la parte b, D.10.7)">
+
+Son los símbolos que usa el diseño por resistencia de D.10.7 (<NormaRef s="D.10.0" pag="D-53" />, <NormaRef s="D.10.0" pag="D-54" />):
+
+| Símbolo | Significado |
+|---|---|
+| $A_{ct}$ | Área total de las columnas de confinamiento del muro, mm² |
+| $A_{md}$ | Área efectiva de mampostería para verificación por aplastamiento, mm² |
+| $A_{mv}$ | Área efectiva para determinar esfuerzos cortantes (véase D.5.4.5), mm² |
+| $b$ | Ancho efectivo de la sección de muro para efectos en el plano del muro (D.5.4.4), mm |
+| $h_p$ | Altura del piso localizado por encima del elemento bajo estudio, centro a centro entre vigas de confinamiento, mm |
+| $I_{ct}$ | Momento de inercia de las columnas de confinamiento del muro respecto a su centroide, mm⁴ |
+| $M_n$, $M_u$ | Momento resistente nominal y momento mayorado solicitado de diseño del muro |
+| $P_{nc}$, $P_{nt}$ | Fuerza axial resistente nominal en compresión (positiva) y en tracción (negativa) sobre la columna de confinamiento, N |
+| $P_{nd}$ | Fuerza axial resistente nominal a compresión de la mampostería sola, N |
+| $P_{uc}$, $P_{ut}$ | Fuerza axial de diseño solicitada en compresión (positiva) y en tracción (negativa) sobre la columna de confinamiento, N |
+| $P_{ud}$ | Fuerza axial que actúa sobre la biela diagonal del muro, N |
+| $R_e$ | Coeficiente de efectos de esbeltez en elementos a compresión |
+| $V_n$, $V_u$ | Fuerza cortante resistente nominal y mayorada solicitada de diseño del muro, N |
+| $V_{nc}$ | Fuerza cortante resistente nominal de una sección de concreto reforzado según el Título C, N |
+| $V_{uc}$ | Fuerza cortante mayorada de diseño sobre las columnas de confinamiento cerca de la intersección con la viga de confinamiento, N |
+| $x_i$, $\bar{x}$ | Distancia de la columna $i$ al borde del muro; distancia del centroide de las áreas de todas las columnas al borde del muro, mm |
+| $\Delta P_{ui}$ | Valor absoluto del incremento de la fuerza axial sobre la columna $i$ causado por $M_u$, N |
+| $\phi$ | Coeficiente de reducción de resistencia |
+
+La lista repite la raíz $\sqrt{f'_m}$ («raíz cuadrada de la resistencia a la compresión de la mampostería, en MPa»).
+
+</Detalle>
+
+<Callout tipo="nota" titulo="Observaciones sobre la nomenclatura">
+**1)** Para $N$ la norma escribe «número de niveles por encima del nivel considerado» (<NormaRef s="D.10.0" pag="D-53" />). Aplicada al pie de la letra, en el último nivel $N=0$ y la Ec. D.10.3-1 no exigiría muro; el texto no aclara si se quiso contar también el propio nivel. Ver la discusión en D.10.3.4. **2)** $h'$ tiene una definición doble («longitud de la diagonal del paño de muro entre elementos de confinamiento, o altura efectiva del elemento para evaluar efectos de pandeo»), que se usa en D.10.7. **3)** La unidad de $A_m$ y $A_p$ es **m²**, mientras que el resto de las áreas del capítulo está en mm²: cuidado al mezclarlas.
+</Callout>
+
+## D.10.1 — Requisitos generales
+
+### D.10.1.1 — Clasificación
+
+Se llama **mampostería confinada** a la que se construye con muros de mampostería **rodeados por elementos de concreto reforzado, vaciados posteriormente a la ejecución del muro**, que **actúan monolíticamente** con él (<NormaRef s="D.10.1.1" pag="D-54" />). El orden constructivo importa: primero el muro, después las columnas, que se vacían **directamente contra el muro** (<NormaRef s="D.10.5.1" pag="D-55" />).
+
+<Figura alt="Elevación de un muro confinado: dos columnas de borde y una intermedia, viga de cimentación abajo y viga de amarre arriba, con las separaciones máximas entre columnas y entre vigas" numero="Esquema" pie="Muro de mampostería confinada: columnas en los bordes y en puntos intermedios, vigas de confinamiento arriba y abajo; la columna sale de la cimentación y llega a la viga superior (esquema del proyecto)." >
+<svg viewBox="0 0 580 330" role="img" aria-label="Elevación de un muro confinado con columnas y vigas de confinamiento" className="mx-auto h-auto w-full max-w-2xl">
+  <rect x="60" y="70" width="440" height="180" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1" />
+  <line x1="60" y1="100" x2="500" y2="100" stroke="currentColor" strokeOpacity="0.25" />
+  <line x1="60" y1="130" x2="500" y2="130" stroke="currentColor" strokeOpacity="0.25" />
+  <line x1="60" y1="160" x2="500" y2="160" stroke="currentColor" strokeOpacity="0.25" />
+  <line x1="60" y1="190" x2="500" y2="190" stroke="currentColor" strokeOpacity="0.25" />
+  <line x1="60" y1="220" x2="500" y2="220" stroke="currentColor" strokeOpacity="0.25" />
+  <rect x="42" y="50" width="26" height="220" fill="currentColor" fillOpacity="0.5" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="268" y="50" width="26" height="220" fill="currentColor" fillOpacity="0.5" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="492" y="50" width="26" height="220" fill="currentColor" fillOpacity="0.5" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="42" y="50" width="476" height="20" fill="currentColor" fillOpacity="0.5" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="30" y="250" width="500" height="22" fill="currentColor" fillOpacity="0.5" stroke="currentColor" strokeWidth="1.5" />
+  <text x="280" y="64" textAnchor="middle" fontSize="11" fill="currentColor">viga de amarre superior (remate)</text>
+  <text x="280" y="266" textAnchor="middle" fontSize="11" fill="currentColor">viga de amarre sobre la cimentación</text>
+  <text x="165" y="165" textAnchor="middle" fontSize="12" fill="currentColor">muro de mampostería</text>
+  <text x="165" y="181" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">(sin aberturas)</text>
+  <text x="381" y="165" textAnchor="middle" fontSize="12" fill="currentColor">muro de mampostería</text>
+  <text x="55" y="40" textAnchor="middle" fontSize="11" fill="currentColor">columna de borde</text>
+  <text x="281" y="40" textAnchor="middle" fontSize="11" fill="currentColor">columna intermedia</text>
+  <text x="505" y="40" textAnchor="middle" fontSize="11" fill="currentColor">columna de borde</text>
+  <line x1="55" y1="296" x2="281" y2="296" stroke="currentColor" strokeWidth="1.2" />
+  <line x1="55" y1="290" x2="55" y2="302" stroke="currentColor" strokeWidth="1.2" />
+  <line x1="281" y1="290" x2="281" y2="302" stroke="currentColor" strokeWidth="1.2" />
+  <text x="168" y="314" textAnchor="middle" fontSize="11" fill="currentColor">menor de 35 t, 1.5 h y 4 m</text>
+  <line x1="545" y1="70" x2="545" y2="250" stroke="currentColor" strokeWidth="1.2" />
+  <line x1="539" y1="70" x2="551" y2="70" stroke="currentColor" strokeWidth="1.2" />
+  <line x1="539" y1="250" x2="551" y2="250" stroke="currentColor" strokeWidth="1.2" />
+  <text x="552" y="160" fontSize="11" fill="currentColor">h</text>
+  <text x="552" y="174" fontSize="10" fill="currentColor" fillOpacity="0.8">≤ 25 t</text>
+</svg>
+</Figura>
+
+### D.10.1.2 — Requisitos complementarios
+
+Las estructuras de mampostería de muros confinados deben cumplir también los **Capítulos D.1, D.2, D.3, D.4 y D.5**, salvo las excepciones que anota este capítulo (<NormaRef s="D.10.1.2" pag="D-54" />). En la práctica, de D.5 se toman las dimensiones efectivas (D.5.4), pero con los **valores de φ propios de D.10.7.2**, y los elementos de confinamiento se tratan como celdas inyectadas (<NormaRef s="D.10.7.3" pag="D-57" />), puntos que desarrolla la parte b.
+
+## D.10.2 — Usos de la mampostería de muros confinados
+
+El sistema debe cumplir las limitaciones del **Capítulo A.3** y se clasifica, para el diseño sismo resistente, como un sistema con **capacidad moderada de disipación de energía en el rango inelástico (DMO)** (<NormaRef s="D.10.2.1" pag="D-54" />). Los requisitos de detallado de este capítulo corresponden a ese nivel de capacidad.
+
+## D.10.3 — Requisitos para los muros de mampostería confinada
+
+### D.10.3.1 — General
+
+Toda la resistencia a las cargas se obtiene por medio de los **muros estructurales confinados**. Para ser estructural, un muro confinado debe ser **continuo desde la cimentación hasta su nivel superior** y **no puede tener aberturas de ningún tipo**; los muros que no cumplan se consideran no estructurales y siguen el Capítulo A.9 (<NormaRef s="D.10.3.1" pag="D-54" />).
+
+### D.10.3.2 — Unidades de mampostería permitidas
+
+Pueden usarse unidades de **concreto, de arcilla cocida o sílico-calcáreas**, de perforación vertical, de perforación horizontal o macizas, que cumplan las especificaciones de D.3.6 (<NormaRef s="D.10.3.2" pag="D-54" />).
+
+#### D.10.3.2.1 — Resistencia mínima de las unidades, f′cu
+
+Las unidades deben tener al menos las resistencias de la Tabla D.10.3-1 (<NormaRef s="D.10.3.2.1" pag="D-54" />):
+
+<TablaNorma numero="Tabla D.10.3-1" titulo="Resistencia mínima de las unidades para muros de mampostería confinada" pag="D-54" nota="Valores verificados contra la imagen de la página; el texto extraído del PDF los entrega desordenados.">
+
+| Tipo de unidad | $f'_{cu}$ (MPa) |
+|---|:---:|
+| Tolete de arcilla | 15 |
+| Bloque de perforación horizontal de arcilla | 3 |
+| Bloque de perforación vertical de concreto o de arcilla (sobre área neta) | 5 |
+
+</TablaNorma>
+
+Para el bloque de perforación vertical la resistencia se mide **sobre el área neta**. El tolete de arcilla exige la resistencia más alta, 15 MPa; el bloque de perforación horizontal admite solo 3 MPa, pero su empleo se restringe por otra vía, como se ve enseguida (D.10.3.2.2).
+
+#### D.10.3.2.2 — Restricción al bloque de perforación horizontal de arcilla
+
+El bloque de perforación horizontal de arcilla **solo se permite** en edificaciones de **uno y dos pisos** y en los **dos pisos superiores** de las de más de dos pisos; cuando se permita su empleo, se limita a muros donde se cumpla
+
+$$
+\frac{P_u}{A_e} \le 0.15\,f'_m
+$$
+
+(<NormaRef s="D.10.3.2.2" pag="D-54" /> y <NormaRef s="D.10.3.2.2" pag="D-55" />). (Comentario del proyecto: la restricción limita el bloque de perforación horizontal a los pisos y a los muros con menor carga axial.)
+
+<Callout tipo="atencion" titulo="Lectura de D.10.3.2.2 (autoría del proyecto)">
+La frase del PDF está redactada de forma incompleta («…cuando se permita su empleo, éste se limitará a muros donde se cumpla…»). El proyecto la lee así: (1) el bloque de perforación horizontal está permitido en edificios de 1 o 2 pisos (todos los pisos) o en los dos pisos superiores de los de más de dos; (2) en esos muros debe cumplirse además $P_u/A_e \le 0.15f'_m$. La función `verificarMuroUnidades` y la calculadora aplican esta lectura.
+</Callout>
+
+### D.10.3.3 — Espesor mínimo del muro
+
+Los muros no pueden tener una relación **altura libre / espesor mayor de 25** y deben tener un **espesor nominal no menor de 110 mm**. En viviendas de uno y dos niveles pueden usarse los espesores mínimos de la Tabla E.3.5-1 (<NormaRef s="D.10.3.3" pag="D-55" />), tabla del Título E que no forma parte de este desarrollo.
+
+$$
+\frac{h_{\text{libre}}}{t} \le 25
+\qquad\text{y}\qquad
+t \ge 110\ \text{mm}
+$$
+
+Con $t$ = 120 mm la altura libre máxima es $25\times 120$ = 3 000 mm. Nótese que el límite de 25 coincide con el que D.5.4.3.1 impone a muros estructurales y con la distancia entre vigas de D.10.6.3.
+
+### D.10.3.4 — Área mínima de muros confinados por nivel
+
+La norma exige una **densidad mínima de muros** en cada dirección principal y en cada nivel (<NormaRef s="D.10.3.4" pag="D-55" />):
+
+<Ecuacion num="D.10.3-1" titulo="Área mínima de muros confinados por nivel">
+
+$$
+A_m \;\ge\; \frac{N\,A_a\,A_p}{20}
+$$
+
+- $A_m$: área mínima de muros del piso que actúan en esa dirección, **incluidas las columnas de confinamiento**, en **m²**.
+- $N$: número de niveles por encima del nivel considerado (D.10.0).
+- $A_a$: coeficiente de aceleración pico efectiva (Título A), adimensional.
+- $A_p$: área del piso en el nivel considerado, en **m²**.
+
+</Ecuacion>
+
+Dividiendo por $A_p$ se obtiene la **densidad de muros** exigida, $A_m/A_p \ge N A_a/20$ (forma del proyecto, **autoría del proyecto**). La idea: cuantos más pisos cargan sobre el nivel y mayor es la aceleración sísmica, más área de muro hay que tener en planta. La siguiente tabla (derivada de la ecuación) da la densidad mínima como porcentaje del área del piso:
+
+| N / Aa | 0.10 | 0.15 | 0.20 | 0.25 | 0.30 | 0.35 |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 1 | {f(dens(1, 0.10), 2)} % | {f(dens(1, 0.15), 2)} % | {f(dens(1, 0.20), 2)} % | {f(dens(1, 0.25), 2)} % | {f(dens(1, 0.30), 2)} % | {f(dens(1, 0.35), 2)} % |
+| 2 | {f(dens(2, 0.10), 2)} % | {f(dens(2, 0.15), 2)} % | {f(dens(2, 0.20), 2)} % | {f(dens(2, 0.25), 2)} % | {f(dens(2, 0.30), 2)} % | {f(dens(2, 0.35), 2)} % |
+| 3 | {f(dens(3, 0.10), 2)} % | {f(dens(3, 0.15), 2)} % | {f(dens(3, 0.20), 2)} % | {f(dens(3, 0.25), 2)} % | {f(dens(3, 0.30), 2)} % | {f(dens(3, 0.35), 2)} % |
+| 4 | {f(dens(4, 0.10), 2)} % | {f(dens(4, 0.15), 2)} % | {f(dens(4, 0.20), 2)} % | {f(dens(4, 0.25), 2)} % | {f(dens(4, 0.30), 2)} % | {f(dens(4, 0.35), 2)} % |
+
+<Figura alt="Planta de un piso con muros en las dos direcciones; los muros en X se resaltan con trama oscura y los de Y con trama clara; cada dirección se verifica por separado" numero="Esquema" pie="Planta con la densidad de muros: cada dirección principal se verifica por separado con Am = Σ ℓi·t, contando las columnas de confinamiento; los muros con aberturas no cuentan (esquema del proyecto).">
+<svg viewBox="0 0 560 300" role="img" aria-label="Planta con muros en dirección X y en dirección Y" className="mx-auto h-auto w-full max-w-2xl">
+  <rect x="60" y="30" width="380" height="200" fill="none" stroke="currentColor" strokeOpacity="0.4" strokeDasharray="5 4" />
+  <rect x="60" y="30" width="150" height="9" fill="currentColor" fillOpacity="0.75" />
+  <rect x="270" y="30" width="170" height="9" fill="currentColor" fillOpacity="0.75" />
+  <rect x="60" y="130" width="120" height="9" fill="currentColor" fillOpacity="0.75" />
+  <rect x="300" y="130" width="140" height="9" fill="currentColor" fillOpacity="0.75" />
+  <rect x="60" y="221" width="380" height="9" fill="currentColor" fillOpacity="0.75" />
+  <rect x="60" y="30" width="9" height="200" fill="currentColor" fillOpacity="0.35" stroke="currentColor" />
+  <rect x="431" y="30" width="9" height="200" fill="currentColor" fillOpacity="0.35" stroke="currentColor" />
+  <rect x="246" y="30" width="9" height="109" fill="currentColor" fillOpacity="0.35" stroke="currentColor" />
+  <rect x="171" y="139" width="9" height="91" fill="currentColor" fillOpacity="0.35" stroke="currentColor" />
+  <text x="240" y="85" textAnchor="middle" fontSize="12" fill="currentColor">Ap (área del piso, m²)</text>
+  <text x="240" y="175" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">huecos: sin muro estructural</text>
+  <rect x="470" y="60" width="16" height="9" fill="currentColor" fillOpacity="0.75" />
+  <text x="492" y="68" fontSize="11" fill="currentColor">muros en X</text>
+  <rect x="470" y="84" width="9" height="16" fill="currentColor" fillOpacity="0.35" stroke="currentColor" />
+  <text x="492" y="96" fontSize="11" fill="currentColor">muros en Y</text>
+  <text x="470" y="136" fontSize="11" fill="currentColor">Am,X = Σ ℓi·t (en X)</text>
+  <text x="470" y="152" fontSize="11" fill="currentColor">Am,Y = Σ ℓi·t (en Y)</text>
+  <text x="470" y="176" fontSize="11" fill="currentColor">cada una ≥ N·Aa·Ap / 20</text>
+  <text x="250" y="262" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">Se verifica en cada nivel con su propio N y su propio Ap</text>
+</svg>
+</Figura>
+
+<Callout tipo="atencion" titulo="El caso N = 0 y la lectura alternativa (autoría del proyecto)">
+Con la definición literal de $N$ («niveles por encima del nivel considerado»), el **último nivel** tiene $N=0$ y la Ec. D.10.3-1 da $A_m \ge 0$: no se exigiría muro en el piso superior de ningún edificio, ni en una casa de un piso. Es una anomalía del texto. El proyecto calcula con el texto literal (opción por defecto) y ofrece, en la calculadora, la **lectura alternativa** $N+1$ (contar también el nivel considerado). Cualquiera que sea la que adopte un proyecto real, debe consultarse la fuente oficial y la práctica de la autoridad local.
+</Callout>
+
+<Ejemplo numero={1} titulo="Densidad de muros de una edificación de tres pisos">
+Casa de 3 pisos con $A_p$ = {f(ej1.Ap, 0)} m² por piso, en zona con $A_a$ = {f(ej1.Aa, 2)}. En la dirección X hay 6 muros confinados de 3.0 m y espesor 120 mm; en la dirección Y, 5 muros de 3.0 m y 120 mm. Verificar la densidad mínima de cada nivel.
+
+<Paso titulo="Área de muros provista" ref="D.10.0 (Am incluye columnas)">
+
+$$
+A_{m,X} = 18.0\ \text{m}\times 0.12\ \text{m}
+\qquad
+A_{m,Y} = 15.0\ \text{m}\times 0.12\ \text{m}
+$$
+
+Resultado: $A_{m,X}$ = **{f(ej1.AmX, 3)} m²**, $A_{m,Y}$ = **{f(ej1.AmY, 3)} m²**.
+
+</Paso>
+<Paso titulo="Área mínima por nivel (N literal)" ref="D.10.3-1">
+
+$$
+A_{m,\min} = \frac{N\,(0.25)\,(80)}{20} = N\ \text{m}^2
+$$
+
+Piso 1 ($N$ = 2): **{f(ej1.tx[0].Amin, 2)} m²**. Piso 2 ($N$ = 1): **{f(ej1.tx[1].Amin, 2)} m²**. Piso 3 ($N$ = 0): **{f(ej1.tx[2].Amin, 2)} m²** (el caso anómalo de la ecuación).
+
+</Paso>
+<Paso titulo="Comparación en cada dirección" ref="D.10.3.4">
+
+- Dirección X: {f(ej1.AmX, 2)} ≥ {f(ej1.tx[0].Amin, 2)} → **{estado(ej1.tx[0])}** en el piso 1 (razón {f(ej1.tx[0].razon, 2)}).
+- Dirección Y: {f(ej1.AmY, 2)} frente a {f(ej1.ty[0].Amin, 2)} → **{estado(ej1.ty[0])}** en el piso 1.
+
+Para corregir Y hay tres caminos: añadir longitud de muro (se necesitan {f(ej1.yNecesaria, 2)} m con t = 120 mm; con un muro más de 3 m se llega a {f(ej1.AmYmas, 2)} m², **{estado(ej1.tyOk[0])}**), aumentar el espesor a 140 mm ({f(ej1.AmYgrueso, 2)} m², **{estado(ej1.tyGrueso[0])}**) o añadir muros estructurales continuos desde la cimentación.
+
+</Paso>
+<Paso titulo="Lectura alternativa N + 1 (autoría del proyecto)" ref="D.10.3-1">
+
+Con $N$ contando el propio nivel, las áreas mínimas serían {f(ej1.alt[0].Amin, 2)}, {f(ej1.alt[1].Amin, 2)} y {f(ej1.alt[2].Amin, 2)} m² en los pisos 1, 2 y 3, y la dirección X (con {f(ej1.AmX, 2)} m²) seguiría cumpliendo en los tres.
+
+</Paso>
+<Resultado>
+En el piso 1: X con {f(ej1.AmX, 2)} m² frente a {f(ej1.tx[0].Amin, 2)} m² mínimos, **{estado(ej1.tx[0])}**; Y con {f(ej1.AmY, 2)} m², **{estado(ej1.ty[0])}**. Densidad mínima de este nivel: {f(ej1.tx[0].densidadMin * 100, 2)} % del área del piso.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Unidades, esbeltez y bloque de perforación horizontal">
+Se evalúan muros de 120 mm de espesor y 2 450 mm de altura libre. (a) Bloque de perforación vertical con $f'_{cu}$ = 4.5 MPa; (b) el mismo con 6 MPa; (c) bloque de perforación horizontal de arcilla en un edificio de 4 pisos, piso 3 desde arriba, $f'_{cu}$ = 4 MPa, $f'_m$ = 4 MPa, $P_u$ = 55 kN por franja de 1 m ($A_e$ = 120 000 mm²); (d) lo mismo en el piso 2 desde arriba; (e) como (d) con $P_u$ = 90 kN.
+
+<Paso titulo="Resistencia de la unidad" ref="D.10.3.2.1, Tabla D.10.3-1">
+
+El bloque de perforación vertical requiere $f'_{cu} \ge$ {f(resistenciaMinimaUnidad('bloque-vertical'), 0)} MPa. (a) con 4.5 MPa **{estado(ej2.a[0])}**; (b) con 6 MPa **{estado(ej2.b[0])}**.
+
+</Paso>
+<Paso titulo="Esbeltez y espesor" ref="D.10.3.3">
+
+$h/t$ = 2 450 / 120 = **{ej2.b[1].provisto}** ≤ 25: **{estado(ej2.b[1])}**. Espesor 120 mm ≥ 110 mm: **{estado(ej2.b[2])}**.
+
+</Paso>
+<Paso titulo="Bloque de perforación horizontal de arcilla" ref="D.10.3.2.2">
+
+- (c) Piso 3 desde arriba de un edificio de 4 pisos: uso permitido = **{String(bloqueHorizontalPermitido(4, 3))}** → el bloque **no puede usarse** en ese piso.
+- (d) Piso 2 desde arriba: permitido = **{String(bloqueHorizontalPermitido(4, 2))}**. Límite $0.15f'_m$ = {f(ej2.limite, 2)} MPa; esfuerzo $P_u/A_e$ = 55 000 / 120 000 = **{ej2.d[4].provisto}**: **{estado(ej2.d[4])}**.
+- (e) Con $P_u$ = 90 kN: esfuerzo **{ej2.e[4].provisto}** frente al límite de {f(ej2.limite, 2)} MPa: **{estado(ej2.e[4])}**.
+
+</Paso>
+<Resultado>
+(a) **{estado(ej2.a[0])}** por resistencia de la unidad; (b) **{estado(ej2.b[0])}**, con $h/t$ = {ej2.b[1].provisto}; (c) **{estado(ej2.c[3])}** por ubicación del piso; (d) **{estado(ej2.d[4])}**; (e) **{estado(ej2.e[4])}** por $P_u/A_e$.
+</Resultado>
+</Ejemplo>
+
+## D.10.4 — Requisitos generales para los elementos de confinamiento
+
+### D.10.4.1 — Resistencia del concreto
+
+Columnas y vigas de confinamiento se construyen con concreto de resistencia a la compresión **no menor de 17.5 MPa a los 28 días** (<NormaRef s="D.10.4.1" pag="D-55" />).
+
+### D.10.4.2 — Compatibilidad con el Título C
+
+Las **longitudes de desarrollo, las longitudes de empalme por traslapo y el anclaje** del refuerzo de los elementos de confinamiento son los del Título C, **salvo** las dimensiones mínimas y cantidades de refuerzo mínimas establecidas en este capítulo (<NormaRef s="D.10.4.2" pag="D-55" />). Para el empalme de columnas se remite además al Capítulo C.12 (<NormaRef s="D.10.5.5" pag="D-56" />).
+
+### D.10.4.3 — Refuerzo interior en el muro
+
+**Todo el refuerzo debe ir dentro de las columnas y vigas de confinamiento**: no se permite colocar el refuerzo de confinamiento dentro de las celdas de las unidades de perforación vertical. La excepción son las **vigas de remate** de los muros, que pueden hacerse con unidades tipo U inyectadas con mortero de resistencia no menor de **14 MPa** (<NormaRef s="D.10.4.3" pag="D-55" />).
+
+<Callout tipo="nota" titulo="Por qué no hay refuerzo en las celdas (autoría del proyecto)">
+En la mampostería reforzada de perforación vertical (Capítulo D.7) el refuerzo va en celdas inyectadas. En el muro **confinado** el sistema es otro: el refuerzo está concentrado en los elementos de concreto, que se vacían contra el muro. Mezclar ambos esquemas sin diseño específico no está contemplado por este capítulo.
+</Callout>
+
+## D.10.5 — Columnas de confinamiento
+
+### D.10.5.1 — General
+
+Son los elementos de concreto reforzado ubicados en **los dos bordes del muro** y en **puntos intermedios**. Deben ser **continuas desde la cimentación hasta la parte superior del muro** y se vacían **directamente contra el muro, con posterioridad al alzado** de los muros estructurales de cada piso (<NormaRef s="D.10.5.1" pag="D-55" />).
+
+### D.10.5.2 — Dimensiones mínimas
+
+- **Espesor mínimo** (<NormaRef s="D.10.5.2.1" pag="D-55" />): igual al del muro confinado.
+- **Área mínima** (<NormaRef s="D.10.5.2.2" pag="D-55" />): **20 000 mm²** (200 cm²) de sección transversal.
+
+Con un muro de 120 mm, la columna de 120 mm de espesor necesita al menos $20\,000/120 \approx 167$ mm de longitud a lo largo del muro; con 150 mm de espesor, al menos 134 mm.
+
+### D.10.5.3 — Ubicación
+
+Se colocan columnas de confinamiento (<NormaRef s="D.10.5.3" pag="D-55" />):
+
+1. **(a)** En los **extremos** de todos los muros estructurales.
+2. **(b)** En las **intersecciones** con otros muros estructurales.
+3. **(c)** En lugares **intermedios**, a distancias no mayores de **35 veces el espesor efectivo del muro**, **1.5 veces la distancia vertical entre elementos horizontales de confinamiento** ó **4 m**.
+
+En el literal (c) las tres distancias son **máximos**; el proyecto lee la «ó» como «el menor de los tres» (**autoría del proyecto**), porque cumplir solo uno de ellos dejaría paños demasiado largos. Para $t$ = 120 mm y vigas cada 2 400 mm se obtiene el mínimo de 4 200, 3 600 y 4 000 mm, es decir **{f(ej3.sep.max, 0)} mm** (rige 1.5 veces la distancia entre vigas). El espesor efectivo $t$ se determina según D.5.4.2.
+
+### D.10.5.4 — Refuerzo mínimo
+
+**(a) Refuerzo longitudinal** (<NormaRef s="D.10.5.4" pag="D-55" />):
+
+- no menos de **3 barras N° 3 (3/8") ó 10M (10 mm)**;
+- área longitudinal **mayor o igual a 0.0075 veces el área bruta**: $A_{st} \ge 0.0075\,A_g$;
+- y nunca menor que la requerida por los esfuerzos de diseño de D.10.7.
+
+**(b) Refuerzo transversal** (<NormaRef s="D.10.5.4" pag="D-56" />): estribos **cerrados** de diámetro mínimo **N° 2 (1/4") ó 6M (6 mm)**, con separación no mayor de **1.5 veces la menor dimensión del elemento, ni de 200 mm**; tampoco menor que el requerido por D.10.7. En forma matemática (**autoría del proyecto**):
+
+$$
+s_{\max} = \min\left(1.5\,b_{\min},\; 200\ \text{mm}\right)
+$$
+
+La exigencia **de área y de número** son independientes: con la sección mínima de 20 000 mm², $0.0075A_g$ = 150 mm², pero 3 barras N° 3 suman {f(ej3.As3, 0)} mm², así que en columnas pequeñas **rige el mínimo de tres barras**; con secciones mayores (p. ej. 200 × 200 mm, $0.0075A_g$ = 300 mm²) rige la cuantía 0.0075.
+
+### D.10.5.5 — Anclaje del refuerzo
+
+El refuerzo vertical de las columnas se **ancla al sistema de cimentación**, pudiendo usarse barras de empalme ancladas en el cimiento con **ganchos a 90°** que sobresalgan la **longitud de empalme por traslapo** desde la cara superior del cimiento. Los empalmes cumplen el Capítulo C.12. En el extremo superior, las barras se **anclan con gancho a 90°** en un elemento de confinamiento transversal a su dirección (<NormaRef s="D.10.5.5" pag="D-56" />).
+
+### D.10.5.6 — Refuerzo transversal de confinamiento
+
+En zonas de **amenaza sísmica alta e intermedia** se utilizan estribos cerrados de confinamiento de mínimo **N° 2 ó 6M**, espaciados a **100 mm**, con **ramas separadas no más de 150 mm**. Se colocan en **cada extremo** de la columna, medidos desde el elemento transversal de confinamiento, en una longitud igual a la **mayor** entre **450 mm**, **3 veces la mayor dimensión de la sección** o la **sexta parte de la luz** (<NormaRef s="D.10.5.6" pag="D-56" />):
+
+$$
+L_z = \max\left(450\ \text{mm},\; 3\,h_{\max},\; \frac{L}{6}\right)
+$$
+
+(forma matemática de D.10.5.6; **autoría del proyecto**: $h_{\max}$ es la mayor dimensión de la sección y $L$ la luz libre de la columna). El proyecto lee «espaciados a 100 mm» como separación **máxima** de 100 mm.
+
+<Figura alt="Detalle de una columna de confinamiento con su sección y su alzado, con estribos a 100 mm en los extremos y a 150 mm o más en el centro, y sección de una viga de confinamiento" numero="Esquema" pie="Refuerzo de columnas y vigas de confinamiento: sección con 3 barras y estribo cerrado; alzado con estribos más juntos en cada extremo; sección de viga de confinamiento (esquema del proyecto)." >
+<svg viewBox="0 0 640 290" role="img" aria-label="Sección y alzado de la columna de confinamiento y sección de viga" className="mx-auto h-auto w-full max-w-3xl">
+  <text x="85" y="22" textAnchor="middle" fontSize="12" fontWeight="bold" fill="currentColor">Sección de columna</text>
+  <rect x="45" y="40" width="80" height="110" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="52" y="47" width="66" height="96" fill="none" stroke="currentColor" strokeWidth="2" />
+  <circle cx="58" cy="53" r="5" fill="currentColor" />
+  <circle cx="112" cy="53" r="5" fill="currentColor" />
+  <circle cx="58" cy="137" r="5" fill="currentColor" />
+  <circle cx="112" cy="137" r="5" fill="currentColor" />
+  <text x="85" y="172" textAnchor="middle" fontSize="11" fill="currentColor">b = t del muro</text>
+  <text x="85" y="188" textAnchor="middle" fontSize="11" fill="currentColor">Ag ≥ 20 000 mm²</text>
+  <text x="85" y="204" textAnchor="middle" fontSize="11" fill="currentColor">≥ 3 barras N° 3 ó 10M</text>
+  <text x="85" y="220" textAnchor="middle" fontSize="11" fill="currentColor">Ast ≥ 0.0075 Ag</text>
+  <text x="85" y="236" textAnchor="middle" fontSize="11" fill="currentColor">estribo cerrado N° 2 ó 6M</text>
+  <text x="270" y="22" textAnchor="middle" fontSize="12" fontWeight="bold" fill="currentColor">Alzado de columna</text>
+  <rect x="240" y="34" width="60" height="224" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="40" x2="300" y2="40" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="47" x2="300" y2="47" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="54" x2="300" y2="54" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="61" x2="300" y2="61" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="68" x2="300" y2="68" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="75" x2="300" y2="75" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="82" x2="300" y2="82" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="105" x2="300" y2="105" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="128" x2="300" y2="128" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="151" x2="300" y2="151" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="174" x2="300" y2="174" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="197" x2="300" y2="197" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="210" x2="300" y2="210" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="217" x2="300" y2="217" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="224" x2="300" y2="224" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="231" x2="300" y2="231" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="238" x2="300" y2="238" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="245" x2="300" y2="245" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="240" y1="252" x2="300" y2="252" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="314" y1="34" x2="314" y2="90" stroke="currentColor" strokeWidth="1.2" />
+  <line x1="309" y1="34" x2="319" y2="34" stroke="currentColor" strokeWidth="1.2" />
+  <line x1="309" y1="90" x2="319" y2="90" stroke="currentColor" strokeWidth="1.2" />
+  <text x="324" y="58" fontSize="11" fill="currentColor">Lz = mayor de 450 mm,</text>
+  <text x="324" y="72" fontSize="11" fill="currentColor">3 hmáx y L/6</text>
+  <text x="324" y="86" fontSize="11" fill="currentColor">estribos a 100 mm</text>
+  <text x="324" y="150" fontSize="11" fill="currentColor">zona central:</text>
+  <text x="324" y="164" fontSize="11" fill="currentColor">s ≤ menor de 1.5 b y 200 mm</text>
+  <text x="324" y="178" fontSize="10" fill="currentColor" fillOpacity="0.8">(en zonas de amenaza alta e</text>
+  <text x="324" y="190" fontSize="10" fill="currentColor" fillOpacity="0.8">intermedia: ramas a ≤ 150 mm)</text>
+  <line x1="314" y1="202" x2="314" y2="258" stroke="currentColor" strokeWidth="1.2" />
+  <line x1="309" y1="202" x2="319" y2="202" stroke="currentColor" strokeWidth="1.2" />
+  <line x1="309" y1="258" x2="319" y2="258" stroke="currentColor" strokeWidth="1.2" />
+  <text x="324" y="234" fontSize="11" fill="currentColor">Lz (otro extremo)</text>
+  <text x="535" y="22" textAnchor="middle" fontSize="12" fontWeight="bold" fill="currentColor">Sección de viga</text>
+  <rect x="495" y="52" width="80" height="62" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="502" y="59" width="66" height="48" fill="none" stroke="currentColor" strokeWidth="2" />
+  <circle cx="508" cy="65" r="5" fill="currentColor" />
+  <circle cx="535" cy="65" r="5" fill="currentColor" />
+  <circle cx="562" cy="65" r="5" fill="currentColor" />
+  <circle cx="508" cy="101" r="5" fill="currentColor" />
+  <circle cx="535" cy="101" r="5" fill="currentColor" />
+  <circle cx="562" cy="101" r="5" fill="currentColor" />
+  <text x="535" y="136" textAnchor="middle" fontSize="11" fill="currentColor">Ag ≥ 20 000 mm², b = t</text>
+  <text x="535" y="152" textAnchor="middle" fontSize="11" fill="currentColor">≥ 3 barras N° 3 ó 10M</text>
+  <text x="535" y="168" textAnchor="middle" fontSize="11" fill="currentColor">Ast ≥ 0.0075 Ag</text>
+  <text x="535" y="184" textAnchor="middle" fontSize="11" fill="currentColor">ancho &lt; 110 mm o losa maciza:</text>
+  <text x="535" y="198" textAnchor="middle" fontSize="11" fill="currentColor">2 barras N° 4 ó 12M</text>
+  <text x="535" y="214" textAnchor="middle" fontSize="11" fill="currentColor">estribo s ≤ menor de 1.5 b y 200</text>
+</svg>
+</Figura>
+
+<Ejemplo numero={3} titulo="Columna de confinamiento de un muro de 120 mm">
+Muro de 120 mm de espesor, altura libre entre vigas 2 400 mm, zona de amenaza sísmica alta, concreto de 21 MPa. Se propone una columna de 120 × 150 mm con 3 barras N° 3 y estribos N° 2: revisar y, si hace falta, corregir.
+
+<Paso titulo="Dimensiones" ref="D.10.5.2">
+
+Con 120 × 150 mm el área es **{f(ej3.peq.Ag, 0)} mm²**, menor que 20 000 mm²: **{estado(ej3.peq.verificaciones.find((v) => v.id === 'area'))}**. Se pasa a 120 × 170 mm: área **{f(ej3.ok.Ag, 0)} mm²** ≥ 20 000 mm².
+
+</Paso>
+<Paso titulo="Refuerzo longitudinal" ref="D.10.5.4(a)">
+
+3 barras N° 3: $A_{st}$ = **{f(ej3.ok.As, 0)} mm²** (cuantía {f(ej3.ok.cuantia, 4)}). Mínimo $0.0075\,(20\,400)$ = **{f(ej3.ok.AsMin, 0)} mm²**: {estado(ej3.ok.verificaciones.find((v) => v.id === 'cuantia'))}; número de barras (≥ 3): {estado(ej3.ok.verificaciones.find((v) => v.id === 'n-barras'))}.
+
+</Paso>
+<Paso titulo="Estribos en la zona central" ref="D.10.5.4(b)">
+
+$s_{\max} = \min(1.5\times 120,\ 200)$ = **{f(ej3.ok.sepEstribosMax, 0)} mm**. Estribo N° 2 a 150 mm: **{estado(ej3.ok.verificaciones.find((v) => v.id === 's-estribo'))}**.
+
+</Paso>
+<Paso titulo="Estribos de confinamiento en los extremos" ref="D.10.5.6">
+
+Longitud de cada zona: $L_z = \max(450,\ 3\times 170,\ 2\,400/6)$ = $\max(450,\ 510,\ 400)$ = **{f(ej3.ok.longitudZona, 0)} mm**. Dentro de ella, estribos N° 2 a 100 mm con ramas a no más de 150 mm (se adoptan 120 mm): **{estado(ej3.ok.verificaciones.find((v) => v.id === 's-extremo'))}** y **{estado(ej3.ok.verificaciones.find((v) => v.id === 'ramas'))}**.
+
+</Paso>
+<Paso titulo="Separación entre columnas" ref="D.10.5.3(c)">
+
+Mínimo de 35 (120) = {f(ej3.sep.porEspesor, 0)}, 1.5 (2 400) = {f(ej3.sep.porAlturaVigas, 0)} y 4 000 mm: columnas intermedias a **{f(ej3.sep.max, 0)} mm** o menos.
+
+</Paso>
+<Resultado>
+Columna de **120 × 170 mm** con **3 N° 3** ({f(ej3.ok.As, 0)} mm²), estribos N° 2 a 150 mm en el centro y a 100 mm en los **{f(ej3.ok.longitudZona, 0)} mm** de cada extremo; en conjunto {ej3.ok.cumple ? 'cumple' : 'NO cumple'} los mínimos de D.10.5 (el refuerzo requerido por D.10.7 puede exigir más). La sección original de 120 × 150 mm {ej3.peq.cumple ? 'cumplía' : 'NO cumplía'}.
+</Resultado>
+</Ejemplo>
+
+## D.10.6 — Vigas de confinamiento
+
+### D.10.6.1 — General
+
+Son los elementos de concreto reforzado en la **parte inferior y superior** de los muros confinados. Las vigas de amarre se vacían **directamente sobre los muros** que confinan. La **viga de cimentación** se considera una viga de amarre y debe cumplir sus requisitos mínimos (<NormaRef s="D.10.6.1" pag="D-56" />).
+
+### D.10.6.2 — Dimensiones mínimas
+
+- **Espesor mínimo**: el mismo del muro (<NormaRef s="D.10.6.2.1" pag="D-56" />).
+- **Área mínima**: **20 000 mm²** (<NormaRef s="D.10.6.2.2" pag="D-56" />). Con **losa de entrepiso maciza de espesor mayor o igual a 100 mm** se puede **prescindir de las vigas de amarre en la zona ocupada por la losa**, colocando el refuerzo requerido para la viga dentro de la losa. En vigas que requieran **enchape**, el ancho puede reducirse **hasta en 75 mm** si se aumenta la altura de modo que el **área no sea inferior** al mínimo.
+
+### D.10.6.3 — Ubicación
+
+Se colocan vigas horizontales en el **arranque y el remate** del muro, en los **entrepisos** y a **distancias libres verticales no mayores de 25 veces el espesor** del muro (<NormaRef s="D.10.6.3" pag="D-56" />); con $t$ = 120 mm la distancia máxima es **{f(ej4.dmax, 0)} mm**. Las vigas forman **anillos cerrados** en planos horizontales, entrelazando los muros de las dos direcciones principales para conformar **diafragmas** con ayuda del entrepiso o la cubierta. Se ubican:
+
+1. **(a) A nivel de cimentación**: el sistema de cimentación es el primer nivel de amarre horizontal.
+2. **(b) A nivel del entrepiso**: las vigas de amarre son parte del sistema de entrepiso.
+3. **(c) A nivel del enrase de cubierta**, con dos opciones para el diafragma: (1) vigas horizontales al nivel de dinteles más **cintas de amarre** como remate de las culatas; o (2) vigas horizontales en muros sin culatas, combinadas con **vigas de amarre inclinadas** que forman los remates de las culatas.
+
+### D.10.6.4 — Refuerzo mínimo
+
+**(a) Refuerzo longitudinal** (<NormaRef s="D.10.6.4" pag="D-56" />, <NormaRef s="D.10.6.4" pag="D-57" />):
+
+- no menos de **3 barras N° 3 ó 10M**;
+- área mínima **0.0075** veces el área bruta;
+- **para anchos menores de 110 mm, y cuando el entrepiso sea una losa maciza, el refuerzo mínimo son 2 barras N° 4 (1/2") ó 12M (12 mm)**;
+- en ningún caso menor que el requerido por D.10.7.
+
+**(b) Refuerzo transversal** (<NormaRef s="D.10.6.4" pag="D-57" />): estribos cerrados **N° 2 ó 6M**, con separación no mayor de **200 mm** ni de **1.5 veces la menor dimensión** del elemento; tampoco menos de lo que exija D.10.7.
+
+<Callout tipo="nota" titulo="Viga angosta o con losa maciza (autoría del proyecto)">
+El texto fija «dos barras N° 4 ó 12M» como mínimo para los casos de viga angosta o losa maciza, pero **no dice si deja de aplicar la cuantía 0.0075**. El proyecto mantiene la verificación de $0.0075A_g$ también en esos casos (lectura prudente). Con la viga mínima de 20 000 mm², $0.0075A_g$ = 150 mm² y 2 barras N° 4 suman {f(areaBarras(2, 'No.4'), 0)} mm².
+</Callout>
+
+#### D.10.6.4.1 — Vigas que continúan fuera del muro confinado
+
+Si la viga de amarre **continúa fuera del muro confinado** y hace de **dintel**, de **apoyo de losa** o de **elemento colector** del diafragma, debe **diseñarse con los requisitos del Título C** (<NormaRef s="D.10.6.4.1" pag="D-57" />).
+
+### D.10.6.5 — Anclaje del refuerzo
+
+El refuerzo de las vigas se ancla en los **extremos terminales** con **ganchos de 90°** dentro de un elemento de confinamiento **transversal** a su dirección (<NormaRef s="D.10.6.5" pag="D-57" />).
+
+### D.10.6.6 — Viga de amarre sobre la cimentación
+
+Sobre la cimentación se coloca una viga de amarre que cumpla los **mínimos de las vigas de confinamiento**. Si la cimentación es de **concreto reforzado**, esos elementos se consideran **equivalentes** a la viga de amarre y solo se exigen las **cuantías mínimas**, sin bajar nunca del refuerzo que pidan los esfuerzos de diseño de D.10.7 (<NormaRef s="D.10.6.6" pag="D-57" />).
+
+### D.10.6.7 — Cintas de amarre
+
+Las **cintas de amarre** son elementos **suplementarios** a las vigas de amarre, útiles en **antepechos de ventanas, remates de culatas, remates de parapetos**, etc. Deben construirse para trabajar **monolíticamente** con el elemento que remata y su refuerzo longitudinal se **ancla en los extremos terminales** (<NormaRef s="D.10.6.7" pag="D-57" />). Se admite, indistintamente, una de dos soluciones:
+
+<TablaNorma numero="D.10.6.7 (a) y (b)" titulo="Cintas de amarre admitidas" pag="D-57" nota="Resumen del proyecto de los dos literales de D.10.6.7; no es una tabla numerada de la norma.">
+
+| Solución | Geometría | Refuerzo longitudinal mínimo | Otros |
+|---|---|---|---|
+| (a) Elemento de concreto reforzado | Altura ≥ 100 mm; ancho igual al espesor del elemento que remata | 2 barras N° 3 ó 10M | Refuerzo transversal el necesario para mantener las barras en su posición |
+| (b) Piezas de mampostería tipo U | Ver el muro que remata | 2 barras N° 3 ó 10M, **ó** 1 barra N° 4 ó 12M | Inyectado con mortero de inyección de resistencia no menor de 14 MPa |
+
+</TablaNorma>
+
+<Ejemplo numero={4} titulo="Viga de amarre de un muro de 120 mm">
+Viga de 120 × 200 mm sobre un muro de 120 mm, concreto de 21 MPa, estribos 6M a 150 mm, distancia libre vertical entre vigas de 2 400 mm. Revisar (a) sin losa maciza con 3 barras N° 3, (b) con entrepiso de losa maciza y 3 barras N° 3, (c) con losa maciza y 2 barras N° 4.
+
+<Paso titulo="Dimensiones y ubicación" ref="D.10.6.2, D.10.6.3">
+
+Área = 120 × 200 = **{f(ej4.normal.Ag, 0)} mm²** ≥ 20 000 mm². Espesor igual al del muro. Distancia vertical máxima 25 (120) = **{f(ej4.dmax, 0)} mm**; se tiene 2 400 mm: cumple.
+
+</Paso>
+<Paso titulo="Estribos" ref="D.10.6.4(b)">
+
+$s_{\max} = \min(1.5\times 120,\ 200)$ = **{f(ej4.sEst, 0)} mm**; estribos 6M a 150 mm: **{estado(ej4.normal.verificaciones.find((v) => v.id === 's-estribo'))}**.
+
+</Paso>
+<Paso titulo="Refuerzo longitudinal, tres casos" ref="D.10.6.4(a)">
+
+- (a) 3 barras N° 3 = {f(ej4.normal.As, 0)} mm² ≥ 0.0075 (24 000) = {f(ej4.normal.AsMin, 0)} mm²: **{ej4.normal.cumple ? 'cumple' : 'NO cumple'}**.
+- (b) Con losa maciza el mínimo pasa a 2 barras N° 4 ó 12M: 3 barras N° 3 **{ej4.losa3.cumple ? 'cumplen' : 'NO cumplen'}** (diámetro de 9.5 mm menor que 12 mm).
+- (c) 2 barras N° 4 = {f(ej4.losa2.As, 0)} mm²: **{ej4.losa2.cumple ? 'cumple' : 'NO cumple'}**.
+
+</Paso>
+<Resultado>
+En un entrepiso normal basta con **3 N° 3** ({f(ej4.normal.As, 0)} mm²) con estribos a 150 mm; si el entrepiso es una losa maciza hay que pasar a **2 N° 4** ({f(ej4.losa2.As, 0)} mm²). Siempre con la reserva de que D.10.7 puede exigir más refuerzo.
+</Resultado>
+</Ejemplo>
+
+### Calculadora
+
+La calculadora reúne las verificaciones de D.10.3 a D.10.6: densidad de muros por nivel y dirección, unidades y esbeltez, columnas y vigas de confinamiento.
+
+<CalculadoraEmbed id="muro-confinado-refuerzo" />
+
+## Transición hacia D.10.7
+
+La sección D.10.7 comienza al final de la página D-57. Sus primeros numerales fijan que el diseño se hace con el Capítulo D.5 por estados límite (<NormaRef s="D.10.7.1" pag="D-57" />), los **valores de φ propios** de la mampostería confinada, distintos de los de D.5.1.5 (<NormaRef s="D.10.7.2" pag="D-57" />), y las suposiciones de diseño que tratan al muro como elemento homogéneo (<NormaRef s="D.10.7.3" pag="D-57" />). Todo ello, junto con las ecuaciones D.10.7-1 en adelante, se desarrolla en la parte b del capítulo.
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Contar como estructural un muro con aberturas o que no llega a la cimentación">
+Un muro confinado **con puertas, ventanas o cualquier abertura**, o que no es continuo desde la cimentación hasta la cubierta, **no es estructural** (D.10.3.1). Su área no puede contarse en $A_m$ y hay que tratarlo como no estructural según A.9.
+</Callout>
+
+<Callout tipo="error" titulo="Mezclar mm² y m² en la densidad de muros">
+La Ec. D.10.3-1 se escribe con $A_m$ y $A_p$ en **m²**. Si se calcula $A_m$ en mm² (como el resto del capítulo) el resultado pierde seis órdenes de magnitud. Además, $A_m$ **incluye** las columnas de confinamiento y se verifica **por separado en cada dirección y en cada nivel**.
+</Callout>
+
+<Callout tipo="error" titulo="Aplicar la densidad con N = 0 y creer que no hace falta muro arriba">
+En el último nivel, con la definición literal de $N$, la ecuación da cero. No significa que no se necesiten muros: significa que la fórmula, tal como está impresa, no los exige. Revisa el criterio con el revisor técnico (ver el recuadro de D.10.3.4).
+</Callout>
+
+<Callout tipo="error" titulo="Cumplir solo el área o solo las 3 barras de la columna">
+Se deben cumplir **las dos** cosas: no menos de 3 barras N° 3 ó 10M **y** $A_{st} \ge 0.0075A_g$. En columnas grandes manda la cuantía; en las mínimas, el número de barras. Y ambas son mínimos «de piso»: el diseño de D.10.7 puede requerir más.
+</Callout>
+
+<Callout tipo="error" titulo="Estribos a 200 mm en toda la columna en zona sísmica alta o intermedia">
+Los 200 mm (o 1.5 veces la menor dimensión) valen para la **zona central**. En amenaza sísmica **alta e intermedia** hay que poner estribos a **100 mm** en la longitud $L_z$ de cada extremo (mayor de 450 mm, 3 veces la mayor dimensión o L/6), con ramas a no más de 150 mm.
+</Callout>
+
+<Callout tipo="error" titulo="Colocar refuerzo en las celdas de los bloques o saltarse las vigas">
+Todo el refuerzo va **dentro de columnas y vigas de confinamiento** (D.10.4.3). Solo la viga de remate puede hacerse con unidades tipo U inyectadas con mortero de al menos 14 MPa. Las vigas deben formar **anillos cerrados** y colocarse a no más de **25 t** de distancia libre vertical.
+</Callout>
+
+<Callout tipo="error" titulo="Usar bloque de perforación horizontal en cualquier piso">
+Solo está permitido en edificios de 1 y 2 pisos y en los **dos pisos superiores** de los de más de dos, y con $P_u/A_e \le 0.15f'_m$. En un edificio de 4 pisos no puede usarse en el piso 1 ni en el piso 2.
+</Callout>
+
+## Resumen en una línea
+
+**Un muro confinado solo es estructural si es continuo y sin aberturas; con unidades de al menos 15 MPa (tolete), 3 MPa (bloque horizontal, restringido) o 5 MPa (bloque vertical), h/t ≤ 25, t ≥ 110 mm, densidad Am ≥ N Aa Ap / 20 por nivel y dirección, y columnas y vigas de concreto de 17.5 MPa, 20 000 mm² mínimo, 3 barras N° 3 (0.0075 Ag) y estribos a 1.5 b ó 200 mm (100 mm en los extremos de las columnas en amenaza alta e intermedia).**

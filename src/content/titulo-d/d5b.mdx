@@ -1,0 +1,1018 @@
+---
+codigo: 'D.5b'
+tipo: capitulo
+titulo: 'Resistencia de muros: compresión, flexión y cortante'
+resumen: 'El núcleo de diseño de la mampostería estructural: resistencia a compresión axial (Po, factor de esbeltez Re, Pn y φPn), flexión sin carga axial, muros fuera de su plano, y muros en su plano con flexo-compresión, módulo de ruptura, cortante nominal Vn = Vm + Vs, articulación plástica y elementos de borde.'
+objetivos:
+  - 'Calcular Po, Re, Pn y φPn de un muro o columna y verificar Pu ≤ φPn con las ecuaciones D.5.5-1 a D.5.5-4'
+  - 'Obtener el momento nominal Mn de una sección simple o doblemente armada (D.5.6) y reconocer cuándo el refuerzo de compresión no fluye'
+  - 'Diseñar a flexión un muro fuera de su plano distinguiendo Pu menor o mayor que 0.10 f′m Ae (D.5.7) y verificar el cortante Vn = Amv √f′m / 6'
+  - 'Verificar un muro en su plano a flexo-compresión con el diagrama de interacción, el momento de agrietamiento y la Tabla D.5.8-1'
+  - 'Calcular Vm, Vs y Vn con las Tablas D.5.8-2 y D.5.8-3, evaluar la articulación plástica y decidir si se requieren elementos de borde'
+paginasNorma: 'D-37 a D-42'
+paginaPdf: 602
+orden: 7
+calculadoras: ['axial-mamposteria', 'flexion-mamposteria', 'muro-fuera-plano', 'muro-en-plano']
+nivel: 'avanzado'
+---
+
+import {
+  alphaMcr,
+  articulacionPlastica,
+  cargaBalanceada,
+  coeficienteVm,
+  coeficienteVnMax,
+  capasMuroEnPlano,
+  cortanteFueraPlano,
+  cortanteMuroEnPlano,
+  cortanteRefuerzo,
+  cuantiaBalanceada,
+  curvaInteraccionMuro,
+  esfuerzoFibraExtrema,
+  factorEsbeltez,
+  flexionDobleArmadura,
+  flexionSimple,
+  momentoAgrietamiento,
+  moduloRuptura,
+  muroFueraPlano,
+  phiEnPlanoFn,
+  requiereElementoBorde,
+  resistenciaAxial,
+  verificarFlexoCompresion,
+} from '../../lib/nsr10/mamposteria';
+import { EPS_MU } from '../../data/muroMamposteria';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const tablaRe = [10, 16, 20, 25, 30, 36, 40].map((r) => ({ r, Re: factorEsbeltez(r, 1) }));
+
+export const ej1 = (() => {
+  const base = { fm: 10, Ae: 150000, Ast: 258, fy: 420, hPrime: 2400, t: 150 };
+  return {
+    base,
+    plano: resistenciaAxial({ ...base, phi: 0.6, Pu: 450 }),
+    grav: resistenciaAxial({ ...base, phi: 0.8 }),
+    alto: resistenciaAxial({ ...base, hPrime: 3600, phi: 0.6 }),
+  };
+})();
+
+export const ej2 = (() => {
+  const s = { fm: 10, fy: 420, b: 150, d: 340, As: 258, phi: 0.8, Mu: 20 };
+  return { s, r: flexionSimple(s), mucho: flexionSimple({ ...s, As: 400 }) };
+})();
+
+export const ej3 = (() => {
+  const s = { fm: 10, fy: 420, b: 150, d: 340, dPrime: 50, As: 597, AsPrime: 258, phi: 0.8, Mu: 50 };
+  const r = flexionDobleArmadura(s);
+  const cerca = flexionDobleArmadura({ ...s, dPrime: 20 });
+  const simple = flexionSimple({ fm: 10, fy: 420, b: 150, d: 340, As: 597, phi: 0.8 });
+  return { s, r, cerca, simple };
+})();
+
+export const ej4 = (() => {
+  const base = { fm: 10, fy: 420, b: 1000, t: 150, d: 75, As: 129 / 0.8, hPrime: 2800, Ae: 150000 };
+  const menor = muroFueraPlano({ ...base, Pu: 40, Mu: 4 });
+  const mayor = muroFueraPlano({ ...base, Pu: 200, Mu: 8 });
+  return { base, menor, mayor, Vn: cortanteFueraPlano(150000, 10), rhoB: cuantiaBalanceada(10, 420) };
+})();
+
+export const ej5 = (() => {
+  const lw = 3000;
+  const t = 150;
+  const fm = 10;
+  const fy = 420;
+  const Pu = 150;
+  const Mu = 400;
+  const Vu = 300;
+  const sec = { b: t, h: lw, fm, fy, capas: capasMuroEnPlano(lw, 150, 258) };
+  const Ae = t * lw;
+  const Pb = cargaBalanceada(fm, t, lw - 150, fy);
+  const phiFn = phiEnPlanoFn({ fm, Ae, fy, simetrico: true, Pb });
+  const curva = curvaInteraccionMuro(sec, phiFn, { hPrime: 2600, t });
+  const ver = verificarFlexoCompresion(sec, Pu, Mu, phiFn, { hPrime: 2600, t });
+  const fr = moduloRuptura({ direccion: 'horizontal', unidad: 'perforacion-vertical', relleno: 1, mortero: 'cemento-cal', tipoMortero: 'HMS' });
+  const Mcr = momentoAgrietamiento(t, lw, fr);
+  const alfa = alphaMcr('inyectada-total');
+  const Mn = ver.detalle.Mn;
+  const MnPura = curva.flexionPura.Mn;
+  const cs = cortanteMuroEnPlano({ fm, lw, b: t, Vu, Mu, Pu, Av: 71, s: 400, fyCortante: fy, refuerzo: 'embebido', MnFlexion: Mn });
+  const art = articulacionPlastica({ Vn: cs.VnUtil, Mn, brazoMV: (Mu / Vu) * 1000, t });
+  const VsHinge = art.VMn / 0.85;
+  const AvS = (VsHinge * 1000 * t) / (0.7 * fy * cs.Amv);
+  const sHinge = Math.floor(71 / AvS / 5) * 5;
+  const VsHingeReal = cortanteRefuerzo({ Av: 71, s: sHinge, b: t, eta: 0.7, fy, Amv: cs.Amv });
+  const sigma = esfuerzoFibraExtrema({ Pu, Mu, b: t, lw });
+  const borde = requiereElementoBorde(sigma, fm, 'reforzada');
+  const bordeParcial = requiereElementoBorde(sigma, fm, 'parcialmente-reforzada');
+  return { lw, t, fm, fy, Pu, Mu, Vu, sec, Ae, Pb, curva, ver, fr, Mcr, alfa, Mn, MnPura, cs, art, VsHinge, AvS, sHinge, VsHingeReal, sigma, borde, bordeParcial };
+})();
+
+export const figRe = (() => {
+  const X = (r) => 50 + (r / 40) * 400;
+  const Y = (v) => 220 - v * 200;
+  const pts = Array.from({ length: 81 }, (_, i) => i * 0.5).map((r) => `${X(r).toFixed(1)},${Y(factorEsbeltez(r, 1)).toFixed(1)}`).join(' ');
+  return { X, Y, pts };
+})();
+
+export const figInt = (() => {
+  const c = ej5.curva;
+  const Mmax = Math.max(...c.puntos.map((p) => p.Mn));
+  const xmax = Math.ceil(Mmax / 100) * 100;
+  const ymax = Math.ceil(c.PnMax / 500) * 500;
+  const ymin = -250;
+  const X = (M) => 60 + (M / xmax) * 430;
+  const Y = (P) => 20 + ((ymax - P) / (ymax - ymin)) * 240;
+  const nominal = [{ Mn: 0, Pn: c.PnMax }, ...c.puntos].map((p) => `${X(p.Mn).toFixed(1)},${Y(p.Pn).toFixed(1)}`).join(' ');
+  const diseno = [{ phiMn: 0, phiPn: c.puntos[0].phiPn }, ...c.puntos].map((p) => `${X(p.phiMn).toFixed(1)},${Y(p.phiPn).toFixed(1)}`).join(' ');
+  const ticksM = Array.from({ length: xmax / 100 + 1 }, (_, i) => i * 100);
+  const ticksP = [-250, 0, 500, 1000, 1500, 2000, 2500, 3000].filter((p) => p <= ymax);
+  return { X, Y, nominal, diseno, xmax, ymax, ticksM, ticksP };
+})();
+
+export const figCoef = (() => {
+  const X = (m) => 50 + (m / 1.5) * 380;
+  const Y = (v) => 230 - (v / 0.6) * 200;
+  const xs = Array.from({ length: 76 }, (_, i) => i * 0.02);
+  const vm = xs.map((m) => `${X(m).toFixed(1)},${Y(coeficienteVmGrafico(m)).toFixed(1)}`).join(' ');
+  const vn = xs.map((m) => `${X(m).toFixed(1)},${Y(coeficienteVnGrafico(m)).toFixed(1)}`).join(' ');
+  return { X, Y, vm, vn };
+})();
+
+export function coeficienteVmGrafico(m) {
+  return m <= 0.25 ? 0.3 : m >= 1 ? 0.2 : 0.33 - 0.13 * m;
+}
+export function coeficienteVnGrafico(m) {
+  return m <= 0.25 ? 0.5 : m >= 1 ? 0.33 : 0.56 - 0.23 * m;
+}
+
+## Idea central del capítulo
+
+Esta es la parte del Título D donde **se dimensiona** un muro: ¿cuánta carga vertical aguanta?, ¿cuánto momento resiste una sección reforzada?, ¿qué pasa cuando el muro se flecta **fuera** de su plano (viento, sismo perpendicular, empuje)? y ¿cómo se comporta **en su plano**, donde recibe el cortante sísmico de la edificación?
+
+Todo se apoya en lo ya fijado en el capítulo D.5a: el método de resistencia $\phi R_n \ge U$ (<NormaRef s="D.5.1.4" pag="D-32" />), las suposiciones de diseño (εmu = 0.003, mampostería sin tracción, bloque rectangular de $0.80f'_m$ sobre $a = 0.85c$, <NormaRef s="D.5.1.6" pag="D-33" />) y las dimensiones efectivas ($A_e$, $A_{mv}$, $b$, $t$, $h'$; <NormaRef s="D.5.4" pag="D-35" />). Aquí esas piezas se convierten en ecuaciones de resistencia.
+
+<Callout tipo="importante" titulo="Cómo leer este capítulo">
+Los cuatro bloques siguen el orden de la norma: **D.5.5** compresión axial, **D.5.6** flexión sin carga axial, **D.5.7** muros fuera de su plano y **D.5.8** muros en su plano. Los resultados de los ejemplos salen de las mismas funciones (`src/lib/nsr10/mamposteria.ts`) que usan las calculadoras incrustadas, de modo que puedes repetirlos a mano y comprobarlos en pantalla. Lo marcado como **«autoría del proyecto»** es una derivación o interpretación nuestra, no texto de la norma.
+</Callout>
+
+<Callout tipo="nota" titulo="Unidades y convenciones">
+Longitudes en mm, esfuerzos en MPa, fuerzas en kN y momentos en kN·m. Las ecuaciones de la norma están escritas con N y mm: en los ejemplos se convierte (1 kN = 1000 N; 1 kN·m = 10⁶ N·mm). La carga axial se toma **positiva en compresión**. Cuando un valor es «por metro de muro» se indica.
+</Callout>
+
+## D.5.1.5 — Los φ que se usan en este capítulo
+
+Antes de las ecuaciones conviene tener a la mano los coeficientes de reducción de resistencia de D.5.1.5 (parte del capítulo D.5a). El φ depende de **hacia dónde apunta la fuerza horizontal respecto al plano del muro**:
+
+<TablaNorma numero="Resumen de D.5.1.5" titulo="Coeficientes de reducción de resistencia φ" pag="D-32" nota="Resumen elaborado a partir del texto de D.5.1.5.1, D.5.1.5.2 y D.5.1.5.3 (D-32 y D-33); no es una tabla impresa.">
+
+| Solicitación | Gravedad sola o con fuerzas perpendiculares al plano (<NormaRef s="D.5.1.5.1" pag="D-32" />) | Fuerzas paralelas al plano (<NormaRef s="D.5.1.5.2" pag="D-32" />) |
+|---|---|---|
+| Flexión | 0.80 | 0.85 |
+| Compresión y flexo-compresión | 0.80 (flexión y flexo-compresión) | 0.60; rampa hasta 0.85 con refuerzo simétrico y $f_y \le 420$ MPa |
+| Cortante | 0.60 | 0.60; sube a 0.85 si $V_n$ excede el cortante asociado a $M_n$ |
+| Aplastamiento (<NormaRef s="D.5.1.5.3" pag="D-33" />) | 0.60 | 0.60 |
+
+</TablaNorma>
+
+**La rampa de φ en flexo-compresión paralela al plano** (<NormaRef s="D.5.1.5.2" pag="D-33" />). Para muros con refuerzo simétrico y $f_y \le 420$ MPa, φ puede subir linealmente hasta 0.85 «en la medida que $\phi P_n$ disminuye desde $0.10f'_mA_e$ ó $0.25P_b$ hasta cero». La carga balanceada para muros con todas las celdas inyectadas es:
+
+<Ecuacion num="D.5.1-2" titulo="Carga axial nominal balanceada">
+
+$$
+P_b = 0.80\,f'_m\,b\,a_b \qquad a_b = 0.85\,d\,\frac{\varepsilon_{mu}}{\varepsilon_{mu} + f_y/E_s}
+$$
+
+- $a_b$: profundidad del bloque equivalente en condiciones balanceadas; $\varepsilon_{mu} = 0.003$; $E_s = 200\,000$ MPa.
+- $d$: distancia de la fibra comprimida al centroide del refuerzo en tracción.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Interpretación de la rampa (autoría del proyecto)">
+El texto dice «ó» entre $0.10f'_mA_e$ y $0.25P_b$. Se toma el **menor** de los dos como umbral $T$ (criterio habitual de la norma MSJC/ACI 530) y se escribe la recta en forma cerrada: $\phi = 0.85 - 0.25\,\phi P_n/T$, que despejada da $\phi = 0.85/(1 + 0.25P_n/T)$, acotada entre 0.60 y 0.85. Con refuerzo no simétrico no hay rampa: $\phi = 0.60$ cuando $P_n > 0$.
+</Callout>
+
+## D.5.5 — Resistencia para carga axial de compresión
+
+Este bloque responde a la pregunta más simple: ¿cuánta carga vertical **centrada** (sin excentricidad) soporta el muro, teniendo en cuenta que si es esbelto se pandea antes de agotar el material?
+
+### D.5.5.1 — Máxima resistencia axial teórica $P_o$
+
+<Ecuacion num="D.5.5-1" titulo="Máxima resistencia axial teórica">
+
+$$
+P_o = 0.80\,f'_m\,(A_e - A_{st}) + A_{st}\,f_y \;\le\; f'_m\,A_e
+$$
+
+- $f'_m$: resistencia a la compresión de la mampostería (MPa). $A_e$: área efectiva (mm², <NormaRef s="D.5.4.1" pag="D-35" />). $A_{st}$: área total del refuerzo vertical de la sección (mm²). $f_y$: fluencia del acero (MPa).
+- Resultado en N si las áreas están en mm² y los esfuerzos en MPa.
+
+</Ecuacion>
+
+La ecuación suma el aporte de la mampostería (con el factor 0.80 de D.5.1.6.6) y el del acero, y lo limita a $f'_mA_e$ (<NormaRef s="D.5.5.1" pag="D-37" />). El tope solo rige con cuantías muy altas: se necesita $A_{st}f_y > 0.20\,f'_mA_e + 0.80\,f'_mA_{st}$.
+
+### D.5.5.2 — Reducción por esbeltez: el parámetro $R_e$
+
+Un muro delgado y alto falla por pandeo, no por aplastamiento. La norma lo toma en cuenta con un factor $R_e \le 1$ que depende de $h'/t$ (altura efectiva sobre espesor efectivo, <NormaRef s="D.5.4.2" pag="D-35" /> y <NormaRef s="D.5.4.3" pag="D-36" />):
+
+<Ecuacion num="D.5.5-2" titulo="Factor de reducción por esbeltez Re">
+
+$$
+R_e = 1 - \left[\frac{h'}{42\,t}\right]^2 \quad \text{para } h'/t \le 30
+$$
+
+$$
+R_e = \left[\frac{21\,t}{h'}\right]^2 \quad \text{para } h'/t > 30
+$$
+
+- $h'$: altura efectiva (mm). $t$: espesor efectivo (mm).
+
+</Ecuacion>
+
+La primera rama es una parábola que parte de 1 con $h'/t = 0$; la segunda es el pandeo de Euler. En $h'/t = 30$ ambas coinciden (0.4898 y 0.4900, diferencia de redondeo). Recuerda además el límite de <NormaRef s="D.5.4.3.1" pag="D-36" />: **$h'/t$ no puede superar 25 en muros estructurales**; la rama de Euler ($h'/t > 30$) **no se alcanza en muros estructurales** y solo es informativa (otros elementos o casos justificados).
+
+<Figura alt="Curva del factor de esbeltez Re frente a la relación h′/t con las ramas parabólica y de Euler" numero="Esquema" pie="Factor Re (Ec. D.5.5-2) frente a h′/t. El punto marca el muro del ejemplo 1 (h′/t = 16); las líneas verticales señalan 25 (límite de D.5.4.3.1) y 30 (cambio de rama). (esquema del proyecto)">
+<svg viewBox="0 0 480 270" role="img" aria-label="Factor Re frente a h′/t de 0 a 40" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="50" y="20" width="400" height="200" fill="none" stroke="currentColor" strokeOpacity="0.3" />
+  {[0, 0.25, 0.5, 0.75, 1].map((v) => (
+    <g key={v}>
+      <line x1="50" x2="450" y1={figRe.Y(v)} y2={figRe.Y(v)} stroke="currentColor" strokeOpacity="0.12" />
+      <text x="44" y={figRe.Y(v) + 4} textAnchor="end" fontSize="11" fill="currentColor">{v.toFixed(2)}</text>
+    </g>
+  ))}
+  {[0, 10, 20, 25, 30, 40].map((r) => (
+    <g key={r}>
+      <line x1={figRe.X(r)} x2={figRe.X(r)} y1="220" y2="224" stroke="currentColor" />
+      <text x={figRe.X(r)} y="238" textAnchor="middle" fontSize="11" fill="currentColor">{r}</text>
+    </g>
+  ))}
+  <line x1={figRe.X(25)} x2={figRe.X(25)} y1="20" y2="220" stroke="currentColor" strokeDasharray="5 3" strokeOpacity="0.6" />
+  <line x1={figRe.X(30)} x2={figRe.X(30)} y1="20" y2="220" stroke="currentColor" strokeDasharray="2 3" strokeOpacity="0.6" />
+  <polyline points={figRe.pts} fill="none" stroke="var(--chart-1)" strokeWidth="2.5" />
+  <circle cx={figRe.X(16)} cy={figRe.Y(ej1.plano.Re)} r="5" fill="var(--chart-2)" />
+  <text x={figRe.X(16) + 8} y={figRe.Y(ej1.plano.Re) - 6} fontSize="11" fill="currentColor">Re = {f(ej1.plano.Re, 3)}</text>
+  <text x={figRe.X(25) - 4} y="34" textAnchor="end" fontSize="11" fill="currentColor">h′/t = 25</text>
+  <text x={figRe.X(30) + 4} y="34" fontSize="11" fill="currentColor">30</text>
+  <text x="250" y="262" textAnchor="middle" fontSize="12" fill="currentColor">h′/t</text>
+  <text x="14" y="125" textAnchor="middle" fontSize="12" fill="currentColor" transform="rotate(-90 14 125)">Re</text>
+</svg>
+</Figura>
+
+<TablaNorma numero="Valores de Re (Ec. D.5.5-2)" titulo="Factor de esbeltez para algunas relaciones h′/t" pag="D-37" nota="Valores calculados con la Ec. D.5.5-2; no es una tabla impresa de la norma (autoría del proyecto).">
+
+| $h'/t$ | 10 | 16 | 20 | 25 | 30 | 36 | 40 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| $R_e$ | {f(tablaRe[0].Re, 3)} | {f(tablaRe[1].Re, 3)} | {f(tablaRe[2].Re, 3)} | {f(tablaRe[3].Re, 3)} | {f(tablaRe[4].Re, 3)} | {f(tablaRe[5].Re, 3)} | {f(tablaRe[6].Re, 3)} |
+
+</TablaNorma>
+
+### D.5.5.3 — Resistencia nominal $P_n$
+
+<Ecuacion num="D.5.5-3" titulo="Resistencia nominal para carga axial">
+
+$$
+P_n = 0.80\,P_o\,R_e
+$$
+
+- $P_n$ es la resistencia nominal sin excentricidad **incluyendo** esbeltez. El 0.80 es un tope por excentricidad accidental (la carga nunca está perfectamente centrada).
+
+</Ecuacion>
+
+### D.5.5.4 — Resistencia de diseño
+
+<Ecuacion num="D.5.5-4" titulo="Máxima resistencia de diseño para carga axial">
+
+$$
+P_u \le \phi P_n = \phi\,0.80\,P_o\,R_e
+$$
+
+- $P_u$: carga axial mayorada (combinaciones de B.2.4, <NormaRef s="D.5.1.3" pag="D-32" />).
+
+</Ecuacion>
+
+<Callout tipo="atencion" titulo="¿Qué φ se usa en la compresión axial pura?">
+La norma da φ = 0.80 para «flexión y flexo-compresión» bajo gravedad (D.5.1.5.1) y φ = 0.60 para «compresión y flexo-compresión» con fuerzas **en el plano** (D.5.1.5.2), pero no nombra la compresión axial pura bajo gravedad. La calculadora ofrece los dos y los ejemplos muestran ambos; si el muro hace parte del sistema sismorresistente, el criterio conservador es 0.60 (interpretación del proyecto).
+</Callout>
+
+<Ejemplo numero={1} titulo="Compresión axial de un muro de bloque inyectado (por metro de muro)">
+Muro de bloque de concreto de espesor $t$ = 150 mm con todas las celdas inyectadas (sección sólida): $A_e$ = 1000 × 150 = {ej1.base.Ae} mm² por metro. Refuerzo vertical: 2 barras No. 4 por metro ($A_{st}$ = 2 × 129 = {ej1.base.Ast} mm²), $f_y$ = 420 MPa, $f'_m$ = 10 MPa. Altura efectiva $h'$ = {ej1.base.hPrime} mm. Carga mayorada $P_u$ = 450 kN/m.
+
+<Paso titulo="Máxima resistencia axial teórica" ref="D.5.5.1">
+
+$$
+P_o = 0.80(10)(150\,000 - 258) + 258(420)
+$$
+
+Resultado: $0.80 f'_m (A_e - A_{st})$ = {f((0.8 * 10 * (150000 - 258)) / 1000, 1)} kN; $A_{st}f_y$ = {f((258 * 420) / 1000, 1)} kN; **$P_o$ = {f(ej1.plano.Po, 1)} kN**. El tope $f'_mA_e$ = {f(ej1.plano.tope, 0)} kN no rige.
+
+</Paso>
+<Paso titulo="Esbeltez y factor Re" ref="D.5.5.2, D.5.4.3.1">
+
+$h'/t$ = {ej1.base.hPrime}/{ej1.base.t} = **{f(ej1.plano.esbeltez, 1)}** ≤ 25 (cumple). Como $h'/t \le 30$:
+
+$$
+R_e = 1 - \left[\frac{16}{42}\right]^2
+$$
+
+Resultado: **$R_e$ = {f(ej1.plano.Re, 4)}**.
+
+</Paso>
+<Paso titulo="Resistencia nominal y de diseño" ref="D.5.5.3, D.5.5.4">
+
+$P_n = 0.80P_oR_e$ = 0.80 × {f(ej1.plano.Po, 1)} × {f(ej1.plano.Re, 4)} = **{f(ej1.plano.Pn, 1)} kN/m**.
+
+- Con φ = 0.60 (en el plano): $\phi P_n$ = **{f(ej1.plano.phiPn, 1)} kN/m**; $P_u/\phi P_n$ = {f(ej1.plano.razon, 3)} → {ej1.plano.cumple ? 'cumple' : 'no cumple'}.
+- Con φ = 0.80 (gravedad): $\phi P_n$ = **{f(ej1.grav.phiPn, 1)} kN/m**.
+
+</Paso>
+<Paso titulo="Efecto de una mayor altura (h′ = 3600 mm)" ref="D.5.5.2, D.5.4.3.1">
+
+$h'/t$ = {f(ej1.alto.esbeltez, 0)} ≤ 25 (aún admisible): $R_e$ = {f(ej1.alto.Re, 4)} y $\phi P_n$ (φ = 0.60) = **{f(ej1.alto.phiPn, 1)} kN/m**, una pérdida de {f((1 - ej1.alto.phiPn / ej1.plano.phiPn) * 100, 0)} % por esbeltez. Para $P_u$ = 450 kN/m el muro **{ej1.alto.phiPn >= 450 ? 'cumple' : 'ya no cumple'}**: la esbeltez cuesta capacidad aun dentro del límite de 25.
+
+</Paso>
+<Resultado>
+$\phi P_n$ = **{f(ej1.plano.phiPn, 1)} kN/m** con $h'$ = 2.4 m (φ = 0.60) frente a $P_u$ = 450 kN/m. Compruébalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="axial-mamposteria" />
+
+## D.5.6 — Resistencia a flexión sin carga axial
+
+### D.5.6.1 — General
+
+<Ecuacion num="D.5.6-1" titulo="Condición de diseño a flexión">
+
+$$
+M_u \le \phi M_n
+$$
+
+- $M_u$: momento mayorado; $M_n$: momento nominal; φ según la dirección de la fuerza (0.80 perpendicular al plano, 0.85 paralela al plano; <NormaRef s="D.5.1.5" pag="D-32" />).
+
+</Ecuacion>
+
+La sección del muro (o dintel, o viga) se supone fisurada en tracción: la mampostería no resiste tracción y el refuerzo la toma toda (<NormaRef s="D.5.1.6.1" pag="D-33" />). La parte comprimida se reemplaza por un **bloque rectangular** de esfuerzo $0.80f'_m$ y profundidad $a = 0.85c$.
+
+<Figura alt="Sección rectangular con refuerzo a tracción, diagrama de deformaciones con εmu = 0.003 y bloque rectangular de esfuerzos 0.80 f′m sobre la profundidad a" numero="Esquema" pie="Equilibrio de una sección simplemente armada: la fuerza de compresión C = 0.80 f′m b a se equilibra con T = As fy y el brazo de palanca es d − a/2. (esquema del proyecto)">
+<svg viewBox="0 0 520 250" role="img" aria-label="Sección, deformaciones y bloque de esfuerzos" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="30" y="20" width="70" height="190" fill="var(--muted)" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="30" y="20" width="70" height="60" fill="var(--chart-1)" fillOpacity="0.4" />
+  <line x1="24" x2="106" y1="91" y2="91" stroke="currentColor" strokeDasharray="5 3" />
+  <circle cx="65" cy="185" r="5" fill="currentColor" />
+  <line x1="18" x2="18" y1="20" y2="185" stroke="currentColor" markerEnd="url(#fl)" />
+  <text x="14" y="105" fontSize="12" textAnchor="end" fill="currentColor">d</text>
+  <text x="108" y="94" fontSize="11" fill="currentColor">c (eje neutro)</text>
+  <text x="108" y="52" fontSize="11" fill="currentColor">a = 0.85c</text>
+  <text x="65" y="232" fontSize="11" textAnchor="middle" fill="currentColor">b</text>
+  <line x1="190" x2="190" y1="14" y2="214" stroke="currentColor" strokeOpacity="0.4" />
+  <polygon points="190,20 250,20 110.6,185 190,185" fill="var(--chart-2)" fillOpacity="0.25" stroke="var(--chart-2)" strokeWidth="1.5" />
+  <text x="254" y="24" fontSize="11" fill="currentColor">εmu = 0.003</text>
+  <text x="112" y="204" fontSize="11" fill="currentColor">εs ≥ εy</text>
+  <rect x="300" y="20" width="44" height="60" fill="var(--chart-1)" fillOpacity="0.5" stroke="var(--chart-1)" />
+  <text x="350" y="46" fontSize="11" fill="currentColor">0.80 f′m</text>
+  <text x="350" y="60" fontSize="11" fill="currentColor">C = 0.80 f′m b a</text>
+  <line x1="322" x2="322" y1="50" y2="185" stroke="currentColor" strokeDasharray="3 3" />
+  <text x="328" y="124" fontSize="11" fill="currentColor">d − a/2</text>
+  <line x1="322" x2="352" y1="185" y2="185" stroke="currentColor" strokeWidth="2" />
+  <polygon points="354,185 344,180 344,190" fill="currentColor" />
+  <text x="360" y="189" fontSize="11" fill="currentColor">T = As fy</text>
+</svg>
+</Figura>
+
+### D.5.6.2 — Secciones solo con refuerzo a tracción
+
+Cuando la sección está simplemente reforzada y su cuantía es **menor del 75 % de la cuantía balanceada**, el acero fluye antes de que la mampostería llegue a εmu y el momento nominal es:
+
+<Ecuacion num="D.5.6-2" titulo="Momento nominal, armadura simple">
+
+$$
+M_n = A_s\,f_y\left(d - \frac{a}{2}\right)
+$$
+
+- $A_s$: refuerzo de tracción (mm²); $d$: altura útil (mm); $a$: profundidad del bloque (Ec. D.5.6-3).
+
+</Ecuacion>
+
+<Ecuacion num="D.5.6-3" titulo="Profundidad del bloque equivalente">
+
+$$
+a = \frac{A_s\,f_y}{0.80\,f'_m\,b}
+$$
+
+- $b$: ancho efectivo de la sección (<NormaRef s="D.5.4.4" pag="D-36" />); en muros se usa el ancho efectivo y no la longitud total.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="La cuantía balanceada ρb (autoría del proyecto)">
+La norma exige comparar $\rho = A_s/(bd)$ con $\rho_b$ (<NormaRef s="D.5.6.2" pag="D-38" />, <NormaRef s="D.5.7.2" pag="D-38" />) pero **no escribe** $\rho_b$; solo da $a_b$ y $P_b$ en la Ec. D.5.1-2. De ese $a_b$ y del equilibrio $0.80f'_m\,b\,a_b = \rho_b\,b\,d\,f_y$ se obtiene $\rho_b = 0.80\,f'_m\,(0.85\,\varepsilon_{mu})\big/\left[(\varepsilon_{mu} + f_y/E_s)\,f_y\right]$, que no depende de $b$ ni de $d$. Con $f'_m$ = 10 MPa y $f_y$ = 420 MPa vale **{f(ej4.rhoB, 5)}**, y el límite 0.75ρb es {f(0.75 * ej4.rhoB, 5)}.
+</Callout>
+
+### D.5.6.3 — Secciones con refuerzo a compresión
+
+Si hay refuerzo a compresión y **se puede probar que está en fluencia**, la sección se descompone en dos partes: $A_{s1}$ (tracción equilibrada por la mampostería) y $A_{s2}$ (tracción equilibrada por el refuerzo de compresión):
+
+<Ecuacion num="D.5.6-4" titulo="Momento nominal con refuerzo a compresión">
+
+$$
+M_n = A_{s1}\,f_y\left(d - \frac{a}{2}\right) + A_{s2}\,f_y\,(d - d')
+$$
+
+- $A_{s1} = A_s - A_{s2}$ define el bloque: $a = A_{s1}f_y/(0.80f'_mb)$. $A_{s2}$ = área del refuerzo de compresión $A'_s$ si fluye. $d'$: distancia de la fibra comprimida al centroide del refuerzo de compresión (<NormaRef s="D.5.0" pag="D-31" />).
+
+</Ecuacion>
+
+La **prueba de fluencia** consiste en comprobar $\varepsilon'_s = \varepsilon_{mu}(c - d')/c \ge f_y/E_s$ con $c = a/0.85$. Si $d'$ es grande respecto de $c$, el acero de compresión no llega a fluir y la Ec. D.5.6-4 sobrestima $M_n$ (ejemplo 3). En ese caso hay que resolver el equilibrio con compatibilidad de deformaciones (autoría del proyecto, función `flexionDobleArmadura`).
+
+<Ejemplo numero={2} titulo="Momento resistente de un dintel de bloque, armadura simple">
+Dintel de ancho efectivo $b$ = 150 mm, altura útil $d$ = 340 mm, 2 barras No. 4 ($A_s$ = 258 mm²), $f'_m$ = 10 MPa, $f_y$ = 420 MPa. Momento mayorado $M_u$ = 20 kN·m (cargas gravitacionales, φ = 0.80).
+
+<Paso titulo="Bloque de compresión" ref="D.5.6.2, D.5.6-3">
+
+$$
+a = \frac{258\,(420)}{0.80\,(10)\,(150)}
+$$
+
+Resultado: **$a$ = {f(ej2.r.a, 1)} mm**, $c = a/0.85$ = {f(ej2.r.c, 1)} mm.
+
+</Paso>
+<Paso titulo="Verificar que el acero fluye y la cuantía" ref="D.5.6.2">
+
+$\varepsilon_s = 0.003(d - c)/c$ = {f(ej2.r.epsS, 4)} ≥ 0.0021: el acero **{ej2.r.fluye ? 'fluye' : 'no fluye'}**. Cuantía $\rho = A_s/(bd)$ = {f(ej2.r.rho, 5)}; $\rho_b$ = {f(ej2.r.rhoB, 5)}, $0.75\rho_b$ = {f(ej2.r.rhoLimite, 5)}: {ej2.r.cumpleCuantia ? 'se cumple ρ < 0.75 ρb' : 'no se cumple ρ < 0.75 ρb'}.
+
+</Paso>
+<Paso titulo="Momento nominal y de diseño" ref="D.5.6-2, D.5.6-1">
+
+$$
+M_n = 258\,(420)\left(340 - \frac{90.3}{2}\right)
+$$
+
+Resultado: **$M_n$ = {f(ej2.r.Mn, 2)} kN·m**; $\phi M_n$ = 0.80 × {f(ej2.r.Mn, 2)} = **{f(ej2.r.phiMn, 2)} kN·m**. Como $M_u$ = 20 kN·m, la razón es {f(ej2.r.razon, 3)} → **cumple**.
+
+</Paso>
+<Paso titulo="Qué pasa con más acero (As = 400 mm²)" ref="D.5.6.2">
+
+$\rho$ = {f(ej2.mucho.rho, 5)} ≥ $0.75\rho_b$ = {f(ej2.mucho.rhoLimite, 5)}: **{ej2.mucho.cumpleCuantia ? 'cumple' : 'no se cumple la condición'}**. La Ec. D.5.6-2 ya no es aplicable; más acero no da más momento de forma proporcional y arriesga una falla frágil por aplastamiento de la mampostería.
+
+</Paso>
+<Resultado>
+$\phi M_n$ = **{f(ej2.r.phiMn, 2)} kN·m** ≥ $M_u$ = 20 kN·m, con $\rho$ = {f(ej2.r.rho, 5)} &lt; $0.75\rho_b$.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Dintel con refuerzo a compresión: ¿fluye A′s?">
+Mismo dintel ($b$ = 150, $d$ = 340, $f'_m$ = 10, $f_y$ = 420), ahora con 3 No. 5 a tracción ($A_s$ = 3 × 199 = {ej3.s.As} mm²) y 2 No. 4 a compresión ($A'_s$ = {ej3.s.AsPrime} mm²) a $d'$ = 50 mm de la cara comprimida.
+
+<Paso titulo="Partir la tracción en As1 y As2" ref="D.5.6.3">
+
+$A_{s2} = A'_s$ = {ej3.r.As2} mm² y $A_{s1} = A_s - A_{s2}$ = **{ej3.r.As1} mm²**. Bloque: $a = A_{s1}f_y/(0.80f'_mb)$ = **{f(ej3.r.a, 1)} mm**, $c$ = {f(ej3.r.c, 1)} mm.
+
+</Paso>
+<Paso titulo="Prueba de fluencia del refuerzo de compresión" ref="D.5.6.3, D.5.1.6.4">
+
+$$
+\varepsilon'_s = 0.003\,\frac{c - d'}{c}
+$$
+
+Resultado: $\varepsilon'_s$ = **{f(ej3.r.epsPrimeS, 5)}** frente a $\varepsilon_y = f_y/E_s$ = 0.0021 → el refuerzo de compresión **{ej3.r.fluyeCompresion ? 'fluye' : 'no fluye'}**.
+
+</Paso>
+<Paso titulo="Momento nominal" ref="D.5.6-4">
+
+Si se aplicara la Ec. D.5.6-4 sin la prueba: $M_n$ = {f(ej3.r.MnNorma, 2)} kN·m. Con el equilibrio completo (el acero de compresión trabaja a $f'_s$ = {f(ej3.r.fsPrime, 1)} MPa) resulta **$M_n$ = {f(ej3.r.MnCompatibilidad, 2)} kN·m** (autoría del proyecto). La diferencia es pequeña porque $\varepsilon'_s$ está cerca de la fluencia, pero la norma solo autoriza la ecuación si la fluencia está probada.
+
+Con $d'$ = 20 mm en lugar de 50 mm, $\varepsilon'_s$ = {f(ej3.cerca.epsPrimeS, 5)} y el refuerzo **{ej3.cerca.fluyeCompresion ? 'sí fluye' : 'no fluye'}**: allí la Ec. D.5.6-4 aplica tal cual ($M_n$ = {f(ej3.cerca.MnNorma, 2)} kN·m).
+
+</Paso>
+<Paso titulo="Diseño y comparación con la armadura simple" ref="D.5.6-1">
+
+$\phi M_n$ = 0.80 × {f(ej3.r.Mn, 2)} = **{f(ej3.r.phiMn, 2)} kN·m**. Si el mismo $A_s$ = {ej3.s.As} mm² se tratara como armadura simple, $\rho$ = {f(ej3.simple.rho, 5)} y $0.75\rho_b$ = {f(ej3.simple.rhoLimite, 5)}: {ej3.simple.cumpleCuantia ? 'cumpliría' : 'NO cumpliría la cuantía'}, de modo que el refuerzo de compresión es lo que hace utilizable el acero adicional.
+
+</Paso>
+<Resultado>
+$\phi M_n$ = **{f(ej3.r.phiMn, 2)} kN·m**; el refuerzo a compresión con $d'$ = 50 mm **{ej3.r.fluyeCompresion ? 'fluye' : 'no fluye'}** ($\varepsilon'_s$ = {f(ej3.r.epsPrimeS, 5)}).
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="flexion-mamposteria" />
+
+## D.5.7 — Diseño de muros en la dirección perpendicular a su plano
+
+### D.5.7.1 — General
+
+Los requisitos de D.5.7 se aplican, por el método de resistencia, a muros de mampostería de **unidades de perforación vertical** y de **cavidad reforzada** sometidos a cargas horizontales **perpendiculares a su plano** (viento, empuje, sismo sobre el elemento) además de las verticales (<NormaRef s="D.5.7.1" pag="D-38" />). El muro se trata como una franja vertical de ancho efectivo $b$ (<NormaRef s="D.5.4.4.1" pag="D-36" />) que flecta alrededor de un eje paralelo al muro.
+
+### D.5.7.2 — Carga axial menor que $0.10f'_mA_e$
+
+Con poca carga vertical, la compresión ayuda poco y el diseño es casi de flexión pura, pero la carga axial se incorpora como una «fuerza de tracción equivalente» que se resta al refuerzo. La esbeltez reduce la resistencia a flexión con $R_e$:
+
+<Ecuacion num="D.5.7-1" titulo="Condición de diseño (Pu menor que 0.10 f′m Ae)">
+
+$$
+M_u \le \phi\,R_e\,M_n
+$$
+
+- $R_e$ de la Ec. D.5.5-2; φ = 0.80 (<NormaRef s="D.5.1.5.1" pag="D-32" />).
+
+</Ecuacion>
+
+<Ecuacion num="D.5.7-2" titulo="Momento nominal con carga axial pequeña">
+
+$$
+M_n = A_{se}\,f_y\left(d - \frac{a}{2}\right)
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.5.7-3" titulo="Área efectiva de refuerzo en tracción">
+
+$$
+A_{se} = \frac{A_s\,f_y + P_u}{f_y}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.5.7-4" titulo="Profundidad del bloque con carga axial">
+
+$$
+a = \frac{A_s\,f_y + P_u}{0.80\,f'_m\,b}
+$$
+
+- $P_u$ debe entrar **en N** (como $A_sf_y$) si los demás términos están en mm y MPa. $A_{se}$ es mayor que $A_s$: la compresión axial aumenta el momento resistente.
+
+</Ecuacion>
+
+Además, la cuantía a flexión $\rho = A_s/(bd)$ **no debe exceder $0.5\rho_b$** (<NormaRef s="D.5.7.2" pag="D-38" />), una condición más estricta que el 75 % de D.5.6.2 para asegurar un comportamiento dúctil de la franja esbelta.
+
+### D.5.7.3 — Carga axial mayor que $0.10f'_mA_e$
+
+Con carga axial importante, la aproximación anterior no es suficiente: la relación de esbeltez **no debe superar 30** y $M_n$ se obtiene del **diagrama de interacción** momento-carga axial (principios de D.5.1.6, con φ de D.5.1.5.1):
+
+<Ecuacion num="D.5.7-5" titulo="Condición de diseño (Pu mayor que 0.10 f′m Ae)">
+
+$$
+M_u \le \phi\,R_e\,M_n
+$$
+
+- $M_n$: momento nominal del diagrama de interacción al nivel de carga axial $P_u$ (<NormaRef s="D.5.7.3" pag="D-39" />).
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Cómo se lee Mn en el diagrama (autoría del proyecto)">
+El texto manda usar el diagrama y el φ de D.5.1.5.1 sin precisar a qué carga nominal se entra. Las calculadoras y el ejemplo 4 usan $P_n = P_u/\phi$ (es decir, $\phi P_n = P_u$) y multiplican el $M_n$ resultante por $\phi R_e$.
+</Callout>
+
+### D.5.7.4 — Cortante perpendicular al plano
+
+<Ecuacion num="D.5.7-6" titulo="Condición de diseño a cortante">
+
+$$
+V_u \le \phi\,V_n
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.5.7-7" titulo="Resistencia nominal a cortante perpendicular al plano">
+
+$$
+V_n = \frac{1}{6}\,A_{mv}\sqrt{f'_m}
+$$
+
+- $A_{mv}$ (mm²) según <NormaRef s="D.5.4.5.1" pag="D-36" />: igual a $A_e$, salvo que el mortero de pega esté solo en las paredes laterales de la unidad (D.4.5.10.1 b), caso en que se cuentan solo las porciones inyectadas. $\sqrt{f'_m}$ en MPa. φ = 0.60 (<NormaRef s="D.5.1.5.1" pag="D-32" />).
+
+</Ecuacion>
+
+<Ejemplo numero={4} titulo="Muro de bloque de 150 mm fuera de su plano">
+Muro de 150 mm, celdas inyectadas (franja de $b$ = 1000 mm, $A_e$ = 150 000 mm²), $f'_m$ = 10 MPa, $f_y$ = 420 MPa. Refuerzo vertical No. 4 (129 mm²) cada 800 mm al centro del muro: $A_s$ = 129/0.80 = {f(ej4.base.As, 2)} mm²/m, $d$ = 75 mm. Altura efectiva $h'$ = 2800 mm ($h'/t$ = {f(ej4.menor.esbeltez, 1)}, $R_e$ = {f(ej4.menor.Re, 4)}). Se consideran dos niveles de carga axial.
+
+<Paso titulo="Caso A: Pu = 40 kN/m, menor que 0.10 f′m Ae" ref="D.5.7.2">
+
+Umbral $0.10f'_mA_e$ = **{f(ej4.menor.umbralPu, 0)} kN/m**; como 40 &lt; 150 aplica D.5.7.2. Con $P_u$ = 40 000 N:
+
+$$
+A_{se} = \frac{161.25(420) + 40\,000}{420} \qquad a = \frac{161.25(420) + 40\,000}{0.80(10)(1000)}
+$$
+
+Resultado: $A_{se}$ = {f(ej4.menor.Ase, 1)} mm², $a$ = {f(ej4.menor.a, 2)} mm, **$M_n$ = {f(ej4.menor.Mn, 3)} kN·m/m**.
+
+</Paso>
+<Paso titulo="Resistencia de diseño y cuantía" ref="D.5.7-1, D.5.7.2">
+
+$\phi R_eM_n$ = 0.80 × {f(ej4.menor.Re, 4)} × {f(ej4.menor.Mn, 3)} = **{f(ej4.menor.phiReMn, 3)} kN·m/m**. Para $M_u$ = 4 kN·m/m la razón es {f(ej4.menor.razon, 3)} → **{ej4.menor.cumple ? 'cumple' : 'no cumple'}**. Cuantía $\rho$ = {f(ej4.menor.rho, 5)} ≤ $0.5\rho_b$ = {f(0.5 * ej4.menor.rhoB, 5)}: **{ej4.menor.cumpleCuantia ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Paso titulo="Caso B: Pu = 200 kN/m, mayor que 0.10 f′m Ae" ref="D.5.7.3">
+
+Ahora $P_u$ = 200 &gt; 150 kN/m: aplica D.5.7.3 (verifica $h'/t$ = {f(ej4.mayor.esbeltez, 1)} ≤ 30: {ej4.mayor.esbeltezAdmisible ? 'cumple' : 'no cumple'}). Entrando al diagrama con $P_n = P_u/\phi$ = 250 kN/m: **$M_n$ = {f(ej4.mayor.Mn, 3)} kN·m/m** y $\phi R_eM_n$ = **{f(ej4.mayor.phiReMn, 3)} kN·m/m**. Para $M_u$ = 8 kN·m/m la razón es {f(ej4.mayor.razon, 3)} → **{ej4.mayor.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Paso titulo="Cortante perpendicular al plano" ref="D.5.7-6, D.5.7-7">
+
+$$
+V_n = \frac{1}{6}\,(150\,000)\sqrt{10}
+$$
+
+Resultado: **$V_n$ = {f(ej4.Vn, 1)} kN/m**; $\phi V_n$ = 0.60 × {f(ej4.Vn, 1)} = **{f(0.6 * ej4.Vn, 1)} kN/m**.
+
+</Paso>
+<Resultado>
+Caso A: $\phi R_eM_n$ = **{f(ej4.menor.phiReMn, 2)} kN·m/m**. Caso B: **{f(ej4.mayor.phiReMn, 2)} kN·m/m**. Cortante: $\phi V_n$ = **{f(0.6 * ej4.Vn, 1)} kN/m**. Verifícalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="muro-fuera-plano" />
+
+## D.5.8 — Diseño de muros en la dirección paralela a su plano
+
+### D.5.8.1 — General
+
+Igual que en D.5.7, D.5.8 vale para el método de resistencia aplicado a muros de **unidades de perforación vertical** y de **cavidad reforzada**, ahora con cargas horizontales **paralelas al plano** del muro, más las verticales (<NormaRef s="D.5.8.1" pag="D-39" />). Este es el caso típico del muro que resiste el cortante sísmico de la edificación.
+
+### D.5.8.2 — Resistencia mínima a la flexión
+
+Cuando el modo de falla dominante es la flexión, $M_n$ no puede ser menor que una fracción de agrietamiento: así se evita que el muro, al fisurarse, quede con tan poco refuerzo que falle de golpe apenas se agrieta.
+
+<Ecuacion num="D.5.8-1" titulo="Resistencia mínima a flexión">
+
+$$
+M_n \ge \alpha\,M_{cr}
+$$
+
+- $\alpha$ = 1.8 para mampostería con **todas** las celdas inyectadas; $\alpha$ = 3.0 si solo están inyectadas las celdas con refuerzo; $\alpha$ = 3.0 para mampostería de cavidad reforzada (<NormaRef s="D.5.8.2" pag="D-39" />).
+
+</Ecuacion>
+
+<Ecuacion num="D.5.8-2" titulo="Momento de agrietamiento">
+
+$$
+M_{cr} = \frac{b\,\ell_w^{2}}{6}\,f_r
+$$
+
+- $b$: ancho efectivo (mm); $\ell_w$: longitud horizontal del muro (mm); $f_r$: módulo de ruptura (MPa), Tabla D.5.8-1. El resultado queda en N·mm.
+
+</Ecuacion>
+
+Es el momento que produce una tracción $f_r$ en la fibra extrema de la sección rectangular $b \times \ell_w$ ($M = f_r\,S$ con $S = b\ell_w^2/6$).
+
+<TablaNorma numero="Tabla D.5.8-1" titulo="Módulo de ruptura, fr (MPa)" pag="D-40" nota="Tomada de la imagen de la página D-40. Columnas: morteros de cemento portland y cal (tipos H, M o S | tipo N) y morteros de cemento para mampostería (H, M o S | N). Nota (1): para mampostería parcialmente inyectada, fr se obtiene por interpolación lineal entre «sin rellenar» y «rellenas» según el porcentaje inyectado.">
+
+| Dirección de los esfuerzos de tracción por flexión y tipo de mampostería | Cemento y cal H, M o S | Cemento y cal N | Cemento para mampostería H, M o S | Cemento para mampostería N |
+|---|---:|---:|---:|---:|
+| **Perpendicular a las juntas horizontales** | | | | |
+| Unidades macizas | 0.69 | 0.52 | 0.41 | 0.26 |
+| Unidades de perforación vertical (1) sin rellenar | 0.43 | 0.33 | 0.26 | 0.16 |
+| Unidades de perforación vertical (1) rellenas con mortero de inyección | 1.12 | 1.09 | 1.06 | 1.00 |
+| **Perpendicular a la junta vertical** | | | | |
+| Unidades macizas | 1.38 | 1.03 | 0.83 | 0.52 |
+| Unidades de perforación vertical sin rellenar | 0.86 | 0.66 | 0.52 | 0.33 |
+| Unidades de perforación vertical rellenas y parcialmente rellenas | 1.38 | 1.03 | 0.83 | 0.52 |
+
+</TablaNorma>
+
+Para el momento de agrietamiento de un muro cuya flexión en su plano agrieta las juntas **horizontales** (tracción perpendicular a ellas) se usa la primera mitad de la tabla. La función `moduloRuptura` implementa la tabla completa e interpola la inyección parcial según la nota (1) (para la junta vertical la tabla da un solo valor a «rellenas y parcialmente rellenas»).
+
+### D.5.8.3 — Resistencia a flexo-compresión
+
+<Ecuacion num="D.5.8-3" titulo="Condición de diseño a flexo-compresión">
+
+$$
+M_u \le \phi\,M_n
+$$
+
+- $M_u$ es el momento que acompaña a la carga axial $P_u$; $M_n$ se obtiene del diagrama de interacción del muro (D.5.1.6) con el φ de <NormaRef s="D.5.1.5.2" pag="D-32" /> (0.60, con rampa hasta 0.85 con refuerzo simétrico y $f_y \le 420$ MPa).
+
+</Ecuacion>
+
+El **diagrama de interacción** reúne todos los pares ($P_n$, $M_n$) que agotan la sección. Se traza variando la profundidad del eje neutro $c$: para cada $c$ se calculan la deformación de cada barra con $\varepsilon = \varepsilon_{mu}(c - y)/c$, su esfuerzo (elastoplástico, <NormaRef s="D.5.1.6.4" pag="D-33" />) y la fuerza del bloque $0.80f'_mba$. En compresión pura el diagrama se corta en $0.80P_oR_e$ (Ec. D.5.5-3) y en el extremo opuesto está la tracción pura $-A_{st}f_y$. Para una carga $P_u$ dada, la capacidad disponible es el $\phi M_n$ de la curva de diseño a esa altura.
+
+<Figura alt="Diagrama de interacción carga axial contra momento de un muro de 3 m con dos barras No. 4 por extremo, con curvas nominal y de diseño y el punto de demanda" numero="Esquema" pie="Diagrama de interacción del muro del ejemplo 5 (ℓw = 3000 mm, t = 150 mm, 2 No. 4 por extremo): curva nominal (trazo punteado) y de diseño con la rampa de φ (trazo continuo). El punto es la demanda (Mu, Pu). (esquema del proyecto)">
+<svg viewBox="0 0 520 300" role="img" aria-label="Diagrama de interacción P-M del muro del ejemplo 5" className="mx-auto h-auto w-full max-w-2xl">
+  <rect x="60" y="20" width="430" height="240" fill="none" stroke="currentColor" strokeOpacity="0.3" />
+  {figInt.ticksM.map((m) => (
+    <g key={m}>
+      <line x1={figInt.X(m)} x2={figInt.X(m)} y1="20" y2="260" stroke="currentColor" strokeOpacity="0.1" />
+      <text x={figInt.X(m)} y="275" textAnchor="middle" fontSize="11" fill="currentColor">{m}</text>
+    </g>
+  ))}
+  {figInt.ticksP.map((p) => (
+    <g key={p}>
+      <line x1="60" x2="490" y1={figInt.Y(p)} y2={figInt.Y(p)} stroke="currentColor" strokeOpacity={p === 0 ? 0.5 : 0.1} />
+      <text x="54" y={figInt.Y(p) + 4} textAnchor="end" fontSize="11" fill="currentColor">{p}</text>
+    </g>
+  ))}
+  <polyline points={figInt.nominal} fill="none" stroke="var(--chart-3)" strokeWidth="2" strokeDasharray="6 4" />
+  <polyline points={figInt.diseno} fill="none" stroke="var(--chart-1)" strokeWidth="2.75" />
+  <circle cx={figInt.X(ej5.Mu)} cy={figInt.Y(ej5.Pu)} r="5.5" fill="var(--chart-2)" />
+  <text x={figInt.X(ej5.Mu) + 9} y={figInt.Y(ej5.Pu) - 6} fontSize="11" fill="currentColor">(Mu, Pu)</text>
+  <text x="275" y="292" textAnchor="middle" fontSize="12" fill="currentColor">M (kN·m)</text>
+  <text x="14" y="140" textAnchor="middle" fontSize="12" fill="currentColor" transform="rotate(-90 14 140)">P (kN, compresión +)</text>
+  <text x="440" y="40" textAnchor="end" fontSize="11" fill="currentColor">tope 0.80 Po Re</text>
+</svg>
+</Figura>
+
+<Ejemplo numero={5} titulo="Muro en su plano: flexo-compresión y flexión mínima">
+Muro de $\ell_w$ = 3000 mm, $t$ = $b$ = 150 mm, celdas inyectadas, $f'_m$ = 10 MPa, $f_y$ = 420 MPa. Refuerzo vertical concentrado en los extremos: 2 No. 4 por extremo ({ej5.sec.capas[0].area} mm²) a $d'$ = 150 mm del borde; altura efectiva $h'$ = 2600 mm. Demanda de la combinación crítica: $P_u$ = {ej5.Pu} kN, $M_u$ = {ej5.Mu} kN·m, $V_u$ = {ej5.Vu} kN.
+
+<Paso titulo="Resistencias de referencia: Po, Re, Pb y umbral de φ" ref="D.5.5, D.5.1-2, D.5.1.5.2">
+
+$A_e$ = {ej5.Ae} mm²; $A_{st}$ = {ej5.sec.capas[0].area * 2} mm². $R_e$ = {f(ej5.curva.Re, 4)} ($h'/t$ = {f(2600 / 150, 1)}), $P_o$ = {f(ej5.curva.Po, 0)} kN, **$P_{n,max}$ = 0.80 $P_oR_e$ = {f(ej5.curva.PnMax, 0)} kN**. Carga balanceada (Ec. D.5.1-2, $d$ = 2850 mm): $P_b$ = **{f(ej5.Pb, 0)} kN**; el umbral de la rampa es el menor entre $0.10f'_mA_e$ = 450 kN y $0.25P_b$ = {f(0.25 * ej5.Pb, 1)} kN.
+
+</Paso>
+<Paso titulo="Resistencia a flexo-compresión con Pu = 150 kN" ref="D.5.8-3, D.5.1.6">
+
+Se busca en la curva el punto con $\phi P_n = P_u$ = 150 kN: $P_n$ = {f(ej5.ver.detalle.Pn, 1)} kN, φ = **{f(ej5.ver.detalle.phi, 3)}** (por la rampa), $c$ = {f(ej5.ver.detalle.c, 1)} mm y **$M_n$ = {f(ej5.ver.detalle.Mn, 1)} kN·m**. Entonces:
+
+$$
+\phi M_n = \phi \times M_n
+$$
+
+Resultado: $\phi M_n$ = {f(ej5.ver.detalle.phi, 3)} × {f(ej5.ver.detalle.Mn, 1)} = **{f(ej5.ver.phiMnDisponible, 1)} kN·m** frente a $M_u$ = {ej5.Mu} kN·m: razón {f(ej5.ver.razon, 3)} → **{ej5.ver.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Paso titulo="Resistencia mínima a la flexión" ref="D.5.8-1, D.5.8-2, Tabla D.5.8-1">
+
+Tracción perpendicular a las juntas horizontales, unidades de perforación vertical **rellenas**, mortero de cemento y cal tipo S: $f_r$ = **{f(ej5.fr, 2)} MPa** (Tabla D.5.8-1). Con todas las celdas inyectadas α = {f(ej5.alfa, 1)}:
+
+$$
+M_{cr} = \frac{150\,(3000)^2}{6}\,(1.12) \qquad \alpha M_{cr} = 1.8\,M_{cr}
+$$
+
+Resultado: $M_{cr}$ = **{f(ej5.Mcr, 1)} kN·m**, $\alpha M_{cr}$ = **{f(ej5.alfa * ej5.Mcr, 1)} kN·m**. El $M_n$ = {f(ej5.Mn, 1)} kN·m (a $P_u$ = 150 kN) {ej5.Mn >= ej5.alfa * ej5.Mcr ? 'cumple' : 'no cumple'}. Atención: con flexión pura ($P_u$ = 0) el $M_n$ del mismo muro cae a {f(ej5.MnPura, 1)} kN·m, {ej5.MnPura >= ej5.alfa * ej5.Mcr ? 'todavía mayor' : 'menor'} que $\alpha M_{cr}$. La norma no dice a qué carga axial evaluar $M_n$ en D.5.8-1; conviene verificar también la combinación con la menor carga vertical (interpretación del proyecto).
+
+</Paso>
+<Resultado>
+$\phi M_n$ = **{f(ej5.ver.phiMnDisponible, 1)} kN·m** ≥ $M_u$ = {ej5.Mu} kN·m con $P_u$ = {ej5.Pu} kN; $M_n$ ≥ 1.8 $M_{cr}$. El ejemplo 6 continúa con el cortante de este mismo muro. Compruébalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="muro-en-plano" />
+
+### D.5.8.4 — Resistencia a cortante paralela al plano
+
+<Ecuacion num="D.5.8-4" titulo="Condición de diseño a cortante">
+
+$$
+V_u \le \phi\,V_n
+$$
+
+- φ = 0.60; puede subirse a 0.85 en muros donde la resistencia nominal a cortante excede el cortante correspondiente al desarrollo de su resistencia nominal a flexión para la combinación de fuerzas mayoradas (<NormaRef s="D.5.1.5.2" pag="D-33" />).
+
+</Ecuacion>
+
+<Ecuacion num="D.5.8-5" titulo="Resistencia nominal a cortante">
+
+$$
+V_n = V_m + V_s
+$$
+
+- $V_m$: aporte de la mampostería (D.5.8.4.2, Tabla D.5.8-2). $V_s$: aporte del refuerzo horizontal (D.5.8.4.3, Ec. D.5.8-7). Además $V_n$ no puede exceder el máximo de la Tabla D.5.8-3 en ninguna sección horizontal.
+
+</Ecuacion>
+
+La norma añade: «Si $V_u \ge \phi V_m$, el refuerzo debe tomar todo el esfuerzo cortante». En la práctica esto significa que cuando la mampostería sola no alcanza ($V_u \ge \phi V_m$), **se dimensiona** el refuerzo horizontal para completar la resistencia. El texto impreso termina la frase con «y entonces:» sin escribir la ecuación (ver *Erratas y observaciones* al final del capítulo).
+
+#### D.5.8.4.1 — Verificación de articulación plástica
+
+Si el cortante nominal $V_n$ excede el cortante que se produce cuando el muro alcanza su resistencia nominal a flexión $M_n$, la falla controlada será **por flexión**, y el muro puede desarrollar una **articulación plástica** en la base. Para que esa articulación sea dúctil y no se vea interrumpida por una falla de cortante, se exige en una región que va **desde la base hasta una altura igual a $\ell_w$**:
+
+<Ecuacion num="D.5.8-6" titulo="Cortante nominal en la región de articulación plástica">
+
+$$
+V_n = V_s
+$$
+
+- En esa región **no se cuenta** el aporte de la mampostería $V_m$: todo el cortante lo resiste el refuerzo.
+
+</Ecuacion>
+
+La resistencia requerida $V_u$ para la región puede determinarse con el momento resistente $M_n$ en una sección a una altura de $\ell_w/2$ (sin pasar de medio piso) sobre la base. La **separación $s$** del refuerzo horizontal en esa región no puede exceder **tres veces el espesor nominal $t$ ni 600 mm**. Por encima de $\ell_w$ se vuelve a $V_n = V_m + V_s$ (Ec. D.5.8-5) (<NormaRef s="D.5.8.4.1" pag="D-40" />).
+
+<Figura alt="Elevación de un muro con la región de articulación plástica en la base, de altura igual a ℓw, y elementos de borde en los extremos" numero="Esquema" pie="Regiones de cortante de un muro en su plano: en la base y hasta una altura ℓw se exige Vn = Vs con s ≤ min(3t, 600 mm); por encima vale Vn = Vm + Vs. Los elementos de borde van en los extremos. (esquema del proyecto)">
+<svg viewBox="0 0 500 290" role="img" aria-label="Elevación del muro con región de articulación plástica y elementos de borde" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="80" y="20" width="150" height="240" fill="var(--muted)" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="80" y="110" width="150" height="150" fill="var(--chart-2)" fillOpacity="0.25" />
+  <rect x="80" y="20" width="16" height="240" fill="var(--chart-1)" fillOpacity="0.5" />
+  <rect x="214" y="20" width="16" height="240" fill="var(--chart-1)" fillOpacity="0.5" />
+  {[130, 150, 170, 190, 210, 230, 250].map((y) => (
+    <line key={y} x1="96" x2="214" y1={y} y2={y} stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.5" />
+  ))}
+  <line x1="80" x2="230" y1="266" y2="266" stroke="currentColor" strokeWidth="3" />
+  <line x1="60" x2="60" y1="260" y2="110" stroke="currentColor" />
+  <polygon points="60,110 56,120 64,120" fill="currentColor" />
+  <polygon points="60,260 56,250 64,250" fill="currentColor" />
+  <text x="54" y="190" fontSize="12" textAnchor="end" fill="currentColor">ℓw</text>
+  <line x1="80" x2="230" y1="280" y2="280" stroke="currentColor" />
+  <text x="155" y="278" fontSize="11" textAnchor="middle" fill="currentColor" dy="-4">ℓw (longitud del muro)</text>
+  <line x1="240" x2="262" y1="185" y2="185" stroke="currentColor" strokeDasharray="3 3" />
+  <text x="266" y="189" fontSize="11" fill="currentColor">Mn evaluado a ℓw/2 (≤ medio piso)</text>
+  <text x="266" y="150" fontSize="12" fill="currentColor">Región de articulación plástica</text>
+  <text x="266" y="166" fontSize="11" fill="currentColor">Vn = Vs; s ≤ min(3t, 600 mm)</text>
+  <text x="266" y="60" fontSize="12" fill="currentColor">Resto del muro</text>
+  <text x="266" y="76" fontSize="11" fill="currentColor">Vn = Vm + Vs (D.5.8-5)</text>
+  <text x="266" y="224" fontSize="11" fill="currentColor">Borde: 0.20 f′m ó 0.30 f′m</text>
+  <line x1="155" x2="155" y1="4" y2="16" stroke="currentColor" strokeWidth="2" />
+  <polygon points="155,18 150,8 160,8" fill="currentColor" />
+  <text x="162" y="12" fontSize="11" fill="currentColor">Vu</text>
+</svg>
+</Figura>
+
+#### D.5.8.4.2 — Valor de $V_m$
+
+El cortante resistido por la mampostería depende de cuán esbelto es el muro **en términos de cortante**, medido por $M_u/(V_ud)$ (luz de cortante adimensional): un muro bajo y ancho (cociente pequeño) trabaja por arco y resiste más cortante que uno alto. $M_u$ es el momento que ocurre **simultáneamente** con $V_u$ en la sección bajo consideración y $d$ puede tomarse como $0.8\ell_w$ en ausencia de un análisis de compatibilidad. El cociente se toma **siempre positivo** y no necesita ser mayor que 1; $A_{mv}$ es la de <NormaRef s="D.5.4.5.2" pag="D-36" /> (generalmente $b\,\ell_w$).
+
+<TablaNorma numero="Tabla D.5.8-2" titulo="Valor del cortante nominal resistido por la mampostería, Vm" pag="D-41" nota="Amv en mm², f′m en MPa y Pu en N dan Vm en N. Pu positivo en compresión.">
+
+| $M_u/(V_ud)$ | $V_m$ |
+|---|---|
+| $M_u/(V_ud) \le 0.25$ | $V_m = 0.30\,A_{mv}\sqrt{f'_m} + 0.25\,P_u$ |
+| $0.25 < M_u/(V_ud) < 1.00$ | $V_m = \left[0.33 - 0.13\,\dfrac{M_u}{V_ud}\right]A_{mv}\sqrt{f'_m} + 0.25\,P_u$ |
+| $M_u/(V_ud) \ge 1.00$ | $V_m = 0.20\,A_{mv}\sqrt{f'_m} + 0.25\,P_u$ |
+
+</TablaNorma>
+
+La carga vertical $P_u$ ayuda: aporta $0.25P_u$ por fricción y estado de compresión. Las bandas son prácticamente continuas (0.33 − 0.13·0.25 = 0.2975 ≈ 0.30 y 0.33 − 0.13·1.00 = 0.20).
+
+#### D.5.8.4.3 — Valor de $V_s$
+
+<Ecuacion num="D.5.8-7" titulo="Cortante resistido por el refuerzo horizontal">
+
+$$
+V_s = \rho_n\,f_y\,A_{mv}
+$$
+
+- $f_y$: fluencia del refuerzo de cortante (MPa); $\rho_n$: cuantía del refuerzo que contribuye a resistir el cortante.
+
+</Ecuacion>
+
+<Ecuacion num="D.5.8-8" titulo="Cuantía del refuerzo horizontal que resiste cortante">
+
+$$
+\rho_n = \frac{A_v}{s\,b}\,\eta
+$$
+
+- $A_v$: área del refuerzo horizontal que resiste cortante, colocada cada $s$ medida verticalmente (mm²); $b$: ancho efectivo del alma; $\eta$: factor de eficiencia del refuerzo horizontal.
+- $\eta$ = **0.70** cuando $A_v$ está dentro de elementos horizontales embebidos en el muro (D.4.5.11.2) y $\eta$ = **0.35** cuando es refuerzo horizontal de junta (D.4.5.11.1).
+
+</Ecuacion>
+
+La norma da $\rho_n$ «según la ecuación D.5-8-8»: es la Ec. D.5.8-8 (errata de tipografía en el original).
+
+#### D.5.8.4.4 — Valores máximos de $V_n$
+
+El cortante nominal total no puede exceder el máximo de la tabla, cuyo objeto es evitar una falla por aplastamiento diagonal del alma antes de que el refuerzo fluya:
+
+<TablaNorma numero="Tabla D.5.8-3" titulo="Valores máximos para el cortante nominal Vn" pag="D-42" nota="Mismas unidades que la Tabla D.5.8-2. d = 0.8 ℓw en ausencia de análisis de compatibilidad; Mu/(Vud) positivo y no mayor que 1.">
+
+| $M_u/(V_ud)$ | Máximo valor permitido para $V_n$ |
+|---|---|
+| $M_u/(V_ud) \le 0.25$ | $0.50\,A_{mv}\sqrt{f'_m}$ |
+| $0.25 < M_u/(V_ud) < 1.00$ | $\left[0.56 - 0.23\,\dfrac{M_u}{V_ud}\right]A_{mv}\sqrt{f'_m}$ |
+| $M_u/(V_ud) \ge 1.00$ | $0.33\,A_{mv}\sqrt{f'_m}$ |
+
+</TablaNorma>
+
+<Figura alt="Gráfico de los coeficientes de las Tablas D.5.8-2 y D.5.8-3 en función de Mu/(Vud): Vm baja de 0.30 a 0.20 y Vn máximo de 0.50 a 0.33" numero="Esquema" pie="Coeficientes que multiplican a Amv √f′m: Vm (sin el término 0.25 Pu) de la Tabla D.5.8-2 y Vn máximo de la Tabla D.5.8-3, frente a Mu/(Vud). Los muros más bajos y anchos (cociente pequeño) tienen más resistencia a cortante. (esquema del proyecto)">
+<svg viewBox="0 0 480 280" role="img" aria-label="Coeficientes de Vm y Vn máximo frente a Mu/(Vud)" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="50" y="30" width="380" height="200" fill="none" stroke="currentColor" strokeOpacity="0.3" />
+  {[0, 0.2, 0.4, 0.6].map((v) => (
+    <g key={v}>
+      <line x1="50" x2="430" y1={figCoef.Y(v)} y2={figCoef.Y(v)} stroke="currentColor" strokeOpacity="0.12" />
+      <text x="44" y={figCoef.Y(v) + 4} textAnchor="end" fontSize="11" fill="currentColor">{v.toFixed(1)}</text>
+    </g>
+  ))}
+  {[0, 0.25, 0.5, 1, 1.5].map((m) => (
+    <g key={m}>
+      <line x1={figCoef.X(m)} x2={figCoef.X(m)} y1="230" y2="234" stroke="currentColor" />
+      <text x={figCoef.X(m)} y="247" textAnchor="middle" fontSize="11" fill="currentColor">{m}</text>
+    </g>
+  ))}
+  <polyline points={figCoef.vn} fill="none" stroke="var(--chart-3)" strokeWidth="2.5" />
+  <polyline points={figCoef.vm} fill="none" stroke="var(--chart-1)" strokeWidth="2.5" />
+  <text x={figCoef.X(1.05)} y={figCoef.Y(0.355)} fontSize="11" fill="currentColor">Vn máximo (D.5.8-3)</text>
+  <text x={figCoef.X(1.05)} y={figCoef.Y(0.225)} fontSize="11" fill="currentColor">Vm (D.5.8-2)</text>
+  <circle cx={figCoef.X(ej5.cs.mvd)} cy={figCoef.Y(coeficienteVm(ej5.cs.mvd))} r="5" fill="var(--chart-2)" />
+  <text x={figCoef.X(ej5.cs.mvd) + 7} y={figCoef.Y(coeficienteVm(ej5.cs.mvd)) + 16} fontSize="11" fill="currentColor">ejemplo 6: {f(ej5.cs.mvd, 3)}</text>
+  <text x="240" y="268" textAnchor="middle" fontSize="12" fill="currentColor">Mu/(Vud)</text>
+  <text x="14" y="130" textAnchor="middle" fontSize="12" fill="currentColor" transform="rotate(-90 14 130)">coeficiente de Amv √f′m</text>
+  <text x={figCoef.X(0.25)} y="24" textAnchor="middle" fontSize="10" fill="currentColor">0.25</text>
+  <line x1={figCoef.X(0.25)} x2={figCoef.X(0.25)} y1="30" y2="230" stroke="currentColor" strokeDasharray="2 3" strokeOpacity="0.5" />
+  <line x1={figCoef.X(1)} x2={figCoef.X(1)} y1="30" y2="230" stroke="currentColor" strokeDasharray="2 3" strokeOpacity="0.5" />
+</svg>
+</Figura>
+
+<Ejemplo numero={6} titulo="Cortante del muro en su plano y articulación plástica">
+Continuación del ejemplo 5: $V_u$ = {ej5.Vu} kN con $M_u$ = {ej5.Mu} kN·m y $P_u$ = {ej5.Pu} kN (compresión). $A_{mv} = b\,\ell_w$ = 150 × 3000 = **{ej5.cs.Amv} mm²** (celdas inyectadas, <NormaRef s="D.5.4.5.2" pag="D-36" />). Refuerzo horizontal: barras No. 3 (71 mm²) en elementos horizontales embebidos cada 400 mm ($\eta$ = 0.70), $f_y$ = 420 MPa.
+
+<Paso titulo="Cociente Mu/(Vud)" ref="D.5.8.4.2">
+
+$d = 0.8\,\ell_w$ = **{ej5.cs.d} mm**:
+
+$$
+\frac{M_u}{V_u\,d} = \frac{400 \times 10^6}{300\,000 \times 2400}
+$$
+
+Resultado: **{f(ej5.cs.mvd, 4)}**, en la banda intermedia (entre 0.25 y 1.00).
+
+</Paso>
+<Paso titulo="Aporte de la mampostería" ref="Tabla D.5.8-2">
+
+$$
+V_m = \left[0.33 - 0.13(0.5556)\right]A_{mv}\sqrt{f'_m} + 0.25\,P_u
+$$
+
+Resultado: coeficiente {f(coeficienteVm(ej5.cs.mvd), 4)}; **$V_m$ = {f(ej5.cs.Vm, 1)} kN** (incluye 0.25 × {ej5.Pu} = {f(0.25 * ej5.Pu, 1)} kN). Con φ = 0.60: $\phi V_m$ = {f(0.6 * ej5.cs.Vm, 1)} kN &lt; $V_u$ → **hace falta refuerzo horizontal**.
+
+</Paso>
+<Paso titulo="Aporte del refuerzo horizontal" ref="D.5.8-8, D.5.8-7">
+
+$$
+\rho_n = \frac{71\,(0.70)}{400\,(150)} \qquad V_s = \rho_n\,f_y\,A_{mv}
+$$
+
+Resultado: $\rho_n$ = {f(ej5.cs.rhoN, 6)}; **$V_s$ = {f(ej5.cs.Vs, 1)} kN**; $V_n = V_m + V_s$ = **{f(ej5.cs.Vn, 1)} kN**. Máximo de la Tabla D.5.8-3: **{f(ej5.cs.VnMax, 1)} kN** (coeficiente {f(coeficienteVnMax(ej5.cs.mvd), 4)}) → $V_n$ {ej5.cs.cumpleMaximo ? 'no excede el máximo' : 'EXCEDE el máximo'}.
+
+</Paso>
+<Paso titulo="¿Hay posibilidad de articulación plástica?" ref="D.5.8.4.1, D.5.1.5.2">
+
+El cortante asociado a la resistencia a flexión es $V(M_n) = M_n/(M_u/V_u)$ = {f(ej5.Mn, 1)}/{f(ej5.Mu / ej5.Vu, 3)} = **{f(ej5.art.VMn, 1)} kN**. Como $V_n$ = {f(ej5.cs.VnUtil, 1)} kN es mayor, el muro **falla antes por flexión** (se formaría la articulación) y φ puede subirse a **{f(ej5.cs.phi, 2)}**: $\phi V_n$ = **{f(ej5.cs.phiVn, 1)} kN** ≥ $V_u$ → **{ej5.cs.cumple ? 'cumple' : 'no cumple'}** (razón {f(ej5.cs.razon, 3)}) fuera de la región de la base.
+
+</Paso>
+<Paso titulo="Refuerzo en la región de articulación (altura ℓw desde la base)" ref="D.5.8-6, D.5.8.4.1">
+
+Allí $V_n = V_s$ y la demanda es $V(M_n)$ = {f(ej5.art.VMn, 1)} kN. Con φ = 0.85 (ya que $V_s$ superará $V(M_n)$) se necesita $V_s \ge V(M_n)/0.85$ = **{f(ej5.VsHinge, 1)} kN**, es decir $A_v/s \ge$ {f(ej5.AvS, 3)} mm²/mm. Con No. 3 (71 mm²), $s \le$ {f(71 / ej5.AvS, 0)} mm: se adopta **$s$ = {ej5.sHinge} mm**, con $V_s$ = {f(ej5.VsHingeReal, 1)} kN (≤ máximo {f(ej5.cs.VnMax, 1)} kN). El límite $s \le \min(3t, 600)$ = {ej5.art.sMax} mm {ej5.sHinge <= ej5.art.sMax ? 'se cumple' : 'no se cumple'}. Es mucho más refuerzo que fuera de la base: la región plástica lo exige.
+
+</Paso>
+<Resultado>
+Fuera de la base: $\phi V_n$ = **{f(ej5.cs.phiVn, 1)} kN** ≥ $V_u$ = {ej5.Vu} kN con No. 3 c/400. Región de articulación (base hasta $\ell_w$ = 3 m): No. 3 c/{ej5.sHinge} mm ($V_s$ = {f(ej5.VsHingeReal, 1)} kN).
+</Resultado>
+</Ejemplo>
+
+### D.5.8.5 — Elementos de borde
+
+Los extremos de un muro que trabaja a flexión están muy comprimidos y se aplastan antes que el resto. Por eso se exigen **elementos de borde** (zonas confinadas en los extremos) cuando el modo de falla es la flexión y el esfuerzo de compresión de la fibra extrema, con cargas mayoradas, excede (<NormaRef s="D.5.8.5" pag="D-42" />):
+
+- **$0.20f'_m$** para mampostería de cavidad reforzada (D.2.1.1) y mampostería reforzada (D.2.1.2);
+- **$0.30f'_m$** para mampostería parcialmente reforzada (D.2.1.3).
+
+Requisitos adicionales:
+
+1. **(a)** Los elementos de borde pueden suspenderse a partir de la sección donde el esfuerzo de compresión sea **inferior a $0.15f'_m$**, pero no antes de una altura igual a $\ell_w$ medida desde la base.
+2. **(b)** Los esfuerzos se calculan con las fuerzas mayoradas, con un **modelo linealmente elástico y sección no fisurada**: $\sigma = P_u/A_e + M_uc/I$, es decir $\sigma = P_u/(b\ell_w) + 6M_u/(b\ell_w^2)$ para una sección rectangular.
+3. **(c)** Estribos de confinamiento **No. 3 (3/8″) ó 10M (10 mm)**, separados **200 mm** verticalmente (o su equivalente) dentro del espacio inyectado con mortero de relleno; cada celda debe ser como mínimo de **100 mm × 100 mm**.
+4. **(d)** En muros de **cavidad reforzada** los elementos de borde deben cumplir C.21.9.6 (muros de concreto).
+
+<Ejemplo numero={7} titulo="¿Necesita elementos de borde el muro del ejemplo 5?">
+Muro $\ell_w$ = 3000 mm, $b$ = 150 mm, $f'_m$ = 10 MPa, mampostería reforzada con todas las celdas inyectadas. Cargas mayoradas: $P_u$ = {ej5.Pu} kN y $M_u$ = {ej5.Mu} kN·m. La flexión domina (ejemplo 6).
+
+<Paso titulo="Esfuerzo elástico en la fibra extrema" ref="D.5.8.5 (b)">
+
+$$
+\sigma = \frac{P_u}{b\,\ell_w} + \frac{6\,M_u}{b\,\ell_w^2} = \frac{150\,000}{450\,000} + \frac{6\,(400\times 10^6)}{150\,(3000)^2}
+$$
+
+Resultado: **$\sigma$ = {f(ej5.sigma, 3)} MPa**.
+
+</Paso>
+<Paso titulo="Comparación con los umbrales" ref="D.5.8.5">
+
+Mampostería reforzada: límite $0.20f'_m$ = **{f(ej5.borde.limite, 2)} MPa** → $\sigma$ = {f(ej5.sigma, 2)} MPa **{ej5.borde.requiere ? 'excede: se requieren elementos de borde' : 'no excede: no se requieren'}**. (Si fuera parcialmente reforzada el límite sería $0.30f'_m$ = {f(ej5.bordeParcial.limite, 2)} MPa: {ej5.bordeParcial.requiere ? 'tampoco bastaría' : 'no se requerirían'}.) Se pueden suspender donde $\sigma < 0.15f'_m$ = {f(ej5.borde.limiteSuspension, 2)} MPa, pero no antes de $\ell_w$ = 3 m desde la base.
+
+</Paso>
+<Resultado>
+$\sigma$ = {f(ej5.sigma, 2)} MPa frente a $0.20f'_m$ = {f(ej5.borde.limite, 2)} MPa: **{ej5.borde.requiere ? 'se requieren elementos de borde' : 'no se requieren elementos de borde'}**, con estribos No. 3 c/200 mm en celdas de al menos 100 × 100 mm.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Fallas frecuentes al aplicar D.5.5 a D.5.8">
+
+- **Olvidar la esbeltez.** $P_n$ sin $R_e$ sobrestima la resistencia; y recordar que $h'/t \le 25$ en muros estructurales (<NormaRef s="D.5.4.3.1" pag="D-36" />) aunque la Ec. D.5.5-2 tenga rama hasta valores mayores.
+- **Usar el φ equivocado.** 0.80/0.60 si la fuerza es perpendicular al plano, 0.85/0.60 si es paralela; el cortante en el plano es 0.60 y solo sube a 0.85 si $V_n$ excede el cortante asociado a $M_n$ (<NormaRef s="D.5.1.5" pag="D-32" />).
+- **Mezclar unidades en D.5.7-3 y D.5.7-4.** $A_sf_y$ está en N; $P_u$ debe pasarse de kN a N antes de sumarlo.
+- **Aplicar D.5.6-4 sin comprobar que $A'_s$ fluye.** Si $d'$ es grande respecto de $c$, el acero de compresión no fluye y $M_n$ se sobrestima.
+- **Pasarse de $0.75\rho_b$ (o $0.5\rho_b$ fuera del plano).** La falla sería por aplastamiento de la mampostería, sin aviso.
+- **Calcular $V_m$ con $M_u$ y $V_u$ de combinaciones distintas.** $M_u$ es el momento que ocurre **simultáneamente** con $V_u$ (<NormaRef s="D.5.8.4.2" pag="D-41" />).
+- **Dejar $M_u/(V_ud)$ sin límite.** Se toma positivo y no mayor que 1.
+- **Contar $V_m$ en la región de articulación plástica.** En la base, hasta $\ell_w$, es $V_n = V_s$ (Ec. D.5.8-6) con $s \le \min(3t, 600)$ mm.
+- **Confundir $A_{mv}$ con $A_e$.** Para cortante paralelo al plano solo cuenta el alma: $A_{mv} = b\,\ell_w$ (<NormaRef s="D.5.4.5.2" pag="D-36" />); para cortante perpendicular, $A_{mv} = A_e$.
+- **Usar $\eta$ = 0.70 con refuerzo de junta.** El refuerzo en juntas (D.4.5.11.1) solo tiene $\eta$ = 0.35.
+
+</Callout>
+
+## Erratas y observaciones del PDF
+
+<Callout tipo="nota" titulo="Anomalías detectadas al transcribir D.5.5 a D.5.8">
+
+- **D.5.8.3 (D-40)** dice «condición dada por la ecuación D.5.8-2»; la condición es la **D.5.8-3** ($M_u \le \phi M_n$), que figura justo debajo. Es una referencia errada del original.
+- **D.5.8.4 (D-40):** la frase «Si $V_u \ge \phi V_m$, el refuerzo debe tomar todo el esfuerzo cortante, y entonces:» queda **sin la ecuación** que debía seguirla. No se inventa: lo normativo es $V_n = V_m + V_s$ (D.5.8-5) y, en la región de articulación plástica, $V_n = V_s$ (D.5.8-6).
+- **D.5.8.4.3 (D-41):** la cuantía se remite a «la ecuación D.5-8-8» (tipografía); se refiere a D.5.8-8.
+- **D.5.0 (D-31/32):** $\rho_n$ se define como la cuantía de refuerzo horizontal «en un plano perpendicular al plano $A_{mv}$, mm²», que mezcla cuantía (adimensional) y unidades de área. Se usa como adimensional, según la Ec. D.5.8-8.
+- **D.5.1.5.2 (D-33):** el umbral de la rampa de φ dice «$0.10f'_mA_e$ ó $0.25P_b$» sin aclarar cuál rige; se toma el menor (interpretación del proyecto).
+- **D.5.6.2 y D.5.7.2 (D-38):** se citan $\rho_b$ sin definirla; solo se da $a_b$ y $P_b$ (Ec. D.5.1-2). Se deriva en este capítulo (autoría del proyecto).
+- **D.5.8.2 (D-39):** no dice a qué carga axial debe evaluarse $M_n$ en $M_n \ge \alpha M_{cr}$.
+- **D.5.5-1 (D-37):** el tope $f'_mA_e$ rara vez rige; se transcribe tal como está impreso.
+
+</Callout>
+
+## Resumen en una línea
+
+Un muro de mampostería se diseña con $\phi P_n = \phi\,0.80\,[0.80f'_m(A_e - A_{st}) + A_{st}f_y]\,R_e$ a compresión, con $M_n = A_sf_y(d - a/2)$ y el bloque de $0.80f'_m$ a flexión (más el diagrama de interacción cuando hay carga axial o el muro flecta en su plano), y con $V_n = V_m + V_s$ —máximo de la Tabla D.5.8-3 y $V_n = V_s$ en la base— a cortante, vigilando $h'/t$, la cuantía, el mínimo $1.8$–$3.0\,M_{cr}$ y los elementos de borde.

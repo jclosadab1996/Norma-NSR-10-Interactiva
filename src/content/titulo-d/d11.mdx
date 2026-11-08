@@ -1,0 +1,362 @@
+---
+codigo: 'D.11'
+tipo: capitulo
+titulo: 'Muros diafragma'
+resumen: 'Muros de mampostería rodeados por vigas y columnas de concreto que rigidizan el pórtico como una diagonal: alcance y uso limitado a edificaciones existentes, R0 ≤ 2.0, espesor mínimo de 120 mm, cortante máximo Vu ≤ φ vm Am con la Tabla D.11.1-1, aplastamiento diagonal y cortante mínimo de vigas y columnas.'
+objetivos:
+  - 'Reconocer qué es un muro diafragma y en qué casos la norma todavía permite usarlo (evaluación y modificación de edificaciones existentes)'
+  - 'Calcular el cortante máximo φ vm Am con el vm de la Tabla D.11.1-1 según el tipo de unidad'
+  - 'Verificar el aplastamiento diagonal con el área de la quinta parte de la diagonal y h′ igual a la diagonal'
+  - 'Determinar el cortante mínimo de diseño de las vigas y columnas del pórtico que lo rodea'
+  - 'Resumir los requisitos de espesor, mortero, R0, refuerzo y construcción de D.11'
+paginasNorma: 'D-63 a D-64'
+paginaPdf: 628
+orden: 14
+calculadoras: ['muro-diafragma']
+nivel: 'intermedio'
+---
+
+import {
+  aplastamientoDiagonal,
+  areaNetaHorizontal,
+  cortanteMinimoMiembroPortico,
+  cortanteResistente,
+  longitudDiagonal,
+  verificarMuroDiafragma,
+  zonaCortanteMiembro,
+} from '../../lib/nsr10/muroDiafragma';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const Am = areaNetaHorizontal(3600, 120);
+  return {
+    Am,
+    maciza: cortanteResistente({ tipo: 'maciza', Am }),
+    vertical: cortanteResistente({ tipo: 'perforacion-vertical', Am }),
+    horizontal: cortanteResistente({ tipo: 'perforacion-horizontal', Am }),
+    ensayo: cortanteResistente({ tipo: 'perforacion-vertical', Am, vmEnsayado: 0.3 }),
+  };
+})();
+
+export const ej2 = (() => {
+  const diag = longitudDiagonal(3600, 2700);
+  const a = aplastamientoDiagonal({ L: 3600, h: 2700, t: 120, fm: 5 });
+  const r = verificarMuroDiafragma({ tipo: 'maciza', L: 3600, h: 2700, t: 120, fm: 5, Vu: 40, R0: 2 });
+  return { diag, a, r, zona: zonaCortanteMiembro(3600), Vmin: cortanteMinimoMiembroPortico(40) };
+})();
+
+export const ej3 = (() => {
+  const r = verificarMuroDiafragma({ tipo: 'perforacion-vertical', L: 4200, h: 2800, t: 150, fraccionNeta: 0.55, fm: 6, Vu: 60 });
+  return { r, zonaViga: zonaCortanteMiembro(4200), zonaColumna: zonaCortanteMiembro(2800) };
+})();
+
+## Idea central del capítulo
+
+Un **muro diafragma** es un muro de mampostería que llena por completo el paño de un pórtico de concreto reforzado, está en contacto pleno con vigas y columnas y, al hacerlo, **rigidiza el pórtico como lo haría una diagonal concéntrica** (<NormaRef s="D.11.1.1" pag="D-63" />). La mampostería actúa como una **biela diagonal que solo trabaja en compresión**: por eso la norma pide que el modelo matemático nunca le asigne tracción (<NormaRef s="D.11.1.2" pag="D-63" />).
+
+El capítulo es muy corto: delimita qué es un muro diafragma, fija requisitos mínimos de material (espesor, aparejo, mortero), limita el sistema a **edificaciones existentes**, topa el coeficiente de disipación de energía en $R_0 \le 2.0$ y establece **dos comprobaciones de resistencia** del muro: el **cortante** $V_u \le \phi v_m A_m$ y el **aplastamiento diagonal**. Además obliga a que vigas y columnas resistan la interacción con el muro.
+
+<Callout tipo="importante" titulo="No se permite en edificaciones nuevas">
+La norma dice expresamente que este tipo de construcción **no se permite para edificaciones nuevas**. Solo se emplea dentro del alcance del Capítulo A.10 (adición, modificación o remodelación de edificaciones construidas antes de la vigencia del Reglamento) o en la **evaluación de su vulnerabilidad sísmica** (<NormaRef s="D.11.2.1" pag="D-63" />). Para esos casos, la verificación y el diseño de los muros diafragma pueden hacerse con este capítulo.
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este capítulo (autoría del proyecto)">
+Los ejemplos y la calculadora usan `src/lib/nsr10/muroDiafragma.ts` y las constantes de `src/data/muroDiafragma.ts`, que reutilizan las funciones de D.5 (`mamposteria.ts`). Lo rotulado **«autoría del proyecto»** no es texto de la norma: la lectura de «dimensión diagonal» como $\sqrt{\ell^2+h^2}$, la conversión de la capacidad de la biela a fuerza horizontal y la fracción neta de unidades perforadas. Unidades del SI: mm, MPa, kN. Los gráficos son esquemas propios, porque el Título D no trae figuras.
+</Callout>
+
+<Figura alt="Pórtico de concreto reforzado con un muro de mampostería que llena el paño completo y una biela diagonal de compresión, con las cotas de longitud, altura, diagonal y ancho efectivo igual a un quinto de la diagonal" numero="Esquema" pie="Muro diafragma: el muro llena el paño entre vigas y columnas y se comporta como una biela diagonal que solo comprime. El área efectiva de compresión es un quinto de la diagonal por el espesor, y h′ es la diagonal (D.11.4.1 b). Esquema del proyecto.">
+<svg viewBox="0 0 560 300" role="img" aria-label="Pórtico con muro diafragma y biela diagonal de compresión" className="mx-auto h-auto w-full max-w-2xl">
+  <defs>
+    <marker id="d11-flecha" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" /></marker>
+  </defs>
+  <rect x="80" y="40" width="360" height="190" fill="currentColor" fillOpacity="0.12" stroke="none" />
+  <rect x="60" y="30" width="20" height="210" fill="currentColor" fillOpacity="0.55" />
+  <rect x="440" y="30" width="20" height="210" fill="currentColor" fillOpacity="0.55" />
+  <rect x="60" y="20" width="400" height="20" fill="currentColor" fillOpacity="0.55" />
+  <rect x="60" y="230" width="400" height="20" fill="currentColor" fillOpacity="0.55" />
+  <polygon points="85,45 120,45 435,225 400,225" fill="currentColor" fillOpacity="0.35" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="80" y1="40" x2="440" y2="230" stroke="currentColor" strokeWidth="1.5" strokeDasharray="6 4" />
+  <line x1="80" y1="275" x2="440" y2="275" stroke="currentColor" markerStart="url(#d11-flecha)" markerEnd="url(#d11-flecha)" />
+  <text x="260" y="292" textAnchor="middle" fontSize="12" fill="currentColor">ℓ (longitud del panel)</text>
+  <line x1="490" y1="40" x2="490" y2="230" stroke="currentColor" markerStart="url(#d11-flecha)" markerEnd="url(#d11-flecha)" />
+  <text x="498" y="140" fontSize="12" fill="currentColor">h</text>
+  <text x="235" y="118" textAnchor="middle" fontSize="12" fill="currentColor" transform="rotate(28 235 118)">diagonal = √(ℓ² + h²)</text>
+  <text x="95" y="14" fontSize="11" fill="currentColor" fillOpacity="0.85">viga</text>
+  <text x="62" y="268" fontSize="11" fill="currentColor" fillOpacity="0.85" textAnchor="start">columna</text>
+  <text x="330" y="190" fontSize="11" fill="currentColor" fillOpacity="0.9">biela: solo compresión</text>
+  <text x="340" y="206" fontSize="11" fill="currentColor" fillOpacity="0.9">ancho efectivo = diagonal/5</text>
+</svg>
+</Figura>
+
+## D.11.1 — Generalidades
+
+### D.11.1.1 — Alcance
+
+Se consideran muros diafragma los muros **continuos desde la cimentación hasta el nivel superior** de la edificación, **rodeados completamente** por vigas y columnas de una estructura de **concreto reforzado**, en contacto pleno con ella (<NormaRef s="D.11.1.1" pag="D-63" />). Para llamarse diafragma, además, el muro debe ser **sin aberturas ni juntas**: un solo cuerpo.
+
+En la práctica (comentario del proyecto) son los «rellenos» de mampostería de pórticos existentes que, sin haber sido pensados como estructura, sí aportan rigidez y resistencia. Si el muro tiene una puerta o ventana, o no llega hasta la cimentación, **no es muro diafragma** en el sentido de la norma.
+
+### D.11.1.2 — Análisis
+
+En el análisis estructural debe emplearse un **modelo matemático adecuadamente sustentado con evidencia experimental previa**, que tome en cuenta la **interacción** entre el muro y el pórtico que lo rodea. **En ningún caso** el modelo puede suponer que la diagonal equivalente lleve esfuerzos de tracción (<NormaRef s="D.11.1.2" pag="D-63" />).
+
+### D.11.1.3 — Unidades de mampostería
+
+Se permiten unidades **de cualquier tipo** que cumplan D.3.6 (<NormaRef s="D.11.1.3" pag="D-63" />).
+
+### D.11.1.4 — Espesor mínimo, aparejo y mortero
+
+- Los requisitos de los Capítulos **D.1 a D.5** son **obligatorios en su totalidad**.
+- **Espesor nominal mínimo: 120 mm.**
+- **Aparejo trabado.**
+- **Mortero de pega tipo M.**
+
+(<NormaRef s="D.11.1.4" pag="D-63" />)
+
+## D.11.2 — Usos de la mampostería de muros diafragma
+
+### D.11.2.1 — Limitaciones al uso
+
+Ya se vio en la idea central: **no se permite en edificaciones nuevas**; solo en adición, modificación o remodelación de edificaciones existentes dentro del alcance de A.10, o en la evaluación de vulnerabilidad sísmica (<NormaRef s="D.11.2.1" pag="D-63" />). Cuando se haga una remodelación de una edificación que ya contenga muros diafragma, su verificación y diseño pueden hacerse con este capítulo.
+
+### D.11.2.2 — Valores de $R_0$
+
+El coeficiente básico de capacidad de disipación de energía en el diseño y verificación sismo resistente de edificaciones que contengan muros diafragma como parte del sistema de resistencia sísmica **no puede ser mayor de 2.0**: $R_0 \le 2.0$ (<NormaRef s="D.11.2.2" pag="D-63" />). Es un valor bajo: significa poca capacidad de disipación de energía (comentario del proyecto: el muro diafragma es un elemento frágil frente a un pórtico dúctil).
+
+### D.11.2.3 — Metodología de diseño
+
+Se diseñan por el **método del estado límite de resistencia** de B.2.4, con las **combinaciones de carga** de allí (<NormaRef s="D.11.2.3" pag="D-63" />). Por eso la Ec. D.11.4-1 lleva $\phi$ y $V_u$ (cortante **mayorado**).
+
+## D.11.3 — Refuerzos
+
+La cantidad mínima de refuerzo interior, su disposición y su detallado **corresponden al tipo de mampostería** usada en el muro diafragma y a los requisitos de diseño y resistencia derivados de su función estructural (<NormaRef s="D.11.3.1" pag="D-63" />). La sección **no da cuantías propias**: remite a los capítulos del tipo de mampostería empleado (D.6 a D.10).
+
+## D.11.4 — Requisitos de diseño
+
+### D.11.4.1 — Comprobaciones mínimas
+
+Los muros diafragma se diseñan para resistir los esfuerzos de su **interacción con los pórticos** que restringen. Las condiciones de falla se establecen en valores de resistencia para los **efectos más desfavorables** entre (<NormaRef s="D.11.4.1" pag="D-63" />):
+
+- **(a) Cortante por tracción diagonal**, según D.11.4.2.
+- **(b) Aplastamiento diagonal** (<NormaRef s="D.11.4.1" pag="D-64" />): el **área efectiva máxima de compresión** es la **quinta parte de la dimensión diagonal del muro multiplicada por su espesor efectivo**, aplicando los requisitos del Capítulo D.5. La **altura efectiva para pandeo $h'$** es igual a la **dimensión diagonal** del muro.
+
+En (b) la norma remite a D.5: con $h' = $ diagonal y espesor efectivo $t$ se calculan $R_e$ (Ec. D.5.5-2), $P_o$ y $P_n$ de la sección D.5.5 (ver el capítulo D.5b). La norma **no formula** cómo pasar la capacidad de la biela a fuerza horizontal: en este proyecto se toma la **componente horizontal** de $\phi P_n$, $V_h = \phi P_n\cos\theta$ con $\cos\theta=\ell/\text{diagonal}$ (**autoría del proyecto**).
+
+### D.11.4.2 — Cortante máximo
+
+El muro diafragma puede tomar un cortante máximo que no debe exceder (<NormaRef s="D.11.4.2" pag="D-64" />):
+
+<Ecuacion num="D.11.4-1" titulo="Cortante máximo del muro diafragma">
+
+$$
+V_u \;\le\; \phi\, v_m\, A_m
+$$
+
+- $V_u$: cortante horizontal solicitado al muro diafragma, **en N**.
+- $v_m$: resistencia al cortante de la mampostería definida en la Tabla D.11.1-1, **en MPa**.
+- $A_m$: **área neta horizontal** de la mampostería del diafragma, en mm².
+- $\phi$: coeficiente de reducción de resistencia para corte, $\phi = 0.50$.
+
+</Ecuacion>
+
+Con $v_m$ en MPa y $A_m$ en mm², el producto $\phi v_m A_m$ queda en N. Al calcular, divida por 1000 para obtener kN.
+
+**Límite en estructuras existentes.** Al definir $v_m$ **no pueden emplearse valores mayores** que los de la Tabla D.11.1-1, **a menos que se realicen ensayos experimentales en una cantidad representativa estadísticamente** para definir un valor apropiado (<NormaRef s="D.11.4.2" pag="D-64" />).
+
+<TablaNorma numero="Tabla D.11.1-1" titulo="Valores máximos para vm en muros diafragma (MPa)" pag="D-64">
+
+| Unidades de mampostería | Valores de $v_m$ (MPa) |
+|---|:---:|
+| Unidades macizas de concreto o arcilla | 0.35 |
+| Unidades de perforación vertical de concreto o arcilla | 0.25 |
+| Unidades de perforación horizontal de arcilla | 0.15 |
+
+</TablaNorma>
+
+<Figura alt="Gráfico de barras horizontales con los valores máximos de vm: 0.35 MPa para unidades macizas, 0.25 MPa para perforación vertical y 0.15 MPa para perforación horizontal" numero="Esquema" pie="Valores máximos de vm de la Tabla D.11.1-1: cuanto más hueca y menos monolítica la unidad, menor la resistencia al cortante (esquema del proyecto).">
+<svg viewBox="0 0 520 170" role="img" aria-label="Barras con vm máximo por tipo de unidad" className="mx-auto h-auto w-full max-w-xl">
+  <line x1="190" y1="20" x2="190" y2="140" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="190" y="28" width="280" height="26" fill="currentColor" fillOpacity="0.6" />
+  <rect x="190" y="68" width="200" height="26" fill="currentColor" fillOpacity="0.4" />
+  <rect x="190" y="108" width="120" height="26" fill="currentColor" fillOpacity="0.25" />
+  <text x="182" y="46" textAnchor="end" fontSize="12" fill="currentColor">Macizas</text>
+  <text x="182" y="86" textAnchor="end" fontSize="12" fill="currentColor">Perforación vertical</text>
+  <text x="182" y="126" textAnchor="end" fontSize="12" fill="currentColor">Perforación horizontal</text>
+  <text x="476" y="46" fontSize="12" fill="currentColor">0.35 MPa</text>
+  <text x="396" y="86" fontSize="12" fill="currentColor">0.25 MPa</text>
+  <text x="316" y="126" fontSize="12" fill="currentColor">0.15 MPa</text>
+</svg>
+</Figura>
+
+<Callout tipo="atencion" titulo="Erratas y ambigüedades del texto (verificadas contra la imagen de D-64)">
+- La Tabla se llama **D.11.1-1** y se cita desde D.11.4.2: es la numeración del original (la tabla pertenece a D.11.4, pero conserva la numeración «D.11.1-1»).
+- La ecuación aparece numerada **(D.11.4-1)** en D.11.4.2, pero D.11.4.3 la cita como «ecuación **D.11-1**». Es la misma ecuación; se trata de una errata de referencia.
+- El texto extraído del PDF desordena las definiciones de $V_u$, $v_m$, $A_m$ y $\phi$; en la imagen están correctas y son las que aquí se transcriben.
+- La norma define $A_m$ solo como «área neta horizontal de la mampostería del diafragma» y no da una regla para unidades perforadas. La calculadora admite una **fracción neta** (aporte del proyecto): con unidades macizas es 1.0.
+</Callout>
+
+### D.11.4.3 — Columnas y vigas del pórtico arriostrado
+
+Las vigas y columnas del pórtico arriostrado por los muros diafragma deben resistir las **condiciones más desfavorables** de la interacción con los muros. La **fuerza cortante de diseño de cada miembro no puede ser menor a la cuarta parte de la fuerza cortante establecida para el muro** en la Ec. D.11.4-1, **resistida en una zona igual al 25 % de la longitud del miembro** (<NormaRef s="D.11.4.3" pag="D-64" />).
+
+Idea física (explicación del proyecto): la biela diagonal descarga en las **esquinas** del pórtico. El cortante que el muro transmite se concentra en un tramo corto de cada viga y columna (cerca de los nudos), y allí hay que dar estribos suficientes.
+
+<Callout tipo="atencion" titulo="¿Cuál es «el cortante del muro»? (autoría del proyecto)">
+D.11.4.3 habla de «la fuerza cortante establecida para el muro en la ecuación», que en la Ec. D.11.4-1 puede entenderse como el cortante **solicitado** $V_u$ o como el **máximo** $\phi v_m A_m$. En este capítulo se usa $V_u$ (el que realmente transmite el muro); tomar $\phi v_m A_m$ es más conservador. Verifíquese con la fuente oficial en un diseño real.
+</Callout>
+
+### D.11.4.4 — Otros requisitos
+
+El sistema estructural debe cumplir el **Título A**; los pórticos de concreto reforzado, además, el **Título C**. Si falta el cumplimiento de algunos requisitos del Título C, se aplican las prescripciones del **Capítulo A.10** (<NormaRef s="D.11.4.4" pag="D-64" />). Es coherente con el uso del sistema en edificaciones existentes, cuyos pórticos pueden no cumplir el detallado actual.
+
+### D.11.4.5 — Construcción
+
+Los muros diafragma pueden construirse **antes, al mismo tiempo o después** de los pórticos (<NormaRef s="D.11.4.5" pag="D-64" />):
+
+- **Construcción previa o simultánea**: debe garantizarse **contacto pleno** entre el muro y los elementos del pórtico, **sin espacios** que los separen.
+- **Construcción posterior**: los bordes del muro deben **llenarse con mortero apropiado**, de modo que haya contacto pleno entre pórtico y muro.
+
+Sin contacto pleno la biela no se forma y el muro no rigidiza: por eso es un requisito de construcción, no un detalle.
+
+## Calculadora
+
+<CalculadoraEmbed id="muro-diafragma" />
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Cortante máximo según el tipo de unidad (Ec. D.11.4-1 y Tabla D.11.1-1)">
+Un muro diafragma existente tiene 3600 mm de longitud y 120 mm de espesor (el mínimo de D.11.1.4). Hallar el cortante máximo $\phi v_m A_m$ si las unidades son macizas, de perforación vertical o de perforación horizontal. Considerar luego un caso con ensayos.
+
+<Paso titulo="Área neta horizontal" ref="D.11.4.2">
+
+Se toma sección maciza (fracción neta 1.0):
+
+$$
+A_m = \ell\, t = 3600\times 120
+$$
+
+Resultado: $A_m$ = **{f(ej1.Am, 0)} mm²**.
+
+</Paso>
+<Paso titulo="Cortante máximo por tipo de unidad" ref="Tabla D.11.1-1, D.11.4-1">
+
+$$
+\phi\, v_m\, A_m = 0.50\; v_m\,(432\,000)\ \text{N}
+$$
+
+- Macizas, $v_m$ = 0.35 MPa: **{f(ej1.maciza.Vr, 1)} kN**.
+- Perforación vertical, $v_m$ = 0.25 MPa: **{f(ej1.vertical.Vr, 1)} kN**.
+- Perforación horizontal, $v_m$ = 0.15 MPa: **{f(ej1.horizontal.Vr, 1)} kN**.
+
+</Paso>
+<Paso titulo="Caso con ensayos experimentales" ref="D.11.4.2">
+
+Para unidades de perforación vertical, un programa de ensayos estadísticamente representativo arroja $v_m$ = 0.30 MPa, mayor que el de la tabla (0.25 MPa). Solo **con esos ensayos** es admisible: $\phi v_m A_m$ = 0.50 (0.30)(432 000) = **{f(ej1.ensayo.Vr, 1)} kN**. Sin ensayos, el límite sigue siendo {f(ej1.vertical.Vr, 1)} kN.
+
+</Paso>
+<Resultado>
+$A_m$ = {f(ej1.Am, 0)} mm²; $\phi v_m A_m$ = **{f(ej1.maciza.Vr, 1)} kN** (macizas), **{f(ej1.vertical.Vr, 1)} kN** (perforación vertical) y **{f(ej1.horizontal.Vr, 1)} kN** (perforación horizontal); con ensayos de $v_m$ = 0.30 MPa en perforación vertical, {f(ej1.ensayo.Vr, 1)} kN.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Aplastamiento diagonal y verificación completa de un muro macizo">
+Muro diafragma de unidades macizas, $\ell$ = 3600 mm, $h$ = 2700 mm, $t$ = 120 mm, $f'_m$ = 5 MPa (valor ilustrativo de una mampostería existente). $R_0$ = 2.0 y $V_u$ = 40 kN. Verificar el muro y el cortante mínimo de la viga y columna que lo rodean (viga de 3600 mm).
+
+<Paso titulo="Diagonal, área efectiva y esbeltez" ref="D.11.4.1(b)">
+
+$$
+\text{diagonal}=\sqrt{3600^2+2700^2}\qquad A_e=\frac{\text{diagonal}}{5}\,t
+\qquad h'=\text{diagonal}
+$$
+
+Resultado: diagonal = **{f(ej2.diag, 0)} mm**; $A_e$ = {f(ej2.diag, 0)}/5 × 120 = **{f(ej2.a.Ae, 0)} mm²**; $h'/t$ = **{f(ej2.a.esbeltez, 1)}**.
+
+</Paso>
+<Paso titulo="Resistencia de la biela con los requisitos de D.5" ref="D.5.5-1 a D.5.5-4">
+
+Con $h'/t > 30$ rige la rama de Euler: $R_e = (21t/h')^2$ = **{f(ej2.a.Re, 4)}**. Sin refuerzo, $P_o = 0.80\,f'_m A_e$ = **{f(ej2.a.Po, 0)} kN**; $P_n = 0.80\,P_o R_e$ = {f(ej2.a.Pn, 1)} kN; con $\phi$ = 0.60 (compresión con fuerzas en el plano, D.5.1.5.2), $\phi P_n$ = **{f(ej2.a.phiPn, 1)} kN**.
+
+</Paso>
+<Paso titulo="Componente horizontal de la biela (autoría del proyecto)" ref="D.11.4.1(b)">
+
+$\theta$ = {f(ej2.a.anguloGrados, 1)}°, $\cos\theta$ = {f(ej2.a.cosTheta, 2)}: $V_h = \phi P_n\cos\theta$ = **{f(ej2.a.Vh, 1)} kN**.
+
+</Paso>
+<Paso titulo="Cortante máximo" ref="D.11.4-1">
+
+$\phi v_m A_m$ = 0.50 (0.35)(432 000) = **{f(ej2.r.cortante.Vr, 1)} kN**.
+
+</Paso>
+<Paso titulo="Comparación con Vu" ref="D.11.4.1">
+
+Se compara $V_u$ = 40 kN con el **menor** de los dos valores: gobierna el **{ej2.r.gobierna}** ({f(ej2.r.Vmax, 1)} kN). Razón $V_u/V_{max}$ = **{f(ej2.r.aplastamiento.razon, 2)}** en aplastamiento y {f(ej2.r.cortante.razon, 2)} en cortante: el muro **{ej2.r.cumple ? 'cumple' : 'no cumple'}**. Espesor: 120 mm ≥ 120 mm ({ej2.r.espesorCumple ? 'cumple' : 'no cumple'}); $R_0$ = 2.0 ≤ 2.0 ({ej2.r.r0Cumple ? 'cumple' : 'no cumple'}).
+
+</Paso>
+<Paso titulo="Vigas y columnas del pórtico" ref="D.11.4.3">
+
+Cortante mínimo de diseño de cada miembro: $V_u/4$ = 40/4 = **{f(ej2.Vmin, 1)} kN**, resistido en el 25 % de la longitud: para la viga de 3600 mm, una zona de **{f(ej2.zona, 0)} mm**.
+
+</Paso>
+<Resultado>
+Gobierna el {ej2.r.gobierna}: resistencia horizontal del muro **{f(ej2.r.Vmax, 1)} kN** frente a $V_u$ = 40 kN ({ej2.r.cumple ? 'cumple' : 'no cumple'}). Vigas y columnas: cortante mínimo **{f(ej2.Vmin, 1)} kN** en una zona de {f(ej2.zona, 0)} mm. Con $h'/t$ = {f(ej2.a.esbeltez, 1)} el aplastamiento es muy sensible al espesor: con $t$ mayor, $R_e$ crece rápidamente.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Muro de unidades de perforación vertical: gobierna el cortante">
+Muro de bloque de perforación vertical, $\ell$ = 4200 mm, $h$ = 2800 mm, $t$ = 150 mm, fracción neta de la sección horizontal 0.55 (dato del proyecto), $f'_m$ = 6 MPa y $V_u$ = 60 kN. Verificar.
+
+<Paso titulo="Cortante máximo" ref="Tabla D.11.1-1, D.11.4-1">
+
+$A_m$ = 4200 × 150 × 0.55 = **{f(ej3.r.Am, 0)} mm²**; $v_m$ = 0.25 MPa (perforación vertical). $\phi v_m A_m$ = 0.50 (0.25)({f(ej3.r.Am, 0)}) = **{f(ej3.r.cortante.Vr, 1)} kN**.
+
+</Paso>
+<Paso titulo="Aplastamiento diagonal" ref="D.11.4.1(b)">
+
+Diagonal = **{f(ej3.r.aplastamiento.diagonal, 0)} mm**, $A_e$ = **{f(ej3.r.aplastamiento.Ae, 0)} mm²** (con la fracción neta), $h'/t$ = {f(ej3.r.aplastamiento.esbeltez, 1)}, $R_e$ = {f(ej3.r.aplastamiento.Re, 3)}, $\phi P_n$ = {f(ej3.r.aplastamiento.phiPn, 1)} kN y $V_h$ = **{f(ej3.r.aplastamiento.Vh, 1)} kN**.
+
+</Paso>
+<Paso titulo="Resultado de la verificación" ref="D.11.4.1">
+
+Resistencia del muro = menor = **{f(ej3.r.Vmax, 1)} kN** (gobierna el {ej3.r.gobierna}). $V_u$ = 60 kN: razón en cortante {f(ej3.r.cortante.razon, 2)} y en aplastamiento {f(ej3.r.aplastamiento.razon, 2)}. El muro **{ej3.r.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Paso titulo="Qué hacer" ref="D.11.4.2, D.11.4.3">
+
+Con unidades perforadas el $v_m$ de la tabla es bajo. Para un muro existente las opciones son: demostrar un $v_m$ mayor **con ensayos representativos** (D.11.4.2), reducir la demanda sobre el muro (por ejemplo, con otros elementos de rigidez) o rehabilitarlo. Si se mantiene, las vigas y columnas deben resistir al menos $V_u/4$ = **{f(cortanteMinimoMiembroPortico(60), 1)} kN** en el 25 % de su longitud: {f(ej3.zonaViga, 0)} mm en la viga de 4200 mm y {f(ej3.zonaColumna, 0)} mm en una columna de 2800 mm.
+
+</Paso>
+<Resultado>
+$\phi v_m A_m$ = **{f(ej3.r.cortante.Vr, 1)} kN** frente a $V_u$ = 60 kN: el muro {ej3.r.cumple ? 'cumple' : 'no cumple'} y gobierna el {ej3.r.gobierna}; el aplastamiento diagonal ofrece {f(ej3.r.aplastamiento.Vh, 1)} kN.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Proyectar muros diafragma en edificaciones nuevas">
+El capítulo **no se aplica a edificaciones nuevas**: solo a adición, modificación o remodelación de edificaciones existentes (alcance de A.10) o a la evaluación de su vulnerabilidad sísmica (D.11.2.1). En obra nueva, un muro que se «incrusta» en un pórtico debe tratarse con otro sistema de D (por ejemplo, mampostería confinada, D.10) o aislarse del pórtico.
+</Callout>
+
+<Callout tipo="error" titulo="Confundir muro diafragma con un muro de relleno cualquiera">
+Un muro con aberturas, con juntas, que no llega a la cimentación o que no está en contacto pleno con vigas y columnas **no es diafragma** (D.11.1.1, D.11.4.5). Un espacio entre muro y pórtico anula la biela diagonal.
+</Callout>
+
+<Callout tipo="error" titulo="Pasar de unidades: Vu en N, vm en MPa, Am en mm²">
+La Ec. D.11.4-1 trabaja con $V_u$ en **N**, $v_m$ en **MPa** y $A_m$ en **mm²**. Si $V_u$ está en kN hay que multiplicar por 1000 (o dividir $\phi v_m A_m$ entre 1000). Además, $\phi$ es **0.50**, no el 0.60 del cortante de los muros de D.5.
+</Callout>
+
+<Callout tipo="error" titulo="Usar un vm mayor que el de la Tabla D.11.1-1 sin ensayos">
+En estructuras existentes **no se puede superar** el valor de la tabla a menos que haya ensayos experimentales en cantidad estadísticamente representativa (D.11.4.2). Un ensayo aislado no basta.
+</Callout>
+
+<Callout tipo="error" titulo="Omitir la comprobación de aplastamiento diagonal o permitir tracción en la diagonal">
+D.11.4.1 exige verificar **ambos** modos de falla (tracción diagonal y aplastamiento) y tomar el más desfavorable. El modelo de análisis nunca puede asignar tracción a la diagonal equivalente (D.11.1.2).
+</Callout>
+
+<Callout tipo="error" titulo="Olvidar las vigas y columnas del pórtico">
+El muro transmite al pórtico un cortante concentrado en el 25 % de la longitud de cada miembro, al menos igual a la cuarta parte del cortante del muro (D.11.4.3). Un pórtico no revisado puede fallar antes que el muro.
+</Callout>
+
+## Resumen en una línea
+
+**Un muro diafragma es mampostería sin aberturas que llena un pórtico de concreto y trabaja como biela de compresión; solo se permite en edificaciones existentes, con R0 ≤ 2.0, espesor ≥ 120 mm, cortante máximo Vu ≤ 0.50 vm Am (vm = 0.35, 0.25 ó 0.15 MPa según la unidad), aplastamiento diagonal con área igual a un quinto de la diagonal por el espesor, y vigas y columnas diseñadas para al menos un cuarto del cortante del muro en el 25 % de su longitud.**

@@ -1,0 +1,435 @@
+---
+codigo: 'D.7'
+tipo: capitulo
+titulo: 'Mampostería reforzada'
+resumen: 'Muros de bloque (perforación vertical) con refuerzo interno: espesor y f′m mínimos, cuándo el sistema es DES o DMO, cuantías mínimas por dirección (0.0007, suma 0.0020, ρv ≥ ½ ρh), separación máxima de 1 200 mm del refuerzo vertical y refuerzo horizontal mínimo en juntas, remate, arranque y aberturas.'
+objetivos:
+  - 'Distinguir cuándo un muro de perforación vertical es DES o DMO según se inyecten todas las celdas o solo las armadas (D.7.2.1)'
+  - 'Calcular las cuantías vertical y horizontal sobre el área bruta y verificar los cuatro límites de D.7.3.1'
+  - 'Verificar separaciones y barras mínimas del refuerzo vertical (D.7.3.2) y horizontal (D.7.3.3)'
+  - 'Distinguir el refuerzo horizontal de junta del refuerzo en elementos embebidos y reconocer las erratas del PDF en D.7.2.1.1 y D.7.3.3(b)'
+  - 'Usar la calculadora de cuantías para comprobar un muro de D.7 y ver a qué sistema (D.7, D.8 o D.9) califica'
+paginasNorma: 'D-47 a D-48'
+paginaPdf: 612
+orden: 9
+calculadoras: ['cuantias-mamposteria']
+nivel: 'intermedio'
+---
+
+import { BARRAS_D, buscarBarraD, D7 } from '../../data/cuantiasMamposteria';
+import {
+  clasificarPerforacionVertical,
+  cuantiasBloque,
+  evaluarAdicionalesDES,
+  resumir,
+  verificarReforzada,
+} from '../../lib/nsr10/cuantiasMamposteria';
+
+export const f = (x, d = 2) => x.toFixed(d);
+export const r5 = (x) => x.toFixed(5);
+export const N4 = buscarBarraD('No. 4');
+export const N3 = buscarBarraD('No. 3');
+export const W4 = buscarBarraD('alambre-4');
+
+export const ej1 = (() => {
+  const base = {
+    espesor: 150,
+    fm: 12,
+    longitud: 4,
+    altura: 2.4,
+    todasCeldasInyectadas: true,
+    ubicacionHorizontal: 'juntas',
+    extremo: { n: 1, diametro: N4.diametro },
+    remate: { n: 2, diametro: N3.diametro },
+    hayAberturas: false,
+    aberturaVertical: { n: 1, diametro: N4.diametro },
+    aberturaHorizontal: { n: 2, diametro: N3.diametro },
+  };
+  const mk = (sv, sh) => ({
+    ...base,
+    vertical: { diametro: N4.diametro, area: N4.area, sep: sv, n: 1 },
+    horizontal: { diametro: W4.diametro, area: W4.area, sep: sh, n: 2 },
+  });
+  const caso = (sv, sh) => {
+    const d = mk(sv, sh);
+    const v = verificarReforzada(d);
+    return { d, q: cuantiasBloque(d), v, res: resumir(v), malos: v.filter((x) => !x.cumple) };
+  };
+  const A = caso(800, 400);
+  const B = caso(800, 200);
+  const C = caso(600, 200);
+  const por = (c, id) => c.v.find((x) => x.id === id);
+  return { A, B, C, por, AsH: 2 * W4.area };
+})();
+
+export const ej2 = (() => {
+  const mk = (sv, todas) => ({
+    espesor: 150,
+    fm: 14,
+    longitud: 6,
+    altura: 2.6,
+    todasCeldasInyectadas: todas,
+    vertical: { diametro: N4.diametro, area: N4.area, sep: sv, n: 1 },
+    horizontal: { diametro: N4.diametro, area: N4.area, sep: 800, n: 1 },
+    ubicacionHorizontal: 'embebido',
+    extremo: { n: 1, diametro: N4.diametro },
+    remate: { n: 2, diametro: N3.diametro },
+    hayAberturas: false,
+    aberturaVertical: { n: 1, diametro: N4.diametro },
+    aberturaHorizontal: { n: 2, diametro: N3.diametro },
+  });
+  const a = mk(800, false);
+  const b = mk(900, false);
+  const c = mk(900, true);
+  const emb = verificarReforzada(a).find((x) => x.id === 'd7-h-sep-emb');
+  return {
+    a,
+    b,
+    c,
+    qa: cuantiasBloque(a),
+    resA: resumir(verificarReforzada(a)),
+    desA: evaluarAdicionalesDES(a),
+    claA: clasificarPerforacionVertical(a),
+    desB: evaluarAdicionalesDES(b),
+    claB: clasificarPerforacionVertical(b),
+    claC: clasificarPerforacionVertical(c),
+    emb,
+  };
+})();
+
+## Idea central del capítulo
+
+El Capítulo D.7 es el sistema **«estándar» de la mampostería estructural en Colombia**: muros de **bloque de perforación vertical** (de concreto, arcilla o sílico-calcáreos) con **barras verticales dentro de las celdas, rellenas con mortero de relleno**, y **refuerzo horizontal** en las juntas de pega o en unidades especiales. Es un capítulo corto porque **casi todo se resuelve con una lista de mínimos**: espesor, resistencia, **cuantías** por dirección, **separaciones máximas** y unas pocas **barras obligatorias** en extremos, remate, arranque y aberturas. El diseño de resistencia (flexión, axial, cortante) no se repite aquí: se hace con el Capítulo D.5 (<NormaRef s="D.7.4.1" pag="D-48" />).
+
+Dos ideas ordenan el capítulo. La primera es la **capacidad de disipación de energía**: si se inyectan **todas** las celdas (o se cumplen unos refuerzos adicionales) el muro es **DES**; si solo se inyectan las celdas con refuerzo, es **DMO** (<NormaRef s="D.7.2.1" pag="D-47" />). La segunda es la **cuantía**: el refuerzo no se mide en «barras por muro» sino como **fracción del área bruta**, en cada dirección y en suma.
+
+<Callout tipo="importante" titulo="Cómo se lee este capítulo (y qué es autoría del proyecto)">
+Las reglas de D.7 son **listas de requisitos (a), (b), (c)…** sin ecuaciones numeradas. Para estudiarlas se reorganizan aquí en tablas-resumen y se expresan como desigualdades; todo lo rotulado **«autoría del proyecto»** (tablas-resumen, esquemas, ejemplos, la lectura del diámetro de «N° 4 ó 12M» como 12 mm) **no es texto de la norma**. Las cuantías y separaciones se pueden verificar con la calculadora de la sección D.7.3 (<NormaRef s="D.7.3" pag="D-48" />), que usa las mismas funciones que los ejemplos.
+</Callout>
+
+## D.7.1 — Generalidades
+
+### D.7.1.1 y D.7.1.2 — Alcance y unidades
+
+Los edificios de muros de mampostería reforzada con unidades de perforación vertical deben cumplir este capítulo **y además** los requisitos generales del Capítulo D.1, las normas y procedimientos del D.2, los materiales del D.3 y la construcción del D.4 (<NormaRef s="D.7.1.1" pag="D-47" />). Los muros se construyen con unidades de perforación vertical que cumplan **D.3.6.4** (<NormaRef s="D.7.1.2" pag="D-47" />): celdas verticales que no superen el 65 % de la sección y celdas donde va refuerzo de al menos 50 mm de lado y 3000 mm² de área (ver el Capítulo [D.3](/titulo-d/d3)).
+
+### D.7.1.3 — Espesor, aparejo y mortero
+
+Tres condiciones en una sola frase (<NormaRef s="D.7.1.3" pag="D-47" />):
+
+- **Espesor nominal mínimo: 120 mm.**
+- **Solo aparejo trabado** (las juntas verticales de una hilada quedan a media unidad de las de la siguiente).
+- **No se permite mortero de pega tipo N.** La Tabla D.3.4-1 (nota 6) explica por qué: el mortero N solo se admite en sistemas de capacidad **mínima** de disipación (DMI), y la mampostería reforzada es DES o DMO (ver [D.3](/titulo-d/d3)).
+
+### D.7.1.4 — Resistencia de la mampostería
+
+La resistencia $f'_m$ **no puede ser menor de 10 MPa ni mayor de 28 MPa** (<NormaRef s="D.7.1.4" pag="D-47" />). Conviene notar que este capítulo pone **cota inferior y superior**, mientras que D.8 (parcialmente reforzada) solo fija una cota inferior de 8 MPa y D.6 (cavidad) liga $f'_m$ al material de inyección.
+
+<TablaNorma numero="Resumen D.7.1" titulo="Requisitos generales de la mampostería reforzada (autoría del proyecto)" pag="D-47" nota="Tabla elaborada a partir de D.7.1.2 a D.7.1.4; no es una tabla de la norma.">
+
+| Requisito | Valor | Sección |
+|---|---|---|
+| Unidades | Perforación vertical, según D.3.6.4 | D.7.1.2 |
+| Espesor nominal del muro | ≥ 120 mm | D.7.1.3 |
+| Aparejo | Solo trabado | D.7.1.3 |
+| Mortero de pega | No se permite tipo N | D.7.1.3 |
+| Resistencia $f'_m$ | 10 MPa ≤ $f'_m$ ≤ 28 MPa | D.7.1.4 |
+
+</TablaNorma>
+
+## D.7.2 — Usos de la mampostería reforzada
+
+Las restricciones de **uso** (en qué zonas sísmicas, alturas y grupos de uso se permite) no están aquí: «se basan en lo establecido en el Capítulo A.3». Lo que sí define D.7.2 es cómo se **clasifica** el sistema para el diseño sismorresistente (<NormaRef s="D.7.2.1" pag="D-47" />).
+
+### D.7.2.1.1 — Capacidad especial (DES)
+
+El muro es **DES** cuando **todas las celdas verticales, incluso las que no llevan refuerzo, se inyectan con mortero de relleno** (<NormaRef s="D.7.2.1.1" pag="D-47" />). El mismo numeral agrega una segunda vía: también se clasifica **DES** cuando se cumplen unos **requisitos de refuerzo mínimo adicionales** a los de D.7.3:
+
+- **(a)** el espaciamiento horizontal entre barras verticales es el **menor** de un tercio de la longitud del muro, un tercio de su altura o el límite de la norma (ver errata abajo);
+- **(b)** el refuerzo horizontal que resiste el cortante en el plano del muro se separa **uniformemente** una distancia vertical no mayor que ese mismo mínimo y va **embebido en mortero de relleno**;
+- **(c)** el área mínima del refuerzo vertical debe ser **mayor de un tercio del refuerzo requerido para cortante**.
+
+La definición de D.2.1.2 confirma que las dos vías son **alternativas** («cuando todas sus celdas se inyectan con mortero de relleno **o** cuando se cumpla con los requisitos adicionales…», <NormaRef s="D.2.1.2" pag="D-5" />).
+
+<Callout tipo="atencion" titulo="Errata probable en D.7.2.1.1(a) y (b): «120 mm»">
+El PDF imprime **«de 120 mm»** como tercer término del mínimo en (a) y (b). Es casi seguro una errata de **1 200 mm**: (i) D.7.3.2(a) ya fija 1 200 mm como separación máxima del refuerzo vertical y sería absurdo que el requisito «adicional» más estricto fuera 120 mm, menor que el paso entre celdas de un bloque; (ii) con 120 mm ningún muro real podría cumplirlo. Se verificó en la imagen de la página D-47. **No se corrige la norma**: la calculadora y los ejemplos evalúan con 1 200 mm, avisan y muestran también el resultado con el valor impreso. Confirme con la edición oficial vigente.
+</Callout>
+
+### D.7.2.1.2 — Capacidad moderada (DMO)
+
+Cuando **solo** se inyectan las celdas verticales que llevan refuerzo, el sistema es **DMO** (<NormaRef s="D.7.2.1.2" pag="D-47" />). Es el caso económico: se rellenan solo las celdas armadas (cada 600 a 1200 mm) y las demás quedan huecas.
+
+<Figura alt="Dos hileras de bloques en planta: arriba todas las celdas rellenas de mortero (DES) y abajo solo las celdas con barra vertical rellenas, el resto huecas (DMO)" numero="Esquema" pie="Inyección de las celdas verticales en planta. Arriba: todas las celdas rellenas, también las sin barra (DES, D.7.2.1.1). Abajo: solo las celdas con refuerzo (DMO, D.7.2.1.2). (esquema del proyecto)">
+<svg viewBox="0 0 560 190" role="img" aria-label="Comparación de celdas inyectadas en un muro DES y en un muro DMO" className="mx-auto h-auto w-full max-w-xl">
+  <text x="10" y="18" fontSize="13" fill="currentColor" fontWeight="600">DES: todas las celdas inyectadas</text>
+  <rect x="20" y="28" width="520" height="40" fill="none" stroke="currentColor" strokeWidth="2" />
+  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
+    <rect key={i} x={30 + i * 40} y="36" width="26" height="24" fill="currentColor" fillOpacity="0.6" />
+  ))}
+  {[0, 4, 8, 12].map((i) => (
+    <circle key={i} cx={43 + i * 40} cy="48" r="5" fill="none" stroke="var(--background, #fff)" strokeWidth="2.5" />
+  ))}
+  <text x="10" y="108" fontSize="13" fill="currentColor" fontWeight="600">DMO: solo celdas con barra inyectadas</text>
+  <rect x="20" y="118" width="520" height="40" fill="none" stroke="currentColor" strokeWidth="2" />
+  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
+    <rect key={i} x={30 + i * 40} y="126" width="26" height="24" fill={i % 4 === 0 ? 'currentColor' : 'none'} fillOpacity="0.6" stroke="currentColor" strokeOpacity="0.5" />
+  ))}
+  {[0, 4, 8, 12].map((i) => (
+    <circle key={i} cx={43 + i * 40} cy="138" r="5" fill="none" stroke="var(--background, #fff)" strokeWidth="2.5" />
+  ))}
+  <text x="280" y="180" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">Círculo = barra vertical · cuadro relleno = celda con mortero de relleno</text>
+</svg>
+</Figura>
+
+## D.7.3 — Refuerzo de muros
+
+### D.7.3.1 — Cuantía mínima
+
+La **cuantía** es el área de acero dividida por el **área bruta de la sección del muro** (espesor × longitud unitaria). Para un refuerzo de área $A_s$ repetido cada $s$ en un muro de espesor $t$:
+
+<Ecuacion num="D.7.3.1" titulo="Cuantía de refuerzo por dirección (forma de autoría del proyecto)">
+
+$$
+\rho_v = \frac{n\,A_{bv}}{s_v\,t}
+\qquad
+\rho_h = \frac{n\,A_{bh}}{s_h\,t}
+$$
+
+- $\rho_v$, $\rho_h$: cuantías vertical y horizontal, evaluadas sobre el **área bruta** (<NormaRef s="D.7.3.1(a)" pag="D-48" />).
+- $A_{bv}$, $A_{bh}$: área de **una** barra o alambre, en mm²; $n$: barras por nivel (2 en una escalerilla de dos alambres; 1 en una barra vertical).
+- $s_v$: separación horizontal entre barras verticales; $s_h$: separación vertical entre niveles de refuerzo horizontal; $t$: espesor del muro, en mm.
+
+</Ecuacion>
+
+Con esa definición, la norma exige **cuatro cosas a la vez** (<NormaRef s="D.7.3.1" pag="D-48" />):
+
+<Ecuacion num="D.7.3.1(a)–(c)" titulo="Cuantías mínimas del muro reforzado (forma matemática, autoría del proyecto)">
+
+$$
+\rho_v \ge 0.0007
+\qquad
+\rho_h \ge 0.0007
+\qquad
+\rho_v + \rho_h \ge 0.0020
+\qquad
+\rho_v \ge \tfrac{1}{2}\,\rho_h
+$$
+
+- Los dos primeros son el mínimo **por dirección** (a); el tercero, el mínimo de la **suma** (b); el cuarto, que el vertical sea **al menos la mitad del horizontal** (c).
+- Valores del PDF verificados en la imagen de la página D-48: 0.0007, 0.0020 y «la mitad».
+
+</Ecuacion>
+
+Tres comentarios que evitan errores de lectura:
+
+1. **Los dos mínimos por dirección no bastan.** Un muro con $\rho_v = \rho_h = 0.0007$ suma 0.0014 y **no cumple (b)**; en la práctica, al menos uno de los dos debe superar 0.0010. La suma es la condición que casi siempre gobierna.
+2. **(c) limita el desbalance en el otro sentido.** Si por cortante se arma mucho el horizontal, el vertical no puede quedarse en el mínimo: debe ser ≥ ½ ρh. (El PDF lo dice como «no puede ser menos de la mitad».)
+3. **Qué refuerzo cuenta** (<NormaRef s="D.7.3.1(d)" pag="D-48" /> y <NormaRef s="D.7.3.1(e)" pag="D-48" />): en las cuantías se pueden contar los refuerzos exigidos en D.7.3.2 y D.7.3.3 (barras de extremo, de aberturas, de remate…) **siempre que sean continuos en el tramo del muro**, y el refuerzo de cortante colocado en los elementos embebidos de D.4.5.11.2 cuenta para la cuantía horizontal. El refuerzo de junta también cuenta (D.4.5.11.1(b)): es el que se coloca para controlar la fisuración por temperatura y retracción.
+
+<TablaNorma numero="Resumen D.7.3.1" titulo="Cuantías mínimas de D.7 (autoría del proyecto)" pag="D-48" nota="Tabla elaborada a partir de D.7.3.1(a)–(e); los valores son los del PDF.">
+
+| Control | Condición | Sección |
+|---|---|---|
+| Por dirección, vertical | $\rho_v \ge 0.0007$ | D.7.3.1(a) |
+| Por dirección, horizontal | $\rho_h \ge 0.0007$ | D.7.3.1(a) |
+| Suma | $\rho_v + \rho_h \ge 0.0020$ | D.7.3.1(b) |
+| Equilibrio entre direcciones | $\rho_v \ge 0.5\,\rho_h$ | D.7.3.1(c) |
+| Qué se cuenta | Refuerzo de D.7.3.2 y D.7.3.3, **continuo** en el tramo del muro | D.7.3.1(d) |
+| Cortante en embebidos | Cuenta como refuerzo horizontal (D.4.5.11.2) | D.7.3.1(e) |
+
+</TablaNorma>
+
+### D.7.3.2 — Refuerzo vertical mínimo
+
+Tres requisitos (<NormaRef s="D.7.3.2" pag="D-48" />):
+
+- **(a)** Separación horizontal entre barras verticales **≤ 1200 mm**.
+- **(b)** **Al menos una barra N° 4 (1/2″) ó 12M (12 mm) en cada extremo** del muro.
+- **(c)** **Al menos una barra N° 4 ó 12M al lado de ventanas o aberturas interiores mayores de 600 mm**, horizontal o verticalmente, **continua** dentro del tramo de muro.
+
+El «N° 4 ó 12M» deja una ambigüedad numérica (la barra N° 4 mide 12.7 mm y la 12M, 12 mm). En este proyecto se acepta cualquier barra de **≥ 12 mm** como cumplimiento (menor de las dos equivalencias; **autoría del proyecto**). Lo mismo para «N° 3 ó 10M» (9.5 mm) y «N° 2 ó 6M» (6 mm).
+
+### D.7.3.3 — Refuerzo horizontal mínimo
+
+Cuatro requisitos (<NormaRef s="D.7.3.3" pag="D-48" />):
+
+- **(a) Refuerzo de junta:** diámetro **≥ 4 mm** y separación vertical **≤ 600 mm**.
+- **(b) Refuerzo en elementos embebidos** de unidades especiales (D.4.5.11.2): el PDF dice separación vertical **≤ 120 mm** (ver errata).
+- **(c) Remate, arranque y entrepisos:** mínimo **dos barras N° 3 (3/8″) ó 10M (10 mm)** en el remate y arranque del muro y **al nivel de las losas de entrepiso**.
+- **(d) Aberturas interiores mayores de 600 mm:** dos barras N° 3 ó 10M en la **parte superior y en la inferior**, que se extienden **al menos 600 mm** dentro del muro.
+
+<Detalle titulo="Errata probable en D.7.3.3(b): «120 mm» (se cree 1 200 mm)">
+
+El PDF imprime **120 mm** como separación vertical máxima del refuerzo en elementos embebidos. Hay tres razones para creer que es 1 200 mm: (1) un elemento embebido (unidad especial con tabiques bajos, D.4.5.11.2) está pensado como **viga de amarre** cada varias hiladas, no en cada hilada, y una hilada de bloque mide unos 200 mm; (2) el refuerzo de **junta** se permite hasta 600 mm, y el embebido (más escaso y más fuerte) no puede ser más denso que él sin motivo; (3) en D.8 la relación es 800 mm en juntas y **3.00 m** en embebidos. Se leyó en la imagen de la página D-48 y el texto extraído coincide, por lo que es una errata del original y no del extractor. La calculadora evalúa con 1 200 mm y muestra entre paréntesis el resultado con el valor impreso.
+
+</Detalle>
+
+<Figura alt="Alzado de un muro de bloque de 4 por 2.4 metros con barras verticales en los extremos y cada 800 mm, escalerilla horizontal cada 400 mm, dos barras en remate y arranque y una ventana con barras alrededor" numero="Esquema" pie="Distribución típica del refuerzo de un muro D.7 con una ventana mayor de 600 mm. Barras verticales en extremos y a los lados de la abertura; refuerzo horizontal en juntas; dos barras N° 3 en remate y arranque; dos barras N° 3 arriba y abajo de la abertura, prolongadas 600 mm. (esquema del proyecto, sin escala exacta)">
+<svg viewBox="0 0 600 340" role="img" aria-label="Alzado de un muro de mampostería reforzada con refuerzo vertical, horizontal, remate, arranque y abertura" className="mx-auto h-auto w-full max-w-2xl">
+  <rect x="60" y="40" width="400" height="240" fill="currentColor" fillOpacity="0.07" stroke="currentColor" strokeWidth="2" />
+  <rect x="230" y="110" width="90" height="90" fill="var(--background, #fff)" stroke="currentColor" strokeWidth="2" />
+  <text x="275" y="160" textAnchor="middle" fontSize="11" fill="currentColor">Abertura &gt; 600 mm</text>
+  {[65, 140, 222, 330, 395, 455].map((x) => (
+    <line key={x} x1={x} y1="44" x2={x} y2="276" stroke="currentColor" strokeWidth="3" />
+  ))}
+  {[80, 120, 160, 200, 240].map((y) => (
+    <g key={y}>
+      <line x1="65" y1={y} x2="228" y2={y} stroke="currentColor" strokeWidth="1" strokeDasharray="5 3" strokeOpacity="0.75" />
+      <line x1="322" y1={y} x2="455" y2={y} stroke="currentColor" strokeWidth="1" strokeDasharray="5 3" strokeOpacity="0.75" />
+    </g>
+  ))}
+  <line x1="65" y1="46" x2="455" y2="46" stroke="currentColor" strokeWidth="4" />
+  <line x1="65" y1="52" x2="455" y2="52" stroke="currentColor" strokeWidth="4" />
+  <line x1="65" y1="268" x2="455" y2="268" stroke="currentColor" strokeWidth="4" />
+  <line x1="65" y1="274" x2="455" y2="274" stroke="currentColor" strokeWidth="4" />
+  <line x1="170" y1="106" x2="380" y2="106" stroke="currentColor" strokeWidth="3" />
+  <line x1="170" y1="112" x2="380" y2="112" stroke="currentColor" strokeWidth="3" />
+  <line x1="170" y1="196" x2="380" y2="196" stroke="currentColor" strokeWidth="3" />
+  <line x1="170" y1="202" x2="380" y2="202" stroke="currentColor" strokeWidth="3" />
+  <text x="470" y="52" fontSize="11" fill="currentColor">Remate: 2 barras N° 3 / 10M</text>
+  <text x="470" y="274" fontSize="11" fill="currentColor">Arranque: 2 barras N° 3 / 10M</text>
+  <text x="470" y="108" fontSize="11" fill="currentColor">Arriba y abajo de la abertura:</text>
+  <text x="470" y="122" fontSize="11" fill="currentColor">2 barras N° 3 / 10M, +600 mm</text>
+  <text x="470" y="160" fontSize="11" fill="currentColor">Juntas: ∅ ≥ 4 mm, s ≤ 600 mm</text>
+  <text x="470" y="215" fontSize="11" fill="currentColor">Vertical: s ≤ 1200 mm,</text>
+  <text x="470" y="229" fontSize="11" fill="currentColor">≥ 1 barra N° 4 / 12M en extremos</text>
+  <text x="470" y="243" fontSize="11" fill="currentColor">y al lado de la abertura</text>
+  <text x="260" y="304" textAnchor="middle" fontSize="12" fill="currentColor">Longitud del muro L (ejemplo: 4.0 m)</text>
+  <line x1="60" y1="312" x2="460" y2="312" stroke="currentColor" strokeWidth="1" />
+  <line x1="60" y1="306" x2="60" y2="318" stroke="currentColor" />
+  <line x1="460" y1="306" x2="460" y2="318" stroke="currentColor" />
+</svg>
+</Figura>
+
+<TablaNorma numero="Resumen D.7.3.2–D.7.3.3" titulo="Separaciones y barras mínimas de D.7 (autoría del proyecto)" pag="D-48" nota="Tabla elaborada a partir de D.7.3.2 y D.7.3.3. «N° 4 ó 12M» se evalúa con 12 mm y «N° 3 ó 10M» con 9.5 mm (convención del proyecto).">
+
+| Elemento | Requisito | Sección |
+|---|---|---|
+| Vertical: separación | ≤ 1200 mm | D.7.3.2(a) |
+| Vertical: extremos | ≥ 1 barra N° 4 ó 12M en **cada extremo** | D.7.3.2(b) |
+| Vertical: aberturas > 600 mm | ≥ 1 barra N° 4 ó 12M al lado, continua | D.7.3.2(c) |
+| Horizontal de junta | ∅ ≥ 4 mm; separación vertical ≤ 600 mm | D.7.3.3(a) |
+| Horizontal en embebidos | Separación vertical ≤ 120 mm **(impreso; probable errata de 1 200 mm)** | D.7.3.3(b) |
+| Remate, arranque y entrepisos | 2 barras N° 3 ó 10M | D.7.3.3(c) |
+| Arriba y abajo de aberturas > 600 mm | 2 barras N° 3 ó 10M, prolongadas ≥ 600 mm | D.7.3.3(d) |
+
+</TablaNorma>
+
+### Ejemplos resueltos de cuantías y separaciones
+
+<Ejemplo numero={1} titulo="Muro de bloque de 150 mm: ajustar el refuerzo hasta cumplir D.7.3.1">
+
+Un muro de bloque de perforación vertical, espesor $t$ = {ej1.A.d.espesor} mm, $f'_m$ = {ej1.A.d.fm} MPa, 4.0 m de largo y 2.4 m de alto, lleva una barra N° 4 ($A_b$ = {N4.area} mm²) y refuerzo horizontal de junta con una **escalerilla de dos alambres de 4 mm** ($A_b$ = {W4.area} mm² cada uno, 2 × {W4.area} = {f(ej1.AsH, 1)} mm² por nivel). En los extremos hay una N° 4 y en remate y arranque, dos N° 3. Verificar las cuantías y las separaciones para tres propuestas.
+
+<Paso titulo="Propuesta A: N° 4 cada 800 mm; escalerilla cada 400 mm" ref="D.7.3.1(a)–(c)">
+
+$\rho_v$ = {N4.area} / (800 × {ej1.A.d.espesor}) = **{r5(ej1.A.q.vertical)}**. $\rho_h$ = {f(ej1.AsH, 1)} / (400 × {ej1.A.d.espesor}) = **{r5(ej1.A.q.horizontal)}**. Suma = {r5(ej1.A.q.suma)}.
+
+- $\rho_v \ge 0.0007$: **cumple**.
+- $\rho_h \ge 0.0007$: **no cumple** ({r5(ej1.A.q.horizontal)} menor que 0.0007).
+- Suma ≥ 0.0020: **no cumple** ({r5(ej1.A.q.suma)}).
+- $\rho_v \ge \tfrac12\rho_h$ = {r5(0.5 * ej1.A.q.horizontal)}: cumple.
+
+</Paso>
+<Paso titulo="Propuesta B: se cierra la escalerilla a 200 mm" ref="D.7.3.1(a)–(b)">
+
+$\rho_h$ = {f(ej1.AsH, 1)} / (200 × {ej1.A.d.espesor}) = **{r5(ej1.B.q.horizontal)}** ≥ 0.0007: ahora **cumple** por dirección. Pero la suma es {r5(ej1.B.q.vertical)} + {r5(ej1.B.q.horizontal)} = **{r5(ej1.B.q.suma)}**, todavía **menor que 0.0020**: **no cumple (b)**. Es el error típico de «cumplo ambos mínimos por dirección, luego cumplo todo».
+
+</Paso>
+<Paso titulo="Propuesta C: N° 4 cada 600 mm; escalerilla cada 200 mm" ref="D.7.3.1">
+
+$\rho_v$ = {N4.area} / (600 × {ej1.A.d.espesor}) = **{r5(ej1.C.q.vertical)}**; $\rho_h$ = **{r5(ej1.C.q.horizontal)}**; suma = **{r5(ej1.C.q.suma)}** ≥ 0.0020: **cumple**. Además $\rho_v$ = {r5(ej1.C.q.vertical)} ≥ ½ ρh = {r5(0.5 * ej1.C.q.horizontal)}: **cumple**.
+
+</Paso>
+<Paso titulo="Separaciones y barras mínimas de la propuesta C" ref="D.7.3.2, D.7.3.3">
+
+Separación vertical 600 mm ≤ 1200 mm: cumple. Escalerilla: ∅ 4 mm ≥ 4 mm y 200 mm ≤ 600 mm: cumple. Extremos: una N° 4 (12.7 mm ≥ 12 mm): cumple. Remate y arranque: dos N° 3 (9.5 mm): cumple. Espesor 150 mm ≥ 120 mm y $f'_m$ = 12 MPa dentro de 10–28 MPa: cumple. En total **{ej1.C.res.cumplen} de {ej1.C.res.total} verificaciones cumplen**.
+
+</Paso>
+
+<Figura alt="Barras horizontales con la cuantía horizontal y la suma de cuantías de las propuestas A, B y C, con marcas en los mínimos 0.0007 y 0.0020" numero="Esquema" pie="Cuantías de las tres propuestas del ejemplo 1 frente a los mínimos de D.7.3.1: la propuesta A falla en ρh y en la suma, la B falla solo en la suma y la C cumple. (esquema del proyecto)">
+<svg viewBox="0 0 560 270" role="img" aria-label="Comparación de la cuantía horizontal y de la suma de cuantías de tres propuestas con los mínimos de la norma" className="mx-auto h-auto w-full max-w-xl">
+  {[
+    { n: 'A  ρh', v: ej1.A.q.horizontal, m: 0.0007 },
+    { n: 'A  ρv+ρh', v: ej1.A.q.suma, m: 0.002 },
+    { n: 'B  ρh', v: ej1.B.q.horizontal, m: 0.0007 },
+    { n: 'B  ρv+ρh', v: ej1.B.q.suma, m: 0.002 },
+    { n: 'C  ρh', v: ej1.C.q.horizontal, m: 0.0007 },
+    { n: 'C  ρv+ρh', v: ej1.C.q.suma, m: 0.002 },
+  ].map((b, i) => (
+    <g key={b.n}>
+      <text x="0" y={34 + i * 38} fontSize="12" fill="currentColor">{b.n}</text>
+      <rect x="85" y={18 + i * 38} width={(b.v / 0.0028) * 380} height="24" rx="3" fill="currentColor" fillOpacity={b.v >= b.m ? 0.8 : 0.3} />
+      <line x1={85 + (b.m / 0.0028) * 380} y1={12 + i * 38} x2={85 + (b.m / 0.0028) * 380} y2={48 + i * 38} stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
+      <text x={85 + (b.v / 0.0028) * 380 + 6} y={34 + i * 38} fontSize="11" fill="currentColor">{r5(b.v)} {b.v >= b.m ? '✓' : '✗'}</text>
+    </g>
+  ))}
+  <text x="85" y="258" fontSize="11" fill="currentColor" fillOpacity="0.8">Marca discontinua = mínimo (0.0007 para ρh; 0.0020 para la suma)</text>
+</svg>
+</Figura>
+
+<Resultado>
+La propuesta **C** (N° 4 cada 600 mm y escalerilla de dos alambres de 4 mm cada 200 mm) cumple D.7 con $\rho_v$ = {r5(ej1.C.q.vertical)} y $\rho_h$ = {r5(ej1.C.q.horizontal)}. Las propuestas A y B incumplen: A en $\rho_h$ y en la suma; B solo en la suma ({r5(ej1.B.q.suma)} menor que 0.0020).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="¿DES o DMO? Refuerzo embebido y los adicionales de D.7.2.1.1">
+
+Un muro de {ej2.a.longitud} m de largo y {ej2.a.altura} m de alto, $t$ = {ej2.a.espesor} mm y $f'_m$ = {ej2.a.fm} MPa lleva una N° 4 cada 800 mm, una N° 4 como refuerzo horizontal cada 800 mm **en unidades especiales embebidas** (D.4.5.11.2), una N° 4 en cada extremo y dos N° 3 en remate y arranque. **No** se inyectan todas las celdas, solo las armadas.
+
+<Paso titulo="Cuantías" ref="D.7.3.1">
+
+$\rho_v$ = {N4.area} / (800 × {ej2.a.espesor}) = **{r5(ej2.qa.vertical)}**; $\rho_h$ = **{r5(ej2.qa.horizontal)}**; suma = {r5(ej2.qa.suma)} ≥ 0.0020 y $\rho_v \ge \tfrac12\rho_h$: el muro cumple D.7.3.1 ({ej2.resA.cumplen} de {ej2.resA.total} verificaciones cumplen en total).
+
+</Paso>
+<Paso titulo="Separación del refuerzo embebido" ref="D.7.3.3(b)">
+
+El refuerzo horizontal va cada 800 mm. Con el valor **probable** de 1 200 mm (ver errata) cumple; con los **120 mm impresos** en el PDF **no cumpliría** ({ej2.emb.cumpleValorImpreso ? 'cumple' : 'no cumple'} con el valor impreso). Por eso conviene verificar la errata con la edición oficial antes de contar con esta vía en un proyecto real.
+
+</Paso>
+<Paso titulo="Requisitos adicionales para DES" ref="D.7.2.1.1(a)–(b)">
+
+El límite es el **menor** de $L/3$ = {f(ej2.a.longitud * 1000 / 3, 0)} mm, $H/3$ = {f(ej2.a.altura * 1000 / 3, 0)} mm y 1 200 mm: **{f(ej2.desA.limiteSeparacion, 0)} mm**. Separación vertical entre barras: 800 mm ≤ {f(ej2.desA.limiteSeparacion, 0)} mm: {ej2.desA.verticalOk ? 'cumple' : 'no cumple'}. Refuerzo horizontal cada 800 mm, embebido en mortero de relleno: {ej2.desA.horizontalOk ? 'cumple' : 'no cumple'}. (c) se cubre porque $\rho_v$ ≥ ½ ρh.
+
+</Paso>
+<Paso titulo="Clasificación" ref="D.7.2.1.1, D.2.1.2">
+
+Cumple los adicionales y las celdas sin barra no se inyectan: clasificación **{ej2.claA.capacidad}**. {ej2.claA.explicacion} Si la separación vertical fuera 900 mm, mayor que {f(ej2.desB.limiteSeparacion, 0)} mm, los adicionales **no se cumplen** y el muro quedaría **{ej2.claB.capacidad}**; si además se inyectaran **todas** las celdas, volvería a ser **{ej2.claC.capacidad}**.
+
+</Paso>
+<Resultado>
+Con celdas armadas inyectadas, refuerzo embebido cada 800 mm y barras cada 800 mm (≤ {f(ej2.desA.limiteSeparacion, 0)} mm) el muro puede declararse **DES** sin inyectar todas las celdas. Con barras cada 900 mm queda **DMO**, a menos que se inyecten todas las celdas.
+</Resultado>
+</Ejemplo>
+
+### Calculadora: cuantías y separaciones de D.6 a D.9
+
+La calculadora siguiente verifica **todos** los límites de este capítulo y de los tres vecinos (D.6, D.8, D.9). Elija el sistema, ingrese el espesor, la resistencia y el refuerzo, y obtenga cumple / no cumple por requisito con su sección y página. Para los sistemas de perforación vertical muestra además **a qué sistema calificaría el muro** (autoría del proyecto). Ingrese solo refuerzo **continuo** en el tramo del muro (<NormaRef s="D.7.3.1(d)" pag="D-48" />).
+
+<CalculadoraEmbed id="cuantias-mamposteria" />
+
+## D.7.4 — Requisitos de diseño
+
+Las estructuras de mampostería reforzada de unidades de perforación vertical se diseñan **siguiendo los Capítulos D.1 a D.5** y **cumpliendo las cuantías de este capítulo** (<NormaRef s="D.7.4.1" pag="D-48" />). Es decir, las cuantías de D.7.3 son un **piso**, no un diseño: el refuerzo real lo dictan la flexión, el cortante y la carga axial calculados con los métodos del Capítulo [D.5](/titulo-d/d5b), y de ahí se toma el mayor entre lo requerido y el mínimo.
+
+## D.7.5 — Requisitos de construcción
+
+Se construye cumpliendo el Capítulo D.4 (<NormaRef s="D.7.5.1" pag="D-48" />): posicionamiento y empalme del refuerzo, inyección de celdas, curado y control (ver [D.4](/titulo-d/d4a)). D.7 no agrega requisitos adicionales de obra.
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Los errores que más se repiten con D.7">
+
+- **Verificar solo los mínimos por dirección.** $\rho_v \ge 0.0007$ y $\rho_h \ge 0.0007$ **no garantizan** la suma de 0.0020 (ejemplo 1, propuesta B).
+- **Olvidar $\rho_v \ge \tfrac12\rho_h$** cuando se arma mucho el refuerzo horizontal por cortante.
+- **Calcular la cuantía sobre el área neta de la unidad** (solo las paredes del bloque) en lugar del **área bruta** del muro.
+- **Contar refuerzo que no es continuo en el tramo** (barras de abertura que se cortan) como parte de la cuantía (D.7.3.1(d)).
+- **Creer que «solo inyecto las celdas con barra» es siempre DMO.** Si se cumplen los adicionales de D.7.2.1.1, el muro puede ser DES; y al revés, no basta con colocar el acero mínimo para llamarlo DES.
+- **Usar mortero tipo N** o aparejo no trabado en un muro D.7 (D.7.1.3).
+- **Tomar «120 mm» de D.7.2.1.1 y D.7.3.3(b) al pie de la letra** sin advertir que el valor probable es 1 200 mm.
+
+</Callout>
+
+## Resumen en una línea
+
+**D.7 pide f′m entre 10 y 28 MPa, muro ≥ 120 mm, cuantías ρv y ρh ≥ 0.0007 con suma ≥ 0.0020 y ρv ≥ ½ ρh, barras verticales cada ≤ 1 200 mm con una N° 4 en cada extremo y refuerzo horizontal en juntas (≤ 600 mm), remate, arranque y aberturas; es DES si se inyectan todas las celdas (o se cumplen los adicionales de D.7.2.1.1) y DMO si solo se inyectan las armadas.**

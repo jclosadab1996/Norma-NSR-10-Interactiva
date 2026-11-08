@@ -3,7 +3,7 @@ import type { LetraTitulo } from './titulos';
 /** Registro de calculadoras interactivas de todos los Títulos (se muestran en el hub y en cada capítulo). */
 export type Calculadora = {
   id: string;
-  /** Título al que pertenece ('a' | 'b' | 'c'). */
+  /** Título al que pertenece ('a' | 'b' | 'c' | 'd'). */
   titulo: LetraTitulo;
   nombre: string;
   descripcion: string;
@@ -279,6 +279,102 @@ export const CALCULADORAS: readonly Calculadora[] = [
     descripcion: 'Resistencia del concreto al arrancamiento y al desprendimiento lateral de anclajes (Apéndice C-D).',
     capitulo: 'apendice-cd',
     secciones: 'C-D',
+  },
+  {
+    id: 'fm-mamposteria',
+    titulo: 'd',
+    nombre: 'Resistencia f′m de la mampostería',
+    descripcion: 'Corrección de muretes por esbeltez, determinación estadística de f′m y criterios de aceptación.',
+    capitulo: 'd3',
+    secciones: 'D.3.7 · D.3.8',
+  },
+  {
+    id: 'desarrollo-mamposteria',
+    titulo: 'd',
+    nombre: 'Desarrollo, empalmes y doblamiento del refuerzo',
+    descripcion: 'Longitud de desarrollo, empalme por traslapo, ganchos y diámetros mínimos de doblamiento en mampostería.',
+    capitulo: 'd4a',
+    secciones: 'D.4.2',
+  },
+  {
+    id: 'dimensiones-efectivas',
+    titulo: 'd',
+    nombre: 'Dimensiones efectivas y módulos',
+    descripcion: 'Espesor, altura y ancho efectivos, áreas efectivas, módulos E y G de la mampostería, acero y mortero de relleno.',
+    capitulo: 'd5a',
+    secciones: 'D.5.2 · D.5.4',
+  },
+  {
+    id: 'axial-mamposteria',
+    titulo: 'd',
+    nombre: 'Compresión axial de muros y columnas',
+    descripcion: 'Resistencia axial nominal Po, reducción por esbeltez y resistencia de diseño φPn.',
+    capitulo: 'd5b',
+    secciones: 'D.5.5',
+  },
+  {
+    id: 'flexion-mamposteria',
+    titulo: 'd',
+    nombre: 'Flexión de elementos de mampostería',
+    descripcion: 'Momento nominal y de diseño, bloque de compresión, cuantía balanceada y doble armadura.',
+    capitulo: 'd5b',
+    secciones: 'D.5.6',
+  },
+  {
+    id: 'muro-fuera-plano',
+    titulo: 'd',
+    nombre: 'Muros fuera de su plano',
+    descripcion: 'Flexión y flexo-compresión de muros con cargas perpendiculares a su plano.',
+    capitulo: 'd5b',
+    secciones: 'D.5.7',
+  },
+  {
+    id: 'muro-en-plano',
+    titulo: 'd',
+    nombre: 'Muros en su plano: flexo-compresión y cortante',
+    descripcion: 'Resistencia a flexo-compresión y cortante nominal Vn de muros cargados en su propio plano.',
+    capitulo: 'd5b',
+    secciones: 'D.5.8',
+  },
+  {
+    id: 'cuantias-mamposteria',
+    titulo: 'd',
+    nombre: 'Cuantías y separaciones mínimas del refuerzo',
+    descripcion: 'Verificador de refuerzo mínimo y espaciamientos máximos de los sistemas D.6 a D.9.',
+    capitulo: 'd7',
+    secciones: 'D.6 · D.7 · D.8 · D.9',
+  },
+  {
+    id: 'muro-confinado-refuerzo',
+    titulo: 'd',
+    nombre: 'Muros confinados: densidad de muros y confinamiento',
+    descripcion: 'Densidad mínima de muros, refuerzo mínimo de columnas y vigas de confinamiento.',
+    capitulo: 'd10a',
+    secciones: 'D.10.3 – D.10.6',
+  },
+  {
+    id: 'muro-confinado-resistencia',
+    titulo: 'd',
+    nombre: 'Muros confinados: resistencia',
+    descripcion: 'Resistencia axial, flexo-compresión, cortante y aplastamiento de muros confinados.',
+    capitulo: 'd10b',
+    secciones: 'D.10.7',
+  },
+  {
+    id: 'muro-diafragma',
+    titulo: 'd',
+    nombre: 'Muros diafragma',
+    descripcion: 'Cortante máximo y verificación de muros diafragma.',
+    capitulo: 'd11',
+    secciones: 'D.11',
+  },
+  {
+    id: 'esfuerzos-admisibles-mamposteria',
+    titulo: 'd',
+    nombre: 'Esfuerzos admisibles (Apéndice D-1)',
+    descripcion: 'Esfuerzos admisibles en la mampostería y el acero y verificación por esfuerzos de trabajo.',
+    capitulo: 'apendice-d1',
+    secciones: 'D-1.5',
   },
 ];
 

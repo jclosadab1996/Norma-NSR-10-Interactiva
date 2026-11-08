@@ -1,0 +1,784 @@
+---
+codigo: 'D.3'
+tipo: capitulo
+titulo: 'Calidad de los materiales'
+resumen: 'Requisitos de cemento, cal, acero, morteros de pega (Tabla D.3.4-1) y de relleno (Tabla D.3.5-1) y unidades de mampostería (Tabla D.3.6-1); tres caminos para fijar la resistencia f′m (muretes, registros estadísticos o calidad de los materiales, Ecs. D.3.7-1 a D.3.7-3) y criterios de muestreo y aceptación en obra.'
+objetivos:
+  - 'Clasificar un mortero de pega (H, M, S, N) y uno de relleno según las Tablas D.3.4-1 y D.3.5-1 y verificar sus normas de calidad'
+  - 'Comprobar que una unidad de perforación vertical cumple los espesores mínimos de pared y los límites de celdas de D.3.6.4'
+  - 'Determinar f′m de una muestra de tres muretes, con el tope del 125 % y la corrección por esbeltez de la Tabla D.3.7-1'
+  - 'Elegir el porcentaje del promedio (70 a 85 %) según el número de ensayos y calcular f′m por la calidad de los materiales (Rm y f′m inyectado)'
+  - 'Aplicar el muestreo mínimo y los criterios de aceptación y rechazo de D.3.8, incluidas las medidas correctivas'
+paginasNorma: 'D-13 a D-20'
+paginaPdf: 578
+orden: 3
+calculadoras: ['fm-mamposteria']
+nivel: intermedio
+---
+
+import { TABLA_D371 } from '../../data/materialesMamposteria';
+import {
+  esfuerzoMurete,
+  estadisticos,
+  factorEsbeltezMurete,
+  fmDesdeRm,
+  fmEstadistico,
+  fmInyectado,
+  fmMuestraMuretes,
+  frecuenciasMuestreo,
+  limitesMorteroRelleno,
+  resistenciaRm,
+  verificarAceptacion,
+  verificarNucleos,
+} from '../../lib/nsr10/resistenciaMamposteria';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const areaNeta = 41800;
+  const cargas = [190, 205, 230];
+  const esf = cargas.map((p) => esfuerzoMurete(p, areaNeta));
+  const rel = 800 / 190;
+  const m = fmMuestraMuretes(esf, rel);
+  const patron = fmMuestraMuretes(esf, 2);
+  // misma muestra con un murete muy dispar para mostrar el tope del 125 %
+  const disp = fmMuestraMuretes([4.0, 6.0, 6.2], 2);
+  return { areaNeta, cargas, esf, rel, m, patron, disp };
+})();
+
+export const ej2 = (() => {
+  const datos = [5.2, 5.8, 6.1, 5.5, 6.4, 5.9, 5.0, 6.2, 5.7, 5.6, 6.0, 5.4];
+  const previo = fmEstadistico(datos, 'previo');
+  const hist = fmEstadistico(datos, 'historico');
+  const pocos = fmEstadistico(datos.slice(0, 6), 'previo');
+  const disp = fmEstadistico([...Array(6).fill(4), ...Array(6).fill(9)], 'historico');
+  return { datos, previo, hist, pocos, disp };
+})();
+
+export const ej3 = (() => {
+  const base = { h: 190, fcu: 10, fcp: 12.5 };
+  const con = resistenciaRm({ ...base, kp: 1.4 });
+  const arc = resistenciaRm({ ...base, kp: 0.8 });
+  const lim = resistenciaRm({ ...base, fcp: 22.5, kp: 1.4 });
+  const iny = fmInyectado({ ...base, kp: 1.4, r: 0.55, kr: 0.9, fcr: 12.5 });
+  const iny2 = fmInyectado({ ...base, kp: 1.4, r: 0.55, kr: 0.9, fcr: 17.5 });
+  const l1 = limitesMorteroRelleno(iny.fm);
+  const l2 = limitesMorteroRelleno(10);
+  return { con, arc, lim, iny, iny2, fmCon: fmDesdeRm(con.Rm), fmArc: fmDesdeRm(arc.Rm), fmLim: fmDesdeRm(lim.Rm), l1, l2 };
+})();
+
+export const ej4 = (() => {
+  const pega = verificarAceptacion([13.1, 12.9, 11.6, 14.0, 10.8], 12.5);
+  const mur = verificarAceptacion([7.4, 7.1, 4.5], 6.0);
+  const nuc = verificarNucleos([5.2, 4.9, 5.5], 6.0);
+  const frec = frecuenciasMuestreo({ areaMuroM2: 1200, volumenInyectadoM3: 45, unidades: 12000 });
+  return { pega, mur, nuc, frec };
+})();
+
+export const grafE = (() => {
+  const X = (r) => 60 + ((r - 1.5) / 3.5) * 380;
+  const Y = (v) => 230 - ((v - 0.8) / 0.5) * 190;
+  const pts = TABLA_D371.map((p) => ({ x: X(p.relacion), y: Y(p.factor), r: p.relacion, v: p.factor }));
+  const poly = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const ex = { x: X(ej1.rel), y: Y(ej1.m.factor) };
+  const gy = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3].map((v) => ({ v, y: Y(v) }));
+  return { pts, poly, ex, gy };
+})();
+
+export const barras = [
+  { g: 'Registros históricos (D.3.7.3)', t: '30 ensayos o más', v: 0.75 },
+  { g: '', t: '10 a 29 ensayos', v: 0.7 },
+  { g: '', t: 'menos de 10 ensayos', v: null },
+  { g: 'Muretes previos a la obra (D.3.7.4)', t: '30 o más', v: 0.85 },
+  { g: '', t: '11 a 29 (el 10 es un vacío del texto)', v: 0.8 },
+  { g: '', t: '3 a 9', v: 0.75 },
+];
+
+## Idea central del capítulo
+
+La mampostería estructural es un **material compuesto**: unidades (bloques, ladrillos), mortero de pega, a veces mortero de relleno en las celdas y acero de refuerzo. Su desempeño depende de que cada componente tenga la calidad que el diseño supuso. El Capítulo D.3 fija esa calidad: qué normas debe cumplir cada material, qué **clase de mortero** (H, M, S, N) se usa, cómo deben ser las unidades, y —lo más importante para el cálculo— **cómo se establece y se verifica en obra la resistencia a la compresión $f'_m$** de la mampostería, el dato del que parten todos los capítulos de diseño (D.5 a D.12).
+
+Hay tres caminos para fijar $f'_m$ antes de construir: **registros históricos**, **ensayos de muretes preliminares** o **calidad de los materiales** (una fórmula con la resistencia de la unidad y del mortero). Durante la obra, $f'_m$ se **verifica con muretes** y se acepta o rechaza con el criterio de «promedio ≥ especificada y ningún valor menor del 80 %».
+
+<Callout tipo="importante" titulo="Los valores por calidad de los materiales no sirven para control">
+Los valores de $f'_m$ que se basan en la calidad de los materiales (D.3.7.5 y D.3.7.6) **solo se pueden usar en el diseño previo a la construcción y no para control de calidad** (<NormaRef s="D.3.7.1.1" pag="D-17" />). Aun así, la norma exige comprobar $f'_m$ con muretes en obra (<NormaRef s="D.3.8.1.4" pag="D-20" />).
+</Callout>
+
+<Callout tipo="nota" titulo="Convenciones de este capítulo (autoría del proyecto)">
+Las funciones de cálculo viven en `src/lib/nsr10/resistenciaMamposteria.ts` y las tablas en `src/data/materialesMamposteria.ts`; los ejemplos y la calculadora comparten el mismo código. Lo rotulado **«(autoría del proyecto)»** o **«(interpretación)»** no es texto de la norma. Unidades del SI (MPa, kN, mm). El Título D del PDF no trae figuras: los esquemas son del proyecto.
+</Callout>
+
+## D.3.0 — Nomenclatura
+
+La nomenclatura propia del capítulo (<NormaRef s="D.3.0" pag="D-13" />):
+
+<TablaNorma numero="D.3.0" titulo="Nomenclatura del Capítulo D.3" pag="D-13" nota="Se conservan los símbolos del PDF (en el texto se escribe f′ con apóstrofo tipográfico).">
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $f'_m$ | Resistencia nominal a la compresión de la mampostería | MPa |
+| $f'_{cr}$ | Resistencia a la compresión del mortero de relleno | MPa |
+| $f'_{cre}$ | Resistencia especificada a la compresión del mortero de recubrimiento o revoque | MPa |
+| $f'_{cu}$ | Resistencia especificada a la compresión de la unidad de mampostería, medida sobre **área neta** | MPa |
+| $f'_{cp}$ | Resistencia especificada a la compresión del mortero de pega | MPa |
+| $h$ | Altura de la unidad de mampostería, **en mm**, para la Ec. D.3.7-1 | mm |
+| $k_p$ | Factor de corrección por absorción de la unidad: **1.4** concreto; **0.8** arcilla o sílico-calcárea | adim. |
+| $k_r$ | Factor de corrección por absorción de la unidad en mampostería inyectada: **0.9** concreto; **0.75** arcilla o sílico-calcárea | adim. |
+| $R_m$ | Parámetro definido por la Ec. D.3.7-1 | MPa |
+| $r$ | Relación entre el área neta y el área bruta de las unidades | adim. |
+
+</TablaNorma>
+
+## D.3.1 — Aspectos generales
+
+- **Requisitos para los materiales** (<NormaRef s="D.3.1.1" pag="D-13" />): todos los materiales de la mampostería estructural deben cumplir la calidad que fija el capítulo, y ese cumplimiento se **comprueba con ensayos sobre muestras representativas**.
+- **Ensayos de control de calidad** (<NormaRef s="D.3.1.2" pag="D-13" />): se hacen con las normas técnicas colombianas (NTC) respectivas; a falta de ellas, con las normas ASTM mencionadas en el Reglamento. Las normas adoptadas por el Título D están en D.2.3.
+
+## D.3.2 — Cemento y cal
+
+El cemento en obra debe estar en condiciones apropiadas y corresponder, en tipo y clase, al que se usó para las dosificaciones de concreto y morteros (<NormaRef s="D.3.2.1" pag="D-13" />). Las normas exigidas:
+
+<TablaNorma numero="D.3.2.1" titulo="Normas de cemento y cal" pag="D-13" nota="Transcrita de la lista de D.3.2.1.">
+
+| Material | Norma NTC | Equivalente ASTM |
+|---|---|---|
+| Cemento portland | NTC 121 y NTC 321 | Se permiten cementos fabricados bajo ASTM C150 y C595 |
+| Cemento para mampostería | NTC 4050 | ASTM C91 |
+| Cal viva | NTC 4046 | ASTM C5 |
+| Cal hidratada | NTC 4019 | ASTM C270 |
+
+</TablaNorma>
+
+## D.3.3 — Acero de refuerzo
+
+El acero de refuerzo cumple **los mismos requisitos de C.3.5** y las normas de producción y uso allí mencionadas. Al colocarlo debe estar **limpio en la superficie, sin corrosión y figurado según los planos** (<NormaRef s="D.3.3.1" pag="D-13" />). La verificación de calidad en obra remite a C.3.5.10 (<NormaRef s="D.3.8.1.5" pag="D-20" />).
+
+## D.3.4 — Mortero de pega
+
+### D.3.4.1 — Requisitos generales y Tabla D.3.4-1
+
+Los morteros de pega cumplen la **NTC 3329 (ASTM C270)** y la Tabla D.3.4-1; el mortero **premezclado** cumple la **NTC 3356 (ASTM C1142)**. Deben tener buena plasticidad y consistencia, retener el agua mínima para hidratar el cemento y adherirse a las unidades para desarrollar su acción cementante (<NormaRef s="D.3.4.1" pag="D-14" />).
+
+<TablaNorma numero="Tabla D.3.4-1" titulo="Clasificación de los morteros de pega por propiedad o por proporción" pag="D-14" nota="Las columnas «Resistencia», «Flujo» y «Retención» son la especificación por propiedad; las demás, por proporción (partes en volumen). Cada tipo admite dos alternativas de dosificación (cemento portland con cal, o con cemento para mampostería). Transcrita de la imagen de la página.">
+
+| Mortero tipo | $f'_{cp}$ mínima a 28 d (MPa)¹ ² | Flujo (%)³ | Retención mínima de agua | Cemento portland | Cal hidratada⁴ | Cemento para mampostería⁷ | Arena / material cementante⁵ (mín.–máx.) |
+|---|---:|---:|---:|---:|---|---|---|
+| **H** | 22.5 | 115–125 | 75 % | 1 | 0.25 | no aplica | 2.00 – 2.5 |
+| **M** | 17.5 | 115–125 | 75 % | 1 | 0.25 | no aplica | 2.25 – 3.0 |
+| **M** | 17.5 | 115–125 | 75 % | 1 | no aplica | 1 | 2.25 – 2.5 |
+| **S** | 12.5 | 110–120 | 75 % | 1 | 0.25 a 0.50 | no aplica | 2.50 – 3.5 |
+| **S** | 12.5 | 110–120 | 75 % | 0.5 | no aplica | 1 | 2.50 – 3.0 |
+| **N**⁶ | 7.5 | 105–115 | 75 % | 1 | 0.50 a 1.25 | no aplica | 3.00 – 4.5 |
+| **N**⁶ | 7.5 | 105–115 | 75 % | 0 | no aplica | 1 | 3.00 – 4.0 |
+
+</TablaNorma>
+
+Notas de la tabla (<NormaRef s="Tabla D.3.4-1" pag="D-14" />):
+
+1. Solo para el diseño de mezclas **en laboratorio** con los materiales que se usarán en obra; el control en obra se hace con la NTC 3546 (ASTM C780).
+2. Resistencia a la compresión a 28 días en **cubos de 50 mm de lado**.
+3. Flujo medido según NTC 4050 (ASTM C91), tal como figura impreso.
+4. Se puede usar cal hidratada en polvo tipo N o S.
+5. En la relación arena/cementante **no se cuenta la cal** como cementante.
+6. El mortero **tipo N solo se permite en sistemas con capacidad mínima de disipación de energía en el rango inelástico (DMI)**.
+7. El tipo de cemento para mampostería (M, S o N) debe ser el **mismo que el tipo de mortero** de pega.
+
+<Callout tipo="nota" titulo="Cómo leer la tabla (autoría del proyecto)">
+La resistencia que identifica al mortero (22.5, 17.5, 12.5 o 7.5 MPa) es la de **cubos de 50 mm a 28 días**, no la del mortero «en el muro». Una mezcla más rica en cemento y con menos arena por parte de cementante da mayor resistencia: por eso H lleva 2.0–2.5 partes de arena y N hasta 4.5. Para $f'_{cp}$ de diseño (por ejemplo, en la Ec. D.3.7-1) se usa el valor mínimo de la fila del tipo escogido.
+</Callout>
+
+### D.3.4.2 — Dosificación
+
+La dosificación debe basarse en **ensayos previos de laboratorio o en experiencia de campo** en obras similares. La denominación H, M, S o N es **exclusiva** de morteros de pega de mampostería y no se usa para otros morteros. La resistencia se mide a los 28 días en **cubos de 50 mm** o en **cilindros de 75 mm × 150 mm**; el flujo inicial y la retención de agua deben cumplir la tabla. Se puede elegir **cualquiera de las dos alternativas** de dosificación, pero **no se permite combinar cal hidratada y cemento para mampostería** en la misma mezcla (<NormaRef s="D.3.4.2" pag="D-14" />).
+
+Si se usan **probetas cilíndricas**, sus resultados deben **correlacionarse con los cubos de 50 mm**, que son la referencia de la dosificación, y ensayarse según la NTC 3546 (ASTM C780) (<NormaRef s="D.3.4.2.1" pag="D-14" />).
+
+### D.3.4.3 a D.3.4.6 — Cal, agregados, agua y aditivos
+
+- **Cal** (<NormaRef s="D.3.4.3" pag="D-14" />): debe ser **cal hidratada**, verificando que no perjudique ninguna propiedad especificada.
+- **Agregados** (<NormaRef s="D.3.4.4" pag="D-14" />): NTC 2240 (ASTM C144), libres de materiales contaminantes o deleznables.
+- **Agua** (<NormaRef s="D.3.4.5" pag="D-14" />): limpia y libre de cantidades perjudiciales de aceite, ácidos, alcoholes, sales, materias orgánicas u otras sustancias dañinas para el mortero o el refuerzo embebido; se cumple C.3.4.
+- **Colorantes y aditivos** (<NormaRef s="D.3.4.6" pag="D-15" />): requieren **aprobación previa del supervisor técnico** y demostrar, con ensayos o evidencia confiable de obras similares, que no deterioran el mortero ni las unidades ni causan corrosión del refuerzo.
+
+### D.3.4.7 — Preparación en obra
+
+El mortero se prepara con **mezcladoras mecánicas**, en seco o con el agua de amasado necesaria para la plasticidad requerida; si se mezcla en seco, el albañil añade el agua hasta lograr plasticidad y consistencia. El tiempo de mezclado debe dar uniformidad sin segregación. La **preparación manual solo se admite en obras menores no contempladas en A.1.6.1** (<NormaRef s="D.3.4.7" pag="D-15" />).
+
+- **Mezclado en seco en obra** (<NormaRef s="D.3.4.7.1" pag="D-15" />): usarse antes de que se inicie la hidratación por contacto con el agua natural de la arena; **nunca después de 2 horas y media** de mezclado, salvo morteros de larga vida.
+- **Premezclados de larga vida** (<NormaRef s="D.3.4.7.2" pag="D-15" />): se usan según las instrucciones y el tiempo del fabricante, y se verifica con ensayos que no pierdan propiedades al momento de usarse.
+
+## D.3.5 — Mortero de relleno
+
+### D.3.5.1 — Requisitos generales
+
+El mortero de relleno (el que se inyecta en las celdas) cumple la **NTC 4048 (ASTM C476)**, con buena consistencia y **fluidez suficiente para penetrar las celdas sin segregación** (<NormaRef s="D.3.5.1" pag="D-15" />).
+
+### D.3.5.2 — Dosificación y Tabla D.3.5-1
+
+La dosificación se basa en ensayos previos o experiencia de campo y se clasifica con la Tabla D.3.5-1. La resistencia $f'_{cr}$ se mide **a los 28 días** sobre probetas tomadas en las celdas de las unidades huecas o en prismas de unidades dispuestas convenientemente, **con papel permeable** que permita el paso de agua entre mortero y unidad e impida su adherencia (NTC 4043, ASTM C1019). También se admiten cilindros de 75 × 150 mm (NTC 3546, ASTM C780, para relleno fino); el relleno grueso puede muestrearse según C.5.6.3.1 y C.5.6.3.2 (<NormaRef s="D.3.5.2" pag="D-15" />).
+
+<TablaNorma numero="Tabla D.3.5-1" titulo="Clasificación y dosificación por volumen de los morteros de relleno" pag="D-15" nota="Partes en volumen por una parte de cemento portland. Transcrita de la imagen de la página.">
+
+| Tipo de mortero | Cemento portland | Agregado fino / cemento (mín.–máx.) | Agregado grueso (tamaño menor de 10 mm) / cemento (mín.–máx.) |
+|---|---:|---|---|
+| Fino | 1 | 2.25 – 3.5 | — |
+| Grueso | 1 | 2.25 – 3.0 | 1.0 – 2.0 |
+
+</TablaNorma>
+
+### D.3.5.3 — Límites de la resistencia del mortero de relleno
+
+A 28 días, $f'_{cr}$ debe ser **como máximo 1.5 veces $f'_m$ y como mínimo 1.25 veces $f'_m$**, pero **en ningún caso menor de 12.5 MPa** (<NormaRef s="D.3.5.3" pag="D-15" />). Es decir:
+
+$$
+\max\left(1.25\,f'_m,\; 12.5\ \text{MPa}\right) \;\le\; f'_{cr} \;\le\; 1.5\,f'_m
+$$
+
+<Callout tipo="atencion" titulo="Una contradicción del texto cuando f′m es bajo (autoría del proyecto)">
+Si $f'_m < 12.5/1.5 = 8.33$ MPa, el piso de 12.5 MPa **supera** al tope $1.5\,f'_m$ y el requisito no se puede cumplir en sentido literal. La norma no resuelve el caso; en la práctica prima el **mínimo absoluto de 12.5 MPa** (interpretación del proyecto). La calculadora lo avisa. Ejemplo con $f'_m$ = {f(ej3.iny.fm, 2)} MPa: mínimo {f(ej3.l1.minimo, 2)} MPa frente a un máximo literal de {f(ej3.l1.maximo, 2)} MPa.
+</Callout>
+
+### D.3.5.4 a D.3.5.7 — Cal, agregados, agua, mezclado
+
+- **Cal** (<NormaRef s="D.3.5.4" pag="D-16" />): si se usa, cumple NTC 4019 (ASTM C207) y **no más del 10 % del volumen de cemento**.
+- **Agregados** (<NormaRef s="D.3.5.5" pag="D-16" />): NTC 4020 (ASTM C404), sin contaminantes ni materiales deleznables.
+- **Agua y aditivos** (<NormaRef s="D.3.5.6" pag="D-16" />): como en D.3.4.5 y D.3.4.6, en concordancia con C.3.4 y C.3.6.
+- **Mezclado y transporte** (<NormaRef s="D.3.5.7" pag="D-16" />): con mezcladoras mecánicas, y un transporte hasta el sitio de inyección que conserve consistencia y plasticidad.
+
+## D.3.6 — Unidades de mampostería
+
+### D.3.6.1 — Tipos de unidades
+
+Las unidades pueden ser de **concreto, cerámica (arcilla cocida), sílico-calcáreas o de piedra**. Según el tipo de mampostería y de refuerzo, son de **perforación vertical, perforación horizontal o sólidas**, de acuerdo con su posición normal en el muro. Una unidad es **sólida** si sus cavidades ocupan **menos del 25 %** del volumen de la pieza (<NormaRef s="D.3.6.1" pag="D-16" />).
+
+### D.3.6.2 — Normas de producción y calidad
+
+<TablaNorma numero="D.3.6.2" titulo="Normas que deben cumplir las unidades" pag="D-16" nota="Transcrita de D.3.6.2.1 a D.3.6.2.3.">
+
+| Unidad | Norma NTC | Equivalente ASTM |
+|---|---|---|
+| Concreto, bloque de perforación vertical portante (D.3.6.2.1 a) | NTC 4026 | C90 |
+| Concreto, maciza portante o «tolete» (D.3.6.2.1 b) | NTC 4026 | C55 |
+| Concreto, mampostería no estructural (D.3.6.2.1 c) | NTC 4076 | C129 |
+| Arcilla, bloque de perforación vertical estructural (D.3.6.2.2 a) | NTC 4205-1 | C34 |
+| Arcilla, maciza estructural o «tolete» (D.3.6.2.2 b) | NTC 4205-1 | C62, C652 |
+| Arcilla, mampostería no estructural (D.3.6.2.2 c) | NTC 4205-2 | C56, C212, C216 |
+| Arcilla, perforación horizontal estructural (D.3.6.2.2 d) | NTC 4205-1 | C56, C212 |
+| Arcilla cocida en fachadas (D.3.6.2.2 e) | NTC 4205-3 | — |
+| Sílico-calcáreas (D.3.6.2.3) | NTC 922 | C73 |
+
+</TablaNorma>
+
+Todas las unidades usadas en el diseño y la construcción deben cumplir estas normas (<NormaRef s="D.3.6.2" pag="D-16" />).
+
+### D.3.6.3 — Unidades especiales
+
+Para muros, vigas y otros elementos son indispensables **unidades especiales** (por ejemplo, de dintel o de esquina), que deben cumplir las especificaciones de las unidades típicas del mismo material (<NormaRef s="D.3.6.3" pag="D-16" />).
+
+### D.3.6.4 — Unidades de perforación vertical
+
+Las unidades de perforación vertical (bloque) pueden ser de concreto, arcilla o sílico-calcáreas y **se pueden usar en todos los tipos de mampostería estructural de D.2.1** (<NormaRef s="D.3.6.4" pag="D-16" />).
+
+**D.3.6.4.1 — Celdas y paredes** (<NormaRef s="D.3.6.4.1" pag="D-17" />):
+
+- El área de las celdas verticales, con la pieza en posición normal, **no puede superar el 65 %** del área de la sección transversal.
+- Las celdas (verticales u horizontales continuas) donde se coloque refuerzo **no pueden tener una dimensión menor de 50 mm ni un área menor de 3000 mm²**.
+- Las paredes externas e internas no pueden ser más delgadas que lo que indica la Tabla D.3.6-1.
+
+<TablaNorma numero="Tabla D.3.6-1" titulo="Espesores mínimos de paredes en unidades (bloques) de mampostería de perforación vertical (mm)" pag="D-17" nota="Nota (1): la unidad de 80 mm de espesor externo nominal solo se permite en muros no estructurales y en las paredes laterales de mampostería de cavidad. Transcrita de la imagen de la página.">
+
+| Espesor externo nominal | Pared exterior, sin perforaciones verticales secundarias | Pared exterior, con perforaciones verticales secundarias | Tabique transversal, sin perforaciones verticales secundarias |
+|---:|---:|---:|---:|
+| 80¹ | 20 | 30 | 20 |
+| 100 | 20 | 30 | 20 |
+| 120 | 22 | 32 | 20 |
+| 150 | 25 | 35 | 25 |
+| 200 | 30 | 40 | 25 |
+| 250 | 35 | 45 | 30 |
+| 300 | 40 | 50 | 30 |
+
+</TablaNorma>
+
+**D.3.6.4.2 — Perforaciones secundarias** (<NormaRef s="D.3.6.4.2" pag="D-17" />): las unidades de **arcilla cocida** de perforación vertical pueden tener perforaciones secundarias en las paredes, paralelas a las celdas principales, con **dimensión transversal no mayor de 20 mm** y **a no menos de 10 mm del borde** de la pared perforada.
+
+<Callout tipo="practica" titulo="Lectura de la Tabla D.3.6-1 (autoría del proyecto)">
+Para un bloque de 150 mm sin perforaciones secundarias: paredes exteriores de al menos 25 mm y tabiques de al menos 25 mm; si tiene perforaciones secundarias, las paredes exteriores suben a 35 mm. Fíjate en el patrón: con perforaciones secundarias la pared exterior siempre exige **10 mm más**. La tabla no da espesor de tabique para unidades con perforaciones secundarias.
+</Callout>
+
+### D.3.6.5 y D.3.6.6 — Unidades de perforación horizontal y macizas
+
+<TablaNorma numero="D.3.6.4 a D.3.6.6" titulo="Dónde se puede usar cada tipo de unidad" pag="D-17" nota="Resumen elaborado a partir de los tres numerales; los tipos de mampostería son los clasificados en D.2.1.">
+
+| Unidad | Tipos de mampostería estructural en que se permite |
+|---|---|
+| Perforación vertical (D.3.6.4) | **Todos** los tipos de D.2.1 |
+| Perforación horizontal (D.3.6.5) | Muros confinados, cavidad reforzada y reforzada externamente. Combinadas con unidades de perforación vertical, también en edificaciones de **uno y dos pisos del grupo de uso I** para mampostería no reforzada y parcialmente reforzada |
+| Maciza o «tolete» (D.3.6.6) | Muros confinados, cavidad reforzada y reforzada externamente. Combinadas con unidades de perforación vertical, para mampostería parcialmente reforzada |
+
+</TablaNorma>
+
+## D.3.7 — Determinación de la resistencia de la mampostería a la compresión $f'_m$
+
+### D.3.7.1 — $f'_m$ previa a la construcción
+
+El valor **especificado** de $f'_m$ se determina por uno de tres procedimientos (<NormaRef s="D.3.7.1" pag="D-17" />):
+
+| Procedimiento | Numeral | Qué se hace |
+|---|---|---|
+| (a) Registros históricos | D.3.7.3 | Se usan resultados de muretes de obras anteriores y se toma un porcentaje del promedio |
+| (b) Determinación experimental | D.3.7.4 | Se ensayan muretes preliminares a la obra y se toma un porcentaje del promedio |
+| (c) Materiales individuales | D.3.7.5 y D.3.7.6 | Se calcula con $f'_{cu}$, $f'_{cp}$ y la altura de la unidad (y $f'_{cr}$ si hay relleno) |
+
+Los valores basados en la calidad de los materiales **solo valen para el diseño previo, no para el control de calidad** (<NormaRef s="D.3.7.1.1" pag="D-17" />).
+
+### D.3.7.2 — Elaboración y ensayo de los muretes
+
+Los muretes se elaboran y ensayan según la **NTC 3495 (ASTM E447)** y los requisitos siguientes (<NormaRef s="D.3.7.2" pag="D-18" />):
+
+- **Elaboración** (<NormaRef s="D.3.7.2.1" pag="D-18" />): con los **mismos materiales, condiciones, contenido de humedad y calidad de mano de obra** que tendrá la estructura. Si en obra el mortero de pega se coloca solo en las paredes laterales de las unidades de perforación vertical, el murete se hace igual: mortero **solo sobre las paredes laterales y sin mortero en los tabiques transversales**, incluidos los terminales (ver D.4.5.10.1 b). Hay que hacer muretes **con celdas vacías y con celdas rellenas** cuando se especifique mampostería parcial o totalmente inyectada.
+- **Valor de $f'_m$ de una muestra** (<NormaRef s="D.3.7.2.2" pag="D-18" />): el **promedio de 3 muretes** de igual procedencia, pero **no mayor del 125 % del menor valor** obtenido.
+- **Área** (<NormaRef s="D.3.7.2.3" pag="D-18" />): el esfuerzo de cada ensayo es la **carga última dividida por el área neta** de la mampostería del murete.
+- **Dimensiones** (<NormaRef s="D.3.7.2.4" pag="D-18" />): altura mínima de **300 mm** y relación altura/ancho **entre 1.5 y 5**. Los muretes de bloque de perforación vertical tienen al menos el **largo de una pieza completa**; los de otros tipos, al menos 100 mm de largo. El ancho y el tipo de construcción deben ser representativos de la mampostería de la obra.
+- **Corrección por esbeltez** (<NormaRef s="D.3.7.2.5" pag="D-18" />): $f'_m$ se multiplica por el factor de la Tabla D.3.7-1.
+- **Curado** (<NormaRef s="D.3.7.2.6" pag="D-18" />): 7 días al aire a 21 ± 5 °C con humedad relativa **mayor del 90 %**; después, las mismas condiciones pero con humedad relativa entre **30 y 50 %**, hasta el ensayo a los **28 días** de la fabricación. Los muretes hechos a pie de obra se conservan húmedos entre **48 y 96 horas** y luego se llevan al laboratorio.
+- **Refrentado y ensayo** (<NormaRef s="D.3.7.2.7" pag="D-18" />): según NTC 3495 (ASTM E447).
+
+<Figura alt="Esquema de un murete de tres hiladas de bloque entre platos de carga, con la carga P, la altura h y una planta que muestra el espesor t y el largo L" numero="Esquema" pie="Ensayo de un murete (esquema del proyecto): la carga última P se divide por el área neta de la planta; la relación h/t entra en la Tabla D.3.7-1.">
+<svg viewBox="0 0 520 300" role="img" aria-label="Esquema del ensayo de un murete de mampostería a compresión" className="mx-auto h-auto w-full max-w-xl">
+  <defs>
+    <marker id="d3-flecha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+    </marker>
+  </defs>
+  <line x1="190" y1="8" x2="190" y2="46" stroke="currentColor" strokeWidth="2.5" markerEnd="url(#d3-flecha)" />
+  <text x="202" y="28" fontSize="14" fill="currentColor">P (carga última)</text>
+  <rect x="100" y="48" width="180" height="14" rx="2" fill="currentColor" fillOpacity="0.55" />
+  <text x="290" y="59" fontSize="11" fill="currentColor" fillOpacity="0.8">plato + refrentado</text>
+  <g stroke="currentColor" strokeWidth="1.5" fill="currentColor" fillOpacity="0.14">
+    <rect x="110" y="62" width="80" height="64" />
+    <rect x="190" y="62" width="80" height="64" />
+    <rect x="110" y="126" width="40" height="64" />
+    <rect x="150" y="126" width="80" height="64" />
+    <rect x="230" y="126" width="40" height="64" />
+    <rect x="110" y="190" width="80" height="64" />
+    <rect x="190" y="190" width="80" height="64" />
+  </g>
+  <rect x="100" y="254" width="180" height="14" rx="2" fill="currentColor" fillOpacity="0.55" />
+  <text x="290" y="265" fontSize="11" fill="currentColor" fillOpacity="0.8">plato inferior</text>
+  <line x1="78" y1="62" x2="78" y2="254" stroke="currentColor" strokeWidth="1.5" markerStart="url(#d3-flecha)" markerEnd="url(#d3-flecha)" />
+  <text x="56" y="162" fontSize="15" fill="currentColor" textAnchor="middle">h</text>
+  <text x="190" y="289" fontSize="11" fill="currentColor" textAnchor="middle" fillOpacity="0.8">vista en alzado: h al menos 300 mm; largo al menos una pieza</text>
+  <text x="420" y="118" fontSize="13" fill="currentColor" textAnchor="middle" fontWeight="600">Planta</text>
+  <rect x="355" y="130" width="130" height="56" fill="currentColor" fillOpacity="0.14" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="368" y="142" width="40" height="32" fill="none" stroke="currentColor" strokeDasharray="3 2" />
+  <rect x="432" y="142" width="40" height="32" fill="none" stroke="currentColor" strokeDasharray="3 2" />
+  <text x="420" y="204" fontSize="11" fill="currentColor" textAnchor="middle" fillOpacity="0.8">L (largo)</text>
+  <line x1="342" y1="130" x2="342" y2="186" stroke="currentColor" strokeWidth="1.5" markerStart="url(#d3-flecha)" markerEnd="url(#d3-flecha)" />
+  <text x="332" y="162" fontSize="15" fill="currentColor" textAnchor="end">t</text>
+  <text x="420" y="232" fontSize="12" fill="currentColor" textAnchor="middle">esfuerzo = P / área neta</text>
+  <text x="420" y="250" fontSize="11" fill="currentColor" textAnchor="middle" fillOpacity="0.8">(celdas punteadas: área vacía)</text>
+</svg>
+</Figura>
+
+#### Tabla D.3.7-1 — Corrección por esbeltez
+
+Un murete más esbelto falla por una combinación de aplastamiento y pandeo, y uno más bajo gana resistencia por el confinamiento de los platos. Por eso el esfuerzo se refiere a una condición patrón mediante el factor de la tabla:
+
+<TablaNorma numero="Tabla D.3.7-1" titulo="Factor de corrección por esbeltez para f′m" pag="D-18" nota="Relación altura/espesor del murete (D.3.7.2.5). Transcrita de la imagen de la página.">
+
+| Relación altura/espesor del murete | 1.5 | 2.0 | 2.5 | 3.0 | 4.0 | 5.0 |
+|---|---:|---:|---:|---:|---:|---:|
+| Factor de corrección | 0.86 | 1.0 | 1.04 | 1.07 | 1.15 | 1.22 |
+
+</TablaNorma>
+
+El factor vale **1.0 para h/t = 2** (el murete «patrón») y crece con la esbeltez. La tabla solo da seis puntos y **la norma no dice cómo tratar relaciones intermedias** (por ejemplo, 3.5 o 4.2); como el rango 1.5–5 es continuo, **la calculadora y los ejemplos interpolan linealmente** entre filas (interpretación del proyecto, la práctica normal con tablas de este tipo). Con una relación fuera de 1.5–5 el murete no cumple D.3.7.2.4 y no hay factor.
+
+<Figura alt="Gráfica del factor de corrección por esbeltez del murete contra la relación altura/espesor, de 0.86 en 1.5 a 1.22 en 5, con los seis puntos de la tabla unidos por rectas" numero="Esquema" pie="Factor de la Tabla D.3.7-1 (esquema del proyecto). Los seis puntos son los de la norma; las rectas entre ellos son la interpolación lineal adoptada. El punto hueco es el murete del Ejemplo 1.">
+<svg viewBox="0 0 500 290" role="img" aria-label="Factor de corrección por esbeltez del murete en función de h/t" className="mx-auto h-auto w-full max-w-xl">
+  {grafE.gy.map((g) => (
+    <g key={g.v}>
+      <line x1="60" y1={g.y} x2="440" y2={g.y} stroke="currentColor" strokeOpacity="0.15" />
+      <text x="52" y={g.y + 4} fontSize="11" textAnchor="end" fill="currentColor">{g.v.toFixed(1)}</text>
+    </g>
+  ))}
+  <line x1="60" y1="230" x2="440" y2="230" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="60" y1="40" x2="60" y2="230" stroke="currentColor" strokeWidth="1.5" />
+  <polyline points={grafE.poly} fill="none" stroke="currentColor" strokeWidth="2.5" />
+  {grafE.pts.map((p) => (
+    <g key={p.r}>
+      <circle cx={p.x} cy={p.y} r="4.5" fill="currentColor" />
+      <line x1={p.x} y1="230" x2={p.x} y2="235" stroke="currentColor" />
+      <text x={p.x} y="250" fontSize="11" textAnchor="middle" fill="currentColor">{p.r}</text>
+      <text x={p.x} y={p.y - 9} fontSize="11" textAnchor="middle" fill="currentColor" fillOpacity="0.8">{p.v}</text>
+    </g>
+  ))}
+  <circle cx={grafE.ex.x} cy={grafE.ex.y} r="7" fill="none" stroke="currentColor" strokeWidth="2" />
+  <text x="250" y="276" fontSize="12" textAnchor="middle" fill="currentColor">relación altura/espesor del murete (h/t)</text>
+  <text x="14" y="135" fontSize="12" textAnchor="middle" fill="currentColor" transform="rotate(-90 14 135)">factor de corrección</text>
+</svg>
+</Figura>
+
+### D.3.7.3 — Determinación estadística de $f'_m$ (registros históricos)
+
+Cuando existen **registros confiables y suficientes** de ensayos de muretes de construcciones anteriores, con los **mismos materiales** y procesos técnicos y de supervisión similares, y el **coeficiente de variación** de los resultados es **menor o igual al 30 %**, se puede escoger $f'_m$ a partir de ellos (<NormaRef s="D.3.7.3" pag="D-18" />):
+
+| Número de resultados registrados | Porcentaje del promedio | Numeral |
+|---|---:|---|
+| 30 o más | **75 %** | <NormaRef s="D.3.7.3.1" pag="D-18" /> |
+| 10 a 30 | **70 %** | <NormaRef s="D.3.7.3.2" pag="D-19" /> |
+| Menos de 10 (con 3 o más muretes por prueba) | **No se pueden usar** los registros históricos | <NormaRef s="D.3.7.3.3" pag="D-19" /> |
+
+### D.3.7.4 — Determinación experimental de $f'_m$ (muretes preliminares)
+
+Se ensayan muretes **preliminares a la obra** con los mismos materiales, según D.3.7.2, **salvo el número de muretes por muestra**, que es el de la tabla siguiente (<NormaRef s="D.3.7.4" pag="D-19" />):
+
+| Número de muretes ensayados | Porcentaje del promedio | Numeral |
+|---|---:|---|
+| 30 o más | **85 %** | <NormaRef s="D.3.7.4.1" pag="D-19" /> |
+| Más de 10 y menos de 30 | **80 %** | <NormaRef s="D.3.7.4.2" pag="D-19" /> |
+| Menos de 10 pero no menos de 3 | **75 %** | <NormaRef s="D.3.7.4.3" pag="D-19" /> |
+
+<Figura alt="Barras horizontales con el porcentaje del promedio que se adopta como f′m según el procedimiento y el número de ensayos, de 70 a 85 por ciento" numero="Esquema" pie="Porcentaje del promedio que se adopta como f′m (esquema del proyecto): cuanto más ensayos, menor es el castigo por incertidumbre.">
+<svg viewBox="0 0 520 270" role="img" aria-label="Porcentaje del promedio adoptado como f′m según el número de ensayos" className="mx-auto h-auto w-full max-w-xl">
+  {barras.map((b, i) => {
+    const y = 14 + i * 38 + (i > 2 ? 14 : 0);
+    return (
+      <g key={i}>
+        {b.g !== '' && <text x="4" y={y - 2} fontSize="12" fontWeight="600" fill="currentColor">{b.g}</text>}
+        <text x="4" y={y + 22} fontSize="11" fill="currentColor" fillOpacity="0.85">{b.t}</text>
+        {b.v !== null ? (
+          <g>
+            <rect x="200" y={y + 6} width={b.v * 280} height="22" rx="3" fill="currentColor" fillOpacity={0.35 + (b.v - 0.7) * 2.5} />
+            <text x={200 + b.v * 280 + 6} y={y + 22} fontSize="12" fill="currentColor">{Math.round(b.v * 100)} %</text>
+          </g>
+        ) : (
+          <text x="204" y={y + 22} fontSize="12" fill="currentColor" fontStyle="italic">no se permite usar el registro</text>
+        )}
+      </g>
+    );
+  })}
+</svg>
+</Figura>
+
+<Detalle titulo="Vacíos y traslapes del texto en D.3.7.3 y D.3.7.4">
+
+Los intervalos del PDF no son perfectamente excluyentes:
+
+- **D.3.7.3.1 y D.3.7.3.2**: el título del primero dice «Más de 30» y el texto «superior o igual a 30»; el segundo dice «de 10 a 30». El valor 30 cae en ambos. La calculadora asigna **30 al tramo del 75 %**, que es lo que dice el texto del primero.
+- **D.3.7.4.2**: «superior a 10 e inferior a 30». Un total de exactamente **10 muretes** no cae en D.3.7.4.2 («superior a 10») ni en D.3.7.4.3 («inferior a 10»). La calculadora asigna el **80 %** y lo marca como interpretación; con 10 muretes lo prudente es usar el 75 %.
+- La norma **no define** la desviación estándar del coeficiente de variación: la calculadora usa la desviación **muestral** (denominador $n-1$).
+- D.3.7.3 exige $CV \le 30\ \%$; **D.3.7.4 no impone** ese límite aunque, con resultados muy dispersos, conviene investigar la causa antes de adoptar el porcentaje.
+
+</Detalle>
+
+### D.3.7.5 — $f'_m$ basada en la calidad de los materiales
+
+Si $f'_m$ no se selecciona con muretes preliminares ni registros históricos, puede determinarse con una **correlación apropiada** de la calidad de los materiales. **En ausencia de tal correlación**, se usa (<NormaRef s="D.3.7.5" pag="D-19" />):
+
+<Ecuacion num="D.3.7-1" titulo="Parámetro Rm">
+
+$$
+R_m=\left(\frac{2h}{75+3h}\right)f'_{cu}+\left(\frac{50\,k_p}{75+3h}\right)f'_{cp}\;\le\;0.8\,f'_{cu}
+$$
+
+- $h$: altura de la unidad, en **mm**.
+- $f'_{cu}$: resistencia especificada de la unidad sobre **área neta** (MPa); $f'_{cp}$: resistencia especificada del mortero de pega (MPa).
+- $k_p$: 1.4 para unidades de concreto; 0.8 para arcilla o sílico-calcáreas.
+
+</Ecuacion>
+
+<Ecuacion num="D.3.7-2" titulo="Resistencia de la mampostería sin inyectar">
+
+$$
+f'_m = 0.75\,R_m
+$$
+
+</Ecuacion>
+
+Los valores usados en la Ec. D.3.7-1 **deben indicarse en los planos estructurales** y controlarse en obra según D.3.8, **sin eximir** de comprobar $f'_m$ con muretes (D.3.8.1.4). Observa que el peso del mortero ($50k_p$ en el numerador) **disminuye** con la altura de la unidad: en una unidad alta, la junta de mortero influye menos en el conjunto.
+
+### D.3.7.6 — $f'_m$ con celdas inyectadas, por calidad de los materiales
+
+En mampostería **de cavidad reforzada o de perforación vertical inyectada** con mortero de relleno (<NormaRef s="D.3.7.6" pag="D-19" />):
+
+<Ecuacion num="D.3.7-3" titulo="Resistencia de la mampostería inyectada">
+
+$$
+f'_m = 0.75\left[\,r\,R_m + 0.9\,k_r\,(1-r)\,f'_{cr}\,\right]\;\le\;0.94\,R_m
+$$
+
+- $r$: relación **área neta / área bruta** de la unidad.
+- $k_r$: 0.9 para unidades de concreto; 0.75 para arcilla o sílico-calcáreas.
+- $f'_{cr}$: resistencia del mortero de relleno (MPa).
+- $R_m$: de la Ec. D.3.7-1.
+
+</Ecuacion>
+
+El primer término de corchete pondera la parte de la sección ocupada por unidad y mortero de pega (fracción $r$) y el segundo la parte ocupada por el relleno (fracción $1-r$); el tope $0.94\,R_m$ impide que el relleno aumente $f'_m$ más de $0.94/0.75 \approx 1.25$ veces respecto al valor sin inyectar.
+
+### Ejemplos del procedimiento
+
+<Ejemplo numero={1} titulo="f′m de una muestra de tres muretes de bloque de concreto">
+Tres muretes de bloque de concreto de 190 mm de espesor, de **800 mm** de altura, con **área neta** de {ej1.areaNeta} mm². Cargas últimas: {ej1.cargas[0]}, {ej1.cargas[1]} y {ej1.cargas[2]} kN. Hallar el $f'_m$ de la muestra.
+
+<Paso titulo="Esfuerzos de cada murete" ref="D.3.7.2.3">
+
+$$
+\sigma_i=\frac{P_i}{A_{neta}}
+$$
+
+Resultado: {f(ej1.esf[0], 2)}, {f(ej1.esf[1], 2)} y {f(ej1.esf[2], 2)} MPa (carga en N dividida por el área neta en mm²).
+
+</Paso>
+<Paso titulo="Promedio y tope del 125 %" ref="D.3.7.2.2">
+
+El promedio es {f(ej1.m.promedio, 2)} MPa y el menor valor {f(ej1.m.menor, 2)} MPa; el tope es $1.25 \times$ {f(ej1.m.menor, 2)} = {f(ej1.m.tope, 2)} MPa. El promedio **no excede** el tope, así que se conserva: {f(ej1.m.promedioLimitado, 2)} MPa.
+
+</Paso>
+<Paso titulo="Corrección por esbeltez" ref="D.3.7.2.5, Tabla D.3.7-1">
+
+Relación $h/t$ = 800/190 = {f(ej1.rel, 2)}, entre las filas 4.0 (factor 1.15) y 5.0 (factor 1.22); por interpolación lineal, el factor es **{f(ej1.m.factor, 3)}**.
+
+$$
+f'_m = \bar{\sigma}_{\text{limitado}}\times \text{factor}
+$$
+
+Resultado: $f'_m$ = {f(ej1.m.promedioLimitado, 2)} × {f(ej1.m.factor, 3)} = **{f(ej1.m.fm, 2)} MPa**.
+
+</Paso>
+<Resultado>
+$f'_m$ de la muestra = **{f(ej1.m.fm, 2)} MPa**. Si los mismos esfuerzos hubieran venido de muretes con $h/t$ = 2, el factor sería 1.0 y $f'_m$ = {f(ej1.patron.fm, 2)} MPa.
+</Resultado>
+
+Un caso con un murete atípico: con esfuerzos de 4.0, 6.0 y 6.2 MPa el promedio es {f(ej1.disp.promedio, 2)} MPa, pero el tope $1.25 \times 4.0$ = {f(ej1.disp.tope, 2)} MPa **gobierna**: la muestra aporta {f(ej1.disp.fm, 2)} MPa (con $h/t$ = 2). Un solo murete flojo arrastra la muestra.
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="f′m por determinación estadística: muretes previos y registros históricos">
+Doce muretes preliminares dieron, en MPa: {ej2.datos.join(', ')}. Hallar $f'_m$ por D.3.7.4 y comparar con el mismo grupo tratado como registro histórico.
+
+<Paso titulo="Estadísticos" ref="D.3.7.3, D.3.7.4">
+
+Promedio = {f(ej2.previo.promedio, 3)} MPa; desviación estándar muestral = {f(ej2.previo.desviacion, 3)} MPa; coeficiente de variación = {f(ej2.previo.cv * 100, 1)} % (autoría del proyecto: la norma no precisa la desviación).
+
+</Paso>
+<Paso titulo="Muretes previos a la obra" ref="D.3.7.4.2">
+
+Con 12 muretes (más de 10 y menos de 30) se toma el **80 %** del promedio:
+
+$$
+f'_m = 0.80\,\bar{x}
+$$
+
+Resultado: $f'_m$ = 0.80 × {f(ej2.previo.promedio, 3)} = **{f(ej2.previo.fm, 2)} MPa**.
+
+</Paso>
+<Paso titulo="Si fueran registros históricos" ref="D.3.7.3.2">
+
+El CV de {f(ej2.hist.cv * 100, 1)} % es menor del 30 %, y con 12 resultados (10 a 30) se toma el **70 %**: $f'_m$ = **{f(ej2.hist.fm, 2)} MPa**. Se ve el costo de no haber ensayado muretes específicos para esta obra: 70 % frente a 80 %.
+
+</Paso>
+<Paso titulo="Si solo hubiera 6 muretes" ref="D.3.7.4.3">
+
+Con los primeros 6 resultados (promedio {f(ej2.pocos.promedio, 3)} MPa) se toma el **75 %**: $f'_m$ = {f(ej2.pocos.fm, 2)} MPa. Menos ensayos, menor porcentaje.
+
+</Paso>
+<Resultado>
+$f'_m$ = **{f(ej2.previo.fm, 2)} MPa** (12 muretes previos, 80 %). Un registro histórico con CV de {f(ej2.disp.cv * 100, 0)} % ({ej2.disp.n} resultados de 4 y 9 MPa) **no se podría usar**: {ej2.disp.motivos[0]}
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="f′m por calidad de los materiales: bloque de concreto, sin y con inyección">
+Bloque de concreto de **190 mm** de altura, $f'_{cu}$ = 10 MPa sobre área neta, mortero de pega tipo S ($f'_{cp}$ = 12.5 MPa, Tabla D.3.4-1). Hallar $f'_m$ sin inyectar y con celdas inyectadas con $r$ = 0.55 y $f'_{cr}$ = 12.5 MPa.
+
+<Paso titulo="Parámetro Rm" ref="D.3.7-1">
+
+Denominador $75 + 3h$ = 645. Término de la unidad: $2(190)/645 \times 10$ = {f(ej3.con.terminoUnidad, 3)} MPa. Término del mortero: $50(1.4)/645 \times 12.5$ = {f(ej3.con.terminoMortero, 3)} MPa.
+
+Resultado: suma = {f(ej3.con.sinLimite, 3)} MPa, menor que el límite $0.8f'_{cu}$ = {f(ej3.con.limite, 1)} MPa; **$R_m$ = {f(ej3.con.Rm, 3)} MPa**.
+
+</Paso>
+<Paso titulo="Mampostería sin inyectar" ref="D.3.7-2">
+
+$$
+f'_m = 0.75\,R_m
+$$
+
+Resultado: $f'_m$ = **{f(ej3.fmCon, 2)} MPa**.
+
+</Paso>
+<Paso titulo="Con celdas inyectadas" ref="D.3.7.6, D.3.7-3">
+
+Con $k_r$ = 0.9 y $r$ = 0.55:
+
+$$
+f'_m = 0.75\left[\,0.55\,R_m + 0.9\,(0.9)\,(0.45)\,(12.5)\,\right]
+$$
+
+Los dos sumandos valen $r R_m$ = {f(0.55 * ej3.con.Rm, 3)} MPa y $0.9 k_r (1-r) f'_{cr}$ = {f(0.9 * 0.9 * 0.45 * 12.5, 3)} MPa; el valor es {f(ej3.iny.sinTope, 3)} MPa, y el tope $0.94 R_m$ = {f(ej3.iny.tope, 3)} MPa no gobierna.
+
+Resultado: $f'_m$ inyectado = **{f(ej3.iny.fm, 2)} MPa** (+{f((ej3.iny.fm / ej3.fmCon - 1) * 100, 0)} % sobre el valor sin inyectar).
+
+</Paso>
+<Paso titulo="Con un relleno más resistente (17.5 MPa)" ref="D.3.7-3">
+
+Sin tope daría {f(ej3.iny2.sinTope, 3)} MPa, pero el tope $0.94\,R_m$ = {f(ej3.iny2.tope, 3)} MPa **gobierna**: $f'_m$ = **{f(ej3.iny2.fm, 2)} MPa**. Aumentar $f'_{cr}$ por encima de cierto valor **ya no sube** $f'_m$.
+
+</Paso>
+<Paso titulo="Efecto del tipo de unidad y del límite 0.8 f′cu" ref="D.3.7-1, D.3.0">
+
+Con arcilla ($k_p$ = 0.8) y los mismos datos, $R_m$ = {f(ej3.arc.Rm, 3)} MPa y $f'_m$ = {f(ej3.fmArc, 2)} MPa. Con el mortero H de 22.5 MPa en el bloque de concreto, la suma sería {f(ej3.lim.sinLimite, 3)} MPa, **mayor** que $0.8f'_{cu}$ = 8 MPa: el límite gobierna, $R_m$ = 8 MPa y $f'_m$ = {f(ej3.fmLim, 2)} MPa. Un mortero más fuerte que la unidad no mejora $f'_m$.
+
+</Paso>
+<Resultado>
+$f'_m$ = **{f(ej3.fmCon, 2)} MPa** sin inyectar y **{f(ej3.iny.fm, 2)} MPa** inyectado con $f'_{cr}$ = 12.5 MPa. Revisando D.3.5.3: con ese $f'_m$ el mínimo del relleno es {f(ej3.l1.minimo, 2)} MPa y el máximo literal {f(ej3.l1.maximo, 2)} MPa (el caso contradictorio descrito arriba); con un $f'_m$ de 10 MPa, $f'_{cr}$ debería estar entre {f(ej3.l2.minimo, 1)} y {f(ej3.l2.maximo, 1)} MPa.
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="fm-mamposteria" />
+
+## D.3.8 — Evaluación y aceptación de la mampostería
+
+### D.3.8.1 — Frecuencia de muestreo y ensayos
+
+Se exigen **como mínimo** los siguientes ensayos (<NormaRef s="D.3.8.1" pag="D-19" />):
+
+<TablaNorma numero="D.3.8.1" titulo="Muestreo mínimo de materiales y mampostería" pag="D-20" nota="Resumen de D.3.8.1.1 a D.3.8.1.5, elaborado a partir del texto. Los ensayos de mortero son el promedio de 3 probetas.">
+
+| Material | Ensayo | Frecuencia mínima | Numeral |
+|---|---|---|---|
+| Mortero de pega | Resistencia a compresión (promedio de 3 probetas) | 1 por cada **200 m²** de muro **o** por cada **día de pega** | <NormaRef s="D.3.8.1.1" pag="D-19" /> |
+| Mortero de pega | Plasticidad y retención de agua | Verificación **semanal** | <NormaRef s="D.3.8.1.1" pag="D-19" /> |
+| Mortero de relleno | Resistencia a compresión (promedio de 3 probetas) | 1 por cada **10 m³** inyectados **o** por cada **día de inyección** | <NormaRef s="D.3.8.1.2" pag="D-19" /> |
+| Unidades | Absorción inicial, absorción total, estabilidad dimensional y resistencia a compresión | Al menos **5 unidades por lote** de hasta 5000 unidades, y no menos de **1 por cada 200 m²** de muro | <NormaRef s="D.3.8.1.3" pag="D-20" /> |
+| Muretes | Resistencia $f'_m$ | Al menos **3 muretes por cada 500 m²** de muro o fracción, con los materiales y procedimientos de obra | <NormaRef s="D.3.8.1.4" pag="D-20" /> |
+| Muretes inyectados | Efecto del relleno en $f'_m$ (unidades de perforación vertical) | Cantidad a juicio del supervisor técnico (Título I), **nunca menos del 50 %** del total de especímenes | <NormaRef s="D.3.8.1.4" pag="D-20" /> |
+| Acero de refuerzo | Calidad | Según C.3.5.10 | <NormaRef s="D.3.8.1.5" pag="D-20" /> |
+
+</TablaNorma>
+
+Además, se toman y ensayan muretes **para todos los tipos de unidades utilizadas** (<NormaRef s="D.3.8.1.4" pag="D-20" />).
+
+<Callout tipo="nota" titulo="Cómo se contó «o por cada día» (interpretación)">
+Donde la norma dice «por cada 200 m² … **o** por cada día de pega» (o de inyección), el proyecto toma el **mayor** de los dos conteos, que es el criterio conservador. Para los muretes inyectados se supone que el mínimo de 3 por 500 m² es el total y que **al menos la mitad** de ese total es inyectado.
+</Callout>
+
+### D.3.8.2 — Criterios de aceptación y rechazo
+
+- **Resistencia mínima** (<NormaRef s="D.3.8.2.1" pag="D-20" />): la calidad es satisfactoria si se cumplen **simultáneamente** (i) el **promedio** de los resultados de compresión de morteros de pega, morteros de relleno, unidades y muretes es **mayor o igual** a la resistencia especificada, y (ii) **ningún valor individual** es inferior al **80 %** de la especificada.
+- **Medidas correctivas** (<NormaRef s="D.3.8.2.2" pag="D-20" />): si no se cumple alguno, deben tomarse **de inmediato** las medidas para **aumentar el promedio** de las evaluaciones siguientes.
+- **Resultados bajos** (<NormaRef s="D.3.8.2.3" pag="D-20" />): si algún resultado individual es menor del 80 % del especificado, se deben tomar las medidas para asegurar que **la capacidad de carga no se haya comprometido**. Si se confirma baja resistencia y los cálculos indican que la capacidad se redujo de forma significativa, se puede recurrir a la **extracción de porciones cortadas** de los muros afectados: **3 porciones por lote afectado**, con dimensión mínima según D.3.7.2.4, cuyo **promedio** debe ser **al menos el 80 %** de la resistencia especificada.
+- **Pruebas de carga** (<NormaRef s="D.3.8.2.4" pag="D-20" />): si no se cumple D.3.8.2.3 y la seguridad sigue en duda, el supervisor técnico puede ordenar **pruebas de carga** (Capítulo C.20) en la parte dudosa.
+
+<Figura alt="Diagrama de decisión: si el promedio es mayor o igual a la especificada y ningún valor es menor del 80 por ciento la calidad es satisfactoria; si no, medidas correctivas; si hay valores bajo 80 por ciento, verificar capacidad y extraer tres porciones; si no se cumple, prueba de carga" numero="Esquema" pie="Flujo de aceptación de D.3.8.2 (esquema del proyecto).">
+<svg viewBox="0 0 540 250" role="img" aria-label="Flujo de aceptación y rechazo de la mampostería según D.3.8.2" className="mx-auto h-auto w-full max-w-2xl">
+  <defs>
+    <marker id="d3-flecha2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+    </marker>
+  </defs>
+  <g fill="currentColor" fillOpacity="0.1" stroke="currentColor" strokeWidth="1.5">
+    <rect x="10" y="95" width="120" height="50" rx="6" />
+    <rect x="165" y="95" width="130" height="50" rx="6" />
+    <rect x="330" y="20" width="200" height="44" rx="6" />
+    <rect x="330" y="100" width="200" height="50" rx="6" />
+    <rect x="330" y="186" width="200" height="50" rx="6" />
+  </g>
+  <g fontSize="11.5" fill="currentColor" textAnchor="middle">
+    <text x="70" y="116">Serie de resultados</text>
+    <text x="70" y="132">de ensayo</text>
+    <text x="230" y="112">Promedio ≥ especificada</text>
+    <text x="230" y="129">y ninguno bajo 80 %</text>
+    <text x="430" y="40" fontWeight="600">Calidad satisfactoria</text>
+    <text x="430" y="56" fillOpacity="0.8">D.3.8.2.1</text>
+    <text x="430" y="119">Medidas correctivas inmediatas</text>
+    <text x="430" y="136" fillOpacity="0.8">{'D.3.8.2.2 (y D.3.8.2.3 si hay valores bajo 80 %)'}</text>
+    <text x="430" y="205">Núcleos: 3 por lote, promedio ≥ 80 %</text>
+    <text x="430" y="222" fillOpacity="0.8">si persiste la duda: prueba de carga (D.3.8.2.4)</text>
+  </g>
+  <g stroke="currentColor" strokeWidth="1.5" fill="none" markerEnd="url(#d3-flecha2)">
+    <line x1="130" y1="120" x2="163" y2="120" />
+    <path d="M295,110 L312,110 L312,42 L328,42" />
+    <path d="M295,128 L328,125" />
+    <line x1="430" y1="150" x2="430" y2="184" />
+  </g>
+  <text x="318" y="78" fontSize="11" fill="currentColor" fillOpacity="0.85">sí</text>
+  <text x="306" y="150" fontSize="11" fill="currentColor" fillOpacity="0.85">no</text>
+</svg>
+</Figura>
+
+<Ejemplo numero={4} titulo="Aceptación de morteros y muretes, y muestreo de una obra">
+**Parte A — mortero de pega tipo S** ($f'_{cp}$ = 12.5 MPa): cinco ensayos dieron 13.1, 12.9, 11.6, 14.0 y 10.8 MPa. **Parte B — muretes** con $f'_m$ = 6.0 MPa especificado: 7.4, 7.1 y 4.5 MPa. **Parte C — muestreo** de una obra de 1200 m² de muro, con 45 m³ de relleno y 12 000 unidades.
+
+<Paso titulo="Mortero de pega" ref="D.3.8.2.1">
+
+Promedio = **{f(ej4.pega.promedio, 2)} MPa**, menor que 12.5: **no cumple el promedio**. El menor valor es {f(ej4.pega.minimo, 2)} MPa, mayor que el 80 % ($0.8 \times 12.5$ = {f(ej4.pega.umbralIndividual, 1)} MPa): el criterio individual sí se cumple. Como falla una condición, el mortero **no es satisfactorio** y se aplican las medidas correctivas de D.3.8.2.2 (más cemento, mejor control de arena, etc.) para subir el promedio de las siguientes series. No hay valores bajo el 80 %, así que no se activa D.3.8.2.3.
+
+</Paso>
+<Paso titulo="Muretes" ref="D.3.8.2.1, D.3.8.2.3">
+
+Promedio = {f(ej4.mur.promedio, 2)} MPa ≥ 6.0: **el promedio cumple**. Pero el murete de 4.5 MPa es menor que el 80 % ($0.8 \times 6.0$ = {f(ej4.mur.umbralIndividual, 1)} MPa): **no cumple el criterio individual**. Se activa D.3.8.2.3: verificar que la capacidad de carga no se haya comprometido y, si los cálculos muestran una reducción significativa, extraer **3 porciones** del lote afectado. Si las porciones dieron 5.2, 4.9 y 5.5 MPa, su promedio es {f(ej4.nuc.promedio, 2)} MPa frente al umbral de 80 % = {f(ej4.nuc.umbral, 1)} MPa: **{ej4.nuc.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Paso titulo="Muestreo mínimo de la obra" ref="D.3.8.1.1 a D.3.8.1.4">
+
+Mortero de pega: 1200/200 = **{ej4.frec.morteroPega} ensayos** (o uno por día de pega si resulta más). Relleno: 45/10 = **{ej4.frec.morteroRelleno} ensayos**. Unidades: 12 000 unidades son 3 lotes de hasta 5000, 5 por lote = 15, y 1200/200 = 6 por área: **{ej4.frec.unidades} unidades** ensayadas. Muretes: 3 × ⌈1200/500⌉ = **{ej4.frec.muretes} muretes**, de los cuales al menos **{ej4.frec.muretesInyectadosMin}** inyectados.
+
+</Paso>
+<Resultado>
+Mortero: **rechazado por promedio** ({f(ej4.pega.promedio, 2)} < 12.5 MPa). Muretes: **promedio cumple, un valor individual no**; los núcleos {ej4.nuc.cumple ? 'confirman' : 'no confirman'} la resistencia. Muestreo mínimo: {ej4.frec.morteroPega} morteros de pega, {ej4.frec.morteroRelleno} de relleno, {ej4.frec.unidades} unidades y {ej4.frec.muretes} muretes.
+</Resultado>
+</Ejemplo>
+
+## Resumen de fórmulas y porcentajes del capítulo
+
+<TablaNorma numero="Resumen D.3" titulo="Valores numéricos clave del Capítulo D.3" pag="D-18" nota="Elaborada a partir del texto de la norma; no es una tabla impresa.">
+
+| Concepto | Valor | Numeral |
+|---|---|---|
+| Resistencia del mortero de pega (H / M / S / N) | 22.5 / 17.5 / 12.5 / 7.5 MPa en cubos de 50 mm a 28 d | Tabla D.3.4-1 |
+| Tiempo máximo de mortero de pega mezclado en seco | 2.5 h (salvo larga vida) | D.3.4.7.1 |
+| $f'_{cr}$ del relleno | de $1.25\,f'_m$ a $1.5\,f'_m$; no menos de 12.5 MPa | D.3.5.3 |
+| Cal en el relleno | no más del 10 % del volumen de cemento | D.3.5.4 |
+| Celdas de unidad de perforación vertical | área máxima 65 %; celda con refuerzo de al menos 50 mm y 3000 mm² | D.3.6.4.1 |
+| Unidad sólida | cavidades menores del 25 % del volumen | D.3.6.1 |
+| Murete | 3 por muestra; promedio no mayor del 125 % del menor; h al menos 300 mm; h/t de 1.5 a 5 | D.3.7.2 |
+| Registros históricos | 75 % (30 o más) · 70 % (10 a 30) · no se usan (menos de 10); CV ≤ 30 % | D.3.7.3 |
+| Muretes previos | 85 % (30 o más) · 80 % (más de 10, menos de 30) · 75 % (3 a 9) | D.3.7.4 |
+| Por materiales | $R_m \le 0.8f'_{cu}$; $f'_m = 0.75R_m$; inyectado $\le 0.94R_m$ | D.3.7-1 a D.3.7-3 |
+| Aceptación | promedio ≥ especificada y ningún valor menor del 80 % | D.3.8.2.1 |
+| Núcleos | 3 por lote afectado, promedio ≥ 80 % | D.3.8.2.3 |
+
+</TablaNorma>
+
+<Detalle titulo="Inconsistencias y erratas observadas en el PDF de este capítulo">
+
+- **Cal hidratada**: D.3.2.1 la remite a **NTC 4019 (ASTM C270)** y D.3.5.4 a **NTC 4019 (ASTM C207)**. La misma NTC aparece con dos normas ASTM distintas; se transcriben tal cual.
+- **Flujo del mortero**: la nota 3 de la Tabla D.3.4-1 remite el ensayo de flujo a la NTC 4050 (ASTM C91), que figura en D.3.2.1 como norma del cemento para mampostería. Se transcribe como está impreso.
+- **Intervalos de D.3.7.3 y D.3.7.4**: traslape en 30 (D.3.7.3.1/D.3.7.3.2) y vacío en 10 (D.3.7.4.2/D.3.7.4.3); ver el detalle de D.3.7.
+- **Relación «altura-ancho» y «altura/espesor»**: D.3.7.2.4 habla de relación altura-ancho y la Tabla D.3.7-1 de altura/espesor del murete; se entiende que son la misma cantidad $h/t$ con $t$ el espesor del murete.
+- **Contradicción de D.3.5.3** para $f'_m$ menor de 8.33 MPa: el máximo (1.5 $f'_m$) queda por debajo del mínimo absoluto (12.5 MPa).
+- **D.3.4.7**: remite a A.1.6.1 para definir las «obras menores» donde se permite la mezcla manual.
+- **Símbolo del mortero de relleno**: la nomenclatura escribe $f'_{cr}$ y el texto lo imprime igual; no hay conflicto con $f'_{cre}$, que es del recubrimiento (D.3.0).
+
+</Detalle>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Usar $f'_m$ calculado con la Ec. D.3.7-2 como control de calidad:** vale solo para el diseño previo; en obra se verifica con **muretes** (<NormaRef s="D.3.7.1.1" pag="D-17" /> y <NormaRef s="D.3.8.1.4" pag="D-20" />).
+- **Poner la altura de la unidad en cm o m** en la Ec. D.3.7-1: $h$ va **en mm** (<NormaRef s="D.3.0" pag="D-13" />).
+- **Olvidar el tope $0.8f'_{cu}$** de $R_m$ y creer que un mortero muy fuerte siempre sube $f'_m$ (<NormaRef s="D.3.7.5" pag="D-19" />).
+- **Dividir la carga por el área bruta** del murete: debe ser el **área neta** (<NormaRef s="D.3.7.2.3" pag="D-18" />). Con bloques huecos el error es del orden de 40–50 %.
+- **Promediar sin el tope del 125 %** del menor valor y sin el factor de esbeltez (<NormaRef s="D.3.7.2.2" pag="D-18" /> y <NormaRef s="D.3.7.2.5" pag="D-18" />).
+- **Construir los muretes con mano de obra, materiales o humedad distintos** de los de la obra, o poner mortero en los tabiques transversales cuando en obra solo se coloca en las paredes laterales (<NormaRef s="D.3.7.2.1" pag="D-18" />).
+- **Aplicar el 85 % de muretes previos a menos de 30 ensayos** (o usar registros históricos con menos de 10 pruebas o con CV mayor del 30 %) (<NormaRef s="D.3.7.3" pag="D-18" />, <NormaRef s="D.3.7.4" pag="D-19" />).
+- **Mezclar cal hidratada y cemento para mampostería** en el mismo mortero de pega, o usar mortero tipo N en un sistema que no es DMI (<NormaRef s="D.3.4.2" pag="D-14" /> y nota 6 de la Tabla D.3.4-1).
+- **Usar mortero de pega mezclado en seco después de 2.5 horas** (<NormaRef s="D.3.4.7.1" pag="D-15" />).
+- **Aceptar una serie porque «el promedio cumple»** aunque un valor esté bajo el 80 % (<NormaRef s="D.3.8.2.1" pag="D-20" />).
+- **Usar una unidad de 80 mm en un muro estructural:** solo se permite en muros no estructurales y en paredes laterales de mampostería de cavidad (nota 1 de la Tabla D.3.6-1).
+</Callout>
+
+## Resumen en una línea
+
+**$f'_m$ se fija antes de construir con registros (70–75 %), muretes previos (75–85 %) o $R_m$ y las Ecs. D.3.7-1 a D.3.7-3, se verifica en obra con muretes corregidos por esbeltez, y la calidad se acepta solo si el promedio de cada serie alcanza lo especificado y ningún valor baja del 80 %.**

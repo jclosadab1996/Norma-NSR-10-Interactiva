@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { unified } from '@astrojs/markdown-remark';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import remarkSvgAtributos from './plugins/remark-svg-atributos.mjs';
 
 // https://astro.build/config
 export default defineConfig({
@@ -14,7 +15,7 @@ export default defineConfig({
   markdown: {
     // Astro 7: los plugins remark/rehype se pasan a través del procesador `unified`.
     processor: unified({
-      remarkPlugins: [remarkMath],
+      remarkPlugins: [remarkMath, remarkSvgAtributos],
       rehypePlugins: [[rehypeKatex, { output: 'html' }]],
     }),
   },

@@ -13,7 +13,7 @@ const esquema = z.object({
     objetivos: z.array(z.string()).default([]),
     /** Páginas impresas de la norma (p. ej. "A-1 a A-12"). */
     paginasNorma: z.string(),
-    /** Página PDF inicial (PDF = impresa + 43 en el Título A, + 219 en el B, + 302 en el C). */
+    /** Página PDF inicial (PDF = impresa + 43 en el Título A, + 219 en el B, + 302 en el C, + 565 en el D). */
     paginaPdf: z.number().int(),
     orden: z.number().int(),
     /** Calculadoras relacionadas (ids de src/data/calculadoras.ts). */
@@ -36,4 +36,5 @@ export const collections = {
   'titulo-a': coleccionTitulo('titulo-a'),
   'titulo-b': coleccionTitulo('titulo-b'),
   'titulo-c': coleccionTitulo('titulo-c'),
+  'titulo-d': coleccionTitulo('titulo-d'),
 };

@@ -1,0 +1,865 @@
+---
+codigo: 'D.10b'
+tipo: capitulo
+titulo: 'Muros confinados: diseño'
+resumen: 'Cómo se diseña un muro de mampostería confinada: φ propios (0.65, 0.85, 0.50), carga axial con Pnc, Pnt y Pnd, flexión fuera del plano por las columnas, flexo-compresión en el plano (columnas solas o diagrama de interacción), cortante solo de la mampostería, aplastamiento de la biela diagonal, cortante y tracción en vigas y columnas de confinamiento, y los requisitos de construcción de D.10.8.'
+objetivos:
+  - 'Aplicar los φ de D.10.7.2 (0.65 compresión, 0.85 tracción y flexión, 0.50 cortante) y saber en qué se diferencian de los de D.5.1.5'
+  - 'Calcular Pnc, Pnt y Pnd (Ecs. D.10.7-1 a D.10.7-4) y verificar la compresión axial del muro y de sus columnas de confinamiento'
+  - 'Obtener las fuerzas Puc y Put en las columnas por flexión en el plano (Ecs. D.10.7-5 a D.10.7-15) y compararlas con la alternativa del diagrama de interacción'
+  - 'Verificar el cortante del muro (Ec. D.10.7-18) y el aplastamiento de la biela diagonal (Ecs. D.10.7-19 y D.10.7-20)'
+  - 'Dimensionar el cortante de columnas y vigas de confinamiento y el acero longitudinal de la viga (Ecs. D.10.7-21 a D.10.7-25) y recordar los requisitos de construcción de D.10.8'
+paginasNorma: 'D-57 a D-62'
+paginaPdf: 622
+orden: 13
+calculadoras: ['muro-confinado-resistencia']
+nivel: 'avanzado'
+---
+
+import {
+  analizarMuroConfinado,
+  cargaColumnaFueraPlano,
+  cortanteEnElementosConfinamiento,
+  cortanteMuroConfinado,
+  flexoCompresionConMamposteria,
+  fuerzasColumnasEnPlano,
+  fuerzasDosColumnas,
+  geometriaMuroConfinado,
+  phiConfinadoFn,
+  resistenciaAxialMuroConfinado,
+  resistenciaColumnaConfinamiento,
+  resistenciaCortanteElemento,
+  resistenciaMamposteriaSola,
+  verificarAceroViga,
+  verificarAplastamientoBiela,
+  verificarColumnaFueraPlano,
+} from '../../lib/nsr10/muroConfinadoResistencia';
+import { curvaInteraccionMuro } from '../../lib/nsr10/mamposteria';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const dat = { fm: 6, fc: 21, fy: 420, t: 150, lw: 3000, bc: 200, hp: 2500, hPrime: 2400, AstCol: 516 };
+
+export const geo = geometriaMuroConfinado({ t: dat.t, lw: dat.lw, bc: dat.bc });
+
+export const colRes = resistenciaColumnaConfinamiento({ fc: dat.fc, Aci: geo.Aci, Ast: dat.AstCol, fy: dat.fy });
+
+export const ej1 = (() => {
+  const axial = resistenciaAxialMuroConfinado({ fm: dat.fm, Ae: geo.Ae, Ast: 2 * dat.AstCol, fy: dat.fy, hPrime: dat.hPrime, t: dat.t, Pu: 600 });
+  const sola = resistenciaMamposteriaSola({ fm: dat.fm, Amd: geo.Amamposteria, hPrime: dat.hPrime, t: dat.t });
+  const alto = resistenciaAxialMuroConfinado({ fm: dat.fm, Ae: geo.Ae, Ast: 2 * dat.AstCol, fy: dat.fy, hPrime: 3600, t: dat.t, Pu: 600 });
+  return { axial, sola, alto, sinConfinar: sola.Pnd };
+})();
+
+export const ej2 = (() => {
+  const Pcol = cargaColumnaFueraPlano(600, geo.Aci, geo.Amamposteria, 2);
+  const wu = 1.0;
+  const w = (wu * 3.0) / 2;
+  const Mu = (w * 2.5 ** 2) / 8;
+  const v = verificarColumnaFueraPlano({ fc: dat.fc, fy: dat.fy, bc: dat.bc, t: dat.t, Ast: dat.AstCol, dPrime: 40, Pu: Pcol, Mu });
+  return { Pcol, wu, w, Mu, v };
+})();
+
+export const ej3 = (() => {
+  const Pu = 150;
+  const Mu = 360;
+  const dos = fuerzasDosColumnas(Pu, Mu, dat.lw);
+  const gen = fuerzasColumnasEnPlano([{ Aci: geo.Aci, xi: 100 }, { Aci: geo.Aci, xi: 3100 }], Pu, Mu);
+  const tres = fuerzasColumnasEnPlano([{ Aci: geo.Aci, xi: 100 }, { Aci: geo.Aci, xi: 3100 }, { Aci: geo.Aci, xi: 6100 }], 300, 1500);
+  const dPuMax = Math.min(colRes.phiPnc - Pu / 2, Pu / 2 + Math.abs(colRes.phiPnt));
+  const MuMax1 = (dPuMax * dat.lw) / 1000;
+  const entrada = { fm: dat.fm, fy: dat.fy, b: geo.b, L: geo.Ltotal, dPrime: 100, AstColumna: dat.AstCol, Pu, esbeltez: { hPrime: dat.hPrime, t: dat.t } };
+  const m2 = flexoCompresionConMamposteria({ ...entrada, Mu });
+  const m2alto = flexoCompresionConMamposteria({ ...entrada, Mu: 700 });
+  const curva = curvaInteraccionMuro(m2.sec, phiConfinadoFn(), { hPrime: dat.hPrime, t: dat.t }, 60);
+  return { Pu, Mu, dos, gen, tres, dPuMax, MuMax1, m2, m2alto, curva };
+})();
+
+export const figInt = (() => {
+  const c = ej3.curva;
+  const pts = [{ phiMn: 0, phiPn: c.puntos[0].phiPn }, ...c.puntos];
+  const xmax = Math.ceil(Math.max(...pts.map((p) => p.phiMn)) / 200) * 200;
+  const ymax = Math.ceil(Math.max(...pts.map((p) => p.phiPn)) / 500) * 500;
+  const ymin = Math.floor(Math.min(...pts.map((p) => p.phiPn)) / 200) * 200;
+  const X = (M) => 60 + (M / xmax) * 410;
+  const Y = (P) => 20 + ((ymax - P) / (ymax - ymin)) * 220;
+  const poly = pts.map((p) => `${X(p.phiMn).toFixed(1)},${Y(p.phiPn).toFixed(1)}`).join(' ');
+  const ticksM = Array.from({ length: xmax / 200 + 1 }, (_, i) => i * 200);
+  const ticksP = Array.from({ length: (ymax - ymin) / 200 + 1 }, (_, i) => ymin + i * 200).filter((p) => p % 400 === 0);
+  return { X, Y, poly, ticksM, ticksP, xmax };
+})();
+
+export const ej4 = (() => {
+  const Pu = 150;
+  const Vu = 60;
+  const r = cortanteMuroConfinado({ fm: dat.fm, Amv: geo.Amv, Ae: geo.Ae, Pu, Vu });
+  const alta = cortanteMuroConfinado({ fm: dat.fm, Amv: geo.Amv, Ae: geo.Ae, Pu: 300, Vu });
+  const grande = cortanteMuroConfinado({ fm: dat.fm, Amv: geo.Amv, Ae: geo.Ae, Pu, Vu: 80 });
+  return { Pu, Vu, r, alta, grande, raiz: Math.sqrt(dat.fm), termino1: Math.sqrt(dat.fm) / 12, termino2: (Pu * 1000) / (3 * geo.Ae) };
+})();
+
+export const ej5 = (() => {
+  const b = verificarAplastamientoBiela({ fm: dat.fm, Vu: 60, lw: dat.lw, lc: dat.lw, hp: dat.hp, t: dat.t, b: geo.b });
+  return b;
+})();
+
+export const ej6 = (() => {
+  const vuc = cortanteEnElementosConfinamiento({ Vu: 60, lw: dat.lw, lc: dat.lw, hp: dat.hp });
+  const col = resistenciaCortanteElemento({ fc: dat.fc, bw: dat.t, d: 160, Av: 64, s: 100, fyt: 420, Vuc: vuc.columna });
+  const viga200 = resistenciaCortanteElemento({ fc: dat.fc, bw: dat.t, d: 160, Av: 64, s: 200, fyt: 420, Vuc: vuc.viga });
+  const viga100 = resistenciaCortanteElemento({ fc: dat.fc, bw: dat.t, d: 160, Av: 64, s: 100, fyt: 420, Vuc: vuc.viga });
+  const as = verificarAceroViga({ Vu: 60, lc: dat.lw, lw: dat.lw, fy: dat.fy, Ast: 284 });
+  const todo = analizarMuroConfinado({
+    fm: dat.fm, fc: dat.fc, fy: dat.fy, t: dat.t, lw: dat.lw, bc: dat.bc, hp: dat.hp, hPrime: dat.hPrime, AstColumna: dat.AstCol,
+    Pu: 600, PuSimultanea: 150, Mu: 360, Vu: 60,
+    columnaCortante: { d: 160, Av: 64, s: 100, fyt: 420 },
+    vigaCortante: { bw: 150, d: 160, Av: 64, s: 100, fyt: 420 },
+    AstViga: 284,
+  });
+  return { vuc, col, viga200, viga100, as, todo };
+})();
+
+export const figBiela = (() => {
+  const k = 0.1;
+  const x0 = 70;
+  const y0 = 50;
+  const W = dat.lw * k;
+  const H = dat.hp * k;
+  const x1 = x0 + W;
+  const y1 = y0 + H;
+  const d = Math.hypot(W, H);
+  const nx = (H / d) * (ej5.anchoBiela * k) / 2;
+  const ny = (W / d) * (ej5.anchoBiela * k) / 2;
+  const band = `${x0 + nx},${y0 - ny} ${x1 + nx},${y1 - ny} ${x1 - nx},${y1 + ny} ${x0 - nx},${y0 + ny}`;
+  return { x0, y0, x1, y1, W, H, band };
+})();
+
+## Idea central del capítulo
+
+En un muro de mampostería confinada la mampostería **no trabaja sola**: está enmarcada por columnas y vigas de concreto reforzado que le dan ductilidad y evitan que se desintegre cuando se agrieta. El capítulo D.10.7 explica cómo se reparte el trabajo: la **mampostería toma todo el cortante**, las **columnas toman la flexión** (en el plano, como un par de fuerzas axiales de tracción y compresión; fuera del plano, como columnas de concreto) y las **vigas atan** el conjunto y absorben la componente horizontal de la biela diagonal.
+
+El diseño es por **estados límite de resistencia** y sigue D.5, pero con unos φ propios, más bajos en compresión y cortante (<NormaRef s="D.10.7.1" pag="D-57" />, <NormaRef s="D.10.7.2" pag="D-57" />). Este capítulo (segunda parte de D.10) recorre las nueve verificaciones que conviene hacer a un muro confinado y los requisitos de construcción de D.10.8. Los requisitos de forma —densidad de muros, dimensiones mínimas, cuantías y estribos— están en la primera parte (D.10.0 a D.10.6, capítulo D.10a).
+
+<Callout tipo="importante" titulo="Mapa del capítulo">
+**Compresión** (D.10.7.4) · **fuera del plano** (D.10.7.5) · **flexo-compresión en el plano**, con dos procedimientos (D.10.7.6) · **cortante** de la mampostería (D.10.7.7) · **aplastamiento** de la biela (D.10.7.8) · **cortante en vigas y columnas** (D.10.7.9) · **acero longitudinal de la viga** (D.10.7.10) · **construcción** (D.10.8). Los ejemplos usan un mismo muro, de modo que puedes seguir cómo cada verificación mira una parte distinta de la misma pieza.
+</Callout>
+
+<Callout tipo="nota" titulo="Unidades y convenciones">
+Longitudes en mm, esfuerzos en MPa, fuerzas en kN y momentos en kN·m (las ecuaciones de la norma están en N y mm; los ejemplos convierten). La compresión es positiva; las fuerzas de tracción $P_{ut}$ y $P_{nt}$ son **negativas**, como en la nomenclatura de <NormaRef s="D.2.4" pag="D-9" />. Todo lo marcado como **«autoría del proyecto»** es interpretación nuestra, no texto de la norma. Los resultados salen de las mismas funciones (`src/lib/nsr10/muroConfinadoResistencia.ts`) que usa la calculadora del final.
+</Callout>
+
+<Callout tipo="nota" titulo="El muro de los ejemplos (esquema del proyecto)">
+Muro de ladrillo de espesor $t$ = {dat.t} mm con dos columnas de borde de {dat.bc} × {dat.t} mm (Aci = {geo.Aci} mm²) con 4 barras No. 4 cada una ($A_{st}$ = {dat.AstCol} mm²), distancia centro a centro $\ell_w$ = {dat.lw} mm, altura del paño (centro a centro de vigas) $h_p$ = {dat.hp} mm, $f'_m$ = {dat.fm} MPa, $f'_c$ = {dat.fc} MPa y $f_y$ = {dat.fy} MPa. Longitud total $L = \ell_w + b_c$ = {geo.Ltotal} mm y área efectiva $A_e$ = {geo.Ae} mm² (mampostería maciza, con las columnas incluidas, <NormaRef s="D.5.4.1" pag="D-35" />). Son valores didácticos, no un diseño.
+</Callout>
+
+## D.10.7.1 — Generalidades
+
+Las estructuras de mampostería de muros confinados se analizan y diseñan según **D.5**, con las excepciones de esta sección, por el método de **estados límite de resistencia** (<NormaRef s="D.10.7.1" pag="D-57" />): la resistencia de diseño $\phi R_n$ debe igualar o superar el efecto de las cargas mayoradas.
+
+## D.10.7.2 — Valores de φ
+
+En lugar de los φ de D.5.1.5 se usan los siguientes (<NormaRef s="D.10.7.2" pag="D-57" />):
+
+<TablaNorma numero="D.10.7.2" titulo="Coeficientes de reducción de resistencia en mampostería de muros confinados" pag="D-57" nota="La norma los da como lista (a) a (d); aquí se ordenan en tabla y se comparan con los de D.5.1.5 (resumen del proyecto).">
+
+| Solicitación | φ en D.10.7.2 | φ en D.5.1.5 (fuerzas paralelas al plano) |
+|---|---:|---:|
+| (a) Carga axial de compresión, con o sin flexión | 0.65 | 0.60 (con rampa hasta 0.85) |
+| (b) Carga axial de tracción | 0.85 | — |
+| (c) Flexión sin carga axial | 0.85 | 0.85 |
+| (d) Cortante | 0.50 | 0.60 (0.85 en el caso de D.5.1.5.2 c) |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Qué cambia respecto de D.5">
+El **cortante** baja a 0.50 (en D.5 era 0.60) y la **compresión** sube a 0.65 (en D.5 era 0.60) sin la rampa hasta 0.85. La norma **no pide** aquí la rampa de φ de D.5.1.5.2: por eso las calculadoras usan φ = 0.65 para toda carga axial nominal positiva y 0.85 cuando $P_n \le 0$ (el salto en $P_n = 0$ es lectura del proyecto).
+</Callout>
+
+## D.10.7.3 — Suposiciones de diseño
+
+Las suposiciones de <NormaRef s="D.10.7.3" pag="D-57" /> son tres:
+
+1. Valen las de **D.5.1.6** (secciones planas, $\varepsilon_{mu}$ = 0.003, mampostería sin tracción, bloque rectangular de $0.80f'_m$ sobre $a = 0.85c$).
+2. El muro es un **elemento homogéneo** que incluye la mampostería y los elementos de confinamiento; sus propiedades como conjunto son las de la mampostería de D.5.
+3. Para aplicar las dimensiones efectivas de D.5.4, los elementos de confinamiento son **equivalentes a celdas inyectadas con mortero de relleno**, salvo que el capítulo diga lo contrario. Por eso $A_e$ incluye el área completa de las columnas (<NormaRef s="D.5.4.1" pag="D-35" />).
+
+La idea de fondo: para compresión y flexión en el plano se mira la **sección completa** del muro como un bloque homogéneo; para cortante se mira solo la mampostería, y para las fuerzas en los elementos de confinamiento se miran **esos elementos** como piezas de concreto reforzado.
+
+## D.10.7.4 — Diseño para carga axial de compresión
+
+El muro, globalmente, se verifica a compresión axial **como en D.5.5**: $P_o$, $R_e$, $P_n = 0.80P_oR_e$ y $P_u \le \phi P_n$, con φ = 0.65 y tomando como $A_{st}$ **solo el acero longitudinal de las columnas de confinamiento** (<NormaRef s="D.10.7.4" pag="D-58" />). Recuerda que $h'/t$ no puede pasar de 25 en muros estructurales (<NormaRef s="D.5.4.3.1" pag="D-36" />; la relación de 25 ya aparece en <NormaRef s="D.10.3.3" pag="D-55" />).
+
+Cuando el procedimiento de diseño necesita la resistencia axial de **los elementos de confinamiento** por separado, se pueden emplear estas resistencias nominales:
+
+<Ecuacion num="D.10.7-1" titulo="Resistencia nominal a compresión axial de un elemento de confinamiento">
+
+$$
+P_{nc} = 0.80\left[\,0.85\,f'_c\,(A_{ci} - A_{st}) + f_y\,A_{st}\,\right]
+$$
+
+- $f'_c$: resistencia del concreto del elemento (MPa; mínimo 17.5 MPa, <NormaRef s="D.10.4.1" pag="D-55" />). $A_{ci}$: área de la sección de la columna $i$ (mm²). $A_{st}$: área del acero longitudinal del elemento (mm²). $f_y$: fluencia (MPa).
+- Es la forma de las columnas de estribos del Título C con el 0.80 de excentricidad mínima; el resultado está en N si las áreas están en mm².
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-2" titulo="Resistencia nominal a tracción axial de un elemento de confinamiento">
+
+$$
+P_{nt} = -f_y\,A_{st}
+$$
+
+- Solo el acero resiste tracción; el signo negativo indica tracción.
+
+</Ecuacion>
+
+La resistencia nominal de la **mampostería sola**, sin contribución de los elementos de confinamiento, es:
+
+<Ecuacion num="D.10.7-3" titulo="Resistencia nominal a compresión de la mampostería sola">
+
+$$
+P_{nd} = 0.80\,\big(0.80\,f'_m\,A_{md}\big)\,R_e
+$$
+
+- $A_{md}$: área de la sección de mampostería (mm²). $R_e$: factor de esbeltez de la Ec. D.10.7-4.
+- Es la ecuación de D.5.5-1 y D.5.5-3 sin acero: 0.80 por el bloque de esfuerzos y 0.80 por excentricidad accidental.
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-4" titulo="Factor de reducción por esbeltez">
+
+$$
+R_e = 1 - \left[\frac{h'}{42\,t}\right]^2 \quad \text{para } h'/t \le 30
+$$
+
+$$
+R_e = \left[\frac{21\,t}{h'}\right]^2 \quad \text{para } h'/t > 30
+$$
+
+- Es idéntica a la Ec. D.5.5-2 (capítulo D.5b). La calculadora y los ejemplos usan la misma función.
+
+</Ecuacion>
+
+<Ejemplo numero={1} titulo="Compresión axial del muro y de sus columnas">
+Muro de los ejemplos con $h'$ = {dat.hPrime} mm ($h'/t$ = {f(ej1.axial.esbeltez, 0)}) y $P_u$ = 600 kN. Las columnas tienen $A_{ci}$ = {geo.Aci} mm² y $A_{st}$ = {dat.AstCol} mm².
+
+<Paso titulo="Resistencia global del muro" ref="D.10.7.4, D.5.5">
+
+$A_e$ = 2 × {geo.Aci} + {geo.Amamposteria} = {geo.Ae} mm²; $A_{st}$ = 2 × {dat.AstCol} = {2 * dat.AstCol} mm².
+
+$$
+P_o = 0.80(6)(480\,000 - 1032) + 1032(420)
+$$
+
+Resultado: **$P_o$ = {f(ej1.axial.Po, 1)} kN** (el tope $f'_mA_e$ = {f(ej1.axial.tope, 0)} kN no rige). $R_e = 1 - (16/42)^2$ = **{f(ej1.axial.Re, 4)}**; $P_n = 0.80P_oR_e$ = **{f(ej1.axial.Pn, 1)} kN**; con φ = 0.65, $\phi P_n$ = **{f(ej1.axial.phiPn, 1)} kN**. Como $P_u/\phi P_n$ = {f(ej1.axial.razon, 3)}, el muro **{ej1.axial.cumple ? 'cumple' : 'no cumple'}** a compresión.
+
+</Paso>
+<Paso titulo="Resistencia de una columna de confinamiento" ref="D.10.7-1, D.10.7-2">
+
+$$
+P_{nc} = 0.80\,[\,0.85(21)(30\,000 - 516) + 420(516)\,]
+$$
+
+Resultado: **$P_{nc}$ = {f(colRes.Pnc, 1)} kN** y $\phi P_{nc}$ = **{f(colRes.phiPnc, 1)} kN** (φ = 0.65). En tracción, $P_{nt} = -420(516)$ = **{f(colRes.Pnt, 2)} kN** y $\phi P_{nt}$ = **{f(colRes.phiPnt, 1)} kN** (φ = 0.85).
+
+</Paso>
+<Paso titulo="Mampostería sola" ref="D.10.7-3, D.10.7-4">
+
+Con $A_{md}$ = {geo.Amamposteria} mm² (mampostería entre columnas): $P_{nd}$ = 0.80(0.80 × 6 × {geo.Amamposteria}) × {f(ej1.sola.Re, 4)} = **{f(ej1.sola.Pnd, 1)} kN** y $\phi P_{nd}$ = {f(ej1.sola.phiPnd, 1)} kN. Esta cifra sirve para la biela (ejemplo 5); la capacidad **global** ya contó las columnas.
+
+</Paso>
+<Paso titulo="Efecto de la esbeltez (h′ = 3600 mm)" ref="D.10.7-4">
+
+Con $h'/t$ = {f(ej1.alto.esbeltez, 0)} (admisible, ≤ 25), $R_e$ = {f(ej1.alto.Re, 4)} y $\phi P_n$ = **{f(ej1.alto.phiPn, 1)} kN**, una pérdida de {f((1 - ej1.alto.phiPn / ej1.axial.phiPn) * 100, 0)} % respecto de $h'$ = 2400 mm.
+
+</Paso>
+<Resultado>
+Compresión global: $\phi P_n$ = **{f(ej1.axial.phiPn, 1)} kN** ≥ $P_u$ = 600 kN. Cada columna resiste $\phi P_{nc}$ = {f(colRes.phiPnc, 1)} kN a compresión y $\phi P_{nt}$ = {f(colRes.phiPnt, 1)} kN a tracción.
+</Resultado>
+</Ejemplo>
+
+## D.10.7.5 — Diseño del muro en la dirección perpendicular a su plano
+
+Cuando las fuerzas horizontales actúan **perpendiculares al plano del muro** (viento, empuje, sismo sobre el muro mismo), además de las verticales, se aplica lo siguiente (<NormaRef s="D.10.7.5" pag="D-58" />).
+
+### D.10.7.5.1 — Resistencia a flexo-compresión
+
+Los cuatro requisitos de <NormaRef s="D.10.7.5.1" pag="D-58" />:
+
+- **(a)** La resistencia a flexo-compresión la aportan **únicamente las columnas de confinamiento**.
+- **(b)** El ancho efectivo $b$ es **solo el de las columnas**, medido en la dirección del muro.
+- **(c)** El diseño es **en su totalidad el del concreto reforzado del Título C** (diagrama de interacción de columna, φ del Título C).
+- **(d)** La carga axial $P_u$ que actúa sobre el elemento de confinamiento se toma como el **doble** de la que resulta proporcionalmente a las áreas de mampostería y de columnas, salvo que se haga un análisis más detallado, con relaciones modulares y la posición de las cargas.
+
+La razón del «doble»: la mampostería se agrieta y tiende a descargarse sobre las columnas, que son más rígidas; el factor 2 cubre esa concentración sin obligar a un análisis modular.
+
+### D.10.7.5.2 — Resistencia a cortante
+
+El cortante producido por fuerzas perpendiculares al plano se evalúa con **D.5.7.4** ($V_u \le \phi V_n$ con $V_n = A_{mv}\sqrt{f'_m}/6$; <NormaRef s="D.10.7.5.2" pag="D-58" />). Ver el capítulo D.5b.
+
+<Ejemplo numero={2} titulo="Columna de confinamiento fuera del plano">
+Sobre el muro actúa una presión horizontal mayorada $w_u$ = {f(ej2.wu, 1)} kPa (hipótesis del ejemplo). **Mecanismo supuesto (autoría del proyecto):** como solo resisten las columnas, el paño trabaja en una dirección entre columnas separadas $\ell_c$ = 3.0 m y cada columna recibe la reacción $w_u\,\ell_c/2$ = {f(ej2.w, 2)} kN/m, que la hace flectar entre vigas distantes $h_p$ = 2.5 m.
+
+<Paso titulo="Momento y carga axial sobre la columna" ref="D.10.7.5.1 (b), (d)">
+
+$M_u = w\,h_p^2/8$ = {f(ej2.w, 2)} × 2.5² / 8 = **{f(ej2.Mu, 2)} kN·m**. Con $P_u$ = 600 kN en el muro, la carga proporcional a las áreas, duplicada, es
+
+$$
+P_{u,col} = 2\,P_u\,\frac{A_{ci}}{2A_{ci} + A_{m}}
+$$
+
+con $A_m$ = {geo.Amamposteria} mm²: **$P_{u,col}$ = {f(ej2.Pcol, 1)} kN** (el 12.5 % de $P_u$, frente al 6.25 % de la distribución simple).
+
+</Paso>
+<Paso titulo="Diseño de la columna como columna de concreto" ref="D.10.7.5.1 (c)">
+
+Sección $b$ = {dat.bc} mm (ancho en la dirección del muro) × $h$ = {dat.t} mm (espesor), con 258 mm² de acero en cada cara a 40 mm de la fibra externa, $f'_c$ = 21 MPa y $f_y$ = 420 MPa. Con el diagrama de interacción del Título C, $\phi M_n$ para $P_u$ = {f(ej2.Pcol, 0)} kN es **{f(ej2.v.phiMnDisponible, 2)} kN·m**; la razón $M_u/\phi M_n$ es {f(ej2.v.razon, 3)} y la columna **{ej2.v.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Resultado>
+La flexión fuera del plano no gobierna en este muro ($M_u$ = {f(ej2.Mu, 2)} kN·m frente a $\phi M_n$ = {f(ej2.v.phiMnDisponible, 1)} kN·m); en muros altos y con vientos fuertes sí puede hacerlo.
+</Resultado>
+</Ejemplo>
+
+## D.10.7.6 — Flexo-compresión en la dirección paralela al plano
+
+Para fuerzas horizontales **paralelas al plano**, más las verticales, la norma permite **dos procedimientos** (<NormaRef s="D.10.7.6" pag="D-58" />). El primero desprecia la mampostería y trata las columnas como los dos cordones de una viga: el momento $M_u$ se convierte en un par de fuerzas axiales en ellas. El segundo calcula el diagrama de interacción del muro completo.
+
+<Figura alt="Muro confinado con columnas de borde y vigas, cargas Pu, Vu y Mu y fuerzas axiales en las columnas Puc y Put" numero="Esquema" pie="Muro confinado y flexo-compresión en su plano (D.10.7.6.1): el momento Mu se convierte en un par ΔPu = Mu/ℓw en las columnas, que se suma a Pu/2 en la columna comprimida y se resta en la traccionada. (esquema del proyecto)">
+<svg viewBox="0 0 560 320" role="img" aria-label="Muro confinado con fuerzas axiales en las columnas" className="mx-auto h-auto w-full max-w-xl">
+  <defs>
+    <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" /></marker>
+  </defs>
+  <rect x="130" y="70" width="300" height="170" fill="var(--muted)" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="130" y="70" width="28" height="170" fill="var(--chart-1)" fillOpacity="0.45" stroke="currentColor" />
+  <rect x="402" y="70" width="28" height="170" fill="var(--chart-1)" fillOpacity="0.45" stroke="currentColor" />
+  <rect x="130" y="50" width="300" height="20" fill="var(--chart-2)" fillOpacity="0.4" stroke="currentColor" />
+  <rect x="130" y="240" width="300" height="20" fill="var(--chart-2)" fillOpacity="0.4" stroke="currentColor" />
+  <text x="280" y="62" textAnchor="middle" fontSize="11" fill="currentColor">viga de confinamiento</text>
+  <text x="280" y="160" textAnchor="middle" fontSize="12" fill="currentColor">paño de mampostería</text>
+  <text x="144" y="160" textAnchor="middle" fontSize="10" fill="currentColor" transform="rotate(-90 144 160)">columna</text>
+  <text x="416" y="160" textAnchor="middle" fontSize="10" fill="currentColor" transform="rotate(-90 416 160)">columna</text>
+  <line x1="40" x2="125" y1="60" y2="60" stroke="currentColor" strokeWidth="2" markerEnd="url(#ar1)" />
+  <text x="40" y="50" fontSize="12" fill="currentColor">Vu</text>
+  <line x1="280" x2="280" y1="8" y2="46" stroke="currentColor" strokeWidth="2" markerEnd="url(#ar1)" />
+  <text x="290" y="20" fontSize="12" fill="currentColor">Pu</text>
+  <path d="M 70 130 A 30 30 0 1 1 70 190" fill="none" stroke="currentColor" strokeWidth="1.8" markerEnd="url(#ar1)" />
+  <text x="30" y="165" fontSize="12" fill="currentColor">Mu</text>
+  <line x1="144" x2="144" y1="290" y2="264" stroke="var(--chart-5)" strokeWidth="2.5" markerEnd="url(#ar1)" />
+  <text x="144" y="305" textAnchor="middle" fontSize="11" fill="currentColor">Put = Pu/2 − ΔPu (tracción)</text>
+  <line x1="416" x2="416" y1="264" y2="290" stroke="var(--chart-1)" strokeWidth="2.5" markerEnd="url(#ar1)" />
+  <text x="416" y="305" textAnchor="middle" fontSize="11" fill="currentColor">Puc = Pu/2 + ΔPu (compresión)</text>
+  <line x1="130" x2="430" y1="275" y2="275" stroke="currentColor" strokeWidth="1" markerStart="url(#ar1)" markerEnd="url(#ar1)" />
+  <text x="280" y="271" textAnchor="middle" fontSize="11" fill="currentColor">ℓw (centro a centro)</text>
+</svg>
+</Figura>
+
+### D.10.7.6.1 — Despreciando la contribución de la mampostería
+
+Se calculan las fuerzas axiales máximas de compresión $P_{uc}$ y de tracción $P_{ut}$ sobre **cada columna** (<NormaRef s="D.10.7.6.1" pag="D-58" />):
+
+<Ecuacion num="D.10.7-5" titulo="Fuerza axial máxima de compresión en la columna i">
+
+$$
+P_{uc} = \frac{A_{ci}}{A_{ct}}\,P_u + \Delta P_{ui}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-6" titulo="Fuerza axial máxima de tracción en la columna i">
+
+$$
+P_{ut} = \frac{A_{ci}}{A_{ct}}\,P_u - \Delta P_{ui} \le 0
+$$
+
+- $P_u$ y $\Delta P_{ui}$ son **siempre positivas**. $P_{ut}$ es negativa (tracción); si el resultado fuese positivo, esa columna no se traccionaría y se toma $P_{ut}$ = 0 (lectura del proyecto del «≤ 0»).
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-7" titulo="Incremento de fuerza axial por flexión">
+
+$$
+\Delta P_{ui} = \left|\frac{M_u\,A_{ci}\,(x_i - \bar{x})}{I_{ct}}\right|
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-8" titulo="Área total de las columnas">
+
+$$
+A_{ct} = \sum_i A_{ci}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-9" titulo="Centroide de las columnas">
+
+$$
+\bar{x} = \frac{\sum_i A_{ci}\,x_i}{A_{ct}}
+$$
+
+- $x_i$: distancia de la columna $i$ al borde del muro (mm).
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-10" titulo="Inercia de las columnas respecto de su centroide">
+
+$$
+I_{ct} = \sum_i A_{ci}\,(x_i - \bar{x})^2
+$$
+
+- Solo cuenta el área de las columnas (la «inercia transformada» de un grupo de áreas puntuales): $I_{ct}$ en mm⁴.
+
+</Ecuacion>
+
+En **cada** columna deben cumplirse:
+
+<Ecuacion num="D.10.7-11" titulo="Compresión en la columna">
+
+$$
+P_{uc} \le \phi\,P_{nc}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-12" titulo="Tracción en la columna">
+
+$$
+P_{ut} \ge \phi\,P_{nt}
+$$
+
+- Con $P_{ut}$ y $P_{nt}$ negativas, «mayor o igual» significa que la tracción de diseño no supera en valor absoluto a la resistente. φ = 0.65 en D.10.7-11 y 0.85 en D.10.7-12 (D.10.7.2).
+
+</Ecuacion>
+
+**Muro con solo dos columnas iguales en los bordes.** Las Ecs. D.10.7-5 a D.10.7-7 se simplifican (<NormaRef s="D.10.7.6.1" pag="D-59" />):
+
+<Ecuacion num="D.10.7-13" titulo="Compresión (dos columnas)">
+
+$$
+P_{uc} = \frac{P_u}{2} + \Delta P_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-14" titulo="Tracción (dos columnas)">
+
+$$
+P_{ut} = \frac{P_u}{2} - \Delta P_u \le 0
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-15" titulo="Incremento por flexión (dos columnas)">
+
+$$
+\Delta P_u = \frac{M_u}{\ell_w}
+$$
+
+- $\ell_w$: longitud del muro medida **centro a centro** de las columnas de borde (<NormaRef s="D.2.4" pag="D-9" />). Se obtiene al reemplazar en D.10.7-7 el centroide $\bar{x} = \ell_w/2$ y $I_{ct} = A_{ci}\ell_w^2/2$.
+
+</Ecuacion>
+
+### D.10.7.6.2 — Teniendo en cuenta la contribución de la mampostería
+
+El momento $M_u$ que acompaña a la carga $P_u$ debe cumplir (<NormaRef s="D.10.7.6.2" pag="D-59" />):
+
+<Ecuacion num="D.10.7-16" titulo="Condición de diseño a flexo-compresión">
+
+$$
+M_u \le \phi\,M_n
+$$
+
+- $M_n$ sale del **diagrama de interacción** del muro, con los principios de D.5.1.6 y D.10.7.3 (sección homogénea: mampostería y columnas como celdas inyectadas) y el φ apropiado de D.10.7.2.
+
+</Ecuacion>
+
+<Figura alt="Diagrama de interacción de diseño phi Pn contra phi Mn del muro confinado con el punto de solicitación" numero="Esquema" pie="Diagrama de interacción de diseño del muro de los ejemplos (D.10.7.6.2), calculado por compatibilidad de deformaciones con φ = 0.65 si Pn > 0 y 0.85 en flexión pura y tracción. El punto es (Mu, Pu) = (360 kN·m, 150 kN). (esquema del proyecto)">
+<svg viewBox="0 0 520 290" role="img" aria-label="Diagrama de interacción de diseño del muro confinado" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="60" y="20" width="410" height="220" fill="none" stroke="currentColor" strokeOpacity="0.3" />
+  {figInt.ticksP.map((p) => (
+    <g key={p}>
+      <line x1="60" x2="470" y1={figInt.Y(p)} y2={figInt.Y(p)} stroke="currentColor" strokeOpacity={p === 0 ? 0.6 : 0.12} />
+      <text x="54" y={figInt.Y(p) + 4} textAnchor="end" fontSize="11" fill="currentColor">{p}</text>
+    </g>
+  ))}
+  {figInt.ticksM.map((m) => (
+    <g key={m}>
+      <line x1={figInt.X(m)} x2={figInt.X(m)} y1="240" y2="244" stroke="currentColor" />
+      <text x={figInt.X(m)} y="257" textAnchor="middle" fontSize="11" fill="currentColor">{m}</text>
+    </g>
+  ))}
+  <polyline points={figInt.poly} fill="var(--chart-1)" fillOpacity="0.12" stroke="var(--chart-1)" strokeWidth="2.5" />
+  <circle cx={figInt.X(ej3.Mu)} cy={figInt.Y(ej3.Pu)} r="5" fill="var(--chart-2)" />
+  <text x={figInt.X(ej3.Mu) + 8} y={figInt.Y(ej3.Pu) - 6} fontSize="11" fill="currentColor">(Mu, Pu)</text>
+  <text x="265" y="282" textAnchor="middle" fontSize="12" fill="currentColor">φMn (kN·m)</text>
+  <text x="14" y="130" textAnchor="middle" fontSize="12" fill="currentColor" transform="rotate(-90 14 130)">φPn (kN)</text>
+</svg>
+</Figura>
+
+<Ejemplo numero={3} titulo="Flexo-compresión en el plano: columnas solas y diagrama de interacción">
+Muro de los ejemplos con $P_u$ = {ej3.Pu} kN y $M_u$ = {ej3.Mu} kN·m **simultáneos** (por ejemplo un cortante de 60 kN actuando a 6 m de altura en una edificación de dos pisos).
+
+<Paso titulo="Procedimiento 1: columnas solas (dos columnas iguales)" ref="D.10.7-13, D.10.7-14, D.10.7-15">
+
+$$
+\Delta P_u = \frac{360}{3.0} \qquad P_{uc} = \frac{150}{2} + \Delta P_u \qquad P_{ut} = \frac{150}{2} - \Delta P_u
+$$
+
+Resultado: $\Delta P_u$ = **{f(ej3.dos.deltaPu, 1)} kN**; **$P_{uc}$ = {f(ej3.dos.Puc, 1)} kN**; **$P_{ut}$ = {f(ej3.dos.Put, 1)} kN** (tracción). Con el método general (Ecs. D.10.7-5 a D.10.7-10): $A_{ct}$ = {ej3.gen.Act} mm², $\bar{x}$ = {ej3.gen.xBarra} mm, $I_{ct}$ = {f(ej3.gen.Ict / 1e9, 0)} × 10⁹ mm⁴, y $\Delta P_{ui}$ = {f(ej3.gen.filas[0].deltaPui, 1)} kN en cada columna: el mismo resultado.
+
+</Paso>
+<Paso titulo="Verificación de las columnas" ref="D.10.7-11, D.10.7-12">
+
+$\phi P_{nc}$ = {f(colRes.phiPnc, 1)} kN ≥ $P_{uc}$ = {f(ej3.dos.Puc, 1)} kN (razón {f(ej3.dos.Puc / colRes.phiPnc, 2)}) y $\phi P_{nt}$ = {f(colRes.phiPnt, 1)} kN ≤ $P_{ut}$ = {f(ej3.dos.Put, 1)} kN (razón {f(ej3.dos.Put / colRes.phiPnt, 2)}). **Cumple.** El momento máximo que admite este procedimiento con $P_u$ = 150 kN es $M_u$ = {f(ej3.MuMax1, 0)} kN·m (rige la tracción).
+
+</Paso>
+<Paso titulo="Procedimiento 2: diagrama de interacción con la mampostería" ref="D.10.7.6.2, D.10.7-16">
+
+Sección homogénea de ancho $b$ = {f(geo.b, 0)} mm y largo $L$ = {geo.Ltotal} mm con 516 mm² de acero en cada extremo ($d'$ = 100 mm). Para $P_u$ = 150 kN, la carga nominal es $P_n = P_u/\phi$ = {f(ej3.m2.verificacion.detalle.Pn, 1)} kN (φ = 0.65) y el diagrama da $M_n$ = {f(ej3.m2.verificacion.detalle.Mn, 1)} kN·m, es decir **$\phi M_n$ = {f(ej3.m2.verificacion.phiMnDisponible, 1)} kN·m**. Razón $M_u/\phi M_n$ = {f(ej3.m2.verificacion.razon, 3)}: **{ej3.m2.verificacion.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Paso titulo="Comparación de los dos procedimientos" ref="D.10.7.6">
+
+Con $M_u$ = 700 kN·m el procedimiento 2 **{ej3.m2alto.verificacion.cumple ? 'cumple' : 'no cumple'}** (razón {f(ej3.m2alto.verificacion.razon, 2)}), mientras que el procedimiento 1 aún cumple ($M_u$ máximo {f(ej3.MuMax1, 0)} kN·m). El segundo **no es necesariamente más favorable**: toma toda la compresión nominal con φ = 0.65, mientras el primero solo usa φ = 0.85 en la tracción de la columna que gobierna.
+
+</Paso>
+<Paso titulo="Muro de 6 m con tres columnas" ref="D.10.7-5 a D.10.7-10">
+
+Columnas iguales en $x$ = 100, 3100 y 6100 mm, $P_u$ = 300 kN y $M_u$ = 1500 kN·m. $A_{ct}$ = {ej3.tres.Act} mm², $\bar{x}$ = {ej3.tres.xBarra} mm, $I_{ct}$ = {f(ej3.tres.Ict / 1e9, 0)} × 10⁹ mm⁴. Columnas de borde: $\Delta P_{ui}$ = {f(ej3.tres.filas[0].deltaPui, 1)} kN, **$P_{uc}$ = {f(ej3.tres.filas[0].Puc, 1)} kN** y **$P_{ut}$ = {f(ej3.tres.filas[0].Put, 1)} kN**. La columna central está en el centroide: $\Delta P_{ui}$ = {f(ej3.tres.filas[1].deltaPui, 1)} kN, $P_{uc}$ = {f(ej3.tres.filas[1].Puc, 1)} kN y no se traccionaría ($P_{ut}$ = {f(ej3.tres.filas[1].Put, 1)} kN). Las bordes cumplen con $\phi P_{nc}$ = {f(colRes.phiPnc, 1)} kN y $\phi P_{nt}$ = {f(colRes.phiPnt, 1)} kN.
+
+</Paso>
+<Resultado>
+Con $P_u$ = 150 kN y $M_u$ = 360 kN·m el muro cumple por los dos procedimientos: columnas con $P_{uc}$ = {f(ej3.dos.Puc, 0)} kN y $P_{ut}$ = {f(ej3.dos.Put, 0)} kN, y $M_u/\phi M_n$ = {f(ej3.m2.verificacion.razon, 2)} con el diagrama.
+</Resultado>
+</Ejemplo>
+
+## D.10.7.7 — Diseño a cortante del muro en la dirección paralela a su plano
+
+En mampostería confinada **toda la fuerza cortante la resiste la mampostería** y se supone que los elementos de confinamiento **no contribuyen** (<NormaRef s="D.10.7.7" pag="D-60" />). Debe cumplirse:
+
+<Ecuacion num="D.10.7-17" titulo="Condición de diseño a cortante">
+
+$$
+V_u \le \phi\,V_n
+$$
+
+- φ = 0.50 (D.10.7.2 d).
+
+</Ecuacion>
+
+La resistencia nominal por tracción diagonal es:
+
+<Ecuacion num="D.10.7-18" titulo="Resistencia nominal a cortante por tracción diagonal">
+
+$$
+V_n = \left(\frac{1}{12}\sqrt{f'_m} + \frac{P_u}{3\,A_e}\right)A_{mv} \;\le\; \frac{1}{6}\sqrt{f'_m}\,A_{mv}
+$$
+
+- $f'_m$ en MPa; $P_u$ en N y $A_e$, $A_{mv}$ en mm²: $V_n$ en N. $P_u$ es la carga axial mayorada que actúa **simultáneamente** con el cortante máximo $V_u$ de diseño.
+- $A_{mv} = b\,\ell_w$ (<NormaRef s="D.5.4.5.2" pag="D-36" />); $b = A_e/L$ con $L$ la longitud total del muro (aclaración del proyecto, véase «Erratas y observaciones»).
+
+</Ecuacion>
+
+La compresión axial ayuda: sube la resistencia a tracción diagonal hasta el tope $\sqrt{f'_m}A_{mv}/6$, que se alcanza cuando $P_u/A_e \ge \sqrt{f'_m}/4$.
+
+<Ejemplo numero={4} titulo="Cortante del muro confinado">
+Mismo muro, $P_u$ = {ej4.Pu} kN simultánea con $V_u$ = {ej4.Vu} kN, $A_{mv}$ = {f(geo.Amv, 0)} mm² (con $b$ = {f(geo.b, 0)} mm y $\ell_w$ = {dat.lw} mm) y $A_e$ = {geo.Ae} mm².
+
+<Paso titulo="Términos de la Ec. D.10.7-18" ref="D.10.7-18">
+
+$$
+V_n = \left(\frac{\sqrt{6}}{12} + \frac{150\,000}{3(480\,000)}\right)(450\,000)
+$$
+
+$\sqrt{f'_m}/12$ = {f(ej4.termino1, 4)} MPa; $P_u/(3A_e)$ = {f(ej4.termino2, 4)} MPa. Resultado: **$V_n$ = {f(ej4.r.VnSinTope, 1)} kN**; el tope $\sqrt{f'_m}A_{mv}/6$ = {f(ej4.r.tope, 1)} kN no rige.
+
+</Paso>
+<Paso titulo="Resistencia de diseño" ref="D.10.7-17">
+
+$\phi V_n$ = 0.50 × {f(ej4.r.Vn, 1)} = **{f(ej4.r.phiVn, 1)} kN**; razón $V_u/\phi V_n$ = {f(ej4.r.razon, 3)}: **{ej4.r.cumple ? 'cumple' : 'no cumple'}**. Con $V_u$ = 80 kN la razón sería {f(ej4.grande.razon, 2)} y **no cumpliría**.
+
+</Paso>
+<Paso titulo="Efecto de una mayor carga axial" ref="D.10.7-18">
+
+Si $P_u$ = 300 kN, la suma sube a {f(ej4.alta.VnSinTope, 1)} kN y **rige el tope**: $V_n$ = {f(ej4.alta.Vn, 1)} kN ($\phi V_n$ = {f(ej4.alta.phiVn, 1)} kN). Más carga vertical ayuda, pero con un límite.
+
+</Paso>
+<Resultado>
+$\phi V_n$ = **{f(ej4.r.phiVn, 1)} kN** frente a $V_u$ = 60 kN: cumple. El factor 0.50 hace que el cortante sea, con frecuencia, la verificación que gobierna en estos muros.
+</Resultado>
+</Ejemplo>
+
+## D.10.7.8 — Verificación por aplastamiento del alma del muro
+
+Hay que comprobar que el **paño de mampostería** enmarcado por las vigas y columnas no falle por aplastamiento. Se modela una **biela de compresión** en la diagonal del paño, con un ancho efectivo igual a **un quinto de la longitud de la diagonal** (<NormaRef s="D.10.7.8" pag="D-60" />):
+
+<Ecuacion num="D.10.7-19" titulo="Condición de diseño por aplastamiento">
+
+$$
+P_{ud} \le \phi\,P_{nd}
+$$
+
+- φ = 0.65 (compresión, D.10.7.2 a).
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-20" titulo="Fuerza axial en la biela diagonal">
+
+$$
+P_{ud} = \frac{h'}{\ell_w}\,V_u
+$$
+
+- $h'$: longitud de la diagonal del paño entre elementos de confinamiento. $\ell_w$: longitud total del muro sobre el que actúa el cortante $V_u$.
+
+</Ecuacion>
+
+La resistencia $P_{nd}$ sale de la Ec. D.10.7-3, con $h'$ = la **diagonal** como longitud de pandeo, $t$ = el espesor del muro, y un área $A_{md}$ igual al ancho de la biela, $h'/5$, por el espesor efectivo $b$ para efectos paralelos al plano (<NormaRef s="D.5.4.4.2" pag="D-36" />).
+
+<Figura alt="Paño de muro confinado con la biela diagonal de compresión de ancho h′/5" numero="Esquema" pie="Biela de compresión en la diagonal del paño (D.10.7.8): longitud h′ = √(ℓc² + hp²), ancho h′/5 y espesor b. La fuerza en la biela es Pud = (h′/ℓw) Vu. (esquema del proyecto)">
+<svg viewBox="0 0 440 260" role="img" aria-label="Biela diagonal de compresión en un paño confinado" className="mx-auto h-auto w-full max-w-xl">
+  <rect x={figBiela.x0} y={figBiela.y0} width={figBiela.W} height={figBiela.H} fill="var(--muted)" stroke="currentColor" strokeWidth="1.5" />
+  <rect x={figBiela.x0 - 22} y={figBiela.y0 - 20} width="22" height={figBiela.H + 40} fill="var(--chart-1)" fillOpacity="0.45" stroke="currentColor" />
+  <rect x={figBiela.x1} y={figBiela.y0 - 20} width="22" height={figBiela.H + 40} fill="var(--chart-1)" fillOpacity="0.45" stroke="currentColor" />
+  <rect x={figBiela.x0 - 22} y={figBiela.y0 - 20} width={figBiela.W + 44} height="20" fill="var(--chart-2)" fillOpacity="0.4" stroke="currentColor" />
+  <rect x={figBiela.x0 - 22} y={figBiela.y1} width={figBiela.W + 44} height="20" fill="var(--chart-2)" fillOpacity="0.4" stroke="currentColor" />
+  <polygon points={figBiela.band} fill="var(--chart-5)" fillOpacity="0.3" stroke="var(--chart-5)" strokeWidth="1.5" />
+  <line x1={figBiela.x0} y1={figBiela.y0} x2={figBiela.x1} y2={figBiela.y1} stroke="currentColor" strokeDasharray="5 3" />
+  <text x={figBiela.x0 + figBiela.W / 2 + 6} y={figBiela.y0 + figBiela.H / 2 - 22} fontSize="12" fill="currentColor">h′</text>
+  <text x={figBiela.x0 + figBiela.W / 2 + 6} y={figBiela.y0 + figBiela.H / 2 + 28} fontSize="11" fill="currentColor">ancho h′/5</text>
+  <text x={figBiela.x0 + figBiela.W / 2} y={figBiela.y1 + 38} textAnchor="middle" fontSize="11" fill="currentColor">ℓc</text>
+  <text x={figBiela.x1 + 34} y={figBiela.y0 + figBiela.H / 2} fontSize="11" fill="currentColor">hp</text>
+</svg>
+</Figura>
+
+<Ejemplo numero={5} titulo="Aplastamiento de la biela">
+Paño de ℓc = {dat.lw} mm por hp = {dat.hp} mm, $t$ = {dat.t} mm, $b$ = {f(geo.b, 0)} mm, $f'_m$ = 6 MPa, $V_u$ = 60 kN y $\ell_w$ = {dat.lw} mm.
+
+<Paso titulo="Diagonal, biela y esbeltez" ref="D.10.7.8">
+
+$h' = \sqrt{3000^2 + 2500^2}$ = **{f(ej5.hDiagonal, 0)} mm** (la fórmula de la diagonal con ℓc y hp es autoría del proyecto). Ancho de la biela $h'/5$ = {f(ej5.anchoBiela, 0)} mm y $A_{md}$ = {f(ej5.anchoBiela, 0)} × {f(geo.b, 0)} = **{f(ej5.Amd, 0)} mm²**. Esbeltez $h'/t$ = {f(ej5.esbeltez, 1)} ≤ 30, así que $R_e = 1 - [h'/(42t)]^2$ = **{f(ej5.Re, 4)}**.
+
+</Paso>
+<Paso titulo="Fuerza en la biela y resistencia" ref="D.10.7-20, D.10.7-3">
+
+$$
+P_{ud} = \frac{3905}{3000}(60) \qquad P_{nd} = 0.80(0.80 \times 6 \times 117\,154)\,R_e
+$$
+
+Resultado: **$P_{ud}$ = {f(ej5.Pud, 1)} kN**; **$P_{nd}$ = {f(ej5.Pnd, 1)} kN**; $\phi P_{nd}$ = {f(ej5.phiPnd, 1)} kN.
+
+</Paso>
+<Paso titulo="Verificación" ref="D.10.7-19">
+
+$P_{ud}/\phi P_{nd}$ = {f(ej5.razon, 3)}: **{ej5.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Resultado>
+La biela trabaja al {f(ej5.razon * 100, 0)} % de su capacidad. La diagonal de un paño de 3.0 × 2.5 m (más esbelta que el muro, $h'/t$ = {f(ej5.esbeltez, 0)}) pierde cerca de {f((1 - ej5.Re) * 100, 0)} % por esbeltez.
+</Resultado>
+</Ejemplo>
+
+## D.10.7.9 — Verificación a cortante en los elementos de confinamiento
+
+La biela empuja contra las **esquinas** donde se cruzan vigas y columnas. Cada elemento debe resistir, como cortante transversal a su eje, **al menos la mitad de la componente correspondiente** de la fuerza de la biela (<NormaRef s="D.10.7.9" pag="D-60" />):
+
+<Ecuacion num="D.10.7-21" titulo="Cortante actuante en la columna de confinamiento">
+
+$$
+V_{uc} = \frac{\ell_c}{2\,\ell_w}\,V_u
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-22" titulo="Cortante actuante en la viga de confinamiento">
+
+$$
+V_{uc} = \frac{h_p}{2\,\ell_w}\,V_u
+$$
+
+- $\ell_c$: distancia horizontal entre columnas del paño, centro a centro. $h_p$: altura del paño, centro a centro de las vigas de confinamiento (<NormaRef s="D.2.4" pag="D-9" />).
+
+</Ecuacion>
+
+<Ecuacion num="D.10.7-23" titulo="Condición de diseño">
+
+$$
+V_{uc} \le \phi\,V_{nc}
+$$
+
+- $V_{nc}$ se calcula para el elemento de confinamiento **según el Capítulo C.11** del Título C (<NormaRef s="D.10.7.9" pag="D-61" />): $V_c = 0.17\lambda\sqrt{f'_c}\,b_wd$ más $V_s = A_vf_{yt}d/s$.
+
+</Ecuacion>
+
+<Figura alt="Mecanismo de cortante en un paño confinado: componentes horizontal y vertical de la biela y su reparto en vigas y columnas" numero="Esquema" pie="Mecanismo de D.10.7.9 y D.10.7.10: la biela de fuerza Pud se descompone en una componente horizontal (ℓc/ℓw)Vu, que tracciona la viga, y una vertical (hp/ℓw)Vu. La columna recibe la mitad de la horizontal y la viga la mitad de la vertical como cortante transversal. (esquema del proyecto)">
+<svg viewBox="0 0 520 280" role="img" aria-label="Componentes de la biela y cortante en vigas y columnas" className="mx-auto h-auto w-full max-w-xl">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor" /></marker>
+  </defs>
+  <rect x="150" y="60" width="260" height="170" fill="var(--muted)" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="128" y="40" width="22" height="210" fill="var(--chart-1)" fillOpacity="0.45" stroke="currentColor" />
+  <rect x="410" y="40" width="22" height="210" fill="var(--chart-1)" fillOpacity="0.45" stroke="currentColor" />
+  <rect x="128" y="40" width="304" height="20" fill="var(--chart-2)" fillOpacity="0.4" stroke="currentColor" />
+  <rect x="128" y="230" width="304" height="20" fill="var(--chart-2)" fillOpacity="0.4" stroke="currentColor" />
+  <line x1="150" y1="60" x2="410" y2="230" stroke="var(--chart-5)" strokeWidth="4" strokeOpacity="0.6" />
+  <text x="290" y="150" fontSize="12" fill="currentColor" transform="rotate(33 290 150)">biela Pud</text>
+  <line x1="150" y1="50" x2="60" y2="50" stroke="currentColor" strokeWidth="2" markerEnd="url(#ar2)" />
+  <text x="20" y="40" fontSize="11" fill="currentColor">(ℓc/ℓw)Vu</text>
+  <text x="20" y="64" fontSize="11" fill="currentColor">tracción en la viga</text>
+  <line x1="140" y1="60" x2="140" y2="14" stroke="currentColor" strokeWidth="2" markerEnd="url(#ar2)" />
+  <text x="148" y="24" fontSize="11" fill="currentColor">(hp/ℓw)Vu</text>
+  <line x1="300" y1="140" x2="300" y2="140" stroke="currentColor" />
+  <text x="440" y="150" fontSize="11" fill="currentColor">columna: Vuc = ℓc Vu/(2ℓw)</text>
+  <text x="440" y="166" fontSize="11" fill="currentColor">viga: Vuc = hp Vu/(2ℓw)</text>
+</svg>
+</Figura>
+
+## D.10.7.10 — Diseño del acero longitudinal de la viga de confinamiento
+
+La **componente horizontal** de la biela debe ser resistida como **tracción** por la viga que llega a la misma esquina del paño. Esa fuerza es igual al cortante que lleva el paño (<NormaRef s="D.10.7.10" pag="D-61" />):
+
+<Ecuacion num="D.10.7-24" titulo="Tracción en la viga de confinamiento">
+
+$$
+P_{ut} = -\,\frac{\ell_c}{\ell_w}\,V_u
+$$
+
+- Negativa: tracción. Con un solo paño ($\ell_c = \ell_w$) es todo el cortante del muro.
+
+</Ecuacion>
+
+El acero longitudinal de la viga debe tomar **toda** esa tracción:
+
+<Ecuacion num="D.10.7-25" titulo="Condición de diseño del acero de la viga">
+
+$$
+-P_{ut} \le -\phi\,P_{nt}
+$$
+
+- $P_{nt} = -f_yA_{st}$ (Ec. D.10.7-2), φ = 0.85. Equivale a $|P_{ut}| \le 0.85\,f_yA_{st}$, es decir $A_{st} \ge |P_{ut}|/(0.85f_y)$.
+
+</Ecuacion>
+
+<Ejemplo numero={6} titulo="Columna y viga de confinamiento: cortante y acero longitudinal">
+Mismo muro y $V_u$ = 60 kN ($\ell_c = \ell_w$ = 3000 mm, $h_p$ = 2500 mm). Columna y viga de {dat.t} mm de ancho con $d$ = 160 mm, estribos de dos ramas No. 2 ($A_v$ = 64 mm²) con $f_{yt}$ = 420 MPa, $f'_c$ = 21 MPa. La viga lleva 4 barras No. 3 (284 mm²).
+
+<Paso titulo="Cortante transversal actuante" ref="D.10.7-21, D.10.7-22">
+
+$$
+V_{uc,col} = \frac{3000}{2(3000)}(60) \qquad V_{uc,viga} = \frac{2500}{2(3000)}(60)
+$$
+
+Resultado: **columna {f(ej6.vuc.columna, 1)} kN**; **viga {f(ej6.vuc.viga, 1)} kN**.
+
+</Paso>
+<Paso titulo="Resistencia de la columna (estribos a 100 mm)" ref="D.10.7-23, C.11">
+
+$V_c = 0.17\sqrt{21}(150)(160)$ = {f(ej6.col.Vc, 1)} kN; $V_s = 64(420)(160)/100$ = {f(ej6.col.Vs, 1)} kN; $V_{nc}$ = {f(ej6.col.Vnc, 1)} kN y $\phi V_{nc}$ (φ = 0.50) = **{f(ej6.col.phiVnc, 1)} kN**. Razón {f(ej6.col.razon, 3)}: **{ej6.col.cumple ? 'cumple' : 'no cumple'}** (casi al límite: el φ de 0.50 pesa).
+
+</Paso>
+<Paso titulo="Resistencia de la viga: estribos a 200 mm frente a 100 mm" ref="D.10.7-23, D.10.6.4">
+
+Con la separación máxima de 200 mm del refuerzo mínimo (<NormaRef s="D.10.6.4" pag="D-56" />), $V_s$ = {f(ej6.viga200.Vs, 1)} kN y $\phi V_{nc}$ = {f(ej6.viga200.phiVnc, 1)} kN &lt; {f(ej6.vuc.viga, 1)} kN: **{ej6.viga200.cumple ? 'cumple' : 'no cumple'}**. Con estribos a 100 mm cerca de la esquina, $\phi V_{nc}$ = {f(ej6.viga100.phiVnc, 1)} kN y razón {f(ej6.viga100.razon, 2)}: **{ej6.viga100.cumple ? 'cumple' : 'no cumple'}**. El mínimo de D.10.6.4 no basta: el diseño del cortante manda.
+
+</Paso>
+<Paso titulo="Acero longitudinal de la viga" ref="D.10.7-24, D.10.7-25">
+
+$P_{ut} = -(3000/3000)(60)$ = **{f(ej6.as.Put, 1)} kN**. $A_{st}$ requerida = 60 000/(0.85 × 420) = **{f(ej6.as.AsRequerida, 0)} mm²**. Con 284 mm²: $\phi P_{nt}$ = {f(ej6.as.phiPnt, 1)} kN, razón {f(ej6.as.razon, 3)}: **{ej6.as.cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Resultado>
+Para este muro el conjunto de las nueve verificaciones de D.10.7 (compresión, columnas, flexo-compresión, cortante, biela, cortante en columna y viga, y acero de viga) **{ej6.todo.cumpleTodo ? 'cumple' : 'no cumple'}**. La calculadora siguiente hace exactamente esta cadena y permite cambiar cualquier dato.
+</Resultado>
+</Ejemplo>
+
+<TablaNorma numero="Resumen del proyecto" titulo="Cadena de verificaciones de D.10.7 para un muro confinado" pag="D-58 a D-61" nota="Resumen elaborado a partir de D.10.7.4 a D.10.7.10; no es una tabla impresa de la norma.">
+
+| Verificación | Qué mira | Condición | φ |
+|---|---|---|---:|
+| Compresión del muro (D.10.7.4) | Sección completa, $A_{st}$ = acero de columnas | $P_u \le \phi\,0.80P_oR_e$ | 0.65 |
+| Fuera del plano (D.10.7.5) | Columnas como concreto reforzado | Título C, $P_u$ doble | Título C |
+| Columnas en el plano (D.10.7.6.1) | $P_{uc}$ y $P_{ut}$ de las columnas | D.10.7-11 y D.10.7-12 | 0.65 / 0.85 |
+| Diagrama de interacción (D.10.7.6.2) | Muro homogéneo | $M_u \le \phi M_n$ | 0.65 / 0.85 |
+| Cortante (D.10.7.7) | Solo la mampostería | $V_u \le \phi V_n$ | 0.50 |
+| Aplastamiento (D.10.7.8) | Biela de ancho $h'/5$ | $P_{ud} \le \phi P_{nd}$ | 0.65 |
+| Cortante en elementos (D.10.7.9) | Esquinas viga-columna | $V_{uc} \le \phi V_{nc}$ | 0.50 |
+| Acero de viga (D.10.7.10) | Tracción por la biela | $-P_{ut} \le -\phi P_{nt}$ | 0.85 |
+
+</TablaNorma>
+
+<CalculadoraEmbed id="muro-confinado-resistencia" />
+
+## D.10.8 — Requisitos de construcción
+
+### D.10.8.1 — General
+
+Deben cumplirse los requisitos de construcción del **Capítulo D.4**, **excepto** D.4.2, D.4.5.10, D.4.5.11, D.4.5.12 y D.4.6, además de los adicionales de D.10.8 (<NormaRef s="D.10.8.1" pag="D-61" />). Las secciones exceptuadas tratan, entre otras cosas, el refuerzo interior y las unidades de perforación vertical, que en la mampostería confinada no se usan para el refuerzo estructural.
+
+### D.10.8.2 — Detalles del refuerzo
+
+**Todo refuerzo está colocado en los elementos de confinamiento** y cumple los requisitos del Título C (<NormaRef s="D.10.8.2" pag="D-61" />). Es coherente con <NormaRef s="D.10.4.3" pag="D-55" />: no se coloca refuerzo de confinamiento dentro de las unidades de perforación vertical.
+
+### D.10.8.3 — Requisitos complementarios para los elementos de confinamiento
+
+Las especificaciones, requisitos, controles y tolerancias de los elementos de confinamiento son los del **Título C**, salvo las dimensiones y cuantías mínimas de D.10 (<NormaRef s="D.10.8.3" pag="D-61" />).
+
+### D.10.8.4 — Construcción del muro
+
+El muro se ejecuta **antes** del vaciado de las columnas, dejando el espacio especificado para ellas, con los procedimientos y controles de D.4 y las tolerancias de la Tabla D.4.2-2; el mortero de pega cumple D.3.4 (<NormaRef s="D.10.8.4" pag="D-61" />). Construir primero el muro es lo que permite que el concreto de la columna se adhiera a la cara terminal del muro (engrane o dentado) y que ambos actúen como un conjunto.
+
+### D.10.8.5 — Juntas de control
+
+En el espacio confinado entre columnas **no se permiten juntas de control**; si se necesitan, se ubican entre columnas adyacentes diseñadas para ese fin (<NormaRef s="D.10.8.5" pag="D-61" />).
+
+### D.10.8.6 — Vaciado de las columnas de confinamiento
+
+Con el refuerzo vertical y horizontal de la columna colocado, se ponen los **testeros laterales** que sirven de formaleta, permitiendo que el concreto haga contacto con la superficie terminal del muro, **libre de rebabas y de materiales** que impidan la adherencia. El refuerzo vertical sobresale lo necesario para el traslapo con la columna superior, y su remate se ancla en la cara superior de la viga con **ganchos de 90°** (<NormaRef s="D.10.8.6" pag="D-61" />).
+
+### D.10.8.7 — Vigas de confinamiento
+
+Una vez vaciadas las columnas, se vacían la losa o las vigas de confinamiento directamente sobre los muros y en contacto con ellos (<NormaRef s="D.10.8.7" pag="D-61" />). El orden —muro, columnas, vigas— es parte del diseño: el concreto de cada elemento se funde contra el anterior.
+
+<Callout tipo="practica" titulo="Orden de ejecución (autoría del proyecto)">
+1. Cimentación y viga de amarre con el refuerzo de las columnas anclado.
+2. Levante del muro dejando los espacios de las columnas (dentado) y verificando tolerancias (Tabla D.4.2-2).
+3. Armado y formaleta (testeros) de las columnas; limpieza de la cara del muro; vaciado.
+4. Armado y vaciado de la viga o losa superior, con los ganchos de 90° del refuerzo de las columnas.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Fallas frecuentes al aplicar D.10.7">
+
+- **Usar los φ de D.5.1.5.** En muros confinados rigen 0.65, 0.85 y 0.50 (<NormaRef s="D.10.7.2" pag="D-57" />); el cortante es 0.50, no 0.60.
+- **Contar las columnas en el cortante.** En D.10.7.7 solo la mampostería resiste cortante; los elementos de confinamiento no aportan (<NormaRef s="D.10.7.7" pag="D-60" />).
+- **Tomar $A_{st}$ del muro como el de la mampostería.** En D.10.7.4 es solo el acero longitudinal de las columnas (<NormaRef s="D.10.7.4" pag="D-58" />).
+- **Olvidar el doble de carga fuera del plano.** En las columnas se usa $2P_u$ proporcional a las áreas (<NormaRef s="D.10.7.5.1" pag="D-58" />).
+- **Mezclar $\ell_w$ y la longitud total.** En D.10.7-15, $\ell_w$ es centro a centro de columnas; al calcular áreas ($A_e$, $A_{mv}$) la longitud física es mayor.
+- **Dar signo positivo a $P_{ut}$.** $P_{ut}$ y $P_{nt}$ son negativas; D.10.7-12 se lee con valores absolutos. Si D.10.7-6 da positivo, no hay tracción.
+- **Verificar la compresión del muro pero no la tracción de las columnas.** El par $\Delta P_u$ puede levantar una columna aunque la carga axial total sea alta.
+- **Olvidar el aplastamiento de la biela y el cortante en vigas y columnas.** Son verificaciones propias de D.10 (D.10.7.8 y D.10.7.9).
+- **Dejar la viga con el refuerzo mínimo.** La tracción de D.10.7-24 y el cortante de D.10.7-22 pueden pedir más acero y estribos más cerrados.
+- **Hacer juntas de control entre columnas o vaciar las columnas antes que el muro** (<NormaRef s="D.10.8.4" pag="D-61" />, <NormaRef s="D.10.8.5" pag="D-61" />).
+
+</Callout>
+
+## Erratas y observaciones del PDF
+
+<Callout tipo="nota" titulo="Anomalías detectadas al transcribir D.10.7 y D.10.8 (D-57 a D-61)">
+
+- **Símbolos del cortante en elementos (D-60).** Las Ecs. D.10.7-21 y D.10.7-22 usan el mismo símbolo $V_{uc}$ para columna y viga, y $\ell_c$ y $h_p$ no están definidos dentro de D.10.7; solo en la nomenclatura (D.2.4: «distancia horizontal entre columnas… centro a centro» y «altura del piso… centro a centro entre vigas»). Se interpretan así.
+- **Longitud de la diagonal $h'$ (D.10.7.8).** La norma dice «longitud de la diagonal del paño de muro entre elementos de confinamiento» y, en D.2.4, repite $h'$ como longitud de la diagonal. Los ejemplos y la calculadora la calculan como $\sqrt{\ell_c^2 + h_p^2}$ con medidas centro a centro (autoría del proyecto); puede cambiarse si se prefiere la diagonal entre caras.
+- **Ancho efectivo $b$ (D.10.7.8, D.5.4.4.2).** D.5.4.4.2 da $b = A_e/\ell_w$; con $\ell_w$ centro a centro y $A_e$ incluyendo las columnas, $b$ resulta mayor que $t$. Aquí se usa $b = A_e/L$ con $L$ la longitud total (autoría del proyecto).
+- **Esbeltez de la biela.** Con $h'/t$ > 30, la Ec. D.10.7-4 pasa a la rama de Euler, que en D.5.5 no se alcanza porque $h'/t \le 25$; el límite de 25 no se aplica a la diagonal de la biela porque la norma no lo dice.
+- **φ de cortante en vigas y columnas (D.10.7.9).** D.10.7.2 (d) da φ = 0.50 para «cortante», sin distinguir mampostería de concreto; $V_{nc}$ se calcula con C.11, donde φ sería 0.75. Se usa 0.50 (lectura literal, conservadora) y la calculadora ofrece 0.75 como alternativa.
+- **φ en $P_n$ = 0.** D.10.7.2 da φ por tipo de solicitación (0.65 compresión, 0.85 flexión sin carga axial y tracción) sin rampa; la transición se hace en $P_n$ = 0 (lectura del proyecto).
+- **Procedimiento 2 y esbeltez.** D.10.7.6.2 no dice si el tope de carga axial de D.5.5 ($0.80P_oR_e$) aplica al diagrama de interacción; se aplica (autoría del proyecto).
+- **«Pu y ΔPui siempre positivas» y «≤ 0» (D-59).** La Ec. D.10.7-6 se escribe «≤ 0» aunque su resultado puede ser positivo; se toma como «no hay tracción».
+- **D.10.8.1 vs. D.10.8.4.** D.10.8.1 exceptúa D.4.2 de lo que debe cumplirse, pero D.10.8.4 exige las tolerancias de la Tabla D.4.2-2, que pertenece a D.4.2.
+- **Tipografía (D-58).** En D.10.7-4 la condición aparece como «para h′ t ≤ 30» (por «h′/t»). La página D-62 está en blanco («Notas»).
+- **Carga axial de diseño en columnas fuera del plano.** No se precisa qué «área de mampostería» se suma a las columnas en el reparto proporcional (D.10.7.5.1 d); se usa la de la mampostería entre columnas.
+
+</Callout>
+
+## Resumen en una línea
+
+Un muro confinado se diseña con φ de 0.65 (compresión), 0.85 (flexión y tracción) y 0.50 (cortante): las columnas toman la flexión como un par $\Delta P_u = M_u/\ell_w$ (o el diagrama de interacción del muro), la mampostería toma todo el cortante $V_n = (\sqrt{f'_m}/12 + P_u/3A_e)A_{mv} \le \sqrt{f'_m}A_{mv}/6$, la biela de ancho $h'/5$ no debe aplastarse, y las vigas y columnas deben resistir el cortante $(h_p/2\ell_w)V_u$ y $(\ell_c/2\ell_w)V_u$ y la tracción $(\ell_c/\ell_w)V_u$ del acero longitudinal de la viga, construyendo siempre primero el muro y luego las columnas y vigas.

@@ -1,0 +1,796 @@
+---
+codigo: 'D.5a'
+tipo: capitulo
+titulo: 'Análisis y diseño: hipótesis y dimensiones efectivas'
+resumen: 'Base común del diseño de la mampostería estructural: método por estados límite y factores φ, suposiciones de diseño (εmu = 0.003, bloque 0.80 f′m), módulos de elasticidad y de cortante, cargas, y las dimensiones efectivas (espesor t con la Tabla D.5.4-1, altura h′, relación h′/t ≤ 25, ancho b y áreas Ae y Amv).'
+objetivos:
+  - 'Explicar el método de resistencia de D.5.1 y aplicar los factores φ según la dirección de las fuerzas respecto al plano del muro'
+  - 'Enumerar las siete suposiciones de D.5.1.6 y calcular Em, Er, Gm y Gr con sus topes'
+  - 'Obtener el espesor efectivo t de un muro arriostrado por machones interpolando la Tabla D.5.4-1'
+  - 'Determinar la altura efectiva h′ según los apoyos y verificar h′/t ≤ 25'
+  - 'Calcular el ancho efectivo b (trabado, petaca, celdas inyectadas) y las áreas efectivas Ae y Amv'
+paginasNorma: 'D-31 a D-37'
+paginaPdf: 596
+orden: 6
+calculadoras: ['dimensiones-efectivas']
+nivel: 'intermedio'
+---
+
+import {
+  alturaEfectiva,
+  anchoAletaMaximo,
+  anchoEfectivoParalelo,
+  anchoEfectivoPerpendicular,
+  areaCortanteParalela,
+  areaEfectiva,
+  cargaBalanceada,
+  coeficienteMachones,
+  distanciaMaximaApoyosViga,
+  esfuerzoAplastamientoMaximo,
+  espesorEfectivoMachones,
+  flechaMaximaViga,
+  longitudAplastamiento,
+  moduloCortanteMamposteria,
+  moduloCortanteMortero,
+  moduloElasticidadMamposteriaDetalle,
+  moduloElasticidadMorteroDetalle,
+  phiEnPlanoFlexocompresion,
+  relacionModular,
+  verificarEsbeltez,
+} from '../../lib/nsr10/dimensionesMamposteria';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const em = moduloElasticidadMamposteriaDetalle(10, 'concreto');
+  const er = moduloElasticidadMorteroDetalle(16);
+  const arc = moduloElasticidadMamposteriaDetalle(30, 'arcilla');
+  return { em, er, gm: moduloCortanteMamposteria(em.valor), gr: moduloCortanteMortero(er.valor), n: relacionModular(em.valor), arc };
+})();
+
+export const ej2 = (() => {
+  const c2 = coeficienteMachones(9, 2);
+  const c3 = coeficienteMachones(9, 3);
+  const mach = espesorEfectivoMachones(140, 3150, 350);
+  const hEf = alturaEfectiva(3600, 'ambos');
+  return { c2, c3, mach, hEf, sin: verificarEsbeltez(hEf, 140), con: verificarEsbeltez(hEf, mach.t), parapeto: alturaEfectiva(1200, 'voladizo'), parEsb: verificarEsbeltez(alturaEfectiva(1200, 'voladizo'), 100) };
+})();
+
+export const ej3 = (() => {
+  const tr = anchoEfectivoPerpendicular({ aparejo: 'trabado', anchoNominal: 150, separacionRefuerzo: 800 });
+  const pe = anchoEfectivoPerpendicular({ aparejo: 'petaca', anchoNominal: 150, separacionRefuerzo: 800 });
+  const so = anchoEfectivoPerpendicular({ aparejo: 'trabado', anchoNominal: 150, separacionRefuerzo: 800, todasInyectadas: true, anchoSolido: 1000 });
+  const Ae = areaEfectiva({ areaContacto: 252000 });
+  const bPar = anchoEfectivoParalelo(Ae, 3000);
+  return { tr, pe, so, Ae, bPar, AmvProm: areaCortanteParalela(bPar, 3000), AmvCentral: areaCortanteParalela(70, 3000) };
+})();
+
+export const ej4 = (() => {
+  const bal = cargaBalanceada(10, 1000, 75, 420);
+  const fmAe = 10 * 150 * 1000;
+  const r = phiEnPlanoFlexocompresion({ phiPn: 30000, fmAe, Pb: bal.Pb, fy: 420 });
+  return { bal, fmAe, r, r0: phiEnPlanoFlexocompresion({ phiPn: 0, fmAe, Pb: bal.Pb, fy: 420 }) };
+})();
+
+export const ej5 = (() => {
+  const L = longitudAplastamiento({ aparejo: 'trabado', anchoPieza: 200, espesorApoyo: 150 });
+  const sMax = esfuerzoAplastamientoMaximo(10);
+  return { L, sMax, A: 150 * L, Pmax: (sMax * 150 * L) / 1000 };
+})();
+
+## Idea central del capítulo
+
+El Capítulo D.5 es la **caja de herramientas común** del Título D: antes de calcular la resistencia a compresión, flexión o cortante de un muro (D.5.5 en adelante, que se tratan en la parte b), la norma fija las **reglas del juego**. Establece que el diseño se hace por **estados límite de resistencia** con factores φ, qué se supone del comportamiento de la mampostería (no resiste tracción, secciones planas, bloque rectangular de compresión), qué **módulos de elasticidad y de cortante** usar, cómo se combinan las cargas y, sobre todo, cuáles son las **dimensiones efectivas** con que se evalúa cada fórmula: el espesor $t$ y la altura $h'$ para el pandeo, el ancho $b$ para la flexión y las áreas $A_e$ y $A_{mv}$ para esfuerzos axiales y cortantes.
+
+Esta primera parte cubre **D.5.0 a D.5.4** (páginas D-31 a D-37). La sección D.5.5 (resistencia a carga axial) comienza al final de la página D-37, pero pertenece a la parte b del capítulo.
+
+<Callout tipo="importante" titulo="Por qué importan las dimensiones efectivas">
+En mampostería de perforación vertical la sección rara vez es sólida: hay celdas huecas, celdas inyectadas, machones, juntas ranuradas. Las fórmulas de resistencia **no** trabajan con la sección bruta, sino con $A_e$, $b$, $t$, $h'$ y $A_{mv}$ definidos en D.5.4. Equivocarse en una de ellas descarta la verificación completa del muro.
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este capítulo (autoría del proyecto)">
+Los ejemplos y la calculadora usan las funciones de `src/lib/nsr10/dimensionesMamposteria.ts` y las constantes de `src/data/dimensionesMamposteria.ts`. Lo rotulado **«autoría del proyecto»** (diagramas, relación modular, lecturas alternativas ante ambigüedades del texto) **no es texto de la norma**. Unidades del SI: mm, MPa, N o kN. Los diagramas de este capítulo son esquemas propios, porque el Título D no trae figuras.
+</Callout>
+
+## D.5.0 — Nomenclatura
+
+La sección D.5.0 (<NormaRef s="D.5.0" pag="D-31" />) lista los símbolos del capítulo. Los que se usan en esta parte son:
+
+| Símbolo | Significado | Sección |
+|---|---|---|
+| $A_e$ | Área efectiva de la sección de mampostería, mm² | <NormaRef s="D.5.4.1" pag="D-35" /> |
+| $A_{mv}$ | Área efectiva para determinar esfuerzos cortantes, mm² | <NormaRef s="D.5.4.5" pag="D-36" /> |
+| $b$ | Ancho efectivo de la sección, mm | <NormaRef s="D.5.4.4" pag="D-36" /> |
+| $h'$ | Altura efectiva del elemento para evaluar efectos de pandeo, mm | <NormaRef s="D.5.4.3" pag="D-36" /> |
+| $t$ | Espesor efectivo de la sección para evaluar efectos de pandeo, mm | <NormaRef s="D.5.4.2" pag="D-35" /> |
+| $E_m$, $E_r$, $E_s$ | Módulos de elasticidad de la mampostería, del mortero de relleno y del acero de refuerzo, MPa | <NormaRef s="D.5.2.1" pag="D-34" /> |
+| $G_m$, $G_r$ | Módulos de cortante de la mampostería y del mortero de relleno, MPa | <NormaRef s="D.5.2.2" pag="D-34" /> |
+| $f'_m$ | Resistencia a la compresión de la mampostería, MPa | <NormaRef s="D.5.0" pag="D-31" /> |
+| $\ell_w$ | Longitud horizontal del muro, mm | <NormaRef s="D.5.0" pag="D-31" /> |
+| $\varepsilon_{mu}$ | Máxima deformación unitaria permisible de compresión en la mampostería ($\varepsilon_{mu}=0.003$) | <NormaRef s="D.5.0" pag="D-32" /> |
+| $\phi$ | Coeficiente de reducción de resistencia | <NormaRef s="D.5.0" pag="D-32" /> |
+
+<Detalle titulo="Resto de la nomenclatura de D.5.0 (para consulta)">
+
+Símbolos que se emplean en las secciones D.5.5 a D.5.8 y en capítulos posteriores (<NormaRef s="D.5.0" pag="D-31" />, <NormaRef s="D.5.0" pag="D-32" />):
+
+| Símbolo | Significado |
+|---|---|
+| $A_{se}$ | Área efectiva de refuerzo en tracción, mm² |
+| $A_{st}$ | Área total de acero de refuerzo en la sección de muro, mm² |
+| $A_{s1}$, $A_{s2}$ | Refuerzo a tracción equilibrado por la compresión en la mampostería, y por el refuerzo a compresión, mm² |
+| $A_v$ | Área del refuerzo para cortante, mm² |
+| $a$, $a_b$ | Profundidad del bloque equivalente de compresión (tomar como $0.85c$) y en condiciones balanceadas (Ec. D.5.1-2), mm |
+| $c$ | Profundidad del eje neutro en la zona de compresión, mm |
+| $d$, $d'$ | Distancia de la cara de compresión al centroide del refuerzo en tracción; del centroide del refuerzo en compresión a la fibra extrema comprimida |
+| $E$, $F_s$ | Efectos sísmicos reducidos; fuerzas sísmicas |
+| $f_r$, $f_y$ | Módulo de ruptura de la mampostería; resistencia a la fluencia del acero, MPa |
+| $\ell$ | Luz de una viga o dintel, mm |
+| $M$, $M_{cr}$, $M_n$, $M_u$ | Momento actuante simultáneo con $V$; de agrietamiento; resistencia nominal y solicitada a flexión |
+| $P_b$, $P_n$, $P_o$, $P_u$ | Carga axial nominal balanceada; resistencia nominal; máxima resistencia axial teórica; resistencia solicitada de diseño, N |
+| $R$, $R_0$, $R_e$ | Coeficientes de capacidad de disipación de energía (de diseño y básico) y de esbeltez de elementos en compresión |
+| $s$ | Separación del refuerzo de cortante a lo largo del eje vertical del muro, mm |
+| $V$, $V_n$, $V_m$, $V_s$, $V_u$ | Cortante actuante simultáneo con $M$; resistencia nominal; aporte de la mampostería; aporte del refuerzo; resistencia solicitada, N |
+| $\alpha$ | Coeficiente de la ecuación D.5.8-1 |
+| $\varepsilon_y$ | Deformación unitaria de fluencia del acero |
+| $\rho$, $\rho_b$, $\rho_n$ | Cuantía de refuerzo a tracción $A_s/(bd)$; cuantía balanceada; cuantía de refuerzo horizontal que resiste cortante |
+
+La lista también incluye $\sqrt{f'_m}$ como «raíz cuadrada de la resistencia a la compresión de la mampostería, en MPa» (<NormaRef s="D.5.0" pag="D-31" />).
+
+</Detalle>
+
+<Callout tipo="nota" titulo="Erratas menores en la nomenclatura">
+En la página D-31 la definición de $R_e$ dice «para **temer** en cuenta» (debe ser «tener»); la de $d'$ dice «refuerzo en compresión flexión»; y la de $\rho_n$ («cuantía de refuerzo horizontal que resiste cortante en un muro en un plano perpendicular al plano $A_{mv}$, mm²») está redactada de forma confusa, con unidades de área para una cuantía. Son defectos de redacción del texto original; no cambian los valores de ninguna ecuación de esta parte.
+</Callout>
+
+## D.5.1 — Hipótesis y principios generales
+
+### D.5.1.1 a D.5.1.4 — Método, resistencia requerida y resistencia de diseño
+
+- **Generalidades** (<NormaRef s="D.5.1.1" pag="D-32" />): el análisis y diseño se hace con **métodos racionales** basados en la buena práctica de la ingeniería, que reflejen las propiedades de los materiales, el método constructivo y el comportamiento individual y de conjunto del sistema.
+- **Metodología** (<NormaRef s="D.5.1.2" pag="D-32" />): el Título D se basa en el **estado límite de resistencia**, con las combinaciones de B.2.4. Se permite diseñar por el método de **esfuerzos de trabajo**, con las combinaciones de B.2.3 y los requisitos alternos del **Apéndice D-1**, pero **todo el diseño de la estructura debe hacerse por uno solo de los dos métodos**.
+- **Resistencia requerida** (<NormaRef s="D.5.1.3" pag="D-32" />): el máximo valor, en términos de carga o de momentos y fuerzas internas asociadas, que resulta de aplicar las cargas muertas, vivas, sísmicas, de viento, de temperatura, retracción, flujo plástico, empuje de tierra o líquidos, etc., **combinadas y mayoradas según B.2.4**.
+- **Resistencia de diseño** (<NormaRef s="D.5.1.4" pag="D-32" />): la resistencia nominal calculada según este capítulo, multiplicada por el coeficiente de reducción φ.
+
+<Ecuacion num="D.5.1-1" titulo="Condición de diseño">
+
+$$
+\phi \times \text{Resistencia nominal} \;\ge\; \text{Resistencia requerida}\;=\;U
+$$
+
+- $\phi$: coeficiente de reducción de resistencia (D.5.1.5).
+- $U$: resistencia requerida, obtenida con las combinaciones mayoradas de B.2.4.
+
+</Ecuacion>
+
+### D.5.1.5 — Valores de φ
+
+El valor de φ depende de **hacia dónde actúan las fuerzas horizontales** respecto al plano del muro (<NormaRef s="D.5.1.5" pag="D-32" />):
+
+| Condición | Efecto | φ | Sección |
+|---|---|:---:|---|
+| Gravedad sola, o con fuerzas **perpendiculares** al plano del muro | Flexión y flexo-compresión | 0.80 | <NormaRef s="D.5.1.5.1" pag="D-32" /> (a) |
+| (ídem) | Cortante | 0.60 | <NormaRef s="D.5.1.5.1" pag="D-32" /> (b) |
+| Fuerzas **paralelas** al plano del muro | Flexión | 0.85 | <NormaRef s="D.5.1.5.2" pag="D-32" /> (a) |
+| (ídem) | Compresión y flexo-compresión | 0.60 (puede crecer hasta 0.85, ver abajo) | <NormaRef s="D.5.1.5.2" pag="D-32" /> (b) |
+| (ídem) | Cortante | 0.60 (0.85 si Vn supera el cortante asociado a Mn) | <NormaRef s="D.5.1.5.2" pag="D-33" /> (c) |
+| Esfuerzos de aplastamiento | Aplastamiento | 0.60 | <NormaRef s="D.5.1.5.3" pag="D-33" /> |
+
+**Incremento lineal de φ en flexo-compresión paralela al plano.** Para muros con **refuerzo simétrico** en los que $f_y$ **no excede 420 MPa**, φ puede aumentar linealmente hasta **0.85** a medida que $\phi P_n$ disminuye desde $0.10f'_mA_e$ ó $0.25P_b$ hasta cero (<NormaRef s="D.5.1.5.2" pag="D-33" />). Para muros con **todas las celdas inyectadas**, $P_b$ puede calcularse con la ecuación D.5.1-2.
+
+<Ecuacion num="D.5.1-2" titulo="Carga axial balanceada y profundidad balanceada del bloque (celdas inyectadas)">
+
+$$
+P_b = 0.80\,f'_m\,b\,a_b
+\qquad\qquad
+a_b = 0.85\,d\;\frac{\varepsilon_{mu}}{\varepsilon_{mu}+\dfrac{f_y}{E_s}}
+$$
+
+- $P_b$: carga axial nominal balanceada, N. $a_b$: profundidad del bloque equivalente en condiciones balanceadas, mm.
+- $b$: ancho efectivo (D.5.4.4), mm. $d$: distancia de la cara en compresión al centroide del refuerzo en tracción, mm.
+- $\varepsilon_{mu}=0.003$ (D.5.1.6.5), $E_s = 200\,000$ MPa (D.5.2-1).
+
+</Ecuacion>
+
+<Figura alt="Gráfico del factor phi frente a phi Pn: vale 0.85 con carga axial nula, baja linealmente hasta 0.60 cuando phi Pn alcanza el límite, y se mantiene en 0.60 después" numero="Esquema" pie="Incremento lineal de φ en muros con refuerzo simétrico y fy ≤ 420 MPa (D.5.1.5.2(b)). El límite es 0.10 f′m Ae ó 0.25 Pb (esquema del proyecto).">
+<svg viewBox="0 0 480 210" role="img" aria-label="φ varía linealmente de 0.85 a 0.60 al crecer φPn hasta el límite y luego permanece en 0.60" className="mx-auto h-auto w-full max-w-xl">
+  <line x1="60" y1="20" x2="60" y2="165" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="60" y1="165" x2="450" y2="165" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="60" y1="40" x2="250" y2="140" stroke="currentColor" strokeWidth="3" />
+  <line x1="250" y1="140" x2="420" y2="140" stroke="currentColor" strokeWidth="3" />
+  <line x1="250" y1="140" x2="250" y2="165" stroke="currentColor" strokeOpacity="0.5" strokeDasharray="4 4" />
+  <line x1="60" y1="40" x2="420" y2="40" stroke="currentColor" strokeOpacity="0.3" strokeDasharray="4 4" />
+  <circle cx="60" cy="40" r="4" fill="currentColor" />
+  <circle cx="250" cy="140" r="4" fill="currentColor" />
+  <text x="52" y="44" textAnchor="end" fontSize="12" fill="currentColor">0.85</text>
+  <text x="52" y="144" textAnchor="end" fontSize="12" fill="currentColor">0.60</text>
+  <text x="250" y="184" textAnchor="middle" fontSize="12" fill="currentColor">límite: 0.10 f′m Ae ó 0.25 Pb</text>
+  <text x="60" y="184" textAnchor="middle" fontSize="12" fill="currentColor">0</text>
+  <text x="455" y="160" fontSize="12" fill="currentColor">φPn</text>
+  <text x="18" y="14" fontSize="12" fill="currentColor">φ</text>
+  <text x="130" y="72" fontSize="12" fill="currentColor" fillOpacity="0.8">interpolación lineal</text>
+  <text x="335" y="130" textAnchor="middle" fontSize="12" fill="currentColor" fillOpacity="0.8">φ = 0.60</text>
+</svg>
+</Figura>
+
+<Callout tipo="atencion" titulo="Ambigüedad: ¿«0.10 f′m Ae» ó «0.25 Pb»?">
+El PDF escribe «desde $0.10f'_mA_e$ **ó** $0.25P_b$ hasta cero» sin decir cuál de los dos límites rige. En la función `phiEnPlanoFlexocompresion` del proyecto se adopta el **menor** de los dos (criterio conservador, **autoría del proyecto**): con el límite menor, $\phi P_n$ llega antes al límite y φ crece más despacio. Además, el párrafo del incremento aparece impreso a continuación del literal (b), «Compresión y flexo-compresión»; se lee como parte de ese literal. Verifica este punto con la fuente oficial antes de una aplicación profesional.
+</Callout>
+
+### D.5.1.6 — Suposiciones de diseño
+
+El diseño por resistencia se basa en siete suposiciones (<NormaRef s="D.5.1.6" pag="D-33" />):
+
+| Numeral | Suposición | En palabras |
+|---|---|---|
+| <NormaRef s="D.5.1.6.1" pag="D-33" /> | La mampostería **no resiste tracción** | Toda la tracción la toma el refuerzo. |
+| <NormaRef s="D.5.1.6.2" pag="D-33" /> | Compatibilidad de deformaciones | El refuerzo está totalmente rodeado y adherido: trabaja con la mampostería como material homogéneo. |
+| <NormaRef s="D.5.1.6.3" pag="D-33" /> | Secciones planas permanecen planas | Deformaciones proporcionales a la distancia al eje neutro; la resistencia sale de equilibrio y compatibilidad. |
+| <NormaRef s="D.5.1.6.4" pag="D-33" /> | Acero elastoplástico | $f_s = E_s\varepsilon_s$ hasta $\varepsilon_y = f_y/E_s$ y luego $f_s = f_y$. |
+| <NormaRef s="D.5.1.6.5" pag="D-33" /> | $\varepsilon_{mu} = 0.003$ | Máxima deformación en la fibra extrema comprimida. |
+| <NormaRef s="D.5.1.6.6" pag="D-33" /> (a) | Esfuerzo uniforme $0.80f'_m$ | Sobre una zona equivalente limitada por los bordes de la sección efectiva y una recta paralela al eje neutro. |
+| <NormaRef s="D.5.1.6.6" pag="D-33" /> (b) | $a = 0.85c$ | La profundidad de la zona equivalente es el 85 % de la dimensión comprimida $c$. |
+
+<Callout tipo="nota" titulo="Comparación con el concreto (autoría del proyecto)">
+Es el mismo esquema del Capítulo C.10, con dos diferencias de valores: en mampostería el bloque tiene intensidad **$0.80f'_m$** (en concreto, $0.85f'_c$) y su profundidad es **fija: $a=0.85c$** (en concreto, $\beta_1$ varía con $f'_c$). La deformación última coincide ($0.003$).
+</Callout>
+
+<Figura alt="Sección de muro con distribución de deformaciones lineal, eje neutro a profundidad c, bloque rectangular de esfuerzos 0.80 f′m de profundidad a = 0.85 c y fuerza de tracción As fy" numero="Esquema" pie="Suposiciones de D.5.1.6 en una sección de muro: deformaciones lineales con εmu = 0.003 en la fibra comprimida, bloque rectangular 0.80 f′m de profundidad a = 0.85c, y refuerzo en fluencia (esquema del proyecto).">
+<svg viewBox="0 0 520 230" role="img" aria-label="Sección, deformaciones y esfuerzos de una sección de mampostería reforzada" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="40" y="30" width="70" height="150" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.5" />
+  <circle cx="75" cy="160" r="6" fill="currentColor" />
+  <text x="75" y="205" textAnchor="middle" fontSize="12" fill="currentColor">Sección</text>
+  <text x="75" y="22" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">cara comprimida</text>
+  <polygon points="190,30 190,180 290,180" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="190" y1="30" x2="290" y2="180" stroke="currentColor" strokeWidth="2" />
+  <line x1="150" y1="87" x2="320" y2="87" stroke="currentColor" strokeDasharray="5 4" strokeOpacity="0.7" />
+  <text x="326" y="91" fontSize="11" fill="currentColor">eje neutro (c)</text>
+  <text x="235" y="205" textAnchor="middle" fontSize="12" fill="currentColor">Deformaciones</text>
+  <text x="188" y="24" textAnchor="end" fontSize="11" fill="currentColor">εmu = 0.003</text>
+  <rect x="400" y="30" width="55" height="48" fill="currentColor" fillOpacity="0.45" stroke="currentColor" strokeWidth="1.5" />
+  <text x="478" y="58" fontSize="11" fill="currentColor">0.80 f′m</text>
+  <line x1="470" y1="30" x2="470" y2="78" stroke="currentColor" />
+  <text x="478" y="76" fontSize="11" fill="currentColor">a = 0.85c</text>
+  <line x1="400" y1="160" x2="455" y2="160" stroke="currentColor" strokeWidth="3" />
+  <text x="460" y="164" fontSize="11" fill="currentColor">As fy</text>
+  <text x="427" y="205" textAnchor="middle" fontSize="12" fill="currentColor">Esfuerzos</text>
+</svg>
+</Figura>
+
+## D.5.2 — Módulos de elasticidad y de cortante
+
+### D.5.2.1 — Módulo de elasticidad
+
+La norma da tres valores (<NormaRef s="D.5.2.1" pag="D-34" />).
+
+<Ecuacion num="D.5.2-1" titulo="Módulo de elasticidad del acero de refuerzo">
+
+$$
+E_s = 200\,000\ \text{MPa}
+$$
+
+</Ecuacion>
+
+**Mampostería** (<NormaRef s="D.5.2.1.2" pag="D-34" />): el valor correcto se establece **por ensayos de laboratorio** de muretes fabricados y ensayados como indica D.3.7.2, calculando en la curva esfuerzo-deformación la **pendiente de la secante desde $0.05f'_m$ hasta $0.33f'_m$**. Los registros históricos del módulo medido en proyectos en construcción pueden usarse en diseños posteriores con materiales similares. **En ausencia de valores experimentales** se permiten:
+
+<Ecuacion num="D.5.2-2 y D.5.2-3" titulo="Módulo de elasticidad de la mampostería (valores supletorios)">
+
+$$
+\text{Concreto:}\quad E_m = 900\,f'_m \le 20\,000\ \text{MPa}
+\qquad\qquad
+\text{Arcilla:}\quad E_m = 750\,f'_m \le 20\,000\ \text{MPa}
+$$
+
+- $f'_m$ en MPa; $E_m$ en MPa. El tope de 20 000 MPa se alcanza con $f'_m \approx 22.2$ MPa en mampostería de concreto y $f'_m = 26.7$ MPa en arcilla.
+
+</Ecuacion>
+
+**Mortero de relleno** (<NormaRef s="D.5.2.1.3" pag="D-34" />): por ensayo de cilindros según C.8.5; en su ausencia:
+
+<Ecuacion num="D.5.2-4" titulo="Módulo de elasticidad del mortero de relleno">
+
+$$
+E_r = 2500\,\sqrt{f'_{cr}} \le 20\,000\ \text{MPa}
+$$
+
+- $f'_{cr}$: resistencia a la compresión del mortero de relleno, MPa.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Verificado contra la imagen: la mampostería usa f′m, no su raíz">
+Las ecuaciones D.5.2-2 y D.5.2-3 son **lineales** en $f'_m$ (el texto extraído del PDF pierde los radicales y daría lugar a dudas). La imagen de la página D-34 muestra $E_m = 900f'_m$ y $E_m = 750f'_m$ sin raíz; solo $E_r$ (D.5.2-4) lleva $\sqrt{f'_{cr}}$.
+</Callout>
+
+### D.5.2.2 — Módulo de cortante
+
+<Ecuacion num="D.5.2-5 y D.5.2-6" titulo="Módulos de cortante">
+
+$$
+G_m = 0.4\,E_m
+\qquad\qquad
+G_r = 0.5\,E_r
+$$
+
+- $G_m$ y $G_r$ en MPa, para la mampostería (<NormaRef s="D.5.2.2" pag="D-34" />) y el mortero de relleno respectivamente.
+
+</Ecuacion>
+
+<Ejemplo numero={1} titulo="Módulos de la mampostería y del mortero, sin ensayos">
+Un muro de bloque de concreto tiene $f'_m$ = 10 MPa y mortero de relleno con $f'_{cr}$ = 16 MPa. Hallar $E_m$, $G_m$, $E_r$, $G_r$ y la relación modular $n=E_s/E_m$. Después, comprobar el tope con mampostería de arcilla de $f'_m$ = 30 MPa.
+
+<Paso titulo="Mampostería de concreto" ref="D.5.2-2, D.5.2-5">
+
+$$
+E_m = 900\,(10) = 9000\ \text{MPa}\le 20\,000
+\qquad
+G_m = 0.4\,(9000)
+$$
+
+Resultado: $E_m$ = **{f(ej1.em.valor, 0)} MPa**, $G_m$ = **{f(ej1.gm, 0)} MPa**.
+
+</Paso>
+<Paso titulo="Mortero de relleno" ref="D.5.2-4, D.5.2-6">
+
+$$
+E_r = 2500\,\sqrt{16} = 2500\,(4)
+\qquad
+G_r = 0.5\,E_r
+$$
+
+Resultado: $E_r$ = **{f(ej1.er.valor, 0)} MPa**, $G_r$ = **{f(ej1.gr, 0)} MPa**.
+
+</Paso>
+<Paso titulo="Relación modular" ref="D.5.2-1">
+
+$n = E_s/E_m = 200\,000/{f(ej1.em.valor, 0)}$ = **{f(ej1.n, 2)}** (aporte del proyecto: es la razón con que se «transforma» el acero a mampostería; la norma la usa implícitamente en D.6.4.4).
+
+</Paso>
+<Paso titulo="Tope de 20 000 MPa" ref="D.5.2-3">
+
+Arcilla con $f'_m$ = 30 MPa: $750(30)$ = {f(ej1.arc.sinTope, 0)} MPa, que excede el tope. Se adopta **$E_m$ = {f(ej1.arc.valor, 0)} MPa**.
+
+</Paso>
+<Resultado>
+Concreto: $E_m$ = **{f(ej1.em.valor, 0)}** MPa, $G_m$ = **{f(ej1.gm, 0)}** MPa; relleno: $E_r$ = **{f(ej1.er.valor, 0)}** MPa, $G_r$ = **{f(ej1.gr, 0)}** MPa; arcilla de $f'_m$ = 30 MPa: $E_m$ limitado a **{f(ej1.arc.valor, 0)}** MPa.
+</Resultado>
+</Ejemplo>
+
+## D.5.3 — Cargas
+
+### D.5.3.1 — Solicitaciones a emplear
+
+Las estructuras de mampostería se diseñan para las **cargas combinadas del Título B**, y en la evaluación de esfuerzos deben considerarse los **efectos de las cargas sobre los desplazamientos** (<NormaRef s="D.5.3.1" pag="D-34" />).
+
+- **Combinación** (<NormaRef s="D.5.3.1.1" pag="D-34" />): se combinan según B.2.4 por el método del estado límite de resistencia; cada solicitación se multiplica por el coeficiente de carga de esa combinación. Los efectos sísmicos se toman **reducidos**, $E = F_s/R$, donde $F_s$ son las fuerzas sísmicas del Título A y $R$ el coeficiente de capacidad de disipación de energía.
+- $R$ depende de (<NormaRef s="D.5.3.1.1" pag="D-35" />): (a) el **sistema de resistencia sísmica** (clasificación del Capítulo A.3); (b) el **grado de irregularidad** de la edificación; (c) la **ausencia de redundancia** (A.3.3.8); y (d) los **requisitos de diseño y detallado** de cada tipo de mampostería para el grado de capacidad de disipación de energía correspondiente (DMI, DMO o DES).
+- **Otros efectos** (<NormaRef s="D.5.3.1.2" pag="D-35" />): además de las cargas verticales y horizontales, la estructura debe resistir contracción, expansión, flujo plástico, asentamientos previstos y condiciones ambientales de funcionamiento.
+
+### D.5.3.2 — Distribución de la fuerza lateral
+
+Las fuerzas laterales se distribuyen al sistema estructural **según la rigidez de los elementos y del diafragma**, como prescribe el Título A (<NormaRef s="D.5.3.2" pag="D-35" />).
+
+- **Efecto de las aletas** (<NormaRef s="D.5.3.2.1" pag="D-35" />): puede considerarse el aumento de rigidez por efecto de aleta en muros que se intersectan **monolíticamente**. El ancho efectivo de aleta **a cada lado** (tipo T, I) no debe exceder **6 veces el espesor del muro intersectado**; igualmente, el de aleta **a un solo lado** (tipo L, Z, C). **La aleta no se considera en la resistencia a cortante.**
+- **Efectos torsionales** (<NormaRef s="D.5.3.2.2" pag="D-35" />): las cargas laterales distribuidas deben incluir los efectos torsionales horizontales por asimetría de cargas, masas o estructura (Título A).
+
+Para un muro intersectado de 150 mm de espesor, la aleta efectiva no puede pasar de {f(anchoAletaMaximo(150), 0)} mm a cada lado (ejemplo del proyecto con la regla $6t$).
+
+### D.5.3.3 — Cargas concentradas
+
+Para cargas concentradas deben tenerse en cuenta (<NormaRef s="D.5.3.3" pag="D-35" />):
+
+1. **Área de aplastamiento** (literal (a)). En **aparejo trabado**: la profundidad es el **espesor neto del elemento de apoyo** y la longitud no puede ser mayor que el **ancho de la pieza soportada más cuatro veces el espesor del apoyo**, sin pasar de la distancia entre centros de las cargas concentradas. En **aparejo de petaca**: la longitud del área de cálculo es el **tamaño de la unidad** de mampostería en esa dirección.
+2. **Esfuerzo máximo** (literal (b)): bajo cargas mayoradas sobre esa área, el esfuerzo de aplastamiento no debe exceder **$\phi\,0.85f'_m$** (con φ = 0.60 de D.5.1.5.3, o sea $0.51f'_m$).
+3. **Dispersión** (literal (c)): la carga concentrada se distribuye a **45° con la vertical** en muros de aparejo trabado y a **30°** en muros de aparejo de petaca.
+
+<Figura alt="Dos muros: en aparejo trabado la carga concentrada se dispersa a 45 grados con la vertical y en aparejo de petaca a 30 grados" numero="Esquema" pie="Dispersión de una carga concentrada (D.5.3.3(c)): 45° con la vertical en aparejo trabado y 30° en petaca; el ancho que moviliza es menor en petaca (esquema del proyecto).">
+<svg viewBox="0 0 520 210" role="img" aria-label="Dispersión de cargas concentradas a 45 y 30 grados" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="40" y="50" width="170" height="130" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="100" y="38" width="50" height="12" fill="currentColor" fillOpacity="0.7" />
+  <line x1="125" y1="10" x2="125" y2="38" stroke="currentColor" strokeWidth="2" />
+  <polygon points="100,50 150,50 195,95 55,95" fill="currentColor" fillOpacity="0.3" />
+  <line x1="100" y1="50" x2="55" y2="95" stroke="currentColor" strokeDasharray="4 3" />
+  <line x1="150" y1="50" x2="195" y2="95" stroke="currentColor" strokeDasharray="4 3" />
+  <text x="125" y="200" textAnchor="middle" fontSize="12" fill="currentColor">Aparejo trabado: 45°</text>
+  <rect x="300" y="50" width="170" height="130" fill="currentColor" fillOpacity="0.15" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="360" y="38" width="50" height="12" fill="currentColor" fillOpacity="0.7" />
+  <line x1="385" y1="10" x2="385" y2="38" stroke="currentColor" strokeWidth="2" />
+  <polygon points="360,50 410,50 437,95 333,95" fill="currentColor" fillOpacity="0.3" />
+  <line x1="360" y1="50" x2="333" y2="95" stroke="currentColor" strokeDasharray="4 3" />
+  <line x1="410" y1="50" x2="437" y2="95" stroke="currentColor" strokeDasharray="4 3" />
+  <text x="385" y="200" textAnchor="middle" fontSize="12" fill="currentColor">Aparejo en petaca: 30°</text>
+</svg>
+</Figura>
+
+<Ejemplo numero={2} titulo="Área y capacidad de aplastamiento bajo una carga concentrada">
+Una viga apoyada de 200 mm de ancho descansa sobre un muro de aparejo trabado con espesor neto de apoyo de 150 mm y $f'_m$ = 10 MPa. Hallar la longitud del área de aplastamiento y la carga mayorada máxima que puede transmitir.
+
+<Paso titulo="Longitud del área de aplastamiento" ref="D.5.3.3(a)">
+
+$$
+L = 200 + 4\,(150)
+$$
+
+Resultado: $L$ = **{f(ej5.L, 0)} mm** (no hay otra carga cercana que la limite). Área = 150 × {f(ej5.L, 0)} = **{f(ej5.A, 0)} mm²**.
+
+</Paso>
+<Paso titulo="Esfuerzo máximo" ref="D.5.3.3(b), D.5.1.5.3">
+
+$$
+f_{aplast} = \phi\,0.85\,f'_m = 0.60\,(0.85)\,(10)
+$$
+
+Resultado: **{f(ej5.sMax, 2)} MPa**.
+
+</Paso>
+<Paso titulo="Carga máxima" ref="D.5.3.3(b)">
+
+$P_u \le f_{aplast}\times A$ = {f(ej5.sMax, 2)} × {f(ej5.A, 0)} / 1000.
+
+</Paso>
+<Resultado>
+Longitud de aplastamiento **{f(ej5.L, 0)} mm**; carga mayorada máxima **{f(ej5.Pmax, 0)} kN** (esfuerzo límite {f(ej5.sMax, 2)} MPa).
+</Resultado>
+</Ejemplo>
+
+### D.5.3.4 — Carga excéntrica
+
+Los esfuerzos que producen las cargas con **excentricidad paralela o normal al plano** del elemento deben considerarse teniendo en cuenta su **posición relativa al centro de rigidez de la sección neta**; todo esfuerzo debe quedar dentro de los límites de cada caso (<NormaRef s="D.5.3.4" pag="D-35" />).
+
+**Apoyos provisionales** (<NormaRef s="D.5.3.4.1" pag="D-35" />): se debe considerar la condición **transitoria** de la acción y los efectos **permanentes**. Si los efectos transitorios se mitigan con apoyos provisionales, estos deben **especificarse claramente en los planos de construcción**.
+
+## D.5.4 — Características dimensionales efectivas
+
+Esta sección define las dimensiones con que se alimentan las fórmulas de resistencia. Termina en la página D-37 con los requisitos de vigas y dinteles (D.5.4.8); a continuación empieza D.5.5.
+
+<CalculadoraEmbed id="dimensiones-efectivas" />
+
+### D.5.4.1 — Área efectiva Ae
+
+El área efectiva para esfuerzos axiales es la **suma del área mínima de contacto entre el mortero de pega y la unidad de mampostería y el área inyectada** (<NormaRef s="D.5.4.1" pag="D-35" />). Cuando la junta de mortero es **ranurada**, el área efectiva se **reduce proporcionalmente**. En **mampostería confinada** incluye el área de los elementos de confinamiento.
+
+La norma no da un factor numérico para la junta ranurada: la función `areaEfectiva` del proyecto lo recibe como parámetro (`factorJuntaRanurada`, **autoría del proyecto**).
+
+### D.5.4.2 — Espesor efectivo t para el pandeo
+
+El espesor efectivo $t$ para el coeficiente de reducción por pandeo se toma así (<NormaRef s="D.5.4.2" pag="D-35" />):
+
+- **(a)** Muros **sin machones o columnas de arriostramiento**: el espesor real.
+- **(b)** Muros **arriostrados a distancias regulares por machones integrados monolíticamente**: el espesor real multiplicado por el **coeficiente de la Tabla D.5.4-1** (<NormaRef s="D.5.4.2" pag="D-36" />).
+- **(c)** **Muros de cavidad reforzada**: se asimilan a un solo muro cuyo espesor real se mide **entre los bordes externos del conjunto**.
+- **(d)** Elementos de **sección rectangular**: la dimensión de la sección en la dirección considerada. Para secciones **no rectangulares**: en cada dirección, el espesor de una sección rectangular de **igual ancho e inercia equivalente**.
+
+Para (d), con ancho $b$ e inercia $I$ respecto al eje paralelo al ancho, el espesor rectangular equivalente es $t=\sqrt[3]{12I/b}$ (deducción del proyecto, a partir de $I=bt^3/12$; función `espesorEquivalenteInercia`).
+
+<TablaNorma numero="Tabla D.5.4-1" titulo="Coeficientes para muros arriostrados por machones (*)" pag="D-36" nota="(*) Interpolar linealmente para valores intermedios.">
+
+| Espaciamiento del machón / Espesor del machón | Espesor machón / Espesor muro = 1.0 | = 2.0 | = 3.0 |
+|---|:---:|:---:|:---:|
+| 6 ó menos | 1.0 | 1.4 | 2.0 |
+| 8 | 1.0 | 1.3 | 1.7 |
+| 10 | 1.0 | 1.2 | 1.4 |
+| 15 | 1.0 | 1.1 | 1.2 |
+| 20 ó más | 1.0 | 1.0 | 1.0 |
+
+</TablaNorma>
+
+**Cómo se usa.** El coeficiente $k_p$ es mayor mientras **más cerca** estén los machones (relación espaciamiento/espesor del machón baja) y mientras **más gruesos** sean respecto al muro. Con machones muy separados (20 o más) no aportan y $k_p=1.0$; con espesor de machón igual al del muro (1.0) tampoco hay efecto. El espesor efectivo es $t = k_p\,t_m$, donde $t_m$ es el espesor real del muro. Para valores intermedios se interpola **linealmente**, en dos direcciones (**interpolación bilineal**): primero sobre las filas de espaciamiento, luego entre columnas de espesor (nota (*) de la tabla).
+
+<Figura alt="Planta de un muro con machones salientes a distancias regulares, con las cotas del espaciamiento entre machones, el espesor del machón y el espesor del muro" numero="Esquema" pie="Muro arriostrado por machones integrados monolíticamente (planta). tm = espesor real del muro; tp = espesor del machón (dimensión total medida desde la cara opuesta del muro); ep = espaciamiento entre machones (esquema del proyecto).">
+<svg viewBox="0 0 540 200" role="img" aria-label="Planta de muro con machones: cotas ep, tp y tm" className="mx-auto h-auto w-full max-w-xl">
+  <defs>
+    <marker id="fa-mach" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" /></marker>
+  </defs>
+  <path d="M60 100 H118 V62 H142 V100 H258 V62 H282 V100 H398 V62 H422 V100 H520 V120 H60 Z" fill="currentColor" fillOpacity="0.3" stroke="currentColor" strokeWidth="1.5" />
+  <line x1="130" y1="62" x2="130" y2="160" stroke="currentColor" strokeOpacity="0.5" strokeDasharray="4 3" />
+  <line x1="270" y1="62" x2="270" y2="160" stroke="currentColor" strokeOpacity="0.5" strokeDasharray="4 3" />
+  <line x1="130" y1="150" x2="270" y2="150" stroke="currentColor" markerStart="url(#fa-mach)" markerEnd="url(#fa-mach)" />
+  <text x="200" y="145" textAnchor="middle" fontSize="12" fill="currentColor">ep (espaciamiento)</text>
+  <line x1="42" y1="62" x2="42" y2="120" stroke="currentColor" markerStart="url(#fa-mach)" markerEnd="url(#fa-mach)" />
+  <line x1="42" y1="62" x2="118" y2="62" stroke="currentColor" strokeOpacity="0.4" strokeDasharray="3 3" />
+  <text x="36" y="95" textAnchor="end" fontSize="12" fill="currentColor">tp</text>
+  <text x="470" y="140" textAnchor="middle" fontSize="12" fill="currentColor">muro (espesor tm)</text>
+  <line x1="470" y1="122" x2="470" y2="128" stroke="currentColor" />
+  <text x="130" y="52" textAnchor="middle" fontSize="12" fill="currentColor">machón</text>
+  <text x="270" y="180" textAnchor="middle" fontSize="12" fill="currentColor" fillOpacity="0.8">t = kp × tm, con kp de la Tabla D.5.4-1</text>
+</svg>
+</Figura>
+
+<Callout tipo="atencion" titulo="Lectura de los encabezados de la Tabla D.5.4-1 (autoría del proyecto)">
+El PDF titula la columna «Espesor machón / Espesor muro» y la fila «Espaciamiento machón / Espesor machón»: usa la misma expresión «espesor machón» en ambas relaciones y no define si el espaciamiento es entre ejes ni si el espesor del machón incluye el del muro. La columna 1.0 con coeficiente 1.0 en todas las filas indica que un «espesor machón = espesor muro» significa **machón sin resalte**, es decir, que el espesor del machón se mide como **dimensión total desde la cara opuesta del muro**. En el proyecto se lee así y se toma el espaciamiento **entre ejes** de los machones; la calculadora usa un solo valor de $t_p$ en ambas relaciones (lectura literal). Si el proyecto tiene machones cuyo ancho a lo largo del muro difiere de su espesor, verifica la interpretación con la fuente oficial.
+
+Fuera de la tabla la norma no da valores. La calculadora **acota** la relación $t_p/t_m$ a 1–3 y lo avisa; para espaciamiento/espesor ≤ 6 usa la fila «6 ó menos» y para ≥ 20 usa 1.0 (así lo dicen los encabezados de fila).
+</Callout>
+
+<Ejemplo numero={3} titulo="Espesor efectivo de un muro con machones e interpolación en la Tabla D.5.4-1">
+Muro de bloque de 140 mm de espesor ($t_m$), arriostrado por machones de 350 mm de espesor ($t_p$) cada 3150 mm entre ejes ($e_p$). Altura libre entre losas $h'$ = 3600 mm, soportado arriba y abajo. Hallar $t$ y verificar $h'/t \le 25$, con y sin los machones.
+
+<Paso titulo="Relaciones de entrada a la tabla" ref="Tabla D.5.4-1">
+
+$$
+\frac{e_p}{t_p}=\frac{3150}{350}=9
+\qquad
+\frac{t_p}{t_m}=\frac{350}{140}=2.5
+$$
+
+</Paso>
+<Paso titulo="Interpolación en el espaciamiento (relación 9, entre las filas 8 y 10)" ref="Tabla D.5.4-1, nota (*)">
+
+Columna 2.0: entre 1.3 (fila 8) y 1.2 (fila 10) → **{f(ej2.c2.coef, 2)}**. Columna 3.0: entre 1.7 y 1.4 → **{f(ej2.c3.coef, 2)}**.
+
+</Paso>
+<Paso titulo="Interpolación en el espesor del machón (relación 2.5, entre las columnas 2.0 y 3.0)" ref="Tabla D.5.4-1, nota (*)">
+
+$$
+k_p = 1.25 + \frac{2.5-2.0}{3.0-2.0}\,(1.55-1.25)
+$$
+
+Resultado: $k_p$ = **{f(ej2.mach.coef, 2)}**.
+
+</Paso>
+<Paso titulo="Espesor efectivo" ref="D.5.4.2(b)">
+
+$t = k_p\,t_m$ = {f(ej2.mach.coef, 2)} × 140 = **{f(ej2.mach.t, 1)} mm**.
+
+</Paso>
+<Paso titulo="Relación de esbeltez" ref="D.5.4.3(a), D.5.4.3.1">
+
+Con machones: $h'/t$ = {f(ej2.hEf, 0)}/{f(ej2.mach.t, 1)} = **{f(ej2.con.relacion, 2)}** ≤ 25: **cumple**. Sin machones ($t$ = 140 mm): $h'/t$ = **{f(ej2.sin.relacion, 2)}**, mayor que 25: **no cumple**. La altura máxima admisible con el espesor efectivo es 25 × {f(ej2.mach.t, 1)} = {f(ej2.con.hMaxima, 0)} mm.
+
+</Paso>
+<Resultado>
+$k_p$ = **{f(ej2.mach.coef, 2)}**, $t$ = **{f(ej2.mach.t, 1)} mm**, $h'/t$ = **{f(ej2.con.relacion, 2)}** ≤ 25. Sin los machones el muro de 140 mm no cumpliría ({f(ej2.sin.relacion, 2)}).
+</Resultado>
+</Ejemplo>
+
+### D.5.4.3 — Altura efectiva h′ para el pandeo
+
+La altura efectiva $h'$ del elemento para el coeficiente de reducción por pandeo se toma así (<NormaRef s="D.5.4.3" pag="D-36" />):
+
+- **(a)** Elementos **soportados lateralmente arriba y abajo** en la dirección considerada: la **distancia libre entre apoyos**.
+- **(b)** Elementos **no soportados en un extremo** en la dirección considerada: el **doble de la dimensión** medida desde el apoyo.
+- **(c)** Cuando se **justifique apropiadamente**, puede usarse una dimensión menor que la distancia libre entre apoyos.
+
+**D.5.4.3.1** (<NormaRef s="D.5.4.3.1" pag="D-36" />): la relación entre la altura efectiva y el espesor efectivo **no puede ser superior a 25** en muros estructurales.
+
+<Figura alt="Tres muros en elevación: soportado arriba y abajo con h′ igual a la distancia libre, en voladizo con h′ igual a dos veces la altura, y con arriostre intermedio con h′ menor justificada" numero="Esquema" pie="Altura efectiva h′ según los apoyos (D.5.4.3): (a) la distancia libre; (b) el doble de la dimensión medida desde el apoyo en un voladizo; (c) una dimensión menor, solo si se justifica (el arriostre intermedio es un ejemplo del proyecto; esquema del proyecto).">
+<svg viewBox="0 0 560 235" role="img" aria-label="Altura efectiva de muros: apoyado arriba y abajo, en voladizo y con apoyo intermedio" className="mx-auto h-auto w-full max-w-2xl">
+  <defs>
+    <marker id="fa-alt" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" /></marker>
+  </defs>
+  <rect x="15" y="30" width="140" height="10" fill="currentColor" fillOpacity="0.6" />
+  <rect x="65" y="40" width="40" height="130" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="15" y="170" width="140" height="10" fill="currentColor" fillOpacity="0.6" />
+  <line x1="128" y1="40" x2="128" y2="170" stroke="currentColor" markerStart="url(#fa-alt)" markerEnd="url(#fa-alt)" />
+  <text x="136" y="108" fontSize="13" fill="currentColor">h′</text>
+  <text x="85" y="200" textAnchor="middle" fontSize="12" fill="currentColor">(a) soportado arriba y abajo</text>
+  <text x="85" y="215" textAnchor="middle" fontSize="12" fill="currentColor">h′ = distancia libre</text>
+  <rect x="190" y="170" width="150" height="10" fill="currentColor" fillOpacity="0.6" />
+  <rect x="225" y="100" width="40" height="70" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1.5" />
+  <text x="245" y="92" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">extremo libre</text>
+  <line x1="290" y1="100" x2="290" y2="170" stroke="currentColor" markerStart="url(#fa-alt)" markerEnd="url(#fa-alt)" />
+  <text x="297" y="140" fontSize="13" fill="currentColor">h</text>
+  <line x1="318" y1="30" x2="318" y2="170" stroke="currentColor" strokeDasharray="5 3" markerStart="url(#fa-alt)" markerEnd="url(#fa-alt)" />
+  <text x="326" y="100" fontSize="13" fill="currentColor">h′ = 2h</text>
+  <text x="265" y="200" textAnchor="middle" fontSize="12" fill="currentColor">(b) en voladizo (parapeto)</text>
+  <text x="265" y="215" textAnchor="middle" fontSize="12" fill="currentColor">h′ = doble de la dimensión</text>
+  <rect x="400" y="30" width="140" height="10" fill="currentColor" fillOpacity="0.6" />
+  <rect x="450" y="40" width="40" height="130" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="400" y="170" width="140" height="10" fill="currentColor" fillOpacity="0.6" />
+  <rect x="425" y="102" width="90" height="7" fill="currentColor" fillOpacity="0.6" />
+  <line x1="530" y1="40" x2="530" y2="106" stroke="currentColor" markerStart="url(#fa-alt)" markerEnd="url(#fa-alt)" />
+  <text x="537" y="78" fontSize="13" fill="currentColor">h′</text>
+  <text x="470" y="200" textAnchor="middle" fontSize="12" fill="currentColor">(c) h′ menor, justificada</text>
+  <text x="470" y="215" textAnchor="middle" fontSize="12" fill="currentColor">(p. ej. arriostre intermedio)</text>
+</svg>
+</Figura>
+
+<Callout tipo="practica" titulo="Parapeto en voladizo (autoría del proyecto)">
+Un antepecho de 100 mm de espesor y 1200 mm de altura libre sobre el apoyo tiene $h'$ = 2 × 1200 = {f(ej2.parapeto, 0)} mm y $h'/t$ = **{f(ej2.parEsb.relacion, 1)}**: cumple, pero casi sin margen ($\le 25$).
+</Callout>
+
+### D.5.4.4 — Ancho efectivo b
+
+El ancho efectivo para la resistencia a flexión y flexo-compresión de muros de **unidades de perforación vertical** se toma así (<NormaRef s="D.5.4.4" pag="D-36" />):
+
+**D.5.4.4.1 — Flexión perpendicular al plano del muro** (<NormaRef s="D.5.4.4.1" pag="D-36" />). Cuando las fuerzas horizontales son perpendiculares al plano del muro e inducen flexión o flexo-compresión respecto a un eje paralelo al muro, el ancho efectivo $b$ es:
+
+| Aparejo | Ancho efectivo $b$ |
+|---|---|
+| **Trabado** | la mayor entre $6\times$ el ancho nominal del muro y la distancia centro a centro entre refuerzos verticales |
+| **Petaca** | la mayor entre $3\times$ el ancho nominal del muro y la distancia centro a centro entre refuerzos verticales |
+| Todas las celdas inyectadas | la sección se considera **sólida**: no se aplican las reducciones |
+
+**D.5.4.4.2 — Flexión paralela al plano del muro** (<NormaRef s="D.5.4.4.2" pag="D-36" />). Cuando las fuerzas son paralelas al plano e inducen flexión respecto a un eje perpendicular al plano, $b$ es el **ancho sólido promedio** del muro, es decir, el área efectiva dividida por la longitud horizontal:
+
+<Ecuacion num="D.5.4.4.2" titulo="Ancho efectivo para flexión paralela al plano">
+
+$$
+b = \frac{A_e}{\ell_w}
+$$
+
+- $A_e$: área efectiva (D.5.4.1), mm². $\ell_w$: longitud horizontal del muro, mm.
+
+</Ecuacion>
+
+<Figura alt="Dos franjas de muro en planta con celdas verticales inyectadas y refuerzo cada s; se muestra el ancho efectivo b para aparejo trabado (6 veces el espesor) y para petaca (3 veces el espesor)" numero="Esquema" pie="Ancho efectivo b en flexión perpendicular al plano (D.5.4.4.1), con t = 40 (unidades de dibujo) y s = 200. Trabado: 6t = 240 > s; petaca: 3t = 120 < s. Con la lectura literal «la mayor», b puede superar la separación entre barras (esquema del proyecto).">
+<svg viewBox="0 0 520 290" role="img" aria-label="Ancho efectivo b para aparejo trabado y petaca" className="mx-auto h-auto w-full max-w-xl">
+  <defs>
+    <marker id="fa-b" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" /></marker>
+  </defs>
+  <text x="40" y="22" fontSize="12" fontWeight="600" fill="currentColor">Aparejo trabado</text>
+  <rect x="40" y="60" width="440" height="40" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="146" y="64" width="28" height="32" fill="currentColor" fillOpacity="0.55" />
+  <rect x="346" y="64" width="28" height="32" fill="currentColor" fillOpacity="0.55" />
+  <circle cx="160" cy="80" r="5" fill="currentColor" />
+  <circle cx="360" cy="80" r="5" fill="currentColor" />
+  <line x1="160" y1="48" x2="360" y2="48" stroke="currentColor" markerStart="url(#fa-b)" markerEnd="url(#fa-b)" />
+  <text x="260" y="42" textAnchor="middle" fontSize="12" fill="currentColor">s = 200</text>
+  <line x1="28" y1="60" x2="28" y2="100" stroke="currentColor" markerStart="url(#fa-b)" markerEnd="url(#fa-b)" />
+  <text x="22" y="84" textAnchor="end" fontSize="12" fill="currentColor">t</text>
+  <line x1="40" y1="122" x2="280" y2="122" stroke="currentColor" strokeWidth="2.5" markerStart="url(#fa-b)" markerEnd="url(#fa-b)" />
+  <text x="160" y="140" textAnchor="middle" fontSize="12" fill="currentColor">b = máx(6t, s) = 240</text>
+  <text x="40" y="152" fontSize="12" fontWeight="600" fill="currentColor">Aparejo en petaca</text>
+  <rect x="40" y="190" width="440" height="40" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="146" y="194" width="28" height="32" fill="currentColor" fillOpacity="0.55" />
+  <rect x="346" y="194" width="28" height="32" fill="currentColor" fillOpacity="0.55" />
+  <circle cx="160" cy="210" r="5" fill="currentColor" />
+  <circle cx="360" cy="210" r="5" fill="currentColor" />
+  <line x1="60" y1="252" x2="260" y2="252" stroke="currentColor" strokeWidth="2.5" markerStart="url(#fa-b)" markerEnd="url(#fa-b)" />
+  <text x="160" y="270" textAnchor="middle" fontSize="12" fill="currentColor">b = máx(3t, s) = s = 200</text>
+  <line x1="100" y1="236" x2="220" y2="236" stroke="currentColor" strokeOpacity="0.6" strokeDasharray="4 3" />
+  <text x="300" y="240" fontSize="11" fill="currentColor" fillOpacity="0.8">3t = 120 (queda dentro de s)</text>
+</svg>
+</Figura>
+
+<Callout tipo="atencion" titulo="Posible errata: «la mayor» frente a un tope (autoría del proyecto)">
+El PDF dice que el ancho efectivo es «**la mayor** entre 6 veces el ancho nominal del muro y la distancia centro a centro entre refuerzos verticales». Con esa lectura, $b$ nunca es menor que la separación del refuerzo, y en aparejo trabado con $6t >$ separación, $b$ **supera** el espacio que le corresponde a cada barra, de modo que las zonas comprimidas de barras vecinas se traslapan. La práctica internacional para este mismo concepto (ancho de compresión por barra) suele plantearse como un **tope** (el ancho no debe exceder el menor de esos valores), lo que apuntaría a «la menor». El proyecto **sigue el texto literal** en `anchoEfectivoPerpendicular` (resultado `b`) y devuelve además el valor con la lectura «menor» (`bSiSeLeyeraComoTope`) solo como comparación informativa. No se modifica el texto de la norma; confirma el criterio con la versión oficial vigente antes de usarlo en un diseño real.
+</Callout>
+
+### D.5.4.5 — Área efectiva para esfuerzos cortantes Amv
+
+El área para el cálculo de esfuerzos cortantes en muros de unidades de **perforación vertical** es (<NormaRef s="D.5.4.5" pag="D-36" />):
+
+- **Cortante perpendicular al plano** (<NormaRef s="D.5.4.5.1" pag="D-37" />): $A_{mv} = A_e$, **excepto** cuando el mortero de pega se emplea solo en las paredes laterales de la unidad de perforación vertical (véase D.4.5.10.1(b)); en ese caso $A_{mv}$ es la **suma de las porciones del muro inyectadas con mortero de relleno**, incluyendo las paredes de las unidades que las circundan y que tienen mortero de pega.
+- **Cortante paralelo al plano** (<NormaRef s="D.5.4.5.2" pag="D-37" />): **solo el alma** de la sección resiste cortante y $A_{mv}$ es el **área neta del alma**. Generalmente $A_{mv} = b\,\ell_w$, con $b$ el ancho efectivo del alma. **Cuando hay concentraciones de celdas inyectadas en los extremos del muro, el ancho efectivo para este propósito se calcula en la zona central del alma.**
+
+<Ejemplo numero={4} titulo="Ancho efectivo b y áreas Ae y Amv de un muro de bloque">
+Muro de bloque de 150 mm de espesor nominal, $\ell_w$ = 3000 mm, con refuerzo vertical cada 800 mm. El área efectiva (contacto mortero–unidad más área inyectada) es $A_e$ = 252 000 mm² (dato del ejemplo). Hallar $b$ para flexión perpendicular al plano en aparejo trabado y en petaca, $b$ para flexión paralela y $A_{mv}$ para cortante paralelo, también con celdas inyectadas en los extremos y ancho de 70 mm en la zona central del alma.
+
+<Paso titulo="Perpendicular al plano, aparejo trabado" ref="D.5.4.4.1">
+
+$$
+b = \max\,(6\times 150,\;800)
+$$
+
+Resultado: 6t = {f(ej3.tr.nVecesAncho, 0)} mm; **b = {f(ej3.tr.b, 0)} mm** (lectura literal «la mayor»). Con la lectura informativa «la menor» sería {f(ej3.tr.bSiSeLeyeraComoTope, 0)} mm.
+
+</Paso>
+<Paso titulo="Perpendicular al plano, aparejo en petaca" ref="D.5.4.4.1">
+
+$$
+b = \max\,(3\times 150,\;800)
+$$
+
+Resultado: 3t = {f(ej3.pe.nVecesAncho, 0)} mm; **b = {f(ej3.pe.b, 0)} mm**.
+
+</Paso>
+<Paso titulo="Todas las celdas inyectadas" ref="D.5.4.4.1">
+
+La sección es sólida: no se aplican las reducciones. Para una franja de análisis de 1000 mm, **b = {f(ej3.so.b, 0)} mm**.
+
+</Paso>
+<Paso titulo="Paralelo al plano" ref="D.5.4.4.2, D.5.4.5.2">
+
+$$
+b=\frac{A_e}{\ell_w}=\frac{252\,000}{3000}
+\qquad
+A_{mv}=b\,\ell_w
+$$
+
+Resultado: **b = {f(ej3.bPar, 0)} mm** y $A_{mv}$ = **{f(ej3.AmvProm, 0)} mm²** (con el ancho promedio, $A_{mv}$ coincide con $A_e$).
+
+</Paso>
+<Paso titulo="Celdas inyectadas concentradas en los extremos" ref="D.5.4.5.2">
+
+Si el ancho del alma en la zona central es 70 mm: $A_{mv}$ = 70 × 3000 = **{f(ej3.AmvCentral, 0)} mm²**, menor que $A_e$: ese es el valor que se usa para cortante.
+
+</Paso>
+<Resultado>
+Trabado: $b$ = **{f(ej3.tr.b, 0)} mm**; petaca: $b$ = **{f(ej3.pe.b, 0)} mm**; paralelo: $b$ = **{f(ej3.bPar, 0)} mm**, $A_{mv}$ = **{f(ej3.AmvProm, 0)} mm²** o **{f(ej3.AmvCentral, 0)} mm²** con celdas inyectadas en los extremos.
+</Resultado>
+</Ejemplo>
+
+### D.5.4.6 a D.5.4.8 — Vigas y dinteles
+
+- **Distancia entre apoyos** (<NormaRef s="D.5.4.6" pag="D-37" />): la distancia máxima entre apoyos que dan soporte lateral a vigas y dinteles es **32 veces el ancho efectivo**. Con $b$ = 140 mm resulta {f(distanciaMaximaApoyosViga(140), 0)} mm.
+- **Rigidez mínima a flexión** (<NormaRef s="D.5.4.7" pag="D-37" />): no deben producirse flechas elásticas mayores que $\ell/500$ bajo la totalidad de las cargas verticales de diseño **sin mayorar**. Para $\ell$ = 4000 mm: {f(flechaMaximaViga(4000), 0)} mm.
+- **Vigas de sección alta** (<NormaRef s="D.5.4.8" pag="D-37" />): las vigas con relación longitud/altura **menor de 1.25 en luces simples** y **menor de 2.5 en luces continuas** deben diseñarse con relaciones **no lineales** en la distribución de esfuerzos de la sección (no vale «secciones planas»).
+
+### Dónde termina D.5.4 y relación con otros capítulos
+
+D.5.4.8 es la última subsección de D.5.4 y está en la página D-37 (PDF 602). Esa misma página contiene el comienzo de **D.5.5** (D.5.5.1 a D.5.5.4: $P_o$, $R_e$, $P_n$), que cubre la parte b del capítulo.
+
+Las dimensiones efectivas de este capítulo se reutilizan en otros: el espesor $t$ y la altura $h'$ de D.5.4 alimentan $R_e$ (D.5.5.2) y la verificación de esbeltez; el ancho $b$ y las áreas $A_e$, $A_{mv}$ aparecen en D.5.6 a D.5.8, en D.10 (muros confinados, donde los elementos de confinamiento se asimilan a celdas inyectadas, <NormaRef s="D.10.7.2" pag="D-57" />) y en el Apéndice D-1, que exige cumplir **la totalidad** de D.5.4 también en el diseño por esfuerzos de trabajo (<NormaRef s="D-1.5.1" pag="D-70" />).
+
+### Sección transformada (conexión con D.6 y D.12)
+
+Para elementos compuestos (muros de cavidad reforzada, mampostería reforzada externamente) el análisis se basa en la **sección transformada elástica**: uno de los materiales se toma como base y la dimensión **paralela al eje neutro** se multiplica por la relación modular, **sin alterar** la dimensión ortogonal; **ni la altura efectiva ni la longitud ni el espesor efectivo** se modifican por la transformación (<NormaRef s="D.6.4.4" pag="D-45" /> y <NormaRef s="D.12.4.4" pag="D-67" />). Los módulos de cada material salen de D.5.2.
+
+<Figura alt="Sección real de mampostería con una barra de acero a la izquierda y, a la derecha, la sección transformada con una franja ensanchada de mampostería equivalente de ancho n por As al nivel de la barra" numero="Esquema" pie="Idea de la sección transformada: el acero se reemplaza por un área equivalente de mampostería (relación modular n = Es/Em), ensanchando la dimensión paralela al eje neutro sin tocar la altura (esquema del proyecto; la regla normativa es D.6.4.4).">
+<svg viewBox="0 0 540 230" role="img" aria-label="Sección real y sección transformada" className="mx-auto h-auto w-full max-w-xl">
+  <defs>
+    <marker id="fa-st" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" /></marker>
+  </defs>
+  <rect x="40" y="30" width="80" height="140" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.5" />
+  <circle cx="80" cy="145" r="7" fill="currentColor" />
+  <text x="80" y="195" textAnchor="middle" fontSize="12" fill="currentColor">Sección real</text>
+  <text x="130" y="149" fontSize="11" fill="currentColor">As (acero)</text>
+  <line x1="190" y1="100" x2="240" y2="100" stroke="currentColor" strokeWidth="2" markerEnd="url(#fa-st)" />
+  <text x="215" y="86" textAnchor="middle" fontSize="11" fill="currentColor">n = Es/Em</text>
+  <rect x="300" y="30" width="80" height="140" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="270" y="138" width="140" height="14" fill="currentColor" fillOpacity="0.55" stroke="currentColor" strokeWidth="1.5" />
+  <text x="340" y="195" textAnchor="middle" fontSize="12" fill="currentColor">Sección transformada</text>
+  <text x="420" y="149" fontSize="11" fill="currentColor">n As (mampostería equivalente)</text>
+  <line x1="340" y1="20" x2="340" y2="30" stroke="currentColor" />
+  <text x="340" y="16" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">altura sin cambio</text>
+</svg>
+</Figura>
+
+<Ejemplo numero={5} titulo="Factor φ variable y carga balanceada de un muro con celdas inyectadas">
+Muro de bloque con todas las celdas inyectadas, $f'_m$ = 10 MPa, espesor 150 mm, franja de 1000 mm, refuerzo simétrico de $f_y$ = 420 MPa con $d$ = 75 mm. Para fuerzas **paralelas** al plano, hallar φ cuando $\phi P_n$ = 30 kN por franja.
+
+<Paso titulo="Carga balanceada" ref="D.5.1-2">
+
+$$
+a_b = 0.85\,(75)\,\frac{0.003}{0.003+420/200\,000}
+\qquad
+P_b = 0.80\,(10)\,(1000)\,a_b
+$$
+
+Resultado: $a_b$ = **{f(ej4.bal.ab, 1)} mm**, $P_b$ = **{f(ej4.bal.Pb / 1000, 0)} kN**.
+
+</Paso>
+<Paso titulo="Límites del incremento de φ" ref="D.5.1.5.2(b)">
+
+$0.10f'_mA_e$ = 0.10 (10)(150 × 1000)/1000 = {f(ej4.fmAe * 0.1 / 1000, 0)} kN y $0.25P_b$ = {f(ej4.bal.Pb * 0.25 / 1000, 0)} kN. Se adopta el menor: **{f(ej4.r.limite / 1000, 0)} kN** (criterio del proyecto, ver la ambigüedad de la norma).
+
+</Paso>
+<Paso titulo="Interpolación lineal" ref="D.5.1.5.2(b)">
+
+$$
+\phi = 0.85 - 0.25\,\frac{\phi P_n}{\text{límite}} = 0.85 - 0.25\,\frac{30}{75}
+$$
+
+Resultado: **φ = {f(ej4.r.phi, 3)}** (con $\phi P_n$ = 0 sería {f(ej4.r0.phi, 2)}; con $\phi P_n \ge$ límite, 0.60).
+
+</Paso>
+<Resultado>
+$P_b$ = **{f(ej4.bal.Pb / 1000, 0)} kN** por franja; límite de incremento = **{f(ej4.r.limite / 1000, 0)} kN**; φ = **{f(ej4.r.phi, 2)}** para $\phi P_n$ = 30 kN.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Confundir qué φ aplica">
+φ **no es único**: depende de la dirección de las fuerzas respecto al plano del muro (D.5.1.5.1 frente a D.5.1.5.2) y del efecto (flexión 0.80 o 0.85, compresión 0.60, cortante 0.60, aplastamiento 0.60). El incremento hasta 0.85 solo aplica a flexo-compresión paralela al plano con refuerzo simétrico y $f_y \le 420$ MPa.
+</Callout>
+
+<Callout tipo="error" titulo="Usar el espesor real cuando hay machones, o el coeficiente sin interpolar">
+El espesor para pandeo es $t = k_p\,t_m$ solo si los machones están **integrados monolíticamente** y a **distancias regulares**. Si el espaciamiento relativo es 20 o más, $k_p$ = 1.0. Entre filas y columnas de la Tabla D.5.4-1 hay que **interpolar linealmente**; no basta con tomar la fila más cercana.
+</Callout>
+
+<Callout tipo="error" titulo="Olvidar que Em y Er tienen tope de 20 000 MPa, o aplicar la raíz a f′m">
+$E_m = 900f'_m$ ó $750f'_m$ (sin raíz) y $E_r = 2500\sqrt{f'_{cr}}$ (con raíz), ambos limitados a 20 000 MPa. Las ecuaciones son **supletorias**: si hay ensayos de murete, mandan los ensayos (secante entre $0.05f'_m$ y $0.33f'_m$).
+</Callout>
+
+<Callout tipo="error" titulo="Usar Ae o b de la sección bruta, o el mismo b para las dos direcciones">
+$b$ en flexión perpendicular al plano sale de $6t$ ó $3t$ y de la separación del refuerzo (o sección sólida si todas las celdas están inyectadas); $b$ en flexión paralela es $A_e/\ell_w$. Para cortante paralelo solo cuenta el **alma** ($A_{mv}=b\,\ell_w$), y con celdas inyectadas en los extremos $b$ se mide en la **zona central**.
+</Callout>
+
+<Callout tipo="error" titulo="No verificar h′/t ≤ 25 ni definir bien los apoyos">
+En voladizos $h'$ es el **doble** de la dimensión desde el apoyo; solo se reduce por debajo de la distancia libre cuando se **justifica apropiadamente**. Un muro estructural con $h'/t > 25$ no cumple D.5.4.3.1, aunque sus esfuerzos sean bajos.
+</Callout>
+
+## Resumen en una línea
+
+**El diseño de mampostería por estados límite usa φ distintos según la dirección de las fuerzas, suposiciones de bloque 0.80 f′m con εmu = 0.003, módulos supletorios Em = 900 f′m ó 750 f′m (Er = 2500 √f′cr, tope 20 000 MPa, G = 0.4Em / 0.5Er) y dimensiones efectivas: t con la Tabla D.5.4-1, h′ según los apoyos con h′/t ≤ 25, b de 6t ó 3t (o Ae/ℓw en el plano) y Amv = Ae o el área del alma.**

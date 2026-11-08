@@ -1,0 +1,288 @@
+---
+codigo: 'D.9'
+tipo: capitulo
+titulo: 'Mampostería no reforzada'
+resumen: 'El sistema «por exclusión» del Título D: todo muro de mampostería que no cumple los requisitos de la parcialmente reforzada o la reforzada. Solo se permite como sistema sismorresistente donde Aa ≤ 0.05 en amenaza baja (DMI), con espesor nominal de 120 mm y diseño por esfuerzos admisibles (Apéndice D-1). Incluye la comparación de los siete sistemas de mampostería.'
+objetivos:
+  - 'Explicar por qué la mampostería no reforzada se define por exclusión y qué la hace «caer» de D.7 o D.8 (D.9.1.2)'
+  - 'Comprobar si un municipio permite usarla como sistema sismorresistente (Aa ≤ 0.05 en zona de amenaza baja)'
+  - 'Saber que se diseña por esfuerzos admisibles de trabajo (Apéndice D-1) y que se construye con D.4'
+  - 'Comparar los siete sistemas de mampostería del Título D por capacidad de disipación, refuerzo y uso'
+  - 'Estimar el acero mínimo por metro cuadrado que impone cada sistema'
+paginasNorma: 'D-51 a D-52'
+paginaPdf: 616
+orden: 11
+calculadoras: ['cuantias-mamposteria']
+nivel: 'basico'
+---
+
+import municipios from '../../data/municipios.json';
+import { D7, D8, D9 } from '../../data/cuantiasMamposteria';
+import { verificarNoReforzada } from '../../lib/nsr10/cuantiasMamposteria';
+
+export const f = (x, d = 2) => x.toFixed(d);
+
+export const bajaYaa = municipios.filter((m) => m.zona === 'Baja' && m.aa <= D9.aaMax);
+export const aa05 = municipios.filter((m) => m.aa <= D9.aaMax);
+export const aa05Inter = municipios.filter((m) => m.aa <= D9.aaMax && m.zona !== 'Baja');
+
+export const ej1 = (() => {
+  const busca = (nombre) => municipios.find((m) => m.municipio.startsWith(nombre));
+  const lista = [busca('Leticia'), busca('Barranquilla'), busca('Cartagena del Chair'), municipios.find((m) => m.municipio.startsWith('Bogot'))];
+  return lista.map((m) => {
+    const v = verificarNoReforzada({ espesor: 120, aa: m.aa });
+    const zonaOk = m.zona === 'Baja';
+    return { m, aaOk: v[1].cumple, zonaOk, permitido: v[1].cumple && zonaOk };
+  });
+})();
+
+export const ej2 = (() => {
+  const gammaAcero = 7850; // kg/m³ (valor corriente del acero; no es de la norma)
+  const t = 0.15;
+  const kgm2 = (rho) => rho * t * gammaAcero;
+  const filas = [
+    { sistema: 'D.9 no reforzada', rho: 0, detalle: 'No hay cuantía mínima (diseño por esfuerzos admisibles)' },
+    { sistema: 'D.8 parcialmente reforzada', rho: 2 * D8.cuantiaPorDireccion, detalle: 'ρv = ρh = 0.00027' },
+    { sistema: 'D.7 reforzada', rho: D7.cuantia.suma, detalle: 'ρv + ρh = 0.0020 (suma mínima)' },
+  ].map((x) => ({ ...x, kg: kgm2(x.rho) }));
+  return { t, gammaAcero, filas, razon: filas[2].kg / filas[1].kg };
+})();
+
+## Idea central del capítulo
+
+La mampostería **no reforzada** es el sistema **por exclusión** del Título D. No se define por lo que tiene sino por lo que **le falta**: una edificación de mampostería que **no cumple todos los requisitos** de la parcialmente reforzada (D.8) o de la reforzada (D.7) **se clasifica y se diseña como no reforzada** (<NormaRef s="D.9.1.2" pag="D-51" />). Por eso es el escalón de **menor capacidad** de disipación de energía (**DMI**) y el de **mayor restricción de uso**: solo se acepta como sistema de resistencia sísmica en las regiones de **amenaza sísmica baja** donde $A_a \le 0.05$ (<NormaRef s="D.9.2.1" pag="D-51" />).
+
+Es el capítulo más corto del Título D (una página): generalidades, usos, diseño y construcción. El diseño **no se hace con el método de resistencia** de D.5 sino con el de los **esfuerzos admisibles de trabajo** del Apéndice D-1 (<NormaRef s="D.9.3.1" pag="D-51" />). Al final del capítulo se comparan **los siete sistemas** de mampostería de D.2.1 y se estima cuánto acero obliga a poner cada uno.
+
+<Callout tipo="importante" titulo="Qué es norma y qué es autoría del proyecto">
+Las condiciones citadas con su numeral son **texto de la norma** (páginas D-51 y D-52, verificadas en la imagen). Las tablas comparativas, los esquemas y los ejemplos son **autoría del proyecto**. El Capítulo D.9 **no contiene cuantías ni ecuaciones**.
+</Callout>
+
+## D.9.1 — Generalidades
+
+### D.9.1.1 — Alcance
+
+Una edificación de muros de mampostería no reforzada **se clasifica como tal si cumple los requisitos de este capítulo**; además cumple lo general del Capítulo D.1, las normas y procedimientos del D.2, los materiales del D.3 y la construcción del D.4 (<NormaRef s="D.9.1.1" pag="D-51" />).
+
+### D.9.1.2 — Clasificación por exclusión
+
+«Cuando una edificación en mampostería **no cumple con todos los requisitos** que este Reglamento establece para mampostería parcialmente reforzada o mampostería reforzada, debe clasificarse y diseñarse como mampostería no reforzada» (<NormaRef s="D.9.1.2" pag="D-51" />). Es la misma idea de la definición D.2.1.4: mampostería «que **no cumple las cuantías mínimas** de refuerzo establecidas para la mampostería parcialmente reforzada» (<NormaRef s="D.2.1.4" pag="D-5" />).
+
+Consecuencias prácticas:
+
+- **No hace falta «elegir» D.9**: se llega a ella cuando una edificación de bloque se queda corta en refuerzo, resistencia o detalles de D.7 y D.8 (ver la escalera de clasificación más abajo).
+- Un muro puede tener **algo** de refuerzo (por ejemplo, una barra en cada esquina) y seguir siendo no reforzado si no alcanza **todas** las cuantías de D.8.
+- Pasar de D.9 a D.8 exige no solo cuantías: también $f'_m \ge 8$ MPa, espesor y barras mínimas de D.8.1 y D.8.3.
+
+### D.9.1.3 — Espesor mínimo
+
+**Espesor nominal mínimo de 120 mm**, **excepto** los espesores mínimos de la **Tabla E.3.5-1** para viviendas de uno y dos pisos (<NormaRef s="D.9.1.3" pag="D-51" />). A diferencia de D.7 y D.8, **este capítulo no prohíbe expresamente el mortero tipo N**: la Tabla D.3.4-1 (nota 6) lo permite solo en sistemas DMI, que es justamente este (ver [D.3](/titulo-d/d3)). Las unidades de perforación horizontal y las macizas también se pueden combinar con las de perforación vertical en edificaciones de uno y dos pisos del grupo de uso I para mampostería no reforzada (<NormaRef s="D.3.6.5" pag="D-17" />).
+
+<TablaNorma numero="Resumen D.9.1" titulo="Requisitos generales de la mampostería no reforzada (autoría del proyecto)" pag="D-51" nota="Tabla elaborada a partir de D.9.1.1 a D.9.1.3.">
+
+| Requisito | Valor | Sección |
+|---|---|---|
+| Cuándo se aplica | Cuando no se cumplen **todos** los requisitos de D.7 ni de D.8 | D.9.1.2 |
+| Espesor nominal | ≥ 120 mm (salvo Tabla E.3.5-1, vivienda de 1–2 pisos) | D.9.1.3 |
+| Refuerzo mínimo | No hay cuantías mínimas en este capítulo | D.9 |
+| Normas generales | D.1, D.2, D.3 y construcción D.4 | D.9.1.1, D.9.4.1 |
+
+</TablaNorma>
+
+## D.9.2 — Usos de la mampostería no reforzada
+
+Las restricciones de uso «se basan en lo establecido en el Capítulo **A.3**». Y la norma agrega la más fuerte: la mampostería no reforzada **solo puede utilizarse como sistema de resistencia sísmica en aquellas regiones de las zonas de amenaza sísmica baja donde el valor de $A_a$ sea menor o igual a 0.05**. Se clasifica como uno de los sistemas con **capacidad mínima de disipación de energía en el rango inelástico (DMI)** (<NormaRef s="D.9.2.1" pag="D-51" />).
+
+<Ecuacion num="D.9.2.1" titulo="Condición de uso como sistema sismorresistente (forma matemática, autoría del proyecto)">
+
+$$
+\text{zona de amenaza sísmica baja}
+\quad\text{y}\quad
+A_a \le 0.05
+$$
+
+- $A_a$: coeficiente de aceleración horizontal pico efectiva del sitio (Título A; ver [A.2](/titulo-a/a2) y el buscador de municipios).
+- Las **dos condiciones** deben cumplirse: estar en zona de amenaza baja **y** tener $A_a \le 0.05$.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Cuántos municipios pasan el filtro (datos del proyecto)">
+Con la tabla de municipios del proyecto (Apéndice A-4), **{aa05.length} de {municipios.length}** municipios tienen $A_a \le 0.05$, pero solo **{bajaYaa.length}** lo tienen **y** están en zona de amenaza **baja**; los otros {aa05Inter.length} tienen $A_a$ = 0.05 en zona **intermedia** y, leyendo D.9.2.1 al pie de la letra, **no** califican. Es una lectura literal; confirme con el Reglamento y con la autoridad local.
+</Callout>
+
+## D.9.3 — Diseño de la mampostería no reforzada
+
+Los muros de mampostería no reforzada **se diseñan por el método de los esfuerzos admisibles de trabajo**, de acuerdo con el **Apéndice D-1** (<NormaRef s="D.9.3.1" pag="D-51" />). En ese método **no se calculan resistencias últimas con factores φ** (D.5), sino que se comparan los **esfuerzos de servicio** (carga axial, flexión, cortante) con **esfuerzos admisibles** que son una fracción de $f'_m$. D.9 no repite nada de eso: todo está en el [Apéndice D-1](/titulo-d/apendice-d1) y en las calculadoras del Título D.
+
+## D.9.4 — Requisitos de construcción
+
+Las estructuras de mampostería no reforzada se construyen siguiendo el Capítulo **D.4** (<NormaRef s="D.9.4.1" pag="D-51" />). Aquí no hay requisitos adicionales.
+
+## ¿Qué sistema es mi muro? La escalera de clasificación
+
+Para muros de **perforación vertical** se puede ordenar la decisión como una **escalera** (autoría del proyecto, basada en D.7.2, D.8.2, D.9.1.2 y D.2.1):
+
+<Figura alt="Diagrama de decisión: si el muro cumple todo D.7 es mampostería reforzada con DES o DMO; si no, y cumple todo D.8, es parcialmente reforzada DMO; si no, es no reforzada DMI, que solo se permite con Aa menor o igual a 0.05 en zona de amenaza baja" numero="Esquema" pie="Escalera de clasificación de un muro de perforación vertical: D.7 (DES o DMO) → D.8 (DMO) → D.9 (DMI). La mampostería no reforzada se define por exclusión (D.9.1.2). (esquema del proyecto)">
+<svg viewBox="0 0 600 300" role="img" aria-label="Diagrama de decisión para clasificar un muro de mampostería en D.7, D.8 o D.9" className="mx-auto h-auto w-full max-w-2xl">
+  <rect x="20" y="20" width="170" height="52" rx="6" fill="none" stroke="currentColor" strokeWidth="2" />
+  <text x="105" y="42" textAnchor="middle" fontSize="12" fill="currentColor">¿Cumple TODO D.7?</text>
+  <text x="105" y="58" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">cuantías, f′m 10–28, barras</text>
+  <line x1="190" y1="46" x2="260" y2="46" stroke="currentColor" strokeWidth="2" />
+  <polygon points="260,46 250,41 250,51" fill="currentColor" />
+  <text x="225" y="38" textAnchor="middle" fontSize="11" fill="currentColor">Sí</text>
+  <rect x="262" y="20" width="318" height="52" rx="6" fill="currentColor" fillOpacity="0.8" />
+  <text x="421" y="42" textAnchor="middle" fontSize="12" fill="var(--background, #fff)">D.7 mampostería reforzada</text>
+  <text x="421" y="58" textAnchor="middle" fontSize="11" fill="var(--background, #fff)">DES (todas las celdas inyectadas o adicionales) · DMO</text>
+  <line x1="105" y1="72" x2="105" y2="118" stroke="currentColor" strokeWidth="2" />
+  <polygon points="105,118 100,108 110,108" fill="currentColor" />
+  <text x="116" y="98" fontSize="11" fill="currentColor">No</text>
+  <rect x="20" y="120" width="170" height="52" rx="6" fill="none" stroke="currentColor" strokeWidth="2" />
+  <text x="105" y="142" textAnchor="middle" fontSize="12" fill="currentColor">¿Cumple TODO D.8?</text>
+  <text x="105" y="158" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">0.00027, f′m ≥ 8, barras</text>
+  <line x1="190" y1="146" x2="260" y2="146" stroke="currentColor" strokeWidth="2" />
+  <polygon points="260,146 250,141 250,151" fill="currentColor" />
+  <text x="225" y="138" textAnchor="middle" fontSize="11" fill="currentColor">Sí</text>
+  <rect x="262" y="120" width="318" height="52" rx="6" fill="currentColor" fillOpacity="0.5" />
+  <text x="421" y="142" textAnchor="middle" fontSize="12" fill="currentColor">D.8 parcialmente reforzada</text>
+  <text x="421" y="158" textAnchor="middle" fontSize="11" fill="currentColor">DMO</text>
+  <line x1="105" y1="172" x2="105" y2="218" stroke="currentColor" strokeWidth="2" />
+  <polygon points="105,218 100,208 110,208" fill="currentColor" />
+  <text x="116" y="198" fontSize="11" fill="currentColor">No</text>
+  <rect x="20" y="220" width="560" height="60" rx="6" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="2" />
+  <text x="300" y="244" textAnchor="middle" fontSize="12" fill="currentColor">D.9 mampostería no reforzada — DMI (D.9.1.2)</text>
+  <text x="300" y="262" textAnchor="middle" fontSize="11" fill="currentColor">Solo como sistema sismorresistente con Aa ≤ 0.05 en zona de amenaza sísmica baja (D.9.2.1)</text>
+</svg>
+</Figura>
+
+La **calculadora de cuantías y separaciones mínimas** del Capítulo [D.7](/titulo-d/d7) hace justamente esta clasificación: con el espesor, $f'_m$ y el refuerzo del muro dice a qué sistema califica y, en el modo D.9, si el sitio cumple $A_a \le 0.05$.
+
+### Ejemplos
+
+<Ejemplo numero={1} titulo="¿Puedo usar mampostería no reforzada como sistema sismorresistente aquí?">
+
+Se proyecta un muro de bloque de 120 mm de espesor nominal en cuatro municipios. Aplicar D.9.1.3 y D.9.2.1 con los valores de $A_a$ y la zona de amenaza del Apéndice A-4 del proyecto.
+
+<Paso titulo="Espesor" ref="D.9.1.3">
+
+120 mm ≥ 120 mm: **cumple** (con la excepción de la Tabla E.3.5-1 para vivienda de uno y dos pisos).
+
+</Paso>
+<Paso titulo="Aceleración y zona de amenaza" ref="D.9.2.1">
+
+{ej1.map((x) => (
+  <p key={x.m.codigo}>
+    <strong>{x.m.municipio}</strong> ({x.m.departamento}): Aa = {x.m.aa}, zona {x.m.zona.toLowerCase()}. Aa ≤ 0.05: {x.aaOk ? 'sí' : 'no'}; zona baja: {x.zonaOk ? 'sí' : 'no'} → <strong>{x.permitido ? 'se permite' : 'no se permite'}</strong>.
+  </p>
+))}
+
+</Paso>
+<Resultado>
+Solo se permite la mampostería no reforzada como sistema sismorresistente donde se cumplen **las dos** condiciones. En los otros casos hay que pasar a D.8, D.7 u otro sistema (D.6, D.10…); un municipio con $A_a$ = 0.05 pero zona **intermedia** tampoco califica leyendo D.9.2.1 literalmente.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="¿Cuánto acero mínimo implica cada sistema por metro cuadrado de muro?">
+
+Comparar el acero mínimo que obliga cada sistema en un muro de espesor $t$ = {f(ej2.t * 1000, 0)} mm. El acero por metro cuadrado de cara de muro es $\rho_{\text{total}}\, t\, \gamma_{\text{acero}}$ (volumen de acero por m² de muro × densidad); se toma $\gamma_{acero}$ = {ej2.gammaAcero} kg/m³, valor corriente que **no es de la norma** (autoría del proyecto).
+
+<Paso titulo="Cuantías mínimas totales" ref="D.7.3.1, D.8.3.1, D.9">
+
+D.9: sin cuantía mínima (0). D.8: $\rho_v + \rho_h$ = 0.00027 + 0.00027 = {f(2 * D8.cuantiaPorDireccion, 5)}. D.7: suma mínima 0.0020 (que además exige 0.0007 por dirección).
+
+</Paso>
+<Paso titulo="Acero por metro cuadrado" ref="Autoría del proyecto">
+
+{ej2.filas.map((x) => (
+  <p key={x.sistema}>
+    <strong>{x.sistema}</strong>: ρ total = {x.rho.toFixed(5)} → <strong>{x.kg.toFixed(2)} kg/m²</strong> ({x.detalle}).
+  </p>
+))}
+
+</Paso>
+<Resultado>
+El mínimo de D.7 obliga a unas **{f(ej2.razon, 1)} veces** el acero mínimo de D.8, y D.9 no obliga a ninguno. Son **mínimos**: el acero real lo dicta el diseño de D.5 y, en D.9, las verificaciones de esfuerzos admisibles del Apéndice D-1. Esta comparación es solo una referencia didáctica de costo.
+</Resultado>
+</Ejemplo>
+
+## Comparación de los siete sistemas de mampostería
+
+El Capítulo D.2 reconoce **siete** tipos de mampostería estructural (<NormaRef s="D.2.1" pag="D-5" />). D.6 a D.9 son cuatro de ellos; los otros tres tienen capítulo propio (D.10, D.11 y D.12). Todos los datos de la tabla salen de las definiciones D.2.1.1 a D.2.1.7:
+
+<TablaNorma numero="Comparación D.2.1" titulo="Los siete sistemas de mampostería estructural (autoría del proyecto)" pag="D-5" nota="Resumen elaborado a partir de D.2.1.1 a D.2.1.7 y de los Capítulos D.6 a D.9. DES: capacidad especial; DMO: moderada; DMI: mínima.">
+
+| N.º | Sistema | Capítulo | Clasificación | Qué lo define |
+|---|---|---|---|---|
+| 1 | Cavidad reforzada | D.6 | DES | Dos paredes de ≥ 70 mm con cavidad armada e inyectada de ≥ 50 mm |
+| 2 | Reforzada | D.7 | DES o DMO | Bloque de perforación vertical; ρ ≥ 0.0007 por dirección y suma ≥ 0.0020 |
+| 3 | Parcialmente reforzada | D.8 | DMO | Bloque de perforación vertical; ρ ≥ 0.00027 por dirección |
+| 4 | No reforzada | D.9 | DMI | No cumple las cuantías de D.8; solo con Aa ≤ 0.05 en amenaza baja |
+| 5 | Muros confinados | D.10 | DMO | Elementos de concreto reforzado (columnas y vigas) alrededor del muro |
+| 6 | Muros diafragma | D.11 | No se permite en edificaciones nuevas | Muros dentro de pórticos; solo en el alcance del Capítulo A.10 |
+| 7 | Reforzada externamente | D.12 | DMI | Refuerzo en una capa de revoque fijado con conectores o clavos |
+
+</TablaNorma>
+
+<Figura alt="Tres columnas: capacidad especial DES con la cavidad reforzada y la mampostería reforzada con celdas inyectadas; capacidad moderada DMO con reforzada con celdas armadas, parcialmente reforzada y muros confinados; capacidad mínima DMI con no reforzada y reforzada externamente; muros diafragma aparte, no permitido en edificaciones nuevas" numero="Esquema" pie="Los siete sistemas de mampostería ordenados por capacidad de disipación de energía (D.2.1). La mampostería reforzada puede ser DES o DMO según se inyecten todas las celdas; los muros diafragma no se permiten en edificaciones nuevas. (esquema del proyecto)">
+<svg viewBox="0 0 600 300" role="img" aria-label="Siete sistemas de mampostería agrupados por capacidad de disipación de energía" className="mx-auto h-auto w-full max-w-2xl">
+  <text x="100" y="22" textAnchor="middle" fontSize="13" fill="currentColor" fontWeight="600">DES (especial)</text>
+  <text x="300" y="22" textAnchor="middle" fontSize="13" fill="currentColor" fontWeight="600">DMO (moderada)</text>
+  <text x="500" y="22" textAnchor="middle" fontSize="13" fill="currentColor" fontWeight="600">DMI (mínima)</text>
+  <rect x="15" y="34" width="170" height="44" rx="6" fill="currentColor" fillOpacity="0.85" />
+  <text x="100" y="52" textAnchor="middle" fontSize="12" fill="var(--background, #fff)">D.6 Cavidad reforzada</text>
+  <text x="100" y="68" textAnchor="middle" fontSize="10" fill="var(--background, #fff)">DES siempre</text>
+  <rect x="15" y="88" width="170" height="44" rx="6" fill="currentColor" fillOpacity="0.85" />
+  <text x="100" y="106" textAnchor="middle" fontSize="12" fill="var(--background, #fff)">D.7 Reforzada</text>
+  <text x="100" y="122" textAnchor="middle" fontSize="10" fill="var(--background, #fff)">todas las celdas inyectadas o adicionales</text>
+  <rect x="215" y="88" width="170" height="44" rx="6" fill="currentColor" fillOpacity="0.55" />
+  <text x="300" y="106" textAnchor="middle" fontSize="12" fill="currentColor">D.7 Reforzada</text>
+  <text x="300" y="122" textAnchor="middle" fontSize="10" fill="currentColor">solo celdas armadas</text>
+  <rect x="215" y="142" width="170" height="44" rx="6" fill="currentColor" fillOpacity="0.55" />
+  <text x="300" y="168" textAnchor="middle" fontSize="12" fill="currentColor">D.8 Parcialmente reforzada</text>
+  <rect x="215" y="196" width="170" height="44" rx="6" fill="currentColor" fillOpacity="0.55" />
+  <text x="300" y="222" textAnchor="middle" fontSize="12" fill="currentColor">D.10 Muros confinados</text>
+  <rect x="415" y="88" width="170" height="44" rx="6" fill="currentColor" fillOpacity="0.25" stroke="currentColor" />
+  <text x="500" y="106" textAnchor="middle" fontSize="12" fill="currentColor">D.9 No reforzada</text>
+  <text x="500" y="122" textAnchor="middle" fontSize="10" fill="currentColor">Aa ≤ 0.05, amenaza baja</text>
+  <rect x="415" y="142" width="170" height="44" rx="6" fill="currentColor" fillOpacity="0.25" stroke="currentColor" />
+  <text x="500" y="164" textAnchor="middle" fontSize="12" fill="currentColor">D.12 Reforzada</text>
+  <text x="500" y="178" textAnchor="middle" fontSize="12" fill="currentColor">externamente</text>
+  <rect x="415" y="250" width="170" height="40" rx="6" fill="none" stroke="currentColor" strokeDasharray="5 3" />
+  <text x="500" y="268" textAnchor="middle" fontSize="12" fill="currentColor">D.11 Muros diafragma</text>
+  <text x="500" y="282" textAnchor="middle" fontSize="10" fill="currentColor">no se permite en nuevas</text>
+</svg>
+</Figura>
+
+### Requisitos de refuerzo de los cuatro sistemas armados (D.6 a D.9)
+
+<TablaNorma numero="Comparación D.6 – D.9" titulo="Espesor, resistencia y refuerzo mínimo (autoría del proyecto)" pag="D-43 a D-51" nota="Valores de D.6.1.3, D.6.3, D.7.1, D.7.3, D.8.1, D.8.3 y D.9.1.3. En D.7.3.3(b) el PDF imprime 120 mm (probable errata de 1 200 mm); aquí no se incluye ese valor.">
+
+| Concepto | D.6 cavidad | D.7 reforzada | D.8 parcial | D.9 no reforzada |
+|---|---|---|---|---|
+| Espesor mínimo | 190 mm reales (70 + 50 + 70) | 120 mm nominales | 120 mm nominales | 120 mm nominales |
+| $f'_m$ | ≥ 6.25 MPa; 0.5 a 2 veces el relleno | 10 a 28 MPa | ≥ 8 MPa | Sin valor propio en D.9 |
+| Cuantía por dirección | 0.0015 / 0.0020 en cavidad; 0.0007 en muro | 0.0007 | 0.00027 | — |
+| Suma ρv + ρh | ≥ 0.0020 | ≥ 0.0020 | No se exige | — |
+| Separación del refuerzo vertical | 50 a 400 mm | ≤ 1200 mm | ≤ 2.40 m | — |
+| Barra de extremo | 2 barras N° 4 ó 12M | 1 barra N° 4 ó 12M | 1 barra N° 3 ó 10M | — |
+| Remate y arranque | 2 barras N° 4 ó 12M | 2 barras N° 3 ó 10M | 2 barras N° 3 ó 10M | — |
+| Capacidad | DES | DES o DMO | DMO | DMI |
+| Uso | Capítulo A.3 | Capítulo A.3 | Capítulo A.3 | Aa ≤ 0.05, amenaza baja |
+
+</TablaNorma>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores típicos con la mampostería no reforzada">
+
+- **Pensar que «no reforzada» significa «sin una sola barra».** Se define por **no cumplir todos los requisitos de D.8**; un muro con refuerzo parcial sigue siendo D.9.
+- **Usarla como sistema sismorresistente en una zona de amenaza intermedia o alta**, o en una región baja con $A_a$ mayor de 0.05 (D.9.2.1).
+- **Diseñarla con el método de resistencia de D.5** cuando D.9.3.1 exige el de **esfuerzos admisibles de trabajo** del Apéndice D-1.
+- **Creer que no tiene requisitos de espesor:** el espesor nominal mínimo es 120 mm (salvo Tabla E.3.5-1 en vivienda de uno y dos pisos).
+- **Olvidar que el mortero tipo N solo se permite en DMI** (Tabla D.3.4-1): si el sistema asciende a D.8 o D.7, se prohíbe.
+- **Confundir los tres sistemas de capacidad moderada** (D.7 con celdas armadas, D.8 y D.10): comparten la categoría DMO pero **no** los requisitos de refuerzo.
+
+</Callout>
+
+## Resumen en una línea
+
+**La mampostería no reforzada (D.9, DMI) es lo que queda cuando un muro no cumple todo D.7 ni D.8: espesor nominal ≥ 120 mm, uso sísmico solo con Aa ≤ 0.05 en amenaza baja, diseño por esfuerzos admisibles de trabajo (Apéndice D-1) y construcción según D.4.**

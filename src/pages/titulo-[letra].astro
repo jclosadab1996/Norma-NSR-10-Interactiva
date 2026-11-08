@@ -21,12 +21,13 @@ const { titulo } = Astro.props;
     <p class="mt-4 text-lg text-muted-foreground">{titulo.resumen}</p>
     <p class="mx-auto mt-8 max-w-xl rounded-xl border border-dashed bg-muted/40 p-5 text-sm text-muted-foreground">
       Este Título todavía no está disponible. Por ahora la web desarrolla en detalle el <strong class="text-foreground">Título A</strong>
-      (requisitos generales de diseño y construcción sismo resistente) el <strong class="text-foreground">Título B</strong> (cargas) y el <strong class="text-foreground">Título C</strong> (concreto estructural).
+      (requisitos generales de diseño y construcción sismo resistente) el <strong class="text-foreground">Título B</strong> (cargas), el <strong class="text-foreground">Título C</strong> (concreto estructural) y el <strong class="text-foreground">Título D</strong> (mampostería estructural).
     </p>
     <div class="mt-8 flex flex-wrap justify-center gap-3">
       <a href="/titulo-a" class={cn(buttonVariants({ size: 'lg' }))}>Ir al Título A</a>
       <a href="/titulo-b" class={cn(buttonVariants({ size: 'lg', variant: 'secondary' }))}>Ir al Título B</a>
       <a href="/titulo-c" class={cn(buttonVariants({ size: 'lg', variant: 'secondary' }))}>Ir al Título C</a>
+      <a href="/titulo-d" class={cn(buttonVariants({ size: 'lg', variant: 'secondary' }))}>Ir al Título D</a>
       <a href="/titulos" class={cn(buttonVariants({ size: 'lg', variant: 'outline' }))}>Ver todos los Títulos</a>
     </div>
   </div>

@@ -1,0 +1,24 @@
+---
+import TituloLayout from '../../layouts/TituloLayout.astro';
+import CalculadoraEmbed from '../../components/content/CalculadoraEmbed.astro';
+import { calculadorasDe } from '../../data/calculadoras';
+
+const CALCULADORAS = calculadorasDe('d');
+---
+
+<TituloLayout titulo="d" title="Calculadoras del Título D" description="Calculadoras interactivas basadas en las fórmulas y tablas del Título D de la NSR-10: resistencia f′m, desarrollo del refuerzo, dimensiones efectivas, compresión, flexión, muros en y fuera de su plano, cuantías, muros confinados, muros diafragma y esfuerzos admisibles." ancho="amplio">
+  <header class="mb-8">
+    <p class="text-sm font-semibold uppercase tracking-wider text-primary">Título D</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Calculadoras</h1>
+    <p class="mt-3 max-w-3xl text-muted-foreground">
+      Cada herramienta aplica las ecuaciones y tablas de la norma y cita la sección de origen. Úsalas para explorar cómo
+      cambian los resultados al variar los datos; no sustituyen un análisis estructural completo.
+    </p>
+    <ul class="mt-5 flex flex-wrap gap-2 text-sm">
+      {CALCULADORAS.map((c) => <li><a href={`#calc-${c.id}`} class="rounded-md border bg-card px-2.5 py-1 hover:border-primary/50 hover:bg-accent">{c.nombre}</a></li>)}
+    </ul>
+  </header>
+  <div class="space-y-2">
+    {CALCULADORAS.map((c) => <CalculadoraEmbed id={c.id} />)}
+  </div>
+</TituloLayout>

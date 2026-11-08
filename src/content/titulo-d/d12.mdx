@@ -1,0 +1,530 @@
+---
+codigo: 'D.12'
+tipo: capitulo
+titulo: 'Mampostería reforzada externamente'
+resumen: 'Muros de mampostería reforzados con mallas electrosoldadas embebidas en un revoque (pañete) de mortero en ambas caras: espesores mínimos (130 mm), f′m ≥ 8 MPa y f′cre ≥ 12.5 MPa, cuantías de 0.00035, anclaje de la malla, análisis con sección transformada elástica, diseño simplificado que desprecia la mampostería y requisitos constructivos del revoque.'
+objetivos:
+  - 'Definir la mampostería reforzada externamente y aplicar sus requisitos de espesor, resistencia, unidades y morteros'
+  - 'Verificar el refuerzo mínimo (0.00035 sobre el área bruta total), la separación de 300 mm y el anclaje de la malla con conectores'
+  - 'Calcular el módulo del revoque Ecre = 2000 √f′cre y construir la sección transformada elástica de la sección compuesta'
+  - 'Aplicar el diseño simplificado de D.12.4.6, que trata el muro como de concreto con solo los dos revoques'
+  - 'Cumplir los requisitos constructivos: capas de 15 a 45 mm, recubrimientos de 5 y 10 mm y curado de 7 días'
+paginasNorma: 'D-65 a D-68'
+paginaPdf: 630
+orden: 15
+calculadoras: []
+nivel: 'intermedio'
+---
+
+import {
+  EXTERNA,
+  areaAlambresPorMetro,
+  areaMinimaMalla,
+  conectoresMinimos,
+  disenoSimplificadoCortante,
+  esfuerzosSeccionTransformada,
+  espesorMinimoRevoqueParaMalla,
+  espesorTransformadoEnPlano,
+  moduloElasticidadRevoque,
+  relacionModulosExterna,
+  seccionTransformada,
+  subcapasRevoque,
+  verificarEspesoresExterna,
+  verificarMalla,
+  verificarMaterialesExterna,
+} from '../../lib/nsr10/mamposteriaExterna';
+import { moduloElasticidadMamposteria } from '../../lib/nsr10/dimensionesMamposteria';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const dMalla = 4;
+  const sMalla = 150;
+  const eMin = espesorMinimoRevoqueParaMalla(dMalla, dMalla);
+  const e = 25;
+  const esp20 = verificarEspesoresExterna(100, 20, 20);
+  const esp = verificarEspesoresExterna(100, e, e);
+  return {
+    eMin,
+    e,
+    esp20,
+    esp,
+    mat: verificarMaterialesExterna(8, 12.5),
+    malla: verificarMalla(dMalla, sMalla, esp.total),
+    areaMin: areaMinimaMalla(esp.total),
+    area: areaAlambresPorMetro(dMalla, sMalla),
+    clavos: conectoresMinimos(7.8, 'clavos'),
+    barras: conectoresMinimos(7.8, 'barras'),
+    capas: subcapasRevoque(e),
+  };
+})();
+
+export const ej2 = (() => {
+  const Em = moduloElasticidadMamposteria(8, 'arcilla');
+  const Ere = moduloElasticidadRevoque(12.5);
+  const capas = [
+    { nombre: 'Revoque 1', espesor: 25, E: Ere },
+    { nombre: 'Mampostería', espesor: 100, E: Em },
+    { nombre: 'Revoque 2', espesor: 25, E: Ere },
+  ];
+  const sec = seccionTransformada(capas, 1000, 1);
+  const s = esfuerzosSeccionTransformada(sec, 20, 1.5);
+  return { Em, Ere, rel: relacionModulosExterna(Em, Ere), sec, s, tEq: espesorTransformadoEnPlano(capas, 1) };
+})();
+
+export const ej3 = (() => {
+  const r = disenoSimplificadoCortante(25, 25, 12.5, 3000);
+  return { r, completo: verificarEspesoresExterna(100, 25, 25) };
+})();
+
+## Idea central del capítulo
+
+La **mampostería reforzada externamente** es un sistema en el que el refuerzo no va dentro de las celdas o juntas, sino **por fuera del muro**: **mallas electrosoldadas** colocadas en ambas caras, fijadas a la mampostería con conectores o clavos y **embebidas en un revoque (pañete) de mortero** de alta resistencia (<NormaRef s="D.12.1.2" pag="D-65" />). La mampostería y los dos revoques trabajan como una **sección compuesta** que debe comportarse de forma **monolítica**.
+
+El capítulo cubre cinco cosas: los **requisitos generales** (unidades, morteros, espesor mínimo de 130 mm, resistencias mínimas), los **usos** (sistema de capacidad mínima de disipación, DMI), el **refuerzo** (cuantía mínima de 0.00035 y anclaje), el **diseño** (sección transformada elástica, y una alternativa simplificada que desprecia la mampostería) y los **requisitos constructivos** del revoque.
+
+<Callout tipo="importante" titulo="Sistema DMI: capacidad mínima de disipación de energía">
+El sistema se clasifica, para el diseño sismo resistente, como uno de los **sistemas de resistencia sísmica con capacidad mínima de disipación de energía en el rango inelástico (DMI)**, y sus limitaciones de uso salen del Capítulo A.3 (<NormaRef s="D.12.2.1" pag="D-65" />).
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este capítulo (autoría del proyecto)">
+Los ejemplos usan `src/lib/nsr10/mamposteriaExterna.ts` (con su test) y reutilizan `dimensionesMamposteria.ts` (D.5.2). Lo rotulado **«autoría del proyecto»** no es texto de la norma: el cálculo numérico de la sección transformada por franjas y de los esfuerzos en cada capa, el espesor de revoque que alberga la malla y la aplicación del diseño simplificado al cortante. D.12 **no tiene calculadora propia**: los módulos de la mampostería se obtienen con la calculadora del Capítulo [D.5a](/titulo-d/d5a) y el diseño por esfuerzos de trabajo remite al [Apéndice D-1](/titulo-d/apendice-d1). Unidades del SI: mm, MPa, kN. Los gráficos son esquemas propios, porque el Título D no trae figuras.
+</Callout>
+
+<Figura alt="Corte de un muro: mampostería central de 100 mm con una malla electrosoldada embebida en un revoque a cada lado, conectores que atraviesan el muro con ganchos de 90 grados y los recubrimientos de 5 mm a la mampostería y 10 mm externo" numero="Esquema" pie="Corte horizontal de un muro reforzado externamente: mampostería con mallas electrosoldadas en ambas caras, revoques de mortero y conectores (D.12.1.2, D.12.3.3 y D.12.5.2). Cotas ilustrativas (esquema del proyecto).">
+<svg viewBox="0 0 560 250" role="img" aria-label="Sección de muro con mallas y revoques en ambas caras" className="mx-auto h-auto w-full max-w-2xl">
+  <defs>
+    <marker id="d12-flecha" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" /></marker>
+  </defs>
+  <rect x="150" y="40" width="40" height="160" fill="currentColor" fillOpacity="0.45" stroke="currentColor" />
+  <rect x="190" y="40" width="130" height="160" fill="currentColor" fillOpacity="0.15" stroke="currentColor" />
+  <rect x="320" y="40" width="40" height="160" fill="currentColor" fillOpacity="0.45" stroke="currentColor" />
+  <line x1="160" y1="40" x2="160" y2="200" stroke="currentColor" strokeWidth="3" />
+  <line x1="350" y1="40" x2="350" y2="200" stroke="currentColor" strokeWidth="3" />
+  <circle cx="160" cy="80" r="4" fill="currentColor" />
+  <circle cx="160" cy="120" r="4" fill="currentColor" />
+  <circle cx="160" cy="160" r="4" fill="currentColor" />
+  <circle cx="350" cy="80" r="4" fill="currentColor" />
+  <circle cx="350" cy="120" r="4" fill="currentColor" />
+  <circle cx="350" cy="160" r="4" fill="currentColor" />
+  <path d="M155 100 H355" stroke="currentColor" strokeWidth="2" strokeDasharray="5 3" fill="none" />
+  <line x1="150" y1="226" x2="190" y2="226" stroke="currentColor" markerStart="url(#d12-flecha)" markerEnd="url(#d12-flecha)" />
+  <text x="170" y="242" textAnchor="middle" fontSize="11" fill="currentColor">revoque 1</text>
+  <line x1="190" y1="226" x2="320" y2="226" stroke="currentColor" markerStart="url(#d12-flecha)" markerEnd="url(#d12-flecha)" />
+  <text x="255" y="242" textAnchor="middle" fontSize="11" fill="currentColor">mampostería (≥ 90 mm)</text>
+  <line x1="320" y1="226" x2="360" y2="226" stroke="currentColor" markerStart="url(#d12-flecha)" markerEnd="url(#d12-flecha)" />
+  <text x="340" y="242" textAnchor="middle" fontSize="11" fill="currentColor">revoque 2</text>
+  <text x="150" y="30" fontSize="11" fill="currentColor">malla (alambres)</text>
+  <text x="372" y="84" fontSize="11" fill="currentColor">malla en cada cara</text>
+  <text x="372" y="104" fontSize="11" fill="currentColor">conector con gancho 90°</text>
+  <text x="372" y="124" fontSize="11" fill="currentColor">(4 por m²) o clavos (9 por m²)</text>
+  <text x="372" y="168" fontSize="11" fill="currentColor">cobertura: 5 mm a la mampostería,</text>
+  <text x="372" y="184" fontSize="11" fill="currentColor">10 mm externo</text>
+</svg>
+</Figura>
+
+## D.12.0 — Nomenclatura
+
+La nomenclatura de D.12 es corta (<NormaRef s="D.12.0" pag="D-65" />):
+
+| Símbolo | Significado | Unidad |
+|---|---|:---:|
+| $E_{cre}$ | Módulo de elasticidad del mortero de revoque o pañete | MPa |
+| $f'_c$ | Resistencia especificada a la compresión del concreto de los elementos de confinamiento | MPa |
+| $f'_{cp}$ | Resistencia especificada a la compresión del mortero de pega | MPa |
+| $f'_{cre}$ | Resistencia especificada a la compresión del mortero de recubrimiento o revoque | MPa |
+| $f'_m$ | Resistencia especificada a la compresión de la mampostería | MPa |
+| $f_y$ | Resistencia a la fluencia del acero de refuerzo | MPa |
+
+En el capítulo, $f'_c$ aparece solo en D.12.4.6, donde se hace $f'_c = f'_{cre}$ para tratar el revoque como concreto. Las demás magnitudes (espesores, cuantías) se definen en el texto.
+
+## D.12.1 — Requisitos generales
+
+### D.12.1.1 — General
+
+Además de lo especificado en el capítulo, las estructuras de mampostería reforzada externamente deben cumplir los **Capítulos D.1, D.2 y D.3** (<NormaRef s="D.12.1.1" pag="D-65" />).
+
+### D.12.1.2 — Definición
+
+Son muros de mampostería reforzada externamente aquellos en que el refuerzo consiste en **mallas electrosoldadas** colocadas **dentro del mortero de recubrimiento o revoque (pañete) en ambas caras laterales** de los muros, fijadas a ellos mediante **conectores y/o clavos de acero** (<NormaRef s="D.12.1.2" pag="D-65" />).
+
+- **Unidades** (<NormaRef s="D.12.1.2.1" pag="D-65" />): pueden ser de **concreto, arcilla cocida o silicio-calcáreas**, **macizas, de perforación vertical u horizontal**, y deben cumplir D.3.6.
+- **Mortero de pega** (<NormaRef s="D.12.1.2.2" pag="D-65" />): lo establecido en D.3.4.
+- **Mortero de revoque** (<NormaRef s="D.12.1.2.3" pag="D-65" />): similar a los morteros de pega de D.3.4, pero **con arenas finas** que cumplan las normas **ASTM C-926 y ASTM C-897**.
+
+### D.12.1.3 — Espesor mínimo
+
+El **espesor real total no puede ser menor de 130 mm**: **90 mm** de espesor real mínimo de la mampostería **más 20 mm** de espesor mínimo de revoque **en cada uno de los dos lados** (<NormaRef s="D.12.1.3" pag="D-65" />): $90 + 2\times 20 = 130$ mm.
+
+### D.12.1.4 — Resistencia mínima
+
+- $f'_m \ge 8$ MPa.
+- $f'_{cre} \ge 12.5$ MPa.
+
+(<NormaRef s="D.12.1.4" pag="D-65" />)
+
+<TablaNorma numero="Resumen D.12.1" titulo="Requisitos generales de materiales y espesores (autoría del proyecto)" pag="D-65" nota="Reorganización del texto de D.12.1.3, D.12.1.4 y D.12.5.1; no es una tabla de la norma.">
+
+| Requisito | Valor | Sección |
+|---|:---:|---|
+| Espesor real total del muro | ≥ 130 mm | D.12.1.3 |
+| Espesor real de la mampostería | ≥ 90 mm | D.12.1.3 |
+| Espesor de revoque en cada cara | ≥ 20 mm | D.12.1.3 |
+| Espesor de cada capa de revoque (construcción) | 15 a 45 mm | D.12.5.1 |
+| $f'_m$ | ≥ 8 MPa | D.12.1.4 |
+| $f'_{cre}$ | ≥ 12.5 MPa | D.12.1.4 |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Inconsistencia entre D.12.1.3 y D.12.5.1">
+D.12.1.3 exige **al menos 20 mm** de revoque en cada cara, mientras que D.12.5.1 dice que cada capa **no podrá ser menor de 15 mm** (ni mayor de 45 mm). Los dos mínimos no coinciden. Aquí se verifica con el más exigente (20 mm, D.12.1.3) y se informa el rango de D.12.5.1 como un chequeo adicional. Verifíquese con la fuente oficial antes de aplicarlo a un proyecto real.
+</Callout>
+
+## D.12.2 — Usos de la mampostería reforzada externamente
+
+Las limitaciones de uso se basan en el **Capítulo A.3** del Reglamento. El sistema se clasifica, para diseño sismo resistente, como sistema de resistencia sísmica con **capacidad mínima de disipación de energía en el rango inelástico (DMI)** (<NormaRef s="D.12.2.1" pag="D-65" />). El Capítulo D.12 no fija altura máxima ni número de pisos: esas condiciones salen de A.3.
+
+## D.12.3 — Requisitos del refuerzo
+
+### D.12.3.1 — General
+
+El refuerzo debe cumplir las especificaciones del **Capítulo D.2** y las demás disposiciones del Título D sobre uso, características, manejo y colocación (<NormaRef s="D.12.3.1" pag="D-66" />).
+
+### D.12.3.2 — Refuerzo mínimo
+
+En **cada lado del muro** se coloca una malla electrosoldada que cumpla las siguientes **cuantías, evaluadas con respecto al área bruta total del muro** (incluye los espesores de mortero de revoque) (<NormaRef s="D.12.3.2" pag="D-66" />):
+
+| Refuerzo | Cuantía mínima |
+|---|:---:|
+| Vertical | 0.00035 |
+| Horizontal | 0.00035 |
+
+Con un espesor bruto total $t$ y una franja de 1000 mm, el área mínima de la malla en cada dirección es
+
+$$
+A_{s,\min} = 0.00035\; t \times 1000\ \text{mm}^2/\text{m}
+$$
+
+Por ejemplo, para $t$ = 140 mm resultan {f(areaMinimaMalla(140), 1)} mm² por metro. La norma dice «en cada lado... una malla que cumpla las siguientes cuantías»; aquí se lee como exigencia para la malla de **cada cara** (interpretación del proyecto, la más conservadora).
+
+#### D.12.3.2.1 — Separación del refuerzo
+
+La separación **horizontal y vertical** de los alambres de las mallas no puede ser **mayor de 300 mm** (<NormaRef s="D.12.3.2.1" pag="D-66" />).
+
+### D.12.3.3 — Anclaje del refuerzo
+
+Las mallas deben anclarse a la mampostería de manera que puedan alcanzar su resistencia a la fluencia especificada $f_y$ (<NormaRef s="D.12.3.3" pag="D-66" />).
+
+<TablaNorma numero="Resumen D.12.3.3" titulo="Fijación y continuidad de la malla (autoría del proyecto)" pag="D-66" nota="Reorganización del texto de D.12.3.3; no es una tabla de la norma.">
+
+| Medio de fijación o requisito | Valor |
+|---|---|
+| Clavos de acero o conectores por carga explosiva controlada (tiros) | Mínimo 9 por m²; diámetro mínimo 3 mm; la cabeza sobresale del muro al menos 10 mm |
+| Conectores de barra o alambre que atraviesan el muro y abrazan las 2 mallas con gancho de 90° en cada extremo | Mínimo 4 por m²; diámetro mínimo 4.5 mm |
+| Amarre de las mallas a los conectores | Alambre galvanizado No. 16 (1.3 mm) |
+| Bordes verticales y bordes de aberturas | Las mallas los rodean y se prolongan al menos 200 mm más allá del extremo |
+| Continuidad | Refuerzo continuo a lo largo y alto del muro; anclado en la fundación de concreto reforzado con las longitudes de desarrollo y traslapos del Título C |
+
+</TablaNorma>
+
+<Figura alt="Alzado de un muro con la malla continua, los bordes verticales y de aberturas rodeados por la malla y la prolongación mínima de 200 mm más allá del borde" numero="Esquema" pie="Mallas que rodean los bordes del muro y de las aberturas y se prolongan al menos 200 mm (D.12.3.3). El refuerzo es continuo y se ancla en la fundación (esquema del proyecto).">
+<svg viewBox="0 0 520 240" role="img" aria-label="Alzado de muro con abertura y malla que rodea los bordes" className="mx-auto h-auto w-full max-w-xl">
+  <defs>
+    <marker id="d12-fl2" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" /></marker>
+  </defs>
+  <rect x="60" y="30" width="340" height="170" fill="currentColor" fillOpacity="0.14" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="170" y="80" width="90" height="70" fill="var(--background, #fff)" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="160" y="70" width="110" height="90" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="6 3" />
+  <rect x="40" y="200" width="380" height="24" fill="currentColor" fillOpacity="0.5" stroke="currentColor" />
+  <text x="230" y="217" textAnchor="middle" fontSize="11" fill="currentColor">fundación de concreto reforzado</text>
+  <line x1="400" y1="60" x2="440" y2="60" stroke="currentColor" markerStart="url(#d12-fl2)" markerEnd="url(#d12-fl2)" />
+  <line x1="400" y1="30" x2="400" y2="70" stroke="currentColor" strokeOpacity="0.4" strokeDasharray="3 3" />
+  <line x1="440" y1="30" x2="440" y2="70" stroke="currentColor" strokeOpacity="0.4" strokeDasharray="3 3" />
+  <text x="420" y="50" textAnchor="middle" fontSize="11" fill="currentColor">≥ 200 mm</text>
+  <text x="215" y="120" textAnchor="middle" fontSize="11" fill="currentColor">abertura</text>
+  <text x="215" y="64" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.85">malla rodea el borde</text>
+  <text x="62" y="22" fontSize="11" fill="currentColor" fillOpacity="0.85">muro con malla continua</text>
+</svg>
+</Figura>
+
+## D.12.4 — Requisitos de diseño
+
+### D.12.4.1 — General
+
+Los muros reforzados externamente se diseñan siguiendo los requisitos del Reglamento, teniendo en cuenta las **propiedades mecánicas** de los materiales y las **características dimensionales de la sección compuesta**, y los procedimientos apropiados para el estudio de la **distribución de esfuerzos en elementos compuestos de varios materiales** (<NormaRef s="D.12.4.1" pag="D-66" />).
+
+### D.12.4.2 — Análisis
+
+El análisis estructural se basa en la **sección transformada elástica de la sección neta compuesta**. Si el diseño es por **esfuerzos de trabajo admisibles**, los esfuerzos en cualquier porción de la mampostería compuesta deben estar dentro de los límites del material de esa porción; los admisibles del **revoque** se obtienen con las **mismas fórmulas de la mampostería, reemplazando $f'_m$ por $f'_{cre}$** (<NormaRef s="D.12.4.2" pag="D-66" />). Las fórmulas de esfuerzos admisibles están en el [Apéndice D-1](/titulo-d/apendice-d1).
+
+### D.12.4.3 — Módulo de elasticidad
+
+El módulo de elasticidad de cada material componente se determina según **D.5.2** (ver el Capítulo [D.5a](/titulo-d/d5a)), pero el del **mortero de revoque** puede tomarse como (<NormaRef s="D.12.4.3" pag="D-67" />):
+
+<Ecuacion num="D.12.4.3" titulo="Módulo de elasticidad del mortero de revoque (ecuación sin número en el original)">
+
+$$
+E_{cre} = 2000\,\sqrt{f'_{cre}}\ \ \text{MPa}
+$$
+
+- $f'_{cre}$: resistencia especificada del mortero de revoque, en MPa.
+
+</Ecuacion>
+
+**Relación entre módulos.** Cuando la relación entre los módulos sea **mayor de 2 o menor de 0.5**, los módulos deben determinarse **mediante ensayos**, tomando el **valor secante entre $0.05f'_m$ y $0.33f'_m$**, y entre $0.05f'_{cre}$ y $0.33f'_{cre}$ respectivamente (<NormaRef s="D.12.4.3" pag="D-67" />). Es la misma secante de D.5.2.1.2.
+
+<Callout tipo="nota" titulo="Verificado contra la imagen de D-67">
+La ecuación $E_{cre}=2000\sqrt{f'_{cre}}$ lleva raíz cuadrada (el texto extraído del PDF la pierde). Con $f'_{cre}$ = 12.5 MPa resulta {f(moduloElasticidadRevoque(12.5), 0)} MPa; con 16 MPa, {f(moduloElasticidadRevoque(16), 0)} MPa.
+</Callout>
+
+### D.12.4.4 — Sección transformada
+
+Al transformar la sección en un solo material se toma **uno de ellos como base**. La **dimensión paralela al eje neutro** se multiplica por la **relación modular**, **sin alterar las dimensiones en la dirección ortogonal** al eje neutro. **Ni la altura efectiva ni la longitud** de los elementos se modifican por la transformación; el **espesor efectivo** es el de la sección original (<NormaRef s="D.12.4.4" pag="D-67" />).
+
+Para una franja de ancho $b$ en flexión **fuera del plano** (eje neutro paralelo a la longitud del muro) con la mampostería como material base, la relación modular de cada revoque es $n_i = E_{cre}/E_m$ y el **ancho transformado** de cada capa es $n_i\,b$, con el mismo espesor $e_i$. El área, el centroide y la inercia transformados salen de sumar las capas:
+
+<Ecuacion num="Forma del proyecto" titulo="Sección transformada por franjas (autoría del proyecto, a partir de D.12.4.4)">
+
+$$
+A_t = \sum n_i\, b\, e_i
+\qquad
+\bar{y}=\frac{\sum A_i\, y_i}{A_t}
+\qquad
+I_t = \sum\left[\frac{n_i\, b\, e_i^{3}}{12} + A_i\,(y_i-\bar{y})^2\right]
+$$
+
+$$
+\sigma_i(y) = n_i\left[\frac{P}{A_t} + \frac{M\,(\bar{y}-y)}{I_t}\right]
+$$
+
+- $A_i = n_i b e_i$: área transformada de la capa $i$. $y_i$: profundidad de su centro desde la cara comprimida.
+- $P$: carga axial (compresión positiva). $M$: momento positivo si comprime esa cara.
+- El esfuerzo **real** en cada capa es $n_i$ veces el esfuerzo en la sección transformada: hay un salto en la interfaz porque cambia el módulo.
+
+</Ecuacion>
+
+En el **plano del muro** (eje neutro perpendicular a la longitud) las capas quedan una al lado de la otra: cada espesor se multiplica por su relación modular y el **espesor transformado** es $t_{eq}=\sum n_i e_i$, sin cambiar la longitud del muro (esta forma también es autoría del proyecto).
+
+<Figura alt="A la izquierda, sección real de tres capas: revoque, mampostería y revoque de igual ancho. A la derecha, sección transformada a mampostería, donde los revoques son más anchos en la proporción de la relación modular y la altura no cambia" numero="Esquema" pie="Sección transformada a mampostería (D.12.4.4): los revoques se ensanchan por la relación modular n = Ecre/Em; los espesores no cambian. El dibujo supone n ≈ 1.2 (esquema del proyecto)">
+<svg viewBox="0 0 540 240" role="img" aria-label="Sección real y sección transformada de un muro con revoques" className="mx-auto h-auto w-full max-w-xl">
+  <defs>
+    <marker id="d12-st" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor" /></marker>
+  </defs>
+  <rect x="50" y="40" width="130" height="24" fill="currentColor" fillOpacity="0.5" stroke="currentColor" />
+  <rect x="50" y="64" width="130" height="100" fill="currentColor" fillOpacity="0.15" stroke="currentColor" />
+  <rect x="50" y="164" width="130" height="24" fill="currentColor" fillOpacity="0.5" stroke="currentColor" />
+  <text x="115" y="30" textAnchor="middle" fontSize="12" fill="currentColor">Sección real</text>
+  <text x="115" y="108" textAnchor="middle" fontSize="11" fill="currentColor">mampostería (Em)</text>
+  <text x="115" y="56" textAnchor="middle" fontSize="11" fill="currentColor">revoque (Ecre)</text>
+  <text x="115" y="180" textAnchor="middle" fontSize="11" fill="currentColor">revoque (Ecre)</text>
+  <line x1="205" y1="114" x2="265" y2="114" stroke="currentColor" strokeWidth="2" markerEnd="url(#d12-st)" />
+  <text x="235" y="104" textAnchor="middle" fontSize="11" fill="currentColor">n = Ecre/Em</text>
+  <rect x="290" y="40" width="156" height="24" fill="currentColor" fillOpacity="0.5" stroke="currentColor" />
+  <rect x="302" y="64" width="132" height="100" fill="currentColor" fillOpacity="0.15" stroke="currentColor" />
+  <rect x="290" y="164" width="156" height="24" fill="currentColor" fillOpacity="0.5" stroke="currentColor" />
+  <text x="368" y="30" textAnchor="middle" fontSize="12" fill="currentColor">Sección transformada</text>
+  <text x="368" y="108" textAnchor="middle" fontSize="11" fill="currentColor">ancho b</text>
+  <text x="368" y="56" textAnchor="middle" fontSize="11" fill="currentColor">ancho n·b</text>
+  <text x="368" y="180" textAnchor="middle" fontSize="11" fill="currentColor">ancho n·b</text>
+  <line x1="470" y1="40" x2="470" y2="188" stroke="currentColor" markerStart="url(#d12-st)" markerEnd="url(#d12-st)" />
+  <text x="478" y="118" fontSize="11" fill="currentColor">espesor</text>
+  <text x="478" y="134" fontSize="11" fill="currentColor">sin cambio</text>
+</svg>
+</Figura>
+
+### D.12.4.5 — Monolitismo
+
+La mampostería reforzada externamente se diseña para que tenga un **funcionamiento monolítico**. Deben estudiarse y atenderse los **esfuerzos internos derivados de los cambios de volumen** y otros **efectos reológicos** (retracción, flujo plástico) si se presentan (<NormaRef s="D.12.4.5" pag="D-67" />). Los conectores y el anclaje de D.12.3.3 son los medios con que se busca ese monolitismo (comentario del proyecto).
+
+### D.12.4.6 — Análisis y diseño simplificado
+
+El análisis y diseño pueden hacerse de forma simplificada, **despreciando el aporte de la mampostería** y dando **toda la responsabilidad a las capas de mortero de recubrimiento** (<NormaRef s="D.12.4.6" pag="D-67" />). El diseño se hace con los requisitos del **Título C**, **como si fuera un muro de concreto** con:
+
+- **espesor** igual a la **suma de los dos espesores de recubrimiento**, $e_1 + e_2$; y
+- **resistencia a la compresión** $f'_c = f'_{cre}$.
+
+Se deben cumplir **todos los requisitos del capítulo excepto los de sección compuesta** (<NormaRef s="D.12.4.6" pag="D-67" />). Comentario del proyecto: es más sencillo y conservador, porque la mampostería no cuenta; el espesor equivalente es solo la suma de los dos revoques (por ejemplo, 40 a 50 mm).
+
+## D.12.5 — Requisitos adicionales de construcción
+
+### D.12.5.1 — Espesor de la capa de revoque
+
+El espesor de **cada capa** de mortero de recubrimiento no puede ser **menor de 15 mm ni mayor de 45 mm**. Cuando el espesor total de la capa supera 15 mm, el mortero se coloca en **capas sucesivas de 10 a 15 mm** hasta completar el espesor (<NormaRef s="D.12.5.1" pag="D-67" />). Por ejemplo, para 45 mm se pueden usar entre {subcapasRevoque(45).nMin} y {subcapasRevoque(45).nMax} sub-capas.
+
+<Callout tipo="nota" titulo="Observación del proyecto sobre las sub-capas">
+Con un espesor total entre 15 y 20 mm no existe un número de sub-capas con todas entre 10 y 15 mm (por ejemplo, 17 mm no puede dividirse en sub-capas de 10 a 15 mm). Para los 20 mm de D.12.1.3 funcionan **dos sub-capas de 10 mm**.
+</Callout>
+
+### D.12.5.2 — Recubrimiento mínimo de la malla
+
+La malla debe tener recubrimientos mínimos garantizados durante la obra con **dispositivos plásticos o similares** (<NormaRef s="D.12.5.2" pag="D-67" />):
+
+- **5 mm** a la superficie de la mampostería.
+- **10 mm** externo a la malla.
+
+Como la malla electrosoldada tiene dos alambres que se cruzan, el espesor mínimo del revoque que la contiene es la suma de ambos recubrimientos más el espesor de la malla, $5 + 10 + d_H + d_V$ (**autoría del proyecto**). Con alambres de 4 mm resulta {f(espesorMinimoRevoqueParaMalla(4, 4), 0)} mm, que **supera los 20 mm** mínimos de D.12.1.3: para esa malla hay que adoptar un revoque mayor.
+
+### D.12.5.3 — Curado del revoque
+
+Curado **húmedo continuo durante al menos 7 días**, con los procedimientos del Título C (<NormaRef s="D.12.5.3" pag="D-67" />).
+
+### D.12.5.4 — Control de calidad de los materiales
+
+Se hace según las normas de producción de cada material y con las **frecuencias de D.3.8** (<NormaRef s="D.12.5.4" pag="D-67" />).
+
+<Callout tipo="nota" titulo="Página D-68">
+La página D-68 (PDF 633) del Título D es una hoja de notas sin contenido normativo.
+</Callout>
+
+## Calculadoras relacionadas
+
+D.12 no tiene calculadora propia. Los módulos $E_m$ y $E_r$ de D.5.2 y la relación modular están en la calculadora «Dimensiones efectivas» del Capítulo [D.5a](/titulo-d/d5a). Las funciones de este capítulo (`mamposteriaExterna.ts`) son las que usan los ejemplos de abajo.
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Espesores, materiales, malla y conectores de un muro reforzado externamente">
+Muro de bloque de arcilla de 100 mm de espesor real, $f'_m$ = 8 MPa, con revoque de $f'_{cre}$ = 12.5 MPa en ambas caras y malla electrosoldada de alambre de 4 mm cada 150 mm en las dos direcciones. Paño de 3.0 m × 2.6 m (7.8 m²). Verificar los requisitos y contar conectores.
+
+<Paso titulo="Materiales" ref="D.12.1.4">
+
+$f'_m$ = 8 MPa ≥ 8 y $f'_{cre}$ = 12.5 MPa ≥ 12.5: **{ej1.mat.cumple ? 'cumple' : 'no cumple'}** (están justo en el mínimo).
+
+</Paso>
+<Paso titulo="Espesor mínimo del revoque para alojar la malla" ref="D.12.5.2">
+
+Revoque mínimo para la malla de 4 mm: $5 + 10 + 4 + 4$ = **{f(ej1.eMin, 0)} mm**. Con 20 mm (mínimo de D.12.1.3) el espesor total sería {f(ej1.esp20.total, 0)} mm ({ej1.esp20.totalCumple ? 'cumple' : 'no cumple'} D.12.1.3), pero la malla no cabe con sus recubrimientos. Se adoptan **{f(ej1.e, 0)} mm** por cara: espesor total = 100 + 2 × {f(ej1.e, 0)} = **{f(ej1.esp.total, 0)} mm** (≥ 130 mm; cada capa entre 15 y 45 mm: {ej1.esp.cumple ? 'cumple' : 'no cumple'}).
+
+</Paso>
+<Paso titulo="Revoque en sub-capas" ref="D.12.5.1">
+
+Como {f(ej1.e, 0)} mm > 15 mm, el revoque se aplica en {ej1.capas.nMin} sub-capas (de entre 10 y 15 mm cada una): {f(ej1.e / ej1.capas.nMin, 1)} mm por sub-capa.
+
+</Paso>
+<Paso titulo="Cuantía mínima de la malla" ref="D.12.3.2">
+
+$$
+A_{s,\min} = 0.00035\,(150)\,(1000) = 52.5\ \text{mm}^2/\text{m}
+$$
+
+Resultado: el área mínima es **{f(ej1.areaMin, 1)} mm²/m**. La malla aporta $\frac{\pi\,4^2}{4}\,\frac{1000}{150}$ = **{f(ej1.area, 1)} mm²/m** por dirección: {ej1.malla.areaCumple ? 'cumple' : 'no cumple'}. La separación de 150 mm es ≤ 300 mm ({ej1.malla.separacionCumple ? 'cumple' : 'no cumple'}). Con alambre de 4 mm la separación máxima por área sería {f(ej1.malla.separacionPorArea, 0)} mm, pero **rige el límite de 300 mm**.
+
+</Paso>
+<Paso titulo="Conectores" ref="D.12.3.3">
+
+Para 7.8 m²: clavos o tiros (9 por m²) = **{ej1.clavos}**; conectores de barra con gancho de 90° (4 por m²) = **{ej1.barras}**.
+
+</Paso>
+<Resultado>
+Espesor total **{f(ej1.esp.total, 0)} mm** (revoque de {f(ej1.e, 0)} mm por cara, {ej1.capas.nMin} sub-capas); malla de 4 mm @ 150 mm con **{f(ej1.area, 1)} mm²/m** frente a un mínimo de **{f(ej1.areaMin, 1)} mm²/m**; {ej1.clavos} clavos o {ej1.barras} conectores para 7.8 m².
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Sección transformada elástica y esfuerzos en cada capa">
+Se analiza una franja de 1 m del muro del ejemplo anterior (revoque de 25 mm por cara, mampostería de arcilla de 100 mm con $f'_m$ = 8 MPa, $f'_{cre}$ = 12.5 MPa) sometida a $P$ = 20 kN por metro de compresión y a un momento fuera del plano $M$ = 1.5 kN·m por metro que comprime la cara 1.
+
+<Paso titulo="Módulos de los materiales" ref="D.5.2-3, D.12.4.3">
+
+Mampostería de arcilla sin ensayos: $E_m = 750\,f'_m$ = 750 (8) = **{f(ej2.Em, 0)} MPa**. Revoque: $E_{cre} = 2000\sqrt{12.5}$ = **{f(ej2.Ere, 0)} MPa**.
+
+</Paso>
+<Paso titulo="¿Hace falta ensayar los módulos?" ref="D.12.4.3">
+
+Relación $E_{cre}/E_m$ = {f(ej2.rel.relacion, 3)}, dentro de 0.5 a 2: **{ej2.rel.requiereEnsayos ? 'se requieren ensayos' : 'no se requieren ensayos'}**; se pueden usar las ecuaciones.
+
+</Paso>
+<Paso titulo="Sección transformada a mampostería" ref="D.12.4.4">
+
+Relación modular de los revoques $n$ = **{f(ej2.sec.capas[0].n, 4)}**; la mampostería es la base ($n$ = 1). Anchos transformados: {f(ej2.sec.capas[0].anchoTransformado, 1)} mm (revoques) y 1000 mm (mampostería); los espesores no cambian (25, 100 y 25 mm; total {f(ej2.sec.espesorTotal, 0)} mm).
+
+$$
+A_t = 2\,(n\,b\,e) + b\,t_m
+$$
+
+Resultado: $A_t$ = **{f(ej2.sec.At, 0)} mm²**, $\bar{y}$ = **{f(ej2.sec.yBarra, 1)} mm** (sección simétrica), $I_t$ = **{f(ej2.sec.It / 1e6, 1)} × 10⁶ mm⁴**.
+
+</Paso>
+<Paso titulo="Esfuerzos elásticos (compresión positiva)" ref="D.12.4.2">
+
+$$
+\sigma_i(y) = n_i\left[\frac{P}{A_t} + \frac{M\,(\bar{y}-y)}{I_t}\right]
+$$
+
+Con $P$ = 20 000 N y $M$ = 1.5 × 10⁶ N·mm:
+
+| Capa | Fibra superior (MPa) | Fibra inferior (MPa) |
+|---|:---:|:---:|
+| Revoque 1 (cara comprimida) | {f(ej2.s[0].sigmaSup, 3)} | {f(ej2.s[0].sigmaInf, 3)} |
+| Mampostería | {f(ej2.s[1].sigmaSup, 3)} | {f(ej2.s[1].sigmaInf, 3)} |
+| Revoque 2 (cara traccionada) | {f(ej2.s[2].sigmaSup, 3)} | {f(ej2.s[2].sigmaInf, 3)} |
+
+Un valor negativo es tracción. Cada resultado debe compararse con el admisible del material de esa capa; para el revoque el admisible se calcula con las fórmulas de la mampostería con $f'_{cre}$ en lugar de $f'_m$ (D.12.4.2 y [Apéndice D-1](/titulo-d/apendice-d1)). Los esfuerzos de tracción, si superan lo que resiste el mortero, indican fisuración y exigen que el acero lo resista.
+
+</Paso>
+<Paso titulo="Espesor transformado en el plano" ref="D.12.4.4">
+
+Para el análisis en el plano, el espesor transformado a mampostería es $t_{eq} = 2\,n\,e + t_m$ = **{f(ej2.tEq, 1)} mm**, frente a 150 mm de espesor real: la longitud del muro no cambia.
+
+</Paso>
+<Resultado>
+$E_m$ = {f(ej2.Em, 0)} MPa; $E_{cre}$ = {f(ej2.Ere, 0)} MPa; $n$ = {f(ej2.sec.capas[0].n, 3)}; $A_t$ = {f(ej2.sec.At, 0)} mm², $I_t$ = {f(ej2.sec.It / 1e6, 1)} × 10⁶ mm⁴. Esfuerzo máximo de compresión en el revoque de la cara comprimida: **{f(ej2.s[0].sigmaSup, 3)} MPa**; en la cara traccionada, {f(ej2.s[2].sigmaInf, 3)} MPa.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Diseño simplificado: el revoque como muro de concreto">
+Mismo muro (revoque de 25 mm por cara, $f'_{cre}$ = 12.5 MPa), con longitud $\ell_w$ = 3000 mm. Aplicar D.12.4.6 al cortante en el plano.
+
+<Paso titulo="Muro de concreto equivalente" ref="D.12.4.6">
+
+Se desprecia la mampostería: espesor $h = e_1 + e_2$ = 25 + 25 = **{f(ej3.r.h, 0)} mm**, con $f'_c = f'_{cre}$ = **{f(ej3.r.fc, 1)} MPa**.
+
+</Paso>
+<Paso titulo="Cortante en el plano con las reglas de C.11.9 (aplicación del proyecto)" ref="C.11.9.4, C.11.9.5">
+
+$d = 0.8\,\ell_w$ = {f(ej3.r.d, 0)} mm; $V_c = 0.17\,\lambda\sqrt{f'_c}\,h\,d$ con $\lambda$ = 1:
+
+$$
+V_c = 0.17\,\sqrt{12.5}\,(50)\,(2400)\ \text{N}
+$$
+
+Resultado: $V_c$ = **{f(ej3.r.Vc, 1)} kN** y $\phi V_c$ = 0.75 $V_c$ = **{f(ej3.r.phiVc, 1)} kN**.
+
+</Paso>
+<Paso titulo="Interpretación" ref="D.12.4.6">
+
+Es una resistencia que **no cuenta la mampostería** (conservadora) y que se debe combinar con el resto de los requisitos de D.12 (cuantías mínimas, separación de la malla, anclaje y construcción), excepto los de sección compuesta. El muro real tiene {f(ej3.completo.total, 0)} mm de espesor total y el simplificado solo cuenta {f(ej3.r.h, 0)} mm: se renuncia a la capacidad de la mampostería a cambio de no hacer el análisis compuesto.
+
+</Paso>
+<Resultado>
+Muro de concreto equivalente de **{f(ej3.r.h, 0)} mm** con $f'_c$ = {f(ej3.r.fc, 1)} MPa: $\phi V_c$ = **{f(ej3.r.phiVc, 1)} kN** a cortante en el plano con $\ell_w$ = 3000 mm (aplicación del proyecto de C.11.9.5; la norma D.12 no formula esta verificación concreta).
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Aceptar 15 mm de revoque porque D.12.5.1 lo permite">
+D.12.1.3 pide **al menos 20 mm por cara** y un espesor total de 130 mm; D.12.5.1 acepta capas desde 15 mm. Aplique el más exigente. Además, la malla de 4 mm o más necesita un revoque mayor para respetar los recubrimientos de 5 y 10 mm (D.12.5.2).
+</Callout>
+
+<Callout tipo="error" titulo="Evaluar la cuantía con el espesor de la mampostería">
+Las cuantías de 0.00035 se evalúan **con respecto al área bruta total del muro, incluidos los revoques** (D.12.3.2). Con 140 mm de espesor total, el mínimo es 49 mm²/m, no el que saldría de un espesor de 100 mm.
+</Callout>
+
+<Callout tipo="error" titulo="Usar Ecre con las fórmulas de la mampostería">
+$E_{cre}$ es **2000 $\sqrt{f'_{cre}}$** (con raíz); la mampostería usa $E_m = 900f'_m$ ó $750f'_m$ (lineales, D.5.2). Si la relación entre módulos supera 2 o es menor que 0.5, se necesitan **ensayos** (D.12.4.3).
+</Callout>
+
+<Callout tipo="error" titulo="Transformar la sección alterando la altura o el espesor">
+En la sección transformada solo cambia la **dimensión paralela al eje neutro**; la altura efectiva, la longitud del muro y el espesor efectivo no se modifican (D.12.4.4).
+</Callout>
+
+<Callout tipo="error" titulo="Anclar la malla con menos conectores o con distinto diámetro del exigido">
+Mínimo **9 por m²** con clavos o tiros (diámetro ≥ 3 mm y cabeza sobresaliendo 10 mm) o **4 por m²** con conectores de barra de ≥ 4.5 mm con gancho de 90°; las mallas rodean los bordes y se prolongan 200 mm (D.12.3.3). Un anclaje deficiente impide que la malla alcance $f_y$ y rompe el monolitismo (D.12.4.5).
+</Callout>
+
+<Callout tipo="error" titulo="Descuidar el curado y el control de calidad">
+El revoque necesita curado húmedo continuo de **al menos 7 días** (D.12.5.3) y el control de materiales con las frecuencias de D.3.8 (D.12.5.4). Un revoque fisurado por mal curado pierde su función de refuerzo.
+</Callout>
+
+## Resumen en una línea
+
+**La mampostería reforzada externamente (DMI) lleva mallas electrosoldadas en un revoque de f′cre ≥ 12.5 MPa en ambas caras de una mampostería de f′m ≥ 8 MPa (espesor total ≥ 130 mm), con cuantías de 0.00035 sobre el área bruta total, separación ≤ 300 mm, anclaje con 9 clavos o 4 conectores por m², análisis con sección transformada (Ecre = 2000 √f′cre) o con el diseño simplificado que solo cuenta el revoque como concreto, y revoque de 15 a 45 mm curado 7 días.**

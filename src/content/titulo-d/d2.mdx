@@ -1,0 +1,733 @@
+---
+codigo: 'D.2'
+tipo: capitulo
+titulo: 'Clasificación, usos, normas, nomenclatura y definiciones'
+resumen: 'Los siete tipos de mampostería estructural y su capacidad de disipación de energía (DES, DMO, DMI), los usos permitidos, las normas NTC, ASTM y AWS que cita el Título D, la nomenclatura de 85 símbolos y las 43 definiciones que se usan en todo el Título.'
+objetivos:
+  - 'Distinguir los siete tipos de mampostería de D.2.1 y asignar a cada uno su capítulo y su capacidad de disipación (DES, DMO o DMI)'
+  - 'Decidir si una mampostería reforzada es DES o DMO según las celdas inyectadas (D.2.1.2)'
+  - 'Reconocer los usos permitidos, la combinación de sistemas y el diseño de elementos de concreto embebidos (D.2.2)'
+  - 'Ubicar las normas NTC, ASTM y AWS citadas por el Título D y sus equivalencias (D.2.3)'
+  - 'Leer la nomenclatura de D.2.4 sin confundir subíndices que cambian de significado, y manejar las definiciones de D.2.5'
+paginasNorma: 'D-5 a D-12'
+paginaPdf: 570
+orden: 2
+calculadoras: []
+nivel: basico
+---
+
+import {
+  TIPOS_MAMPOSTERIA,
+  capacidadMamposteriaReforzada,
+  tipoMamposteria,
+} from '../../data/tiposMamposteria';
+import { definicionesD, simbolosD, TEMAS_GLOSARIO_D } from '../../data/glosarioD';
+
+export const f = (x, d = 2) => x.toFixed(d);
+export const n0 = (x) => String(Math.round(x)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+export const columnasCapacidad = [
+  {
+    k: 'DES',
+    titulo: 'DES · especial',
+    items: [
+      ['Cavidad reforzada', '(D.6)'],
+      ['Reforzada (D.7), si todas', 'las celdas se inyectan o', 'se cumple D.7.2.1.1'],
+    ],
+  },
+  {
+    k: 'DMO',
+    titulo: 'DMO · moderada',
+    items: [
+      ['Reforzada (D.7), si solo', 'se inyectan las celdas', 'con refuerzo'],
+      ['Parcialmente reforzada', '(D.8)'],
+      ['Muros confinados (D.10)'],
+    ],
+  },
+  {
+    k: 'DMI',
+    titulo: 'DMI · mínima',
+    items: [['No reforzada (D.9)'], ['Reforzada externamente', '(D.12)']],
+  },
+  {
+    k: 'NO',
+    titulo: 'Edificios nuevos: no',
+    items: [['Muros diafragma (D.11):', 'solo en el alcance del', 'Capítulo A.10']],
+  },
+].map((c) => {
+  let y = 52;
+  const items = c.items.map((lineas) => {
+    const it = { lineas, y };
+    y += lineas.length * 14 + 14;
+    return it;
+  });
+  return { ...c, items, alto: y - 28 };
+});
+
+export const ej1 = (() => {
+  const a = capacidadMamposteriaReforzada({ todasLasCeldasInyectadas: true, cumpleRefuerzoMinimoD7211: false });
+  const b = capacidadMamposteriaReforzada({ todasLasCeldasInyectadas: false, cumpleRefuerzoMinimoD7211: false });
+  const c = capacidadMamposteriaReforzada({ todasLasCeldasInyectadas: false, cumpleRefuerzoMinimoD7211: true });
+  return { a, b, c, parcial: tipoMamposteria('parcialmente-reforzada'), conf: tipoMamposteria('muros-confinados') };
+})();
+
+export const ej2 = (() => {
+  const largo = 390;
+  const ancho = 140;
+  const celda = 80 * 110;
+  const celdas = 2 * celda;
+  const Ag = largo * ancho;
+  const An = Ag - celdas;
+  const AnUnaInyectada = An + celda;
+  return { largo, ancho, celda, celdas, Ag, An, r: An / Ag, AnUnaInyectada, rUna: AnUnaInyectada / Ag };
+})();
+
+export const ej3 = (() => {
+  const b = 140;
+  const d = 400;
+  const h = 450;
+  const As = 2 * 129;
+  return { b, d, h, As, rho: As / (b * d), rhoBruta: As / (b * h) };
+})();
+
+## Idea central del capítulo
+
+El Capítulo D.2 es el **vocabulario del Título D**. Antes de calcular nada hay que saber **de qué tipo de mampostería se habla**, porque de ese tipo dependen el capítulo del Título D que se aplica (D.6 a D.12), la **capacidad de disipación de energía** (DES, DMO o DMI) y, con ella, los límites de uso por zona sísmica del Capítulo A.3. El capítulo también fija **qué normas técnicas** (NTC, ASTM, AWS) forman parte del Reglamento, y define la **nomenclatura** ({simbolosD.length} símbolos) y las **definiciones** ({definicionesD.length} términos) que se usan de D.3 a D.12.
+
+<Callout tipo="importante" titulo="Cómo usar este capítulo">
+No se estudia de memoria: se **consulta**. Aquí se explican los siete tipos de mampostería, los usos y las normas, y se enseña a **leer la notación** (la parte que más errores produce). Las listas completas están en el [glosario del Título D](/titulo-d/glosario): las {definicionesD.length} definiciones de D.2.5 y los {simbolosD.length} símbolos de D.2.4, con búsqueda y filtro por tema.
+</Callout>
+
+## D.2.1 — Clasificación de la mampostería estructural
+
+La norma reconoce **siete tipos** de mampostería estructural (<NormaRef s="D.2.1" pag="D-5" />). Cada uno se define por **cómo está reforzado** y se asocia a un capítulo del Título D y a una capacidad de disipación de energía en el rango inelástico. Esa capacidad se expresa con tres siglas del Título A: **DES** (especial), **DMO** (moderada) y **DMI** (mínima).
+
+<Figura alt="Ocho recuadros: siete esquemas de los tipos de mampostería (cavidad reforzada, reforzada, parcialmente reforzada, no reforzada, muros confinados, muros diafragma y reforzada externamente) más una leyenda" numero="Esquema" pie="Los siete tipos de mampostería de D.2.1 (vistas en planta de la 1 a la 4 y la 7; en alzado, la 5 y la 6). Esquemas no a escala. (esquema del proyecto)">
+<svg viewBox="0 0 690 400" role="img" aria-label="Esquemas de los siete tipos de mampostería estructural de D.2.1" className="mx-auto h-auto w-full max-w-3xl">
+  {TIPOS_MAMPOSTERIA.map((t, i) => (
+    <g key={t.id} transform={`translate(${5 + (i % 4) * 171}, ${5 + Math.floor(i / 4) * 195})`}>
+      <rect x="0" y="0" width="165" height="185" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.25" />
+      <text x="10" y="18" font-size="12" font-weight="bold" fill="currentColor">{t.seccion}</text>
+      <text x="10" y="33" font-size="11" fill="currentColor">{t.nombre.replace('Mampostería de ', '').replace('Mampostería ', '').replace(/^./, (c) => c.toUpperCase())}</text>
+      {t.id === 'cavidad-reforzada' && (
+        <g>
+          <rect x="15" y="62" width="135" height="14" fill="currentColor" fill-opacity="0.3" stroke="currentColor" />
+          <rect x="15" y="76" width="135" height="24" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-dasharray="3 2" />
+          <rect x="15" y="100" width="135" height="14" fill="currentColor" fill-opacity="0.3" stroke="currentColor" />
+          {[48, 82, 116].map((x) => (
+            <g key={x}>
+              <line x1={x} y1="62" x2={x} y2="76" stroke="currentColor" />
+              <line x1={x} y1="100" x2={x} y2="114" stroke="currentColor" />
+            </g>
+          ))}
+          {[35, 82, 130].map((x) => (
+            <circle key={x} cx={x} cy="88" r="3.5" fill="currentColor" />
+          ))}
+          <text x="82" y="136" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">dos paredes + concreto</text>
+          <text x="82" y="148" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">reforzado en la cavidad</text>
+        </g>
+      )}
+      {['reforzada', 'parcialmente-reforzada', 'no-reforzada'].includes(t.id) && (
+        <g>
+          {[0, 1, 2].map((b) => (
+            <g key={b}>
+              <rect x={15 + b * 45} y="62" width="45" height="52" fill="none" stroke="currentColor" />
+              {[0, 1].map((c) => {
+                const k = b * 2 + c;
+                const inyectada = t.id === 'reforzada' || (t.id === 'parcialmente-reforzada' && (k === 0 || k === 5));
+                const conBarra = t.id === 'reforzada' ? k % 2 === 0 : t.id === 'parcialmente-reforzada' && (k === 0 || k === 5);
+                return (
+                  <g key={c}>
+                    <rect x={21 + b * 45 + c * 19} y="70" width="14" height="36" fill={inyectada ? 'currentColor' : 'none'} fill-opacity={inyectada ? 0.28 : 0} stroke="currentColor" stroke-dasharray={inyectada ? '0' : '3 2'} stroke-opacity={inyectada ? 1 : 0.6} />
+                    {conBarra && <circle cx={28 + b * 45 + c * 19} cy="88" r="3.5" fill="currentColor" />}
+                  </g>
+                );
+              })}
+            </g>
+          ))}
+          <text x="82" y="136" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">
+            {t.id === 'reforzada' ? 'celdas inyectadas con barras' : t.id === 'parcialmente-reforzada' ? 'pocas celdas con barras' : 'sin refuerzo mínimo'}
+          </text>
+          <text x="82" y="148" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">
+            {t.id === 'reforzada' ? 'DES (todas) o DMO (con barra)' : t.id === 'parcialmente-reforzada' ? 'cuantías de D.8' : 'celdas vacías'}
+          </text>
+        </g>
+      )}
+      {t.id === 'muros-confinados' && (
+        <g>
+          <rect x="28" y="52" width="12" height="70" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+          <rect x="125" y="52" width="12" height="70" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+          <rect x="40" y="52" width="85" height="9" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+          <rect x="40" y="113" width="85" height="9" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+          <rect x="40" y="61" width="85" height="52" fill="currentColor" fill-opacity="0.1" stroke="currentColor" />
+          {[71, 81, 91, 101].map((y) => (
+            <line key={y} x1="40" y1={y} x2="125" y2={y} stroke="currentColor" stroke-opacity="0.5" />
+          ))}
+          <text x="82" y="140" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">columnas y vigas de concreto</text>
+          <text x="82" y="152" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">rodean el muro</text>
+        </g>
+      )}
+      {t.id === 'muros-diafragma' && (
+        <g>
+          <rect x="28" y="52" width="8" height="70" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+          <rect x="129" y="52" width="8" height="70" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+          <rect x="36" y="52" width="93" height="8" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+          <rect x="36" y="114" width="93" height="8" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+          <rect x="36" y="60" width="93" height="54" fill="currentColor" fill-opacity="0.1" stroke="currentColor" />
+          <line x1="36" y1="60" x2="129" y2="114" stroke="currentColor" stroke-width="2" stroke-dasharray="5 3" />
+          <line x1="6" y1="56" x2="26" y2="56" stroke="currentColor" stroke-width="2.5" />
+          <polygon points="26,56 19,52 19,60" fill="currentColor" />
+          <text x="82" y="140" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">muro dentro del pórtico</text>
+          <text x="82" y="152" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">(solo edificios existentes)</text>
+        </g>
+      )}
+      {t.id === 'reforzada-externamente' && (
+        <g>
+          <rect x="15" y="82" width="135" height="22" fill="currentColor" fill-opacity="0.1" stroke="currentColor" />
+          {[48, 82, 116].map((x) => (
+            <line key={x} x1={x} y1="82" x2={x} y2="104" stroke="currentColor" stroke-opacity="0.6" />
+          ))}
+          <rect x="15" y="72" width="135" height="10" fill="currentColor" fill-opacity="0.55" stroke="currentColor" />
+          <rect x="15" y="104" width="135" height="10" fill="currentColor" fill-opacity="0.55" stroke="currentColor" />
+          <line x1="15" y1="77" x2="150" y2="77" stroke="currentColor" stroke-dasharray="2 2" />
+          <line x1="15" y1="109" x2="150" y2="109" stroke="currentColor" stroke-dasharray="2 2" />
+          {[35, 82, 130].map((x) => (
+            <g key={x}>
+              <line x1={x} y1="77" x2={x} y2="109" stroke="currentColor" stroke-width="1.5" />
+              <circle cx={x} cy="77" r="2" fill="currentColor" />
+              <circle cx={x} cy="109" r="2" fill="currentColor" />
+            </g>
+          ))}
+          <text x="82" y="136" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">refuerzo dentro del pañete,</text>
+          <text x="82" y="148" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.8">fijado con conectores</text>
+        </g>
+      )}
+      <text x="10" y="176" font-size="11" fill="currentColor">{`${t.capacidades.length ? t.capacidades.join(' o ') : 'Solo existentes'} · Cap. ${t.capitulo}`}</text>
+    </g>
+  ))}
+  <g transform={`translate(${5 + 3 * 171}, ${5 + 195})`}>
+    <rect x="0" y="0" width="165" height="185" rx="6" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-dasharray="4 3" />
+    <text x="10" y="18" font-size="12" font-weight="bold" fill="currentColor">Leyenda</text>
+    <rect x="12" y="34" width="22" height="14" fill="none" stroke="currentColor" />
+    <text x="42" y="45" font-size="11" fill="currentColor">unidad</text>
+    <rect x="12" y="58" width="22" height="14" fill="currentColor" fill-opacity="0.28" stroke="currentColor" />
+    <text x="42" y="69" font-size="11" fill="currentColor">celda inyectada</text>
+    <rect x="12" y="82" width="22" height="14" fill="none" stroke="currentColor" stroke-dasharray="3 2" stroke-opacity="0.6" />
+    <text x="42" y="93" font-size="11" fill="currentColor">celda vacía</text>
+    <rect x="12" y="106" width="22" height="14" fill="currentColor" fill-opacity="0.6" stroke="currentColor" />
+    <text x="42" y="117" font-size="11" fill="currentColor">concreto o pañete</text>
+    <circle cx="23" cy="138" r="3.5" fill="currentColor" />
+    <text x="42" y="142" font-size="11" fill="currentColor">barra de refuerzo</text>
+    <text x="10" y="170" font-size="10" fill="currentColor" fill-opacity="0.8">Esquemas sin escala</text>
+  </g>
+</svg>
+</Figura>
+
+### D.2.1.1 — Mampostería de cavidad reforzada
+
+Construcción con **dos paredes de piezas de mampostería de caras paralelas**, reforzadas o no, **separadas por un espacio continuo de concreto reforzado**, con **funcionamiento compuesto**; cumple los requisitos del **Capítulo D.6**. Se clasifica como sistema con capacidad **especial** de disipación de energía (**DES**) (<NormaRef s="D.2.1.1" pag="D-5" />).
+
+### D.2.1.2 — Mampostería reforzada
+
+Construcción con **piezas de perforación vertical**, unidas con mortero y **reforzada internamente con barras y alambres de acero**; cumple los requisitos del **Capítulo D.7** (<NormaRef s="D.2.1.2" pag="D-5" />). Es el único tipo que puede caer en **dos** categorías:
+
+- **DES** cuando **todas sus celdas se inyectan** con mortero de relleno, o cuando se cumplen los **refuerzos mínimos adicionales** de **D.7.2.1.1**;
+- **DMO** cuando **solo se inyectan** con mortero de relleno **las celdas verticales que llevan refuerzo**.
+
+<Callout tipo="atencion" titulo="Una misma obra, dos clasificaciones">
+La clasificación DES o DMO de la mampostería reforzada **no depende del nombre del sistema** sino de **cuántas celdas se inyectan** (o de que se cumplan los refuerzos mínimos de D.7.2.1.1). Cambiar el plan de inyección de un muro puede cambiar su capacidad de disipación y, con ella, el coeficiente R y los límites de uso del Capítulo A.3. La condición debe quedar en los planos (literal (d) de <NormaRef s="D.1.2.1" pag="D-1" />).
+</Callout>
+
+### D.2.1.3 — Mampostería parcialmente reforzada
+
+Construcción con piezas de perforación vertical, unidas con mortero y reforzada internamente con barras y alambres; cumple los requisitos del **Capítulo D.8** y se clasifica con capacidad **moderada** (**DMO**) (<NormaRef s="D.2.1.3" pag="D-5" />).
+
+### D.2.1.4 — Mampostería no reforzada
+
+Construcción con piezas unidas con mortero que **no cumple las cuantías mínimas de refuerzo** de la mampostería parcialmente reforzada; cumple los requisitos del **Capítulo D.9** y se clasifica con capacidad **mínima** (**DMI**) (<NormaRef s="D.2.1.4" pag="D-5" />). Nótese que la definición es **por exclusión**: es la mampostería que no llega a ser parcialmente reforzada.
+
+### D.2.1.5 — Mampostería de muros confinados
+
+Construcción con piezas unidas con mortero, **reforzada de manera principal con elementos de concreto reforzado construidos alrededor del muro**, que lo confinan; cumple el **Capítulo D.10** y se clasifica con capacidad **moderada** (**DMO**) (<NormaRef s="D.2.1.5" pag="D-5" />).
+
+### D.2.1.6 — Mampostería de muros diafragma
+
+**Muros colocados dentro de una estructura de pórticos**, que restringen su desplazamiento libre bajo cargas laterales; cumplen el **Capítulo D.11**. **No se permite para edificaciones nuevas**: su empleo solo se permite dentro del alcance del **Capítulo A.10** (adición, modificación o remodelación de edificaciones construidas antes de la vigencia de esta versión del Reglamento, o evaluación de su vulnerabilidad sísmica) (<NormaRef s="D.2.1.6" pag="D-5" />). La norma no le asigna una capacidad de disipación.
+
+### D.2.1.7 — Mampostería reforzada externamente
+
+Construcción de mampostería en la que **el refuerzo se coloca dentro de una capa de revoque (pañete)**, fijándolo al muro mediante **conectores y/o clavos**; cumple el **Capítulo D.12** y se clasifica con capacidad **mínima** (**DMI**) (<NormaRef s="D.2.1.7" pag="D-6" />).
+
+### Resumen de la clasificación
+
+<TablaNorma numero="Resumen de D.2.1" titulo="Tipos de mampostería, capítulo y capacidad de disipación de energía" pag="D-5" nota="Elaborada a partir de D.2.1.1 a D.2.1.7; no es una tabla impresa. DES = especial, DMO = moderada, DMI = mínima.">
+
+| Sección | Tipo de mampostería | Capítulo | Capacidad |
+|---|---|---|---|
+| D.2.1.1 | Cavidad reforzada | D.6 | DES |
+| D.2.1.2 | Reforzada | D.7 | DES (todas las celdas inyectadas o D.7.2.1.1) o DMO (solo celdas con refuerzo) |
+| D.2.1.3 | Parcialmente reforzada | D.8 | DMO |
+| D.2.1.4 | No reforzada | D.9 | DMI |
+| D.2.1.5 | Muros confinados | D.10 | DMO |
+| D.2.1.6 | Muros diafragma | D.11 | No se permite en edificaciones nuevas (solo A.10) |
+| D.2.1.7 | Reforzada externamente | D.12 | DMI |
+
+</TablaNorma>
+
+<Figura alt="Cuatro columnas: DES, DMO, DMI y no permitido en edificios nuevos, con los tipos de mampostería que corresponden a cada capacidad de disipación de energía" numero="Esquema" pie="Los siete tipos de D.2.1 ordenados por capacidad de disipación de energía en el rango inelástico. (esquema del proyecto)">
+<svg viewBox="0 0 690 230" role="img" aria-label="Tipos de mampostería agrupados por capacidad de disipación DES, DMO y DMI" className="mx-auto h-auto w-full max-w-3xl">
+  {columnasCapacidad.map((c, i) => (
+    <g key={c.k} transform={`translate(${5 + i * 171}, 5)`}>
+      <rect x="0" y="0" width="165" height="215" rx="6" fill="currentColor" fill-opacity={[0.14, 0.1, 0.06, 0.02][i]} stroke="currentColor" stroke-opacity="0.35" />
+      <text x="10" y="22" font-size="13" font-weight="bold" fill="currentColor">{c.titulo}</text>
+      <line x1="10" y1="32" x2="155" y2="32" stroke="currentColor" stroke-opacity="0.4" />
+      {c.items.map((it) => (
+        <g key={it.y}>
+          {it.lineas.map((l, j) => (
+            <text key={l} x="12" y={it.y - 4 + j * 14} font-size="11" fill="currentColor">{l}</text>
+          ))}
+        </g>
+      ))}
+    </g>
+  ))}
+</svg>
+</Figura>
+
+<Callout tipo="nota" titulo="Qué significan DES, DMO y DMI">
+Son las tres **capacidades de disipación de energía** del Título A: la capacidad de un sistema o elemento de trabajar en el **rango inelástico** sin perder resistencia (**especial**, **moderada** y **mínima**). En términos generales del Título A, a mayor capacidad corresponde mayor coeficiente R y más permisos de uso en zonas de amenaza alta, a cambio de más requisitos de refuerzo y detalle. Los valores de R0 y los límites por zona están en el Capítulo A.3 y no se repiten en D.2.
+</Callout>
+
+## D.2.2 — Usos de la mampostería estructural
+
+### D.2.2.1 — Usos permitidos
+
+Se permite usar la mampostería estructural como sistema estructural **siempre que se cumplan las salvedades del Título D** y las **limitaciones de uso del Capítulo A.3** para cada tipo de mampostería, según la **zona de amenaza sísmica**, el **grupo de uso** de la edificación y el **tipo de sistema estructural** (<NormaRef s="D.2.2.1" pag="D-5" />, continúa en D-6). Cada capítulo de tipo (D.6, D.7, D.8, D.9, D.10, D.11, D.12) tiene además su propia sección de «Usos».
+
+### D.2.2.2 — Combinación de sistemas estructurales
+
+Las combinaciones de sistemas que incluyen mampostería tienen **las mismas limitaciones y requisitos del Capítulo A.3** (<NormaRef s="D.2.2.2" pag="D-6" />). Es coherente con D.1.4.4 y D.1.4.5: la combinación se permite pero no se recomienda en altura.
+
+### D.2.2.3 — Elementos de concreto reforzado dentro de la mampostería estructural
+
+Se permite **embeber elementos de concreto reforzado** dentro de la mampostería, o combinarlos con ella —dinteles, vigas, **elementos colectores de diafragmas**, machones, etc.— en los casos **no contemplados explícitamente** en cada tipo de mampostería (<NormaRef s="D.2.2.3" pag="D-6" />). Para estos elementos:
+
+- Se diseñan con el **Título C**, **para el mismo grado de capacidad de disipación** en que se clasifica la mampostería donde están colocados.
+- Los **enchapes de piezas de mampostería** usados como **formaleta** para vaciar el concreto pueden considerarse **parte del recubrimiento**.
+- El **coeficiente básico de disipación $R_0$** que se use es **el mismo asignado al sistema de mampostería** en el Capítulo A.3.
+
+<Callout tipo="practica" titulo="Qué significa en una obra de muros (autoría del proyecto)">
+Un dintel de concreto sobre una puerta en un muro DMO debe diseñarse con los requisitos del Título C para elementos **DMO**, no con los de un elemento sin requisitos sísmicos. Y si un colector de diafragma se hace de concreto dentro del muro, usa el mismo $R_0$ del sistema de mampostería. Es un solo conjunto de reglas para todo el muro y sus elementos embebidos.
+</Callout>
+
+## D.2.3 — Normas y especificaciones citadas en el Título D
+
+Las normas técnicas colombianas **NTC** del ICONTEC y las **ASTM** (Sociedad Americana para Ensayos de Materiales) a las que se refiere el Título D **hacen parte integral del Reglamento**; la obligatoriedad se consulta en **A.1.6** (<NormaRef s="D.2.3" pag="D-6" />). La mayoría de las NTC son la versión colombiana de una ASTM; la norma imprime la equivalencia entre paréntesis.
+
+### Normas NTC (ICONTEC)
+
+<TablaNorma numero="D.2.3 (NTC)" titulo="Normas Técnicas Colombianas citadas en el Título D" pag="D-6" nota="Transcritas tal como aparecen en D-6 y D-7, con sus notas y equivalencias ASTM entre paréntesis. Las notas (entre paréntesis) son de la propia norma.">
+
+| NTC | Título | Equivalencia / nota de la norma |
+|---|---|---|
+| 121 | Cemento Portland — Especificaciones físicas y mecánicas | — |
+| 161 | Barras lisas de acero al carbono para concreto armado | C.3.5.4 impone limitaciones a este tipo de acero. (ASTM A615) |
+| 245 | Barras de acero al carbono trabajadas en frío para concreto reforzado armado | Se prohíbe el uso de este tipo de acero |
+| 248 | Barras corrugadas de acero al carbono para concreto reforzado armado | C.3.5.3 impone requisitos adicionales a los de esta Norma. (ASTM A615) |
+| 296 | Dimensiones modulares de ladrillos cerámicos | — |
+| 321 | Cemento Portland — Especificaciones químicas | — |
+| 673 | Ensayo de resistencia a la compresión de cilindros de concreto | (ASTM C39) |
+| 922 | Ladrillos sílico-calcáreos | (ASTM C73) |
+| 1925 | Mallas soldadas fabricadas con alambre liso de acero para concreto reforzado | (ASTM A185) |
+| 2240 | Agregados usados en morteros de mampostería | (ASTM C144) |
+| 2289 | Barras y rollos corrugados de acero de baja aleación y/o termotratados para concreto reforzado en construcciones de diseño sismo resistente | (ASTM A706) |
+| 2310 | Mallas soldadas fabricadas con alambre corrugado para refuerzo de concreto | (ASTM A497) |
+| 3329 | Especificaciones del mortero para unidades de mampostería | (ASTM C270) |
+| 3356 | Mortero premezclado de larga duración para unidades de mampostería | (ASTM C1142) |
+| 3495 | Resistencia a la compresión de prismas de mampostería | (ASTM E447) |
+| 3546 | Método de ensayo para la evaluación en el laboratorio y en obra de morteros para unidades de mampostería simple y reforzada; toma de muestras y ensayo del mortero de pega | (ASTM C780) |
+| 4002 | Siderurgia. Alambre liso de acero para refuerzo de concreto | (ASTM A82) |
+| 4017 | Método de ensayo para unidades de mampostería de arcilla cocida | (ASTM C67) |
+| 4019 | Cal hidratada para mampostería | (ASTM C207) |
+| 4020 | Agregados para mortero de inyección para mampostería | (ASTM C404) |
+| 4024 | Muestreo y ensayo de prefabricados de concreto no reforzados, vibrocompactados | (ASTM C140) |
+| 4026 | Unidades, bloques y ladrillos de concreto para mampostería estructural | (ASTM C90) |
+| 4040 | Procedimientos de soldadura aplicables al acero para refuerzo de concreto | (ANSI/AWS D1.4) |
+| 4043 | Muestreo y ensayo de concreto fluido (grouts) | (ASTM C1019) |
+| 4046 | Cal viva (CaO) para propósitos estructurales | (ASTM C5) |
+| 4048 | Lechadas (grouts) para mampostería | (ASTM C476) |
+| 4050 | Cemento para mampostería | (ASTM C91) |
+| 4076 | Unidades de concreto, bloques y ladrillos para mampostería no estructural | (ASTM C129) |
+| 4205 | Unidades de mampostería de arcilla cocida (ladrillos y bloques) | (ASTM C34, C56 y C62) |
+| 4383 | Términos y definiciones sobre mampostería de concreto | — |
+
+</TablaNorma>
+
+### Normas ASTM
+
+<TablaNorma numero="D.2.3 (ASTM)" titulo="Normas ASTM citadas en el Título D" pag="D-7" nota="Transcritas de D-7 y D-8; los títulos están en inglés como los imprime la norma. Entre paréntesis, la NTC equivalente que da el Reglamento.">
+
+| ASTM | Título (en inglés, como en la norma) | NTC equivalente |
+|---|---|---|
+| A 82 | Specification for Steel Wire, plain for concrete reinforcement | 4002 |
+| A 185 | Standard Specification for Steel Welded Wire Fabric, Plain, for Concrete Reinforcement | 1925 |
+| A 706 | Specification for low-alloy steel deformed bars for concrete reinforcement | 2289 |
+| A 497 | Standard Specification for Steel Welded Wire Fabric, Deformed, for Concrete Reinforcement | 2310 |
+| C 5 | Specification for quicklime for structural purposes | 4046 |
+| C 34 | Specification for structural clay load-bearing wall tile | 4205 |
+| C 55 | Specification for concrete building brick | 4026 |
+| C 56 | Specification for structural clay, non-load bearing tile | 4205 |
+| C 62 | Specification for building brick (Solid masonry units made from clay or shale) | 4205 |
+| C 67 | Test methods of sampling and testing brick and structural clay tile | 4017 |
+| C 73 | Specification for calcium silicate face brick (Sand-lime brick) | 922 |
+| C 90 | Specification for load-bearing concrete masonry units | 4026 |
+| C 91 | Specification for masonry cement | 4050 |
+| C 109 | Test method for compressive strength of hydraulic cement mortars (using 2-in. or 50-mm cube specimens) | 220 |
+| C 129 | Specification for non-load-bearing concrete masonry units | 4076 |
+| C 140 | Method of sampling and testing concrete masonry units | 4024 |
+| C 144 | Specification for aggregate for masonry mortar | 2240 |
+| C 150 | Specification for portland cement | — |
+| C 207 | Specification for hydrated lime for masonry purposes | 4019 |
+| C 212 | Specification for structural clay facing tile | 4205 |
+| C 216 | Specification for facing brick (Solid masonry units made from clay or shale) | 4205 |
+| C 270 | Specification for mortar for unit masonry | 3329 |
+| C 404 | Specification for aggregate for masonry grout | 4020 |
+| C 476 | Specification for grout for masonry | 4048 |
+| C 595 | Standard specification for blended hydraulic cements | — |
+| C 652 | Specification for hollow brick (Hollow masonry units made from clay or shale) | 4205 |
+| C 780 | Test method for pre-construction and construction evaluation of mortars for plain and reinforced unit masonry | 3546 |
+| C 897 | Specification for Aggregate for Job-Mixed Portland Cement – Based Plasters | — |
+| C 926 | Specification for Application of Portland Cement – Based Plaster | — |
+| C 1019 | Method for sampling and testing grout | 4043 |
+| C 1142 | Specification for ready-mixed mortar for masonry | 3356 |
+| E 447 | Test methods for compressive strength of masonry prisms | 3495 |
+
+</TablaNorma>
+
+### Norma AWS
+
+<TablaNorma numero="D.2.3 (AWS)" titulo="Norma de la Sociedad Americana de Soldadura" pag="D-8" nota="Transcrita de D-8.">
+
+| Norma | Título | NTC |
+|---|---|---|
+| ANSI/AWS D1.4-92 | «Structural Welding Code - Reinforcing Steel» (American Welding Society) | 4040 |
+
+</TablaNorma>
+
+<Detalle titulo="Anomalías del original en la lista de normas (no cambian su sentido)">
+
+- **NTC 161 y NTC 248** citan ambas la **ASTM A615**, aunque la 161 trata de barras **lisas**; la ASTM A615 (barras corrugadas) **no figura** en la lista ASTM de D.2.3. Se transcribe como en el PDF.
+- **ASTM C39** (equivalente de NTC 673) y la **NTC 220** (equivalente de ASTM C109) **no aparecen** como entradas propias en su lista respectiva.
+- **ASTM C150 y C595** (cementos) y **C897 y C926** (revoques) **no tienen NTC** equivalente en la lista.
+- **ASTM C55** (ladrillo de concreto para construcción) se asocia a la **NTC 4026**, que es la de bloques y ladrillos estructurales (ASTM C90).
+- El **título de la NTC 4205** cubre tres ASTM de tejas y ladrillos de arcilla (C34, C56 y C62) y la lista ASTM le asigna además C212, C216 y C652.
+- **NTC 3546** y **NTC 4026** tienen una redacción algo distinta en cada lista; se conserva la de cada una.
+
+</Detalle>
+
+## D.2.4 — Nomenclatura
+
+La nomenclatura de D.2.4 reúne **{simbolosD.length} símbolos** en el orden de la norma: primero las letras latinas mayúsculas (Aa, Aci…, Vs, x), luego las minúsculas y las griegas (α, εmu, φ, ρ, η). La lista completa y buscable está en el [glosario](/titulo-d/glosario); aquí se explica **cómo leerla**, que es lo que evita los errores.
+
+### Cómo leer un símbolo
+
+Un símbolo tiene una **letra base** (qué magnitud es) y uno o varios **subíndices** (de qué es). Las unidades que imprime la norma son **N** para fuerzas, **mm** y **mm²** para longitudes y áreas, **MPa** para resistencias y módulos (excepto $A_m$ y $A_p$, que van en **m²**, y varios símbolos sin unidad impresa, como $M_n$, $M_u$ o $E$).
+
+<TablaNorma numero="Guía de lectura" titulo="Letras base de la nomenclatura de D.2.4" pag="D-8" nota="Clasificación de autoría del proyecto a partir de las definiciones de D.2.4; no es una tabla impresa.">
+
+| Letra base | Magnitud | Ejemplos de D.2.4 |
+|---|---|---|
+| $A$ | Área | $A_e$ (efectiva), $A_{mv}$ (cortante), $A_{st}$ (acero total), $A_v$ (refuerzo horizontal de cortante) |
+| $a$, $c$, $d$, $b$, $t$ | Longitudes de la sección | $a$ (bloque de compresión), $c$ (eje neutro), $d$ (altura útil), $b$ (ancho efectivo), $t$ (espesor efectivo) |
+| $E$, $G$ | Módulos de elasticidad y de cortante | $E_m$, $E_s$, $G_m$, $G_r$ |
+| $f$, $f'$ | Resistencias y esfuerzos | $f'_m$, $f'_{cp}$, $f_y$, $f_r$ |
+| $M$, $P$, $V$ | Momento, carga axial, fuerza cortante | $M_u$, $P_n$, $V_m$ |
+| $\ell$ | Longitud (luz, longitud del muro) | $\ell$ (luz de viga o dintel), $\ell_w$ (longitud del muro), $\ell_c$ (entre columnas de confinamiento) |
+| $R$ | Coeficientes de disipación y esbeltez | $R$, $R_0$, $R_e$, $R_m$ |
+| $k$ | Factores de corrección por absorción | $k_p$ (no inyectada), $k_r$ (inyectada) |
+| $\rho$ | Cuantías | $\rho$ (flexión), $\rho_b$ (balanceada), $\rho_n$ (cortante horizontal) |
+| $\varepsilon$ | Deformación unitaria | $\varepsilon_{mu}$ = 0.003, $\varepsilon_y$ |
+
+</TablaNorma>
+
+### Subíndices: el mismo signo, distintos significados
+
+Los subíndices **no tienen un significado único**: dependen de la letra que acompañan. Esta tabla recoge los que más se confunden.
+
+<TablaNorma numero="Subíndices" titulo="Subíndices que cambian de significado según el símbolo" pag="D-9" nota="Interpretación de autoría del proyecto a partir de las definiciones de D.2.4.">
+
+| Subíndice | Puede significar… | Ejemplos |
+|---|---|---|
+| m | **mampostería** (Em, Gm, f′m, Vm) y también **mínima** en $A_m$ (área mínima de muros) | $E_m$, $V_m$, $A_m$ |
+| c | **compresión** ($P_{nc}$, $P_{uc}$), **concreto de confinamiento** ($f'_c$), **columna de confinamiento** ($A_{ci}$), **distancia entre columnas** ($\ell_c$), **agrietamiento** ($M_{cr}$) | $f'_c$, $P_{nc}$, $A_{ci}$ |
+| cr, cre | en $f'_{cr}$ la r es **relleno**; en $M_{cr}$, cr es **agrietamiento**; en $f'_{cre}$, cre es **revoque** | $f'_{cr}$, $M_{cr}$, $f'_{cre}$ |
+| p | **pega** ($f'_{cp}$), **piso** ($A_p$, $h_p$), **no inyectada** en $k_p$ | $f'_{cp}$, $A_p$, $k_p$ |
+| r | **relleno** ($E_r$, $G_r$, $f'_{cr}$, $k_r$ inyectada) y **ruptura** ($f_r$, módulo de ruptura) | $E_r$, $f_r$ |
+| u | **unidad** de mampostería en $f'_{cu}$; **mayorado, de diseño** en $M_u$, $P_u$, $V_u$ | $f'_{cu}$, $V_u$ |
+| n | **nominal** (resistencia): $M_n$, $P_n$, $V_n$ | $V_n$ |
+| t | **tracción** ($P_{nt}$, $P_{ut}$), **total** o de **columnas de confinamiento** (con c: $A_{ct}$, $I_{ct}$, $A_{st}$) | $P_{nt}$, $A_{st}$ |
+| d | **diagonal** o biela ($P_{ud}$) y **aplastamiento** ($A_{md}$) | $P_{ud}$, $A_{md}$ |
+| v | **cortante** ($A_v$, $A_{mv}$) | $A_{mv}$ |
+| e | **efectiva** ($A_e$, $A_{se}$) o de **esbeltez** ($R_e$) | $A_e$, $R_e$ |
+| s | **acero** (steel: $A_s$, $E_s$, $V_s$ cortante por refuerzo) o **sísmico** ($F_s$) | $E_s$, $V_s$, $F_s$ |
+| b | **balanceada** (condición): $P_b$, $\rho_b$, $a_b$ | $\rho_b$ |
+| o | **teórica máxima**: $P_o$ | $P_o$ |
+
+</TablaNorma>
+
+### La familia de resistencias a compresión
+
+Seis símbolos distintos miden «resistencia a la compresión» de seis cosas distintas. Confundirlos es el error más común al empezar con el Título D:
+
+<TablaNorma numero="Resistencias" titulo="Resistencias a la compresión que define D.2.4" pag="D-9" nota="Transcritas de D.2.4; la columna «De qué material» es de autoría del proyecto.">
+
+| Símbolo | Definición de la norma | De qué material |
+|---|---|---|
+| $f'_m$ | Resistencia especificada a la compresión de la mampostería, MPa | Conjunto unidad + mortero (+ relleno): **la base del diseño** |
+| $f'_{cu}$ | …de la unidad de mampostería medida sobre **área neta**, MPa | Ladrillo o bloque |
+| $f'_{cp}$ | …del mortero de pega, MPa | Mortero de las juntas |
+| $f'_{cr}$ | …del mortero de relleno, MPa | Mortero que inyecta las celdas |
+| $f'_{cre}$ | …del mortero de recubrimiento o revoque, MPa | Pañete (mampostería reforzada externamente) |
+| $f'_c$ | …del concreto de los elementos de confinamiento, MPa | Concreto de columnas y vigas de confinamiento |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Cómo se usan √f′m, kp y kr">
+$\sqrt{f'_m}$ aparece como símbolo propio (raíz cuadrada de la resistencia de la mampostería, en MPa), de modo que las ecuaciones de D.5 lo escriben con su propio radical. Los factores $k_p$ y $k_r$ **corrigen por absorción** de la unidad la resistencia de la mampostería **no inyectada** y la **inyectada**: $k_p$ = 1.4 (concreto) o 0.8 (arcilla o sílico-calcáreas); $k_r$ = 0.90 (concreto) o 0.75 (arcilla o sílico-calcáreas). Su uso está en D.3.7.
+</Callout>
+
+### Símbolos que solo se usan en el Capítulo D.10
+
+Una parte de la lista **no sirve para todo el Título**: la remisión «Capítulo D.10» al final de la definición indica que el símbolo se emplea solo en **mampostería de muros confinados**. Son: $A_{ci}$, $A_{ct}$, $A_m$, $A_{md}$, $A_p$, $h_p$, $I_{ct}$, $\ell_c$, $N$, $P_{ud}$, $P_{ut}$, $\Delta P_{ui}$, $V_{nc}$, $V_{uc}$, $x_i$ y $\bar{x}$; además, $\ell_w$ y $h'$ tienen una definición especial en D.10.
+
+### Erratas y rarezas de la nomenclatura impresa
+
+<Callout tipo="atencion" titulo="Tres detalles del original (no cambian el sentido)">
+- **$\rho_n$** se da con unidad «mm²» aunque una cuantía es adimensional: es un descuido de la norma.
+- **$\rho$** se imprime como «$\rho = A_s(bd)$» **sin la barra de división**; la definición de cuantía de flexión es $\rho = A_s/(bd)$.
+- **$d'$** dice «centroide del refuerzo en compresión **flexión**»: sobra la palabra «flexión».
+
+Se mantienen en el glosario tal como aparecen, con la forma $A_s/(bd)$ para la cuantía.
+</Callout>
+
+## D.2.5 — Definiciones
+
+Las definiciones de D.2.5 son las de **mayor uso en el Título D**; deben consultarse además las de **A.13**, el **Capítulo C.2** y la **NTC 4383** (<NormaRef s="D.2.5" pag="D-11" />). La lista completa ({definicionesD.length} términos) está en el [glosario](/titulo-d/glosario). Se agrupan aquí en cinco temas (los mismos del glosario) y se explican **las más importantes**.
+
+<Callout tipo="nota" titulo="Los cinco temas del glosario">
+{TEMAS_GLOSARIO_D.map((t) => t.nombre).join(' · ')}.
+</Callout>
+
+### Unidades y piezas de mampostería
+
+<TablaNorma numero="D.2.5 · unidades" titulo="Definiciones clave sobre las unidades" pag="D-11" nota="La columna «Definición de la norma» es literal; la columna «Para qué sirve» es explicación del proyecto.">
+
+| Término | Definición de la norma | Para qué sirve |
+|---|---|---|
+| Unidad de mampostería | Elemento de colocación manual, de características pétreas y estabilidad dimensional, que unida con mortero configura el muro | Es la pieza básica; sus tipos se normalizan en D.3.6 |
+| Bloque | Pieza de mampostería que tiene huecos | Distingue la pieza hueca de la maciza |
+| Bloque de perforación vertical | Bloque de concreto o arcilla cocida con perforaciones verticales que forman celdas donde se coloca el refuerzo; en celdas con refuerzo vertical debe colocarse mortero de relleno | Es la unidad de la mampostería reforzada y parcialmente reforzada |
+| Bloque de perforación horizontal | Bloque cuyas perforaciones son horizontales; se asienta sobre la cara sin huecos | Unidad distinta de la de perforación vertical (sus requisitos están en D.3.6.5) |
+| Tolete | Unidad de mampostería sólida, de arcilla cocida, de concreto o sílico-calcárea | Unidad maciza |
+| Celda | Cavidad continua interior en la mampostería | Es el lugar del refuerzo y del mortero de relleno |
+| Dimensiones nominales | Dimensiones modulares de la unidad, incluyendo espesores de pega y/o acabados; no deben exceder en más de 10 mm las dimensiones reales | Para el diseño y el replanteo del muro |
+| Dimensiones reales | Dimensiones externas de fabricación de la pieza | Para el control de calidad de la unidad |
+| Absorción | Cantidad de agua que penetra en los poros de la unidad en relación con el peso seco | Afecta la resistencia (factores $k_p$ y $k_r$) |
+| Tasa inicial de absorción | Agua que absorbe una unidad de arcilla en contacto con el agua, por unidad de área, durante un minuto | Mide qué tan ávida de agua es la unidad de arcilla |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="«Cavidad continúa» (autoría del proyecto)">
+Varias definiciones del PDF dicen «continúa» con tilde cuando se quiere decir «continua» (celda, junta de control, traba). Es una errata del original; el glosario la conserva tal cual.
+</Callout>
+
+### Morteros, cementantes y aditivos
+
+<TablaNorma numero="D.2.5 · morteros" titulo="Definiciones clave sobre los morteros" pag="D-12" nota="La columna «Definición de la norma» es literal (resumida); la columna «Dónde se usa» es del proyecto.">
+
+| Término | Definición de la norma | Dónde se usa |
+|---|---|---|
+| Mortero de pega | Mezcla plástica de materiales cementantes, agregado fino y agua, usado para unir las unidades | D.3.4 (tipos H, M, S, N) |
+| Mortero de relleno | Mezcla fluida de materiales cementantes, agregados y agua, con consistencia apropiada para colocarse sin segregación en celdas o cavidades | D.3.5 |
+| Mortero de recubrimiento o revoque (pañete) | Mezcla plástica para dar acabado liso (enlucir) a los muros | Mampostería reforzada externamente (D.12) |
+| Cemento de mampostería | Cemento hidráulico para mortero de pega, con mayor plasticidad y retención de agua que el Portland solo | Mortero de pega |
+| Aditivo | Toda sustancia, diferente de agua, agregados, cemento y refuerzos, que se agrega a la mezcla antes o después del mezclado | Concreto y mortero |
+| Adherencia | Adhesión y enlace del concreto o el mortero al refuerzo o a otras superficies; capacidad del mortero para atender esfuerzos normales y tangenciales | Interfaz mortero–unidad y mortero–refuerzo |
+| Plasticidad (mortero de pega) | Facilidad con que se extiende sobre una superficie sin perder uniformidad | Calidad del pegado |
+| Trabajabilidad (mortero de pega) | Medida de la plasticidad de una mezcla | Control en obra |
+| Retención de agua | Capacidad del mortero de pega para evitar la pérdida de humedad, manteniendo su estado plástico | Evita que la unidad le «robe» el agua |
+
+</TablaNorma>
+
+### Aparejo, juntas y colocación
+
+- **Aparejo:** patrón de colocación de las unidades. **Aparejo trabado:** las unidades se traslapan con las superiores e inferiores **al menos un cuarto de la longitud de la pieza**. **Aparejo de petaca:** unidades **alineadas verticalmente sin traslapos**, es decir, con juntas verticales continuas.
+- **Junta de pega:** capa de mortero en cualquier dirección que adhiere las unidades. **Junta de control:** separación continua que **reduce la transferencia de esfuerzos**, para permitir desplazamientos relativos controlados o para controlar constructivamente el tamaño de los elementos.
+- **Traba:** intersección continua y traslapada de dos muros. **Conector:** elemento mecánico para unir dos o más piezas, partes o miembros.
+
+### Muros y elementos
+
+- **Muro estructural:** elemento de longitud considerable respecto a su espesor, que atiende cargas **en su plano adicionales a su peso propio**. **Muro no estructural:** separa espacios y atiende **únicamente su peso propio**.
+- **Antepecho:** muro de altura inferior a la de piso, la parte inferior de una ventana o de un balcón. **Cabezal:** parte extrema de un elemento estructural.
+- **Elemento compuesto:** muros con aletas de sección L, T, C, H, Z, I, Y, etc., que trabajan con acción compuesta. **Elemento de borde:** región extrema de un muro que soporta cargas en su plano, reforzada y confinada, del mismo o mayor espesor que el muro.
+- **Altura libre efectiva:** distancia libre entre elementos que dan apoyo lateral, usada para la relación de esbeltez del muro o columna.
+
+### Secciones, refuerzo y resistencia
+
+<TablaNorma numero="D.2.5 · secciones" titulo="Definiciones clave sobre secciones, refuerzo y resistencia" pag="D-11" nota="Resumen de las definiciones literales de D.2.5; las notas de la tercera columna son del proyecto.">
+
+| Término | Definición de la norma | Nota |
+|---|---|---|
+| Área bruta de la sección | Delimitada por los bordes externos de la mampostería en el plano bajo consideración | Incluye las celdas |
+| Área neta de la sección | Área de la unidad **incluyendo los morteros de relleno** y **excluyendo las cavidades**, desde los bordes externos | Al inyectar las celdas, el área neta aumenta |
+| Cuantía | Relación entre el área transversal del refuerzo y el **área bruta** de la sección considerada | Compárese con $\rho = A_s/(bd)$ de D.2.4 |
+| Barra de empalme | Refuerzo que transfiere por adherencia el esfuerzo entre el refuerzo longitudinal de un muro y el elemento de soporte, en el cual se ancla | Dowels de arranque |
+| Acción compuesta | Transferencia de esfuerzos entre los componentes de un elemento diseñado, de modo que actúan como un solo elemento | Cavidad reforzada, elementos compuestos |
+| Murete o prisma | Ensamble de piezas con mortero de pega, inyectadas o no de relleno, usado como espécimen de ensayo para determinar las propiedades de la mampostería. **Prisma:** murete | Ensayo para $f'_m$ (D.3.7) |
+| Resistencia a la compresión de la mampostería ($f'_m$) | Mínima resistencia nominal de la mampostería a compresión, medida sobre el **área transversal neta** y sobre la cual se basa su diseño | Es el dato central de D.5 |
+
+</TablaNorma>
+
+<Detalle titulo="Las 43 definiciones, por tema (lista de términos)">
+
+{TEMAS_GLOSARIO_D.map((t) => (
+  <p key={t.id}>
+    <strong>{t.nombre}</strong> ({definicionesD.filter((d) => d.tema === t.id).length}): {definicionesD.filter((d) => d.tema === t.id).map((d) => d.termino).join('; ')}.
+  </p>
+))}
+
+</Detalle>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="¿DES o DMO? Clasificar una mampostería reforzada por su plan de inyección">
+Un edificio de muros de **bloque de perforación vertical** y refuerzo interno de barras está proyectado como mampostería reforzada del Capítulo D.7. El diseñador estudia tres planes de inyección. Hallar la capacidad de disipación de energía en cada uno.
+
+<Paso titulo="Identificar el tipo y qué decide la clasificación" ref="D.2.1.2">
+
+Con piezas de perforación vertical reforzadas con barras y alambres es **mampostería reforzada** (D.7). Para este tipo la capacidad la decide el **plan de inyección**: DES si **todas** las celdas se inyectan o se cumple D.7.2.1.1; DMO si **solo** se inyectan las celdas con refuerzo.
+
+</Paso>
+<Paso titulo="Plan A: se inyectan todas las celdas" ref="D.2.1.2">
+
+Todas las celdas con mortero de relleno: capacidad **{ej1.a}**.
+
+</Paso>
+<Paso titulo="Plan B: solo las celdas con barras, sin los refuerzos mínimos de D.7.2.1.1" ref="D.2.1.2">
+
+Solo se inyectan las celdas verticales con refuerzo y no se cumple D.7.2.1.1: capacidad **{ej1.b}**.
+
+</Paso>
+<Paso titulo="Plan C: solo celdas con barras, pero se cumplen los refuerzos mínimos de D.7.2.1.1" ref="D.2.1.2, D.7.2.1.1">
+
+Aunque no se inyecten todas las celdas, el cumplimiento de **D.7.2.1.1** lleva a **{ej1.c}**. (Qué exige D.7.2.1.1 se verá en el Capítulo D.7.)
+
+</Paso>
+<Paso titulo="Contraste con los otros tipos" ref="D.2.1.3, D.2.1.5">
+
+Si el mismo edificio se resolviera como **{ej1.parcial.nombre.toLowerCase()}** (Cap. {ej1.parcial.capitulo}) o como **{ej1.conf.nombre.toLowerCase()}** (Cap. {ej1.conf.capitulo}), la capacidad sería **{ej1.parcial.capacidades[0]}** en ambos casos: no hay opción DES.
+
+</Paso>
+<Resultado>
+Plan A: **{ej1.a}**; plan B: **{ej1.b}**; plan C: **{ej1.c}**. Lo que cambia la clasificación no es el tipo de pieza, sino cuántas celdas se inyectan o si se cumple D.7.2.1.1; por eso ese dato debe estar en los planos.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Área bruta, área neta y relación r de una unidad de perforación vertical">
+Un bloque de **{ej2.largo} mm de largo por {ej2.ancho} mm de espesor** tiene **dos celdas** de 80 mm × 110 mm (valores ilustrativos de autoría del proyecto). Calcular el área bruta, el área neta y la relación $r$ de D.2.4, y ver el efecto de inyectar una celda con mortero de relleno.
+
+<Paso titulo="Área bruta de la sección" ref="D.2.5">
+
+Delimitada por los bordes externos en el plano considerado:
+
+$$
+A_{\text{bruta}} = 390 \times 140
+$$
+
+Resultado: **{n0(ej2.Ag)} mm²**.
+
+</Paso>
+<Paso titulo="Área neta de la unidad" ref="D.2.5">
+
+Se excluyen las cavidades (dos celdas de 80 × 110 = {n0(ej2.celda)} mm² cada una, es decir {n0(ej2.celdas)} mm²):
+
+$$
+A_{\text{neta}} = A_{\text{bruta}} - A_{\text{celdas}}
+$$
+
+Resultado: **{n0(ej2.An)} mm²**.
+
+</Paso>
+<Paso titulo="Relación r entre área neta y bruta" ref="D.2.4">
+
+$r$ es la «relación entre el área neta y el área bruta de las unidades de mampostería, adimensional»:
+
+$$
+r = \frac{A_{\text{neta}}}{A_{\text{bruta}}}
+$$
+
+Resultado: $r$ = **{f(ej2.r, 3)}**.
+
+</Paso>
+<Paso titulo="Efecto de inyectar una celda" ref="D.2.5">
+
+Como el área neta **incluye el mortero de relleno**, inyectar una celda suma sus {n0(ej2.celda)} mm²: área neta = {n0(ej2.AnUnaInyectada)} mm² y la relación sube a **{f(ej2.rUna, 3)}**. Con todas las celdas inyectadas el área neta iguala al área bruta.
+
+</Paso>
+<Resultado>
+$A_{\text{bruta}}$ = {n0(ej2.Ag)} mm²; $A_{\text{neta}}$ = {n0(ej2.An)} mm² sin inyectar y {n0(ej2.AnUnaInyectada)} mm² con una celda inyectada; $r$ = {f(ej2.r, 3)} → {f(ej2.rUna, 3)}.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Leer la nomenclatura: cuantía ρ y cuantía de la definición">
+Un dintel de mampostería con $b$ = {ej3.b} mm, altura total $h$ = {ej3.h} mm y altura útil $d$ = {ej3.d} mm lleva **2 barras No. 4** de 129 mm² cada una (valores ilustrativos de autoría del proyecto). Hallar la cuantía según la nomenclatura de D.2.4 y según la definición de D.2.5, y explicar por qué difieren.
+
+<Paso titulo="Área de acero" ref="D.2.4">
+
+$A_s$ = 2 × 129 = **{ej3.As} mm²**.
+
+</Paso>
+<Paso titulo="Cuantía de flexión ρ (D.2.4)" ref="D.2.4">
+
+«Cuantía de refuerzo a tracción por flexión» $\rho = A_s/(bd)$:
+
+$$
+\rho = \frac{258}{140 \times 400}
+$$
+
+Resultado: **{f(ej3.rho * 100, 3)} %** ({f(ej3.rho, 5)}).
+
+</Paso>
+<Paso titulo="Cuantía de la definición (D.2.5)" ref="D.2.5">
+
+La definición de «cuantía» usa el **área bruta** de la sección, $b\,h$ = {n0(ej3.b * ej3.h)} mm²:
+
+$$
+\frac{A_s}{b\,h} = \frac{258}{140 \times 450}
+$$
+
+Resultado: **{f(ej3.rhoBruta * 100, 3)} %**.
+
+</Paso>
+<Resultado>
+$\rho = A_s/(bd)$ = {f(ej3.rho * 100, 3)} % (con altura útil $d$); cuantía de D.2.5 = {f(ej3.rhoBruta * 100, 3)} % (con área bruta). Son magnitudes distintas: cada ecuación de la norma indica cuál de las dos usa, y no deben intercambiarse.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Decir «mampostería reforzada = DES» sin más:** solo lo es si se inyectan **todas** las celdas o se cumple D.7.2.1.1; con solo las celdas con refuerzo inyectadas es **DMO** (<NormaRef s="D.2.1.2" pag="D-5" />).
+- **Considerar los muros diafragma una opción para obra nueva:** **no se permiten en edificaciones nuevas**; solo dentro del alcance de A.10 (<NormaRef s="D.2.1.6" pag="D-5" />).
+- **Asumir que la mampostería no reforzada es «sin ningún refuerzo»:** se define como la que **no cumple las cuantías mínimas** de la parcialmente reforzada (<NormaRef s="D.2.1.4" pag="D-5" />).
+- **Diseñar con el Título D los dinteles de concreto sin las reglas del Título C:** los elementos de concreto embebidos se diseñan con el Título C, para el **mismo grado de disipación** y con el mismo $R_0$ de la mampostería (<NormaRef s="D.2.2.3" pag="D-6" />).
+- **Confundir las seis resistencias a compresión:** $f'_m$ (mampostería), $f'_{cu}$ (unidad), $f'_{cp}$ (pega), $f'_{cr}$ (relleno), $f'_{cre}$ (revoque) y $f'_c$ (concreto de confinamiento).
+- **Leer el subíndice r como «relleno» en todos los casos:** $f_r$ es el **módulo de ruptura**, no una resistencia del relleno; ni $M_{cr}$ lleva «relleno» sino «agrietamiento».
+- **Mezclar área bruta, neta y efectiva:** $A_e$, $A_{mv}$ y las áreas de D.5.4 son **áreas efectivas** de cálculo; el área neta incluye el mortero de relleno y no las cavidades vacías.
+- **Usar $A_m$ y $A_p$ en mm²:** la norma los da en **m²** (Capítulo D.10).
+- **Citar la nomenclatura de otros títulos:** D.2.4 solo define los símbolos del Título D; para los del concreto (C.2.1) o del Título A (A.13.2), se consultan sus propios capítulos.
+- **Olvidar las normas que hacen parte del Reglamento:** las NTC y ASTM de D.2.3 son obligatorias según A.1.6, no meramente informativas.
+</Callout>
+
+## Resumen en una línea
+
+**La mampostería estructural se clasifica en siete tipos (D.6 a D.12) con capacidad DES, DMO o DMI —la reforzada es DES si todas las celdas se inyectan o cumple D.7.2.1.1, DMO si solo inyecta las celdas con refuerzo—, sus elementos de concreto se diseñan con el Título C con el mismo grado de disipación, y la nomenclatura exige leer cada subíndice en su contexto.**

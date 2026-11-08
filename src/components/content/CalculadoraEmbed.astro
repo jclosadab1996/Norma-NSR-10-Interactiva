@@ -39,6 +39,18 @@ import ZapataDiseno from '../calc/ZapataDiseno';
 import PreesforzoEsfuerzos from '../calc/PreesforzoEsfuerzos';
 import ConfinamientoColumna from '../calc/ConfinamientoColumna';
 import AnclajeConcreto from '../calc/AnclajeConcreto';
+import FmMamposteria from '../calc/FmMamposteria';
+import DesarrolloMamposteria from '../calc/DesarrolloMamposteria';
+import DimensionesEfectivas from '../calc/DimensionesEfectivas';
+import AxialMamposteria from '../calc/AxialMamposteria';
+import FlexionMamposteria from '../calc/FlexionMamposteria';
+import MuroFueraPlano from '../calc/MuroFueraPlano';
+import MuroEnPlano from '../calc/MuroEnPlano';
+import CuantiasMamposteria from '../calc/CuantiasMamposteria';
+import MuroConfinadoRefuerzo from '../calc/MuroConfinadoRefuerzo';
+import MuroConfinadoResistencia from '../calc/MuroConfinadoResistencia';
+import MuroDiafragma from '../calc/MuroDiafragma';
+import EsfuerzosAdmisiblesMamposteria from '../calc/EsfuerzosAdmisiblesMamposteria';
 
 interface Props {
   id: string;
@@ -85,6 +97,18 @@ const meta = calculadoraPorId(id);
       {id === 'preesforzo-esfuerzos' && <PreesforzoEsfuerzos client:visible />}
       {id === 'confinamiento-columna' && <ConfinamientoColumna client:visible />}
       {id === 'anclaje-concreto' && <AnclajeConcreto client:visible />}
+      {id === 'fm-mamposteria' && <FmMamposteria client:visible />}
+      {id === 'desarrollo-mamposteria' && <DesarrolloMamposteria client:visible />}
+      {id === 'dimensiones-efectivas' && <DimensionesEfectivas client:visible />}
+      {id === 'axial-mamposteria' && <AxialMamposteria client:visible />}
+      {id === 'flexion-mamposteria' && <FlexionMamposteria client:visible />}
+      {id === 'muro-fuera-plano' && <MuroFueraPlano client:visible />}
+      {id === 'muro-en-plano' && <MuroEnPlano client:visible />}
+      {id === 'cuantias-mamposteria' && <CuantiasMamposteria client:visible />}
+      {id === 'muro-confinado-refuerzo' && <MuroConfinadoRefuerzo client:visible />}
+      {id === 'muro-confinado-resistencia' && <MuroConfinadoResistencia client:visible />}
+      {id === 'muro-diafragma' && <MuroDiafragma client:visible />}
+      {id === 'esfuerzos-admisibles-mamposteria' && <EsfuerzosAdmisiblesMamposteria client:visible />}
     </div>
   ) : (
     <section id={`calc-${id}`} class="not-prose my-8 scroll-mt-24 rounded-2xl border border-chart-2/40 bg-card shadow-sm" aria-label={`Calculadora: ${meta?.nombre ?? id}`}>
@@ -127,6 +151,18 @@ const meta = calculadoraPorId(id);
       {id === 'preesforzo-esfuerzos' && <PreesforzoEsfuerzos client:visible />}
       {id === 'confinamiento-columna' && <ConfinamientoColumna client:visible />}
       {id === 'anclaje-concreto' && <AnclajeConcreto client:visible />}
+      {id === 'fm-mamposteria' && <FmMamposteria client:visible />}
+      {id === 'desarrollo-mamposteria' && <DesarrolloMamposteria client:visible />}
+      {id === 'dimensiones-efectivas' && <DimensionesEfectivas client:visible />}
+      {id === 'axial-mamposteria' && <AxialMamposteria client:visible />}
+      {id === 'flexion-mamposteria' && <FlexionMamposteria client:visible />}
+      {id === 'muro-fuera-plano' && <MuroFueraPlano client:visible />}
+      {id === 'muro-en-plano' && <MuroEnPlano client:visible />}
+      {id === 'cuantias-mamposteria' && <CuantiasMamposteria client:visible />}
+      {id === 'muro-confinado-refuerzo' && <MuroConfinadoRefuerzo client:visible />}
+      {id === 'muro-confinado-resistencia' && <MuroConfinadoResistencia client:visible />}
+      {id === 'muro-diafragma' && <MuroDiafragma client:visible />}
+      {id === 'esfuerzos-admisibles-mamposteria' && <EsfuerzosAdmisiblesMamposteria client:visible />}
       </div>
       {meta && <p class="border-t px-5 py-2 text-xs text-muted-foreground">{meta.descripcion}</p>}
     </section>

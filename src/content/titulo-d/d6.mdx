@@ -1,0 +1,543 @@
+---
+codigo: 'D.6'
+tipo: capitulo
+titulo: 'Mampostería de cavidad reforzada'
+resumen: 'Muros de dos paredes de mampostería con una cavidad continua reforzada e inyectada: espesor mínimo de 190 mm, conectores, resistencias, cuantías de 0.0015 vertical y 0.0020 horizontal sobre la cavidad, separaciones de 50 a 400 mm, refuerzo de extremos y aberturas, sección transformada y reglas de inyección.'
+objetivos:
+  - 'Describir el muro de cavidad reforzada y verificar sus espesores mínimos (70 + 50 + 70 = 190 mm) y sus conectores'
+  - 'Calcular las cuantías de la cavidad y de la sección completa y comprobar los mínimos de D.6.3.2'
+  - 'Comprobar separaciones, diámetros, capas y posicionadores del refuerzo de la cavidad (D.6.3.2.1, D.6.3.5, D.6.3.6)'
+  - 'Explicar la sección transformada elástica y el límite de 0.07 MPa en la interfaz cavidad–pared'
+  - 'Planear la inyección: alturas de 1.2 m, esperas de 60 a 90 minutos y tramos de 8 m como máximo'
+paginasNorma: 'D-43 a D-46'
+paginaPdf: 608
+orden: 8
+calculadoras: ['cuantias-mamposteria']
+nivel: 'intermedio'
+---
+
+import { D6, buscarBarraD } from '../../data/cuantiasMamposteria';
+import { cuantiasCavidad, resumir, verificarCavidad } from '../../lib/nsr10/cuantiasMamposteria';
+
+export const f = (x, d = 2) => x.toFixed(d);
+export const r5 = (x) => x.toFixed(5);
+export const N4 = buscarBarraD('No. 4');
+export const N3 = buscarBarraD('No. 3');
+export const W4 = buscarBarraD('alambre-4');
+
+export const rangoFm = (fi) => ({ fi, min: Math.max(D6.resistencias.fmMin, D6.resistencias.fmFraccionMin * fi), max: D6.resistencias.fmFraccionMax * fi });
+export const rangos = [12.5, 14, 17.5, 21, 28].map(rangoFm);
+
+export const ej1 = (() => {
+  const base = {
+    espesorPared: 80,
+    espesorCavidad: 100,
+    fm: 10,
+    fInyeccion: 14,
+    capas: 1,
+    fraccionCapaMayor: 1,
+    verticalParedes: { diametro: 0, area: 0, sep: 1, n: 0 },
+    horizontalParedes: { diametro: W4.diametro, area: W4.area, sep: 400, n: 2 },
+    extremo: { n: 2, diametro: N4.diametro },
+    remate: { n: 2, diametro: N4.diametro },
+    contribuyeCompresion: false,
+    estribo: { diametro: 6, sep: 150 },
+    posicionadorSep: 1500,
+    conector: { tipo: 'cercha', diametro: 4, sepVertical: 600, sepHorizontal: 800, pata: 0 },
+  };
+  const mk = (sh) => ({
+    ...base,
+    verticalCavidad: { diametro: N4.diametro, area: N4.area, sep: 400 },
+    horizontalCavidad: { diametro: N3.diametro, area: N3.area, sep: sh },
+  });
+  const caso = (sh) => {
+    const d = mk(sh);
+    const v = verificarCavidad(d);
+    return { d, q: cuantiasCavidad(d), v, res: resumir(v), malos: v.filter((x) => !x.cumple) };
+  };
+  return { A: caso(400), B: caso(300) };
+})();
+
+export const ej2 = (() => {
+  const dbN4 = N4.diametro;
+  const dbN5 = buscarBarraD('No. 5').diametro;
+  const cav = 200;
+  return {
+    cav,
+    maxDiam200: D6.diametroMaxFraccionCavidad * cav,
+    maxDiam60: D6.diametroMaxFraccionCavidad * 60,
+    dbN4,
+    dbN5,
+    posN4: Math.min(D6.separacion.posicionadorDiametros * dbN4, D6.separacion.posicionadorMax),
+    posN4sin: D6.separacion.posicionadorDiametros * dbN4,
+    posN2: Math.min(D6.separacion.posicionadorDiametros * 6, D6.separacion.posicionadorMax),
+    rhoDos: (2 * N4.area) / (400 * cav),
+    rhoUna: N4.area / (400 * cav),
+    total: 2 * 80 + cav,
+  };
+})();
+
+export const ej3 = (() => {
+  const altura = 2.6;
+  const longitud = 14;
+  const capa = D6.construccion.alturaCapaInyeccion;
+  const nCapas = Math.ceil(altura / capa);
+  const capas = Array.from({ length: nCapas }, (_, i) => ({ i, h: Math.min(capa, altura - i * capa), z0: i * capa }));
+  const tramos = Math.ceil(longitud / D6.construccion.longitudInyeccionMax);
+  const esperas = nCapas - 1;
+  const [e1, e2] = D6.construccion.esperaEntreCapasMin;
+  return {
+    altura,
+    longitud,
+    capa,
+    nCapas,
+    capas,
+    tramos,
+    barreras: tramos - 1,
+    esperas,
+    espMin: esperas * e1,
+    espMax: esperas * e2,
+    recompactar: D6.construccion.recompactarMin,
+    longTramo: longitud / tramos,
+    edadDias: D6.construccion.edadMinimaInyeccionDias,
+  };
+})();
+
+## Idea central del capítulo
+
+La mampostería de **cavidad reforzada** es un muro **compuesto de tres partes**: dos **paredes laterales** de mampostería (de concreto, arcilla o sílico-calcárea) separadas por una **cavidad continua** que se arma con barras verticales y horizontales y se **inyecta por completo** con mortero de relleno grueso o con concreto fluido (<NormaRef s="D.6.1.2" pag="D-43" />). Las paredes sirven de formaleta permanente y de piel, y la cavidad armada e inyectada se comporta como un pequeño **muro de concreto reforzado** entre ellas. Los **conectores** de alambre aseguran que las tres partes trabajen juntas.
+
+Es el sistema de **mayor capacidad** de la mampostería: se clasifica como **DES** (capacidad especial de disipación de energía) (<NormaRef s="D.6.2.1" pag="D-44" />). A cambio tiene reglas más exigentes de **espesor, conectores, resistencias, refuerzo, análisis** (sección transformada) y **construcción** (inyección por capas). El capítulo no trae ecuaciones numeradas: es una colección de mínimos que aquí se reorganizan, se ilustran con esquemas propios y se verifican con ejemplos y con la calculadora de cuantías del Capítulo [D.7](/titulo-d/d7).
+
+<Callout tipo="importante" titulo="Qué es norma y qué es autoría del proyecto">
+Los valores y condiciones citados con su sección son **texto de la norma**, verificados en las imágenes de las páginas D-43 a D-45. Donde el PDF dice «200 mm ó 16 diámetros» o «250 diámetros ó 3 m», se lee «el menor de los dos» (autoría del proyecto). Las tablas-resumen, los esquemas, los ejemplos y la lectura de «N° 4 ó 12M» como «barra de al menos 12 mm» son **autoría del proyecto**. Los diseños de resistencia (flexión, cortante, carga axial) **no** se repiten aquí: remiten a los Capítulos D.5 y al Apéndice D-1 (<NormaRef s="D.6.4.1" pag="D-44" />).
+</Callout>
+
+## D.6.1 — Requisitos generales
+
+### D.6.1.1 — General
+
+Además de este capítulo, las estructuras de cavidad reforzada cumplen los Capítulos **D.1, D.2 y D.3** (<NormaRef s="D.6.1.1" pag="D-43" />). Nótese que aquí **no se cita D.4** (construcción) en la lista inicial; la construcción se regula en D.6.5, que dice «además de lo establecido en el Capítulo D.4».
+
+### D.6.1.2 — Definición y materiales
+
+Se llaman muros de cavidad reforzada los construidos con **dos paredes laterales** de mampostería que dejan una **cavidad interior continua**, reforzada como indica el capítulo e **inyectada posteriormente en su totalidad** con mortero o concreto fluido (<NormaRef s="D.6.1.2" pag="D-43" />). Tres sub-numerales fijan los materiales:
+
+- **D.6.1.2.1 — Unidades.** Las paredes pueden ser de **concreto, arcilla cocida o sílico-calcáreas**, **macizas o de perforación vertical u horizontal**, y deben cumplir D.3.6 (<NormaRef s="D.6.1.2.1" pag="D-43" />). Es el único sistema del Título D que admite con tanta libertad unidades de perforación horizontal (comparar con D.7 y D.8, que exigen perforación vertical).
+- **D.6.1.2.2 — Mortero de pega.** Cumple D.3.4 (<NormaRef s="D.6.1.2.2" pag="D-43" />).
+- **D.6.1.2.3 — Mortero de relleno.** Las celdas verticales de las paredes se rellenan con mortero de D.3.5. El material de la **cavidad continua** debe ser **mortero de relleno grueso** (Tabla D.3.5-1) o, alternativamente, **concreto fluido** cuyo **agregado grueso no exceda la quinta parte del espesor de la cavidad** y cuya fluidez y consistencia garanticen su colocación **sin segregación** (<NormaRef s="D.6.1.2.3" pag="D-43" />). Con una cavidad de 100 mm, por ejemplo, el agregado máximo del concreto fluido sería de 20 mm.
+
+### D.6.1.3 — Espesor mínimo
+
+El muro debe tener un espesor real total **no menor de 190 mm**, que corresponde a **70 mm de espesor real mínimo** en cada pared lateral (80 mm nominales) y a **50 mm de espesor mínimo de la cavidad** (<NormaRef s="D.6.1.3" pag="D-43" />). La suma: 70 + 50 + 70 = 190 mm.
+
+<Ecuacion num="D.6.1.3" titulo="Espesores mínimos de la cavidad reforzada (forma matemática, autoría del proyecto)">
+
+$$
+t_{\text{pared}} \ge 70\ \text{mm}
+\qquad
+t_{\text{cav}} \ge 50\ \text{mm}
+\qquad
+t = 2\,t_{\text{pared}} + t_{\text{cav}} \ge 190\ \text{mm}
+$$
+
+- $t_{\text{pared}}$: espesor real de cada pared lateral (se supone igual en las dos); $t_{\text{cav}}$: espesor de la cavidad; $t$: espesor total.
+
+</Ecuacion>
+
+<Figura alt="Corte en planta de un muro de cavidad: pared lateral superior de 70 mm, cavidad de 50 mm con barras verticales y pared lateral inferior de 70 mm, unidas por conectores de alambre" numero="Esquema" pie="Corte en planta (visto desde arriba) de un muro de cavidad reforzada con los espesores mínimos: dos paredes de 70 mm y cavidad de 50 mm. Las barras verticales (círculos) van dentro de la cavidad cada 400 mm como máximo; los conectores (líneas finas) atraviesan la cavidad. (esquema del proyecto, espesores a escala; longitud comprimida)">
+<svg viewBox="0 0 600 270" role="img" aria-label="Corte en planta de un muro de cavidad reforzada con paredes, cavidad, barras verticales y conectores" className="mx-auto h-auto w-full max-w-2xl">
+  <rect x="40" y="40" width="440" height="70" fill="currentColor" fillOpacity="0.35" stroke="currentColor" strokeWidth="2" />
+  <rect x="40" y="110" width="440" height="50" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1.5" strokeDasharray="6 3" />
+  <rect x="40" y="160" width="440" height="70" fill="currentColor" fillOpacity="0.35" stroke="currentColor" strokeWidth="2" />
+  {[80, 200, 320, 440].map((x) => (
+    <circle key={x} cx={x} cy="135" r="9" fill="currentColor" />
+  ))}
+  {[140, 260, 380].map((x) => (
+    <polyline key={x} points={`${x},75 ${x},135 ${x + 10},135 ${x + 10},195`} fill="none" stroke="currentColor" strokeWidth="1.5" />
+  ))}
+  <text x="260" y="78" textAnchor="middle" fontSize="12" fill="currentColor">Pared lateral (≥ 70 mm reales)</text>
+  <text x="260" y="196" textAnchor="middle" fontSize="12" fill="currentColor">Pared lateral (≥ 70 mm reales)</text>
+  <text x="260" y="256" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.85">Barra vertical en la cavidad: 50 mm ≤ s ≤ 400 mm · conectores: ∅ ≥ 4 mm</text>
+  <line x1="500" y1="40" x2="500" y2="110" stroke="currentColor" />
+  <line x1="494" y1="40" x2="506" y2="40" stroke="currentColor" />
+  <line x1="494" y1="110" x2="506" y2="110" stroke="currentColor" />
+  <text x="512" y="80" fontSize="11" fill="currentColor">≥ 70</text>
+  <line x1="500" y1="110" x2="500" y2="160" stroke="currentColor" />
+  <line x1="494" y1="160" x2="506" y2="160" stroke="currentColor" />
+  <text x="512" y="140" fontSize="11" fill="currentColor">≥ 50</text>
+  <line x1="500" y1="160" x2="500" y2="230" stroke="currentColor" />
+  <line x1="494" y1="230" x2="506" y2="230" stroke="currentColor" />
+  <text x="512" y="200" fontSize="11" fill="currentColor">≥ 70</text>
+  <text x="565" y="140" fontSize="12" fill="currentColor" fontWeight="600">190</text>
+  <text x="560" y="154" fontSize="10" fill="currentColor">mm total</text>
+</svg>
+</Figura>
+
+### D.6.1.4 — Conectores
+
+Las paredes laterales se conectan horizontalmente con **alambres de diámetro no inferior a 4 mm**, espaciados **verticalmente máximo a 600 mm y horizontalmente máximo a 800 mm**. Se pueden usar conectores **en cercha, en escalera, en zeta o estribos rectangulares con abertura de 100 a 150 mm** (<NormaRef s="D.6.1.4" pag="D-43" />).
+
+- **D.6.1.4.1 — Propósito.** Los conectores garantizan la **acción compuesta** de las dos paredes y la cavidad. En algunas circunstancias pueden ser **insuficientes** frente a la **presión hidrostática** del material de inyección sobre las paredes; el texto remite para ello a «los requisitos establecido en D.6.5.4» (<NormaRef s="D.6.1.4.1" pag="D-43" />). **Errata del PDF:** D.6.5.4 es el control de calidad de los materiales; el numeral que trata del arriostramiento contra la presión hidrostática es **D.6.5.3** (<NormaRef s="D.6.5.3" pag="D-45" />). Lo más probable es que la remisión debiera ser a D.6.5.3.
+- **D.6.1.4.2 — Conectores en Z.** Solo se pueden usar con paredes de **unidades macizas o de perforación horizontal**. La **pata** mide **50 mm o más** y debe quedar **totalmente embebida en el mortero de pega**. Con conectores en zeta las distancias no pueden exceder **400 mm verticales ni 600 mm horizontales** (<NormaRef s="D.6.1.4.2" pag="D-43" />), es decir, más estrictas que las generales.
+
+### D.6.1.5 — Ventanas de limpieza
+
+Se dejan **ventanas de limpieza en cada pared**, de **no menos de 75 × 75 mm**, **espaciadas como máximo a 1 m** de un extremo a otro del muro y **alternadas** entre las dos paredes (<NormaRef s="D.6.1.5" pag="D-43" />). Sirven para retirar rebabas y escombros del fondo de la cavidad antes de inyectar.
+
+### D.6.1.6 — Resistencia mínima
+
+El mortero de relleno o el concreto fluido deben tener una resistencia a la compresión **mínima de 12.5 MPa a los 28 días**. Además, la resistencia de la mampostería de las paredes $f'_m$ **no puede ser inferior a 6.25 MPa ni al 50 % de la resistencia especificada del material de inyección, ni mayor que dos veces** esa resistencia (<NormaRef s="D.6.1.6" pag="D-43" />). Llamando $f_{\text{iny}}$ a la resistencia especificada del material de inyección:
+
+<Ecuacion num="D.6.1.6" titulo="Intervalo permitido de f′m (forma matemática, autoría del proyecto)">
+
+$$
+f_{\text{iny}} \ge 12.5\ \text{MPa}
+\qquad
+\max\!\left(6.25\ \text{MPa},\; 0.50\,f_{\text{iny}}\right) \le f'_m \le 2\,f_{\text{iny}}
+$$
+
+- $f_{\text{iny}}$: resistencia especificada del mortero de relleno o del concreto fluido de la cavidad, en MPa (la norma la llama «resistencia especificada para el material de inyección»; en D.6.4 la simboliza $f'_{cr}$).
+- La idea es **igualar rigideces**: si las paredes fueran mucho más débiles o mucho más fuertes que el relleno, el muro compuesto trabajaría de forma desigual.
+
+</Ecuacion>
+
+<TablaNorma numero="Resumen D.6.1.6" titulo="Intervalo de f′m según el material de inyección (autoría del proyecto)" pag="D-43" nota="Tabla calculada con la regla de D.6.1.6; no aparece en el PDF.">
+
+| $f_{\text{iny}}$ (MPa) | $f'_m$ mínimo (MPa) | $f'_m$ máximo (MPa) |
+|---:|---:|---:|
+| {f(rangos[0].fi, 1)} | {f(rangos[0].min)} | {f(rangos[0].max)} |
+| {f(rangos[1].fi, 1)} | {f(rangos[1].min)} | {f(rangos[1].max)} |
+| {f(rangos[2].fi, 1)} | {f(rangos[2].min)} | {f(rangos[2].max)} |
+| {f(rangos[3].fi, 1)} | {f(rangos[3].min)} | {f(rangos[3].max)} |
+| {f(rangos[4].fi, 1)} | {f(rangos[4].min)} | {f(rangos[4].max)} |
+
+</TablaNorma>
+
+## D.6.2 — Usos de la mampostería de cavidad reforzada
+
+Las **limitaciones de uso** y los requisitos sísmicos especiales del sistema, solo o como parte de un sistema combinado, **se rigen por el Capítulo A.3**. Para el diseño sismorresistente se clasifica como uno de los sistemas con **capacidad especial de disipación de energía (DES)** (<NormaRef s="D.6.2.1" pag="D-43" />, continúa en <NormaRef s="D.6.2.1" pag="D-44" />). Esa clasificación coincide con la de D.2.1.1 (<NormaRef s="D.2.1.1" pag="D-5" />).
+
+## D.6.3 — Requisitos del refuerzo
+
+### D.6.3.1 — General
+
+Los refuerzos cumplen el Capítulo **D.2**; su uso, manejo y colocación tienen en cuenta las demás disposiciones del Título (<NormaRef s="D.6.3.1" pag="D-44" />).
+
+### D.6.3.2 — Refuerzo mínimo
+
+La cantidad de refuerzo del muro **no puede ser inferior** a lo siguiente (<NormaRef s="D.6.3.2" pag="D-44" />):
+
+- **(a) En la cavidad**: refuerzo **continuo**, vertical y horizontal, con cuantías evaluadas sobre el **área bruta de la cavidad**: **vertical 0.0015** y **horizontal 0.0020**.
+- **(b) Cavidad + paredes laterales**: sumando el refuerzo de la cavidad y el de las paredes, la cantidad **en cualquier dirección no puede ser inferior a 0.0007** respecto al **área bruta de la sección transversal completa**, y la **suma de las cuantías vertical y horizontal no puede ser inferior a 0.0020**, también sobre la sección completa.
+
+Dos áreas brutas diferentes: la de **(a)** es $t_{\text{cav}}$ × longitud (solo la cavidad); la de **(b)** es $t$ × longitud (el muro completo, 190 mm o más). Por eso el refuerzo de la cavidad, que parece generoso frente a su propia área, representa una cuantía mucho menor sobre el muro entero.
+
+<Ecuacion num="D.6.3.2(a)–(b)" titulo="Cuantías mínimas de la cavidad reforzada (forma matemática, autoría del proyecto)">
+
+$$
+\rho_{v,\text{cav}} = \frac{c\,A_{bv}}{s_v\,t_{\text{cav}}} \ge 0.0015
+\qquad
+\rho_{h,\text{cav}} = \frac{c\,A_{bh}}{s_h\,t_{\text{cav}}} \ge 0.0020
+$$
+
+$$
+\rho_v = \frac{\sum A_v / s}{t} \ge 0.0007
+\qquad
+\rho_h = \frac{\sum A_h / s}{t} \ge 0.0007
+\qquad
+\rho_v + \rho_h \ge 0.0020
+$$
+
+- $c$: número de capas de refuerzo en la cavidad (1 o 2, ver D.6.3.6); $A_{bv}$, $A_{bh}$: área de una barra vertical u horizontal; $s_v$, $s_h$: separaciones.
+- La segunda línea usa la **suma** del refuerzo de la cavidad y de las paredes (por ejemplo, un alambre de junta en cada pared) dividida por el espesor **total** $t$.
+
+</Ecuacion>
+
+#### D.6.3.2.1 — Separación del refuerzo
+
+Dentro de la cavidad, la separación del refuerzo **no puede ser mayor de 400 mm ni menor de 50 mm**. El refuerzo vertical lleva **posicionadores a distancias no mayores de 250 diámetros de la barra o 3 m** (el menor) y el refuerzo horizontal se apoya en los **conectores transversales** (<NormaRef s="D.6.3.2.1" pag="D-44" />). El mínimo de 50 mm es el espacio para que el material de inyección envuelva las barras.
+
+### D.6.3.3 — Refuerzo en extremos y aberturas
+
+(<NormaRef s="D.6.3.3" pag="D-44" />) El título del numeral habla de aberturas, pero el texto cubre cuatro situaciones:
+
+1. **En cada extremo del muro**: **mínimo dos barras N° 4 (1/2″) ó 12M (12 mm)** en **toda la altura** y **ancladas** en los extremos.
+2. **En el remate y en el arranque**: **mínimo dos barras N° 4 ó 12M** horizontales en **toda la longitud**, ancladas en los extremos.
+3. **A cada lado de puertas y ventanas**: mínimo dos barras N° 4 ó 12M, **horizontal y verticalmente**.
+4. **Longitud** de esas barras de abertura: cada extremo debe **sobrepasar el borde de la abertura una distancia no menor que la longitud de desarrollo ni 500 mm** (la mayor de las dos).
+
+### D.6.3.4 — Refuerzo en compresión
+
+Si el refuerzo vertical de la cavidad **no** ayuda a resistir compresión, su diámetro mínimo es **N° 2 (1/4″) ó 6M (6 mm)**. Si **sí** contribuye, el mínimo sube a **N° 4 ó 12M**, y debe **soportarse lateralmente con estribos** de diámetro **≥ N° 2 ó 6M**, con separación máxima de **200 mm ó 16 diámetros de la barra vertical** (<NormaRef s="D.6.3.4" pag="D-44" />); el «ó» se lee aquí como «el menor de los dos» (autoría del proyecto). Es la regla que evita el pandeo de la barra comprimida dentro de la cavidad.
+
+### D.6.3.5 — Diámetro de las barras
+
+«El diámetro de las barras de la cavidad no puede ser mayor que la **cuarta parte de su espesor**» (<NormaRef s="D.6.3.5" pag="D-44" />). Con una cavidad de 50 mm, la barra máxima es de 12.5 mm; con 60 mm, de 15 mm. **Anomalía del PDF:** el título del numeral es «DIÁMETRO MÍNIMO», pero el texto fija un **máximo**; se toma el texto, que es el que tiene sentido físico (la barra debe caber y dejar espacio para el relleno).
+
+### D.6.3.6 — Capas de refuerzo
+
+El refuerzo se dispone en **una sola capa** para cavidades **de hasta 150 mm**. Para espesores mayores se disponen **dos capas**, y ninguna puede contener **más del 66 %** del refuerzo total de la cavidad (<NormaRef s="D.6.3.6" pag="D-44" />). Con dos capas iguales cada una lleva el 50 %.
+
+<TablaNorma numero="Resumen D.6.3" titulo="Refuerzo de la cavidad reforzada: mínimos y límites (autoría del proyecto)" pag="D-44" nota="Tabla elaborada a partir de D.6.3.2 a D.6.3.6; «N° 4 ó 12M» se evalúa con 12 mm, «N° 2 ó 6M» con 6 mm.">
+
+| Concepto | Requisito | Sección |
+|---|---|---|
+| Cuantía vertical en la cavidad | ≥ 0.0015 (área bruta de la cavidad) | D.6.3.2(a) |
+| Cuantía horizontal en la cavidad | ≥ 0.0020 (área bruta de la cavidad) | D.6.3.2(a) |
+| Cuantía por dirección (cavidad + paredes) | ≥ 0.0007 (área bruta del muro) | D.6.3.2(b) |
+| Suma ρv + ρh | ≥ 0.0020 (área bruta del muro) | D.6.3.2(b) |
+| Separación en la cavidad | 50 mm ≤ s ≤ 400 mm | D.6.3.2.1 |
+| Posicionadores (vertical) | ≤ menor de 250 ∅ y 3 m | D.6.3.2.1 |
+| Extremos del muro | 2 barras N° 4 ó 12M, toda la altura, ancladas | D.6.3.3 |
+| Remate y arranque | 2 barras N° 4 ó 12M, toda la longitud, ancladas | D.6.3.3 |
+| A cada lado de aberturas | 2 barras N° 4 ó 12M horizontal y vertical; sobrepasan Ld y 500 mm | D.6.3.3 |
+| Vertical sin compresión | ∅ ≥ N° 2 ó 6M | D.6.3.4 |
+| Vertical a compresión | ∅ ≥ N° 4 ó 12M; estribos ∅ ≥ 6 mm cada ≤ 200 mm ó 16 ∅ | D.6.3.4 |
+| Diámetro máximo | ≤ ¼ del espesor de la cavidad | D.6.3.5 |
+| Capas | 1 capa si $t_{\text{cav}}$ ≤ 150 mm; si es mayor, 2 capas con ≤ 66 % cada una | D.6.3.6 |
+
+</TablaNorma>
+
+<Figura alt="Alzado de un muro de cavidad con barras verticales cada 400 mm, barras horizontales cada 400 mm, dos barras en cada extremo, dos barras en remate y arranque y los conectores de alambre en una malla de 600 por 800 mm" numero="Esquema" pie="Alzado del refuerzo de la cavidad (esquema del proyecto, sin escala exacta). Vertical y horizontal cada 400 mm; dos barras en cada extremo, remate y arranque; conectores de alambre (cruces) cada 600 mm en vertical y 800 mm en horizontal. La cavidad se inyecta por completo después de armada.">
+<svg viewBox="0 0 600 330" role="img" aria-label="Alzado de un muro de cavidad reforzada con refuerzo vertical, horizontal, extremos, remate, arranque y conectores" className="mx-auto h-auto w-full max-w-2xl">
+  <rect x="50" y="40" width="340" height="240" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeWidth="2" />
+  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+    <line key={`v${i}`} x1={60 + i * 40} y1="44" x2={60 + i * 40} y2="276" stroke="currentColor" strokeWidth={i === 0 || i === 8 ? 3.5 : 1.8} strokeOpacity={i === 0 || i === 8 ? 1 : 0.8} />
+  ))}
+  {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+    <line key={`h${i}`} x1="60" y1={52 + i * 36} x2="380" y2={52 + i * 36} stroke="currentColor" strokeWidth="1.2" strokeDasharray="6 3" strokeOpacity="0.75" />
+  ))}
+  <line x1="60" y1="58" x2="380" y2="58" stroke="currentColor" strokeWidth="3.5" />
+  <line x1="60" y1="270" x2="380" y2="270" stroke="currentColor" strokeWidth="3.5" />
+  <line x1="66" y1="44" x2="66" y2="276" stroke="currentColor" strokeWidth="3.5" />
+  <line x1="374" y1="44" x2="374" y2="276" stroke="currentColor" strokeWidth="3.5" />
+  {[0, 1, 2, 3, 4].map((i) =>
+    [0, 1, 2, 3].map((j) => (
+      <g key={`c${i}-${j}`}>
+        <line x1={100 + i * 80 - 4} y1={90 + j * 60 - 4} x2={100 + i * 80 + 4} y2={90 + j * 60 + 4} stroke="currentColor" strokeWidth="1.5" />
+        <line x1={100 + i * 80 - 4} y1={90 + j * 60 + 4} x2={100 + i * 80 + 4} y2={90 + j * 60 - 4} stroke="currentColor" strokeWidth="1.5" />
+      </g>
+    )),
+  )}
+  <text x="405" y="62" fontSize="11" fill="currentColor">Remate: 2 barras N° 4 / 12M</text>
+  <text x="405" y="274" fontSize="11" fill="currentColor">Arranque: 2 barras N° 4 / 12M</text>
+  <text x="405" y="110" fontSize="11" fill="currentColor">Extremos: 2 barras N° 4 / 12M</text>
+  <text x="405" y="124" fontSize="11" fill="currentColor">en toda la altura</text>
+  <text x="405" y="160" fontSize="11" fill="currentColor">Vertical y horizontal:</text>
+  <text x="405" y="174" fontSize="11" fill="currentColor">50 ≤ s ≤ 400 mm</text>
+  <text x="405" y="210" fontSize="11" fill="currentColor">× Conector de alambre ∅ ≥ 4 mm</text>
+  <text x="405" y="224" fontSize="11" fill="currentColor">sv ≤ 600 mm · sh ≤ 800 mm</text>
+  <text x="220" y="310" textAnchor="middle" fontSize="12" fill="currentColor">Longitud del muro</text>
+</svg>
+</Figura>
+
+### Ejemplos: cuantías y diámetros de la cavidad
+
+<Ejemplo numero={1} titulo="Cuantías de un muro de cavidad de 80 + 100 + 80 mm">
+
+Un muro de cavidad tiene paredes de $t_{\text{pared}}$ = {ej1.A.d.espesorPared} mm y una cavidad de $t_{\text{cav}}$ = {ej1.A.d.espesorCavidad} mm (espesor total {ej1.A.q.espesorTotal} mm), $f'_m$ = {ej1.A.d.fm} MPa y relleno de {ej1.A.d.fInyeccion} MPa. La cavidad lleva una **N° 4** vertical cada 400 mm y una **N° 3** horizontal cada 400 mm (propuesta A); las paredes llevan una escalerilla de dos alambres de 4 mm cada 400 mm. En extremos hay dos N° 4, en remate y arranque dos N° 4; los conectores son de cercha de 4 mm a 600 × 800 mm. Verificar D.6.3.2 y ajustar el refuerzo si es necesario.
+
+<Paso titulo="Materiales y espesores" ref="D.6.1.3, D.6.1.6">
+
+Espesor total {ej1.A.q.espesorTotal} mm ≥ 190 mm; paredes 80 mm ≥ 70 mm; cavidad 100 mm ≥ 50 mm: cumple. Relleno 14 MPa ≥ 12.5 MPa. Intervalo de $f'_m$: de max(6.25; 0.5 × 14 = 7.0) = 7.0 MPa a 2 × 14 = 28 MPa; $f'_m$ = 10 MPa **está dentro**.
+
+</Paso>
+<Paso titulo="Cuantías de la cavidad (propuesta A)" ref="D.6.3.2(a)">
+
+$\rho_{v,\text{cav}}$ = {N4.area} / (400 × 100) = **{r5(ej1.A.q.cavidadVertical)}** ≥ 0.0015: cumple. $\rho_{h,\text{cav}}$ = {N3.area} / (400 × 100) = **{r5(ej1.A.q.cavidadHorizontal)}**, **menor que 0.0020**: **no cumple**.
+
+</Paso>
+<Paso titulo="Cuantías sobre la sección completa" ref="D.6.3.2(b)">
+
+Refuerzo vertical: solo la cavidad, {N4.area}/400 = {f(N4.area / 400, 4)} mm²/mm; $\rho_v$ = {f(N4.area / 400, 4)} / {ej1.A.q.espesorTotal} = **{r5(ej1.A.q.seccionVertical)}**. Refuerzo horizontal: cavidad {N3.area}/400 = {f(N3.area / 400, 4)} mm²/mm más escalerilla (2 × {W4.area})/400 = {f(2 * W4.area / 400, 4)} mm²/mm; $\rho_h$ = **{r5(ej1.A.q.seccionHorizontal)}**. Ambos ≥ 0.0007 y suma = **{r5(ej1.A.q.suma)}** ≥ 0.0020: cumple (b). **El muro falla solo en D.6.3.2(a), horizontal.**
+
+</Paso>
+<Paso titulo="Propuesta B: N° 3 horizontales cada 300 mm" ref="D.6.3.2(a)">
+
+$\rho_{h,\text{cav}}$ = {N3.area} / (300 × 100) = **{r5(ej1.B.q.cavidadHorizontal)}** ≥ 0.0020: **cumple**. Separación 300 mm dentro de 50–400 mm: cumple. Con esto **{ej1.B.res.cumplen} de {ej1.B.res.total} verificaciones cumplen** (posicionadores a 1 500 mm ≤ 3 000 mm; ∅ 12.7 mm ≤ ¼ × 100 = 25 mm; una capa porque 100 mm ≤ 150 mm).
+
+</Paso>
+<Resultado>
+La propuesta A cumple todo **salvo** la cuantía horizontal de la cavidad ({r5(ej1.A.q.cavidadHorizontal)} menor que 0.0020). Con N° 3 cada 300 mm (propuesta B) la cuantía pasa a {r5(ej1.B.q.cavidadHorizontal)} y el muro cumple todos los mínimos de refuerzo de D.6. Obsérvese que la cuantía **de la cavidad** (0.0020) es más exigente que la de la **sección completa** (0.0007).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Capas, diámetro máximo y posicionadores en cavidades de 60 mm y de 200 mm">
+
+Verificar las reglas geométricas del refuerzo para dos cavidades: una **delgada** (60 mm) y una **gruesa** ({ej2.cav} mm, con paredes de 80 mm: espesor total {ej2.total} mm).
+
+<Paso titulo="Número de capas" ref="D.6.3.6">
+
+Cavidad de 60 mm ≤ 150 mm: **una sola capa**. Cavidad de {ej2.cav} mm > 150 mm: **dos capas**, y **ninguna con más del 66 %** del refuerzo: con dos capas iguales de N° 4 cada 400 mm, cada capa lleva el 50 %: **cumple**. Cuantía con las dos capas: $\rho_{v,\text{cav}}$ = 2 × {N4.area} / (400 × {ej2.cav}) = **{r5(ej2.rhoDos)}**; con una sola capa sería {r5(ej2.rhoUna)} (y **no cumpliría D.6.3.6** por ser la cavidad mayor de 150 mm).
+
+</Paso>
+<Paso titulo="Diámetro máximo" ref="D.6.3.5">
+
+Cavidad de 60 mm: $\tfrac14$ × 60 = **{f(ej2.maxDiam60, 1)} mm**: una N° 4 (12.7 mm) **cabe**; una N° 5 (15.9 mm) **no cumple**. Cavidad de {ej2.cav} mm: $\tfrac14$ × {ej2.cav} = **{f(ej2.maxDiam200, 0)} mm**: cualquier barra del catálogo usual cabe.
+
+</Paso>
+<Paso titulo="Posicionadores del refuerzo vertical" ref="D.6.3.2.1">
+
+Para N° 4: 250 × {ej2.dbN4} = {f(ej2.posN4sin, 0)} mm y 3 000 mm: gobierna **{f(ej2.posN4, 0)} mm**. Para una barra de 6 mm: 250 × 6 = **{f(ej2.posN2, 0)} mm** (gobierna el diámetro). Una barra delgada, entonces, necesita **más posicionadores** que una gruesa.
+
+</Paso>
+<Resultado>
+Cavidad de 60 mm: una capa, barra máxima de {f(ej2.maxDiam60, 1)} mm (N° 4 sí, N° 5 no) y posicionadores cada 3.0 m para N° 4. Cavidad de {ej2.cav} mm: dos capas (50 % + 50 %), barra máxima de {f(ej2.maxDiam200, 0)} mm y posicionadores cada 3.0 m. Los mismos chequeos están en la calculadora de cuantías del Capítulo [D.7](/titulo-d/d7).
+</Resultado>
+</Ejemplo>
+
+## D.6.4 — Requisitos de diseño
+
+### D.6.4.1 — General
+
+Los muros de cavidad se diseñan siguiendo los Capítulos **D.5** y el **Apéndice D-1**, considerando las propiedades de los materiales y las **características dimensionales de la sección compuesta**, con procedimientos apropiados para la distribución de esfuerzos en elementos de varios materiales (<NormaRef s="D.6.4.1" pag="D-44" />). En la práctica esto significa trabajar con la **sección transformada**.
+
+### D.6.4.2 — Análisis
+
+El análisis estructural se basa en la **sección transformada elástica de la sección neta compuesta**. Los esfuerzos en cualquier porción de la mampostería compuesta deben estar **dentro de los límites del material de esa porción**. Si el diseño es por el **método de los esfuerzos admisibles de trabajo**, los esfuerzos admisibles del material de inyección se calculan con las **mismas fórmulas de la mampostería, reemplazando $f'_m$ por $f'_{cr}$** (la resistencia del material de inyección) (<NormaRef s="D.6.4.2" pag="D-45" />).
+
+### D.6.4.3 — Módulo de elasticidad
+
+El módulo de cada pared componente se determina según **D.5.2**. Cuando la **relación entre los módulos sea superior a 2 o inferior a 0.5**, los módulos deben determinarse **mediante ensayos**, tomando el **valor secante** entre $0.05 f'_m$ y $0.33 f'_m$ (paredes) y entre $0.05 f'_{cr}$ y $0.33 f'_{cr}$ (relleno) (<NormaRef s="D.6.4.3" pag="D-45" />). Es una alerta: si el relleno y la mampostería tienen rigideces muy diferentes, la fórmula general ya no es confiable.
+
+### D.6.4.4 — Sección transformada
+
+Al transformar la sección se toma **uno de los materiales como base**. La dimensión **paralela al eje neutro** se multiplica por la **relación modular** (cociente de módulos), **sin alterar las dimensiones en la dirección ortogonal** al eje neutro. **Ni la altura efectiva ni la longitud** de los elementos se modifican, y el **espesor efectivo** es el de la sección original (<NormaRef s="D.6.4.4" pag="D-45" />).
+
+<Ecuacion num="D.6.4.4" titulo="Relación modular de la cavidad (forma de autoría del proyecto)">
+
+$$
+n = \frac{E_{\text{cav}}}{E_m}
+\qquad
+b_{\text{cav,transf}} = n\, b_{\text{cav}}
+\qquad
+0.5 \le n \le 2
+$$
+
+- $E_{\text{cav}}$: módulo del material de inyección; $E_m$: módulo de la mampostería de las paredes (D.5.2). Con la mampostería como base, la franja de cavidad se ensancha en $n$ (si es más rígida) o se angosta (si es más flexible); el espesor no cambia.
+- El intervalo $0.5 \le n \le 2$ es el límite de D.6.4.3 por encima del cual hay que ensayar los módulos.
+
+</Ecuacion>
+
+<Figura alt="A la izquierda la sección real con pared, cavidad y pared del mismo ancho; a la derecha la sección transformada con la cavidad más ancha en la relación modular n, con el mismo espesor" numero="Esquema" pie="Sección transformada de un muro de cavidad tomando la mampostería como material base. El ancho paralelo al eje neutro de la cavidad se multiplica por n = Ecav/Em (aquí n = 1.5 como ejemplo); el espesor no cambia (D.6.4.4). (esquema del proyecto)">
+<svg viewBox="0 0 560 260" role="img" aria-label="Sección real y sección transformada de un muro de cavidad reforzada" className="mx-auto h-auto w-full max-w-2xl">
+  <text x="100" y="24" textAnchor="middle" fontSize="12" fill="currentColor" fontWeight="600">Sección real</text>
+  <rect x="30" y="40" width="140" height="50" fill="currentColor" fillOpacity="0.35" stroke="currentColor" strokeWidth="2" />
+  <rect x="30" y="90" width="140" height="60" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="2" />
+  <rect x="30" y="150" width="140" height="50" fill="currentColor" fillOpacity="0.35" stroke="currentColor" strokeWidth="2" />
+  <line x1="15" y1="120" x2="185" y2="120" stroke="currentColor" strokeDasharray="6 4" />
+  <text x="100" y="64" textAnchor="middle" fontSize="11" fill="currentColor">Pared (Em)</text>
+  <text x="100" y="124" textAnchor="middle" fontSize="11" fill="currentColor">Cavidad (Ecav)</text>
+  <text x="100" y="178" textAnchor="middle" fontSize="11" fill="currentColor">Pared (Em)</text>
+  <text x="100" y="222" textAnchor="middle" fontSize="11" fill="currentColor">ancho b</text>
+  <text x="400" y="24" textAnchor="middle" fontSize="12" fill="currentColor" fontWeight="600">Sección transformada (base: mampostería)</text>
+  <rect x="330" y="40" width="140" height="50" fill="currentColor" fillOpacity="0.35" stroke="currentColor" strokeWidth="2" />
+  <rect x="295" y="90" width="210" height="60" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="2" />
+  <rect x="330" y="150" width="140" height="50" fill="currentColor" fillOpacity="0.35" stroke="currentColor" strokeWidth="2" />
+  <line x1="280" y1="120" x2="520" y2="120" stroke="currentColor" strokeDasharray="6 4" />
+  <text x="400" y="124" textAnchor="middle" fontSize="11" fill="currentColor">Cavidad: ancho n·b</text>
+  <text x="400" y="222" textAnchor="middle" fontSize="11" fill="currentColor">el espesor no cambia</text>
+  <text x="525" y="118" fontSize="10" fill="currentColor">eje neutro</text>
+</svg>
+</Figura>
+
+### D.6.4.5 — Monolitismo
+
+El muro se diseña para que tenga **funcionamiento monolítico**: se estudian y atienden los esfuerzos internos por **cambios de volumen** y otros efectos **reológicos** (<NormaRef s="D.6.4.5" pag="D-45" />). Y el **esfuerzo cortante en la superficie de contacto** de la cavidad con las paredes **se limita, en todos los casos, a 0.07 MPa** (<NormaRef s="D.6.4.5.1" pag="D-45" />). Es el valor que el diseñador debe comparar con el cortante horizontal que se transmite entre el relleno y cada pared; si se supera, el muro deja de ser monolítico y la hipótesis de sección compuesta no vale.
+
+## D.6.5 — Requisitos adicionales de construcción
+
+Además del Capítulo D.4 (<NormaRef s="D.6.5" pag="D-45" />):
+
+- **D.6.5.1 — Paredes laterales.** Se construyen con las tolerancias de alineamiento del Título D y **simultáneamente**, con un **desfase vertical máximo de 400 mm** entre las dos paredes. La cavidad queda **libre de rebabas, escombros y chorreaduras de mortero** (<NormaRef s="D.6.5.1" pag="D-45" />).
+- **D.6.5.2 — Refuerzo horizontal de la cavidad.** Se coloca **a medida que avanza** el muro, **soportado por los conectores y fijado a ellos** (<NormaRef s="D.6.5.2" pag="D-45" />).
+- **D.6.5.3 — Inyección.** Se hace **mínimo a los 3 días** de construidas las paredes, **garantizando el arriostramiento** contra la presión hidrostática del material de inyección (<NormaRef s="D.6.5.3" pag="D-45" />).
+  - **D.6.5.3.1 — Altura de inyección.** Se inyecta después de **limpiar el fondo** y de **colocar y asegurar el refuerzo vertical**, **el mismo día**, en **alturas sucesivas de 1.2 m**, con **60 a 90 minutos entre capas**; **pasados 5 minutos** de terminar cada capa se **recompacta** la mezcla (<NormaRef s="D.6.5.3.1" pag="D-45" />).
+  - **D.6.5.3.2 — Longitud de inyección.** En una sola operación la longitud horizontal **no excede 8 m**; si es necesario se colocan **barreras verticales continuas** que impidan el flujo lateral, para garantizar el monolitismo (<NormaRef s="D.6.5.3.2" pag="D-45" />).
+- **D.6.5.4 — Control de calidad.** De acuerdo con las normas de producción de cada material y las frecuencias de **D.3.8** (<NormaRef s="D.6.5.4" pag="D-45" />).
+
+<Ejemplo numero={3} titulo="Plan de inyección de un muro de 2.6 m de alto y 14 m de largo">
+
+Se debe inyectar la cavidad de un muro de {ej3.altura} m de alto y {ej3.longitud} m de largo, ya armada. Determinar el número de capas de inyección, la duración mínima de las esperas y si hacen falta barreras (aplicación directa de D.6.5.3; el plan es **autoría del proyecto**).
+
+<Paso titulo="Capas de 1.2 m" ref="D.6.5.3.1">
+
+Número de capas = ⌈{ej3.altura} / {ej3.capa}⌉ = **{ej3.nCapas}**: {ej3.capas.map((c) => f(c.h, 1)).join(' m, ')} m. Se inyecta **el mismo día**.
+
+</Paso>
+<Paso titulo="Esperas entre capas y recompactación" ref="D.6.5.3.1">
+
+Entre {ej3.nCapas} capas hay **{ej3.esperas} esperas** de 60 a 90 minutos: de **{ej3.espMin} a {ej3.espMax} minutos** ({f(ej3.espMin / 60, 1)} a {f(ej3.espMax / 60, 1)} h) de espera total, más la recompactación a los {ej3.recompactar} minutos de cada capa.
+
+</Paso>
+<Paso titulo="Longitud de cada operación" ref="D.6.5.3.2">
+
+{ej3.longitud} m / 8 m ⇒ **{ej3.tramos} tramos** de inyección (de {f(ej3.longTramo, 1)} m cada uno, menos de 8 m), separados por **{ej3.barreras} barrera(s) vertical(es) continua(s)** para impedir el flujo lateral.
+
+</Paso>
+<Paso titulo="Edad mínima de las paredes" ref="D.6.5.3">
+
+La inyección no puede empezar antes de **{ej3.edadDias} días** de construidas las paredes, y debe asegurarse el **arriostramiento** (apuntalamiento) de las paredes contra la presión hidrostática del material.
+
+</Paso>
+
+<Figura alt="Alzado del muro de 2.6 metros con las tres capas de inyección de 1.2, 1.2 y 0.2 metros, las esperas de 60 a 90 minutos entre ellas y la barrera vertical a los 7 metros" numero="Esquema" pie="Secuencia de inyección del ejemplo 3: tres capas en el mismo día, esperas de 60 a 90 minutos y una barrera vertical que divide los 14 m en dos tramos de 7 m. (esquema del proyecto)">
+<svg viewBox="0 0 600 270" role="img" aria-label="Capas de inyección y barrera vertical de un muro de cavidad reforzada" className="mx-auto h-auto w-full max-w-2xl">
+  <rect x="60" y="30" width="400" height="195" fill="none" stroke="currentColor" strokeWidth="2" />
+  {ej3.capas.map((c) => (
+    <g key={c.i}>
+      <rect x="60" y={225 - (c.z0 + c.h) * 75} width="400" height={c.h * 75} fill="currentColor" fillOpacity={0.15 + 0.2 * (ej3.nCapas - c.i) / ej3.nCapas} stroke="currentColor" strokeDasharray="5 3" />
+      <text x="260" y={225 - (c.z0 + c.h / 2) * 75 + 4} textAnchor="middle" fontSize="12" fill="currentColor">{`Capa ${c.i + 1}: ${f(c.h, 1)} m`}</text>
+    </g>
+  ))}
+  <line x1="260" y1="26" x2="260" y2="229" stroke="currentColor" strokeWidth="4" />
+  <text x="266" y="20" fontSize="11" fill="currentColor">Barrera vertical continua (cada ≤ 8 m)</text>
+  <text x="472" y="150" fontSize="11" fill="currentColor">Espera de 60 a 90 min</text>
+  <text x="472" y="164" fontSize="11" fill="currentColor">y recompactar a los 5 min</text>
+  <text x="165" y="250" textAnchor="middle" fontSize="11" fill="currentColor">Tramo 1 (7 m)</text>
+  <text x="360" y="250" textAnchor="middle" fontSize="11" fill="currentColor">Tramo 2 (7 m)</text>
+</svg>
+</Figura>
+
+<Resultado>
+La inyección se hace en **{ej3.nCapas} capas** el mismo día con **{ej3.espMin} a {ej3.espMax} minutos** de espera total, en **{ej3.tramos} tramos** de {f(ej3.longTramo, 1)} m separados por {ej3.barreras} barrera vertical, y no antes de {ej3.edadDias} días de construidas las paredes.
+</Resultado>
+</Ejemplo>
+
+## Comparación con los otros sistemas
+
+La cavidad reforzada es el sistema de mayor **espesor mínimo** (190 mm), el único con **conectores**, **sección transformada** y **inyección total** de una cavidad. Frente a la mampostería reforzada de bloque (D.7) y a la parcialmente reforzada (D.8) cambia el punto de vista de la cuantía: aquí se mide sobre la **cavidad** y sobre la **sección completa**.
+
+| Concepto | D.6 cavidad | D.7 reforzada | D.8 parcial |
+|---|---|---|---|
+| Capacidad sísmica | DES | DES o DMO | DMO |
+| Espesor mínimo | 190 mm (70 + 50 + 70) | 120 mm nominal | 120 mm nominal |
+| $f'_m$ | ≥ 6.25 MPa, entre 0.5 y 2 veces el relleno | 10 a 28 MPa | ≥ 8 MPa |
+| Cuantía por dirección | 0.0015 / 0.0020 en la cavidad; 0.0007 en el muro | 0.0007 | 0.00027 |
+| Suma ρv + ρh | ≥ 0.0020 | ≥ 0.0020 | no se exige |
+| Separación vertical del refuerzo | 50–400 mm (en la cavidad) | ≤ 1200 mm | ≤ 2.40 m |
+
+*(Tabla comparativa de autoría del proyecto, con valores de D.6.3, D.7.3 y D.8.3.)* La comparación de los siete sistemas del Título D está al final del Capítulo [D.9](/titulo-d/d9).
+
+## Calculadora
+
+La **calculadora de cuantías y separaciones mínimas** del Capítulo [D.7](/titulo-d/d7) incluye el sistema **D.6**: ingrese espesores, resistencias, refuerzo de cavidad y paredes, extremos, remate, conectores y posicionadores, y obtenga cumple / no cumple con la sección de la norma. Usa las mismas funciones que los ejemplos de este capítulo.
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores típicos con la cavidad reforzada">
+
+- **Calcular la cuantía de la cavidad sobre el espesor total del muro** (190 mm o más) en lugar del espesor de la cavidad: D.6.3.2(a) usa el **área bruta de la cavidad**; D.6.3.2(b) usa la del muro completo. Son dos verificaciones distintas.
+- **Poner una sola capa de refuerzo en una cavidad de más de 150 mm** o repartir el refuerzo con más del 66 % en una capa (D.6.3.6).
+- **Elegir una barra gruesa para una cavidad delgada:** el diámetro máximo es ¼ del espesor de la cavidad (50 mm de cavidad → 12.5 mm).
+- **Usar conectores en zeta con unidades de perforación vertical** o con separaciones de 600 × 800 mm (en zeta son 400 × 600 mm y solo con unidades macizas o de perforación horizontal).
+- **Olvidar la relación entre $f'_m$ y el relleno** (0.5 a 2 veces) y el relleno mínimo de 12.5 MPa.
+- **Inyectar toda la altura de una vez** o sin esperar los 60–90 minutos entre capas de 1.2 m, o antes de los 3 días de edad de las paredes.
+- **Seguir la remisión de D.6.1.4.1 a «D.6.5.4»:** parece errata; el arriostramiento contra la presión hidrostática está en D.6.5.3. También el título de D.6.3.5 dice «mínimo» pero el texto fija un máximo.
+
+</Callout>
+
+## Resumen en una línea
+
+**La cavidad reforzada (DES) es un muro compuesto de dos paredes de ≥ 70 mm y una cavidad de ≥ 50 mm (≥ 190 mm en total), armada con cuantías de 0.0015 vertical y 0.0020 horizontal sobre la cavidad (≥ 0.0007 y suma ≥ 0.0020 sobre el muro), barras a 50–400 mm, relleno de ≥ 12.5 MPa con f′m entre 0.5 y 2 veces ese valor, análisis con sección transformada, esfuerzo de contacto ≤ 0.07 MPa e inyección en capas de 1.2 m.**

@@ -2,7 +2,7 @@
 export type EstadoTitulo = 'disponible' | 'proximamente';
 
 /** Letras de los Títulos con contenido desarrollado (minúscula: rutas y colecciones `titulo-<letra>`). */
-export type LetraTitulo = 'a' | 'b' | 'c';
+export type LetraTitulo = 'a' | 'b' | 'c' | 'd';
 
 export type Titulo = {
   /** Letra del Título (A…K). */
@@ -51,9 +51,9 @@ export const TITULOS: readonly Titulo[] = [
     letra: 'D',
     slug: 'titulo-d',
     nombre: 'Mampostería estructural',
-    resumen: 'Requisitos de diseño y construcción para mampostería estructural.',
+    resumen: 'Diseño y construcción de mampostería estructural: materiales, muros reforzados, confinados, de cavidad, diafragma y reforzados externamente.',
     paginasNorma: 'D-1',
-    estado: 'proximamente',
+    estado: 'disponible',
     acento: 'text-chart-4',
   },
   {

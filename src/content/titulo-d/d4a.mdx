@@ -1,0 +1,407 @@
+---
+codigo: 'D.4a'
+tipo: capitulo
+titulo: 'Requisitos constructivos: refuerzo'
+resumen: 'Cómo se detalla el refuerzo de la mampostería estructural: diámetros máximos y mínimos, número de barras por celda, recubrimientos, longitud de desarrollo y de empalme (Ec. D.4.2-1), ganchos estándar y diámetros de doblamiento (Tabla D.4.2-1), y las actividades preliminares de almacenamiento y toma de muestras.'
+objetivos:
+  - 'Verificar el diámetro, el número de barras por celda y el mortero que rodea una barra vertical según D.4.2.2 y D.4.2.3'
+  - 'Determinar el recubrimiento mínimo de barras en celdas y de refuerzo de junta (D.4.2.4)'
+  - 'Calcular la longitud de desarrollo ℓd con la Ec. D.4.2-1, la longitud de empalme por traslapo y la separación máxima de barras traslapadas'
+  - 'Dimensionar ganchos estándar (180°, 90° y 135°) y el diámetro mínimo de doblamiento con la Tabla D.4.2-1'
+  - 'Enumerar las actividades preliminares de obra: almacenamiento de materiales y unidades, y lugar para muestras'
+paginasNorma: 'D-21 a D-23'
+paginaPdf: 586
+orden: 4
+calculadoras: ['desarrollo-mamposteria']
+nivel: intermedio
+---
+
+import {
+  diametroDoblamiento,
+  diametroJunta,
+  ganchoEstandar,
+  longitudDesarrollo,
+  longitudEmpalme,
+  recubrimientoMinimoCelda,
+  recubrimientoMinimoJunta,
+  resistenciaEmpalmeMecanico,
+  separacionMaximaEmpalme,
+  verificarBarraEnCelda,
+} from '../../lib/nsr10/desarrolloMamposteria';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const base = { db: 15.9, fy: 420, fm: 10, K: 75 };
+  const r = longitudDesarrollo(base);
+  const rK100 = longitudDesarrollo({ ...base, K: 120 });
+  const rK40 = longitudDesarrollo({ ...base, K: 40 });
+  const rFm20 = longitudDesarrollo({ ...base, fm: 20 });
+  const emp = longitudEmpalme(r.ld);
+  return { base, r, rK100, rK40, rFm20, emp, sep: separacionMaximaEmpalme(emp), mec: resistenciaEmpalmeMecanico(420), lisa: longitudDesarrollo({ ...base, lisa: true }) };
+})();
+
+export const ej2 = (() => {
+  const db = 12.7;
+  return {
+    db,
+    g180: ganchoEstandar(db, 180),
+    g90: ganchoEstandar(db, 90),
+    g135: ganchoEstandar(db, 135),
+    dob420: diametroDoblamiento(db, 420),
+    dob240: diametroDoblamiento(db, 240),
+    dob8: diametroDoblamiento(25.4, 240),
+  };
+})();
+
+export const ej3 = (() => {
+  const ok = verificarBarraEnCelda({ db: 15.9, espesorMuro: 150, celdaMenor: 80, mortero: 'fino' });
+  const mal = verificarBarraEnCelda({ db: 22.2, espesorMuro: 150, celdaMenor: 80, mortero: 'fino' });
+  return { ok, mal, cobExp5: recubrimientoMinimoCelda(15.9, true), cobExp7: recubrimientoMinimoCelda(22.2, true), cobInt: recubrimientoMinimoCelda(15.9, false), junta: diametroJunta(10), cobJunta: recubrimientoMinimoJunta(true) };
+})();
+
+## Idea central del capítulo
+
+El Capítulo D.4 reúne los **requisitos constructivos** de la mampostería estructural: lo que debe cumplirse **en la obra** para que el muro se comporte como lo supone el diseño de D.5. Aquí se estudia su primera mitad: **cómo se detalla el refuerzo** (diámetros, número de barras, recubrimientos, longitud de desarrollo, empalmes, ganchos y doblamientos) y las **actividades preliminares** (almacenar materiales y unidades, y reservar un lugar para las muestras). La segunda mitad —cimentaciones, muros, mortero de relleno, losas, apuntalamiento, juntas y curado— está en el capítulo D.4b.
+
+La idea física es sencilla: el refuerzo solo trabaja si está **bien embebido**. Una barra vertical dentro de una celda inyectada transmite su fuerza al muro por **adherencia** con el mortero de relleno; para que esa adherencia sea posible hacen falta un **diámetro** compatible con la celda, un **espesor mínimo de mortero** a su alrededor, un **recubrimiento** que la proteja y una **longitud** suficiente para desarrollar su esfuerzo (Ec. D.4.2-1). Todo lo demás —ganchos, doblamientos, tolerancias— son reglas para que esa barra quede donde el cálculo supone.
+
+<Callout tipo="importante" titulo="Qué calcula este capítulo y qué no">
+D.4 no dimensiona muros: **no da resistencias**. Fija longitudes, diámetros, separaciones y recubrimientos que el diseñador debe respetar y el constructor debe cumplir. La resistencia de los muros está en D.5 y los requisitos de cada tipo de mampostería (cavidad reforzada, confinada, etc.) en D.6 a D.12. El desarrollo del refuerzo embebido en **concreto** (por ejemplo, barras de empalme en la cimentación) se rige por el Título C, no por este capítulo (<NormaRef s="D.4.2.6" pag="D-23" />).
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este capítulo (autoría del proyecto)">
+Las calculadoras y los ejemplos usan `src/lib/nsr10/desarrolloMamposteria.ts` y las constantes de `src/data/refuerzoMamposteria.ts`. Lo marcado **«autoría del proyecto»** (criterios para valores no tabulados, verificación de la barra centrada en la celda, esquemas) **no es texto de la norma**. Unidades SI: mm, MPa. Los diámetros se citan como en la norma («N° 5 (5/8") ó 16M (16 mm)»); en los cálculos se usa el diámetro nominal $d_b$ de las Tablas C.3.5.3-1 y C.3.5.3-2 (por ejemplo N° 5 = 15.9 mm).
+</Callout>
+
+## D.4.0 — Nomenclatura
+
+<NormaRef s="D.4.0" pag="D-21" /> define los símbolos del capítulo:
+
+| Símbolo | Significado | Unidad |
+|---|---|---|
+| $d_b$ | Diámetro de la barra | mm |
+| $f_y$ | Resistencia a la fluencia del acero de refuerzo | MPa |
+| $f'_m$ | Resistencia a la compresión de la mampostería | MPa |
+| $\sqrt{f'_m}$ | Raíz cuadrada de la resistencia a la compresión de la mampostería | MPa$^{1/2}$ (se opera con $f'_m$ en MPa) |
+| $\ell_d$ | Longitud de desarrollo requerida para el refuerzo | mm |
+| $K$ | Recubrimiento del refuerzo medido desde el extremo exterior de la unidad de mampostería | mm |
+| $\phi$ | Coeficiente de reducción de resistencia, dado en el Capítulo D.5 | — |
+
+Nótese que $\phi$ figura en la nomenclatura pero **no se usa en ningún numeral de D.4** (ver «Erratas y rarezas»).
+
+## D.4.1 — Alcance
+
+<NormaRef s="D.4.1.1" pag="D-21" />: los requisitos de este capítulo **cubren los diferentes sistemas de mampostería estructural**. Cuando un requisito es propio de un solo sistema, el texto lo dice; **si no hay esa advertencia, el requisito es obligatorio para todos los tipos** de mampostería estructural. Las **casas de uno y dos pisos de mampostería confinada** tienen requisitos especiales en el Título E.
+
+## D.4.2 — Detalles del refuerzo
+
+### D.4.2.1 — Embebido del refuerzo
+
+Todo refuerzo de la mampostería estructural debe estar **embebido en concreto, mortero de relleno o mortero de pega**, y colocado de modo que se cumplan los requisitos de **recubrimiento mínimo, anclaje, adherencia y separación mínima y máxima** respecto de las unidades y de otros refuerzos (<NormaRef s="D.4.2.1" pag="D-21" />). Es el principio rector de la sección: una barra sin mortero alrededor no trabaja.
+
+### D.4.2.2 — Diámetros máximos y mínimos permitidos
+
+<NormaRef s="D.4.2.2" pag="D-21" /> fija un intervalo de diámetros según el lugar donde va el refuerzo.
+
+#### D.4.2.2.1 — Refuerzo longitudinal en celdas y cavidades que se inyectan
+
+Se refiere al refuerzo vertical dentro de celdas de unidades de perforación vertical, de unidades especiales tipo viga o de cavidades que luego se inyectan con mortero (<NormaRef s="D.4.2.2.1" pag="D-21" />):
+
+| Literal | Condición | Límite |
+|---|---|---|
+| (a) | Diámetro mínimo | N° 3 (3/8") ó 10M (10 mm) |
+| (b) | Muros con espesor nominal de **200 mm o más** | Máximo N° 8 (1") ó 25M (25 mm) |
+| (c) | Muros con espesor nominal **menor de 200 mm** | Máximo N° 6 (3/4") ó 20M (20 mm) |
+| (d) | Cualquier muro | No mayor de **1/3 de la menor dimensión libre de la celda** |
+
+Los límites (b), (c) y (d) se aplican **a la vez**: gobierna el menor. Por ejemplo, una celda de 80 mm de dimensión menor limita la barra a 80/3 = 26.7 mm por el literal (d), pero en un muro de 150 mm el literal (c) la limita a 20 mm.
+
+#### D.4.2.2.2 — Refuerzo de junta
+
+El refuerzo horizontal colocado en las **juntas de mortero de pega** debe tener un diámetro **mínimo de 4 mm** y **no mayor de la mitad del espesor del mortero de pega** (<NormaRef s="D.4.2.2.2" pag="D-21" />). Como el espesor máximo de la junta es de 10 mm (<NormaRef s="D.4.5.10.1" pag="D-26" />), el refuerzo de junta tiene a lo sumo 5 mm de diámetro.
+
+#### D.4.2.2.3 y D.4.2.2.4 — Elementos de confinamiento y elementos de concreto reforzado
+
+- **Elementos de confinamiento** (mampostería confinada): los diámetros mínimos y máximos están en el **Capítulo D.10** (<NormaRef s="D.4.2.2.3" pag="D-21" />).
+- **Elementos de concreto reforzado embebidos o combinados con la mampostería** (excepto los de confinamiento): se cumple lo especificado en el **Título C**, para el **mismo grado de capacidad de disipación de energía** (DES, DMO o DMI) del sistema de mampostería (<NormaRef s="D.4.2.2.4" pag="D-22" />).
+
+### D.4.2.3 — Límites para la colocación del refuerzo
+
+#### D.4.2.3.1 — Número de barras por celda vertical
+
+En la mampostería de unidades de perforación vertical **solo debe colocarse una barra vertical por celda**. Si la **dimensión menor de la celda es mayor de 140 mm**, se permiten **dos barras por celda** siempre que su diámetro **no sea mayor de N° 5 (5/8") ó 16M (16 mm)** (<NormaRef s="D.4.2.3.1" pag="D-22" />).
+
+#### D.4.2.3.2 — Barras en paquete
+
+Cuando se permiten dos barras por celda, pueden ir **en paquete y en contacto**, actuando como una unidad. Los **puntos de corte** de las barras individuales de un paquete deben estar espaciados **como mínimo 40 veces el diámetro** de la barra (<NormaRef s="D.4.2.3.2" pag="D-22" />).
+
+#### D.4.2.3.3 — Distancia entre la barra y el borde interior de la celda
+
+El **espesor de mortero de relleno entre el refuerzo y la unidad** no debe ser menor de **6.5 mm para mortero fino** ni de **13 mm para mortero grueso** (<NormaRef s="D.4.2.3.3" pag="D-22" />). Es lo que garantiza que el mortero envuelva la barra y que el agregado grueso pueda pasar.
+
+<Figura alt="Planta de una unidad de perforación vertical con una celda inyectada: paredes de la unidad, mortero de relleno, barra vertical al centro, zona de tolerancia de colocación del refuerzo y espesor mínimo de mortero entre barra y pared" numero="Esquema" pie="Corte en planta de una celda inyectada. El mortero que rodea la barra debe tener al menos 6.5 mm (fino) o 13 mm (grueso) de espesor; la barra se coloca preferiblemente al centro y su posición puede desviarse como máximo 1/4 de la dimensión de la celda en cada sentido (D.4.2.3.3, D.4.5.12). (esquema del proyecto)">
+<svg viewBox="0 0 520 230" role="img" aria-label="Corte en planta de una celda de mampostería con barra vertical, mortero de relleno y zona de tolerancia" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="150" y="30" width="220" height="150" fill="currentColor" fillOpacity="0.25" stroke="currentColor" strokeWidth="2" />
+  <rect x="200" y="62" width="120" height="86" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="245" y="86" width="30" height="38" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
+  <circle cx="260" cy="105" r="8" fill="currentColor" />
+  <line x1="268" y1="105" x2="320" y2="105" stroke="currentColor" strokeWidth="1.5" />
+  <polygon points="320,105 312,101 312,109" fill="currentColor" />
+  <line x1="320" y1="95" x2="320" y2="115" stroke="currentColor" strokeWidth="1.5" />
+  <text x="378" y="100" fontSize="12" fill="currentColor">Mortero entre barra y unidad:</text>
+  <text x="378" y="116" fontSize="12" fill="currentColor">≥ 6.5 mm (fino) ó 13 mm (grueso)</text>
+  <text x="378" y="46" fontSize="12" fill="currentColor">Pared de la unidad</text>
+  <line x1="372" y1="44" x2="345" y2="44" stroke="currentColor" strokeWidth="1" />
+  <text x="40" y="104" fontSize="12" fill="currentColor">Celda inyectada</text>
+  <line x1="130" y1="100" x2="205" y2="100" stroke="currentColor" strokeWidth="1" />
+  <text x="40" y="200" fontSize="12" fill="currentColor">Recuadro discontinuo: zona de colocación admisible</text>
+  <text x="40" y="216" fontSize="12" fill="currentColor" fillOpacity="0.8">(posición de proyecto ± 1/4 de la dimensión de la celda)</text>
+  <text x="260" y="22" textAnchor="middle" fontSize="12" fill="currentColor" fillOpacity="0.8">Barra vertical de refuerzo</text>
+</svg>
+</Figura>
+
+#### D.4.2.3.4 — Mampostería confinada
+
+En los muros confinados, el número de barras y la cantidad de refuerzo dependen de la **sección y del tipo de elemento** de confinamiento diseñado; los requisitos de construcción adicionales están en el Capítulo D.10 (<NormaRef s="D.4.2.3.4" pag="D-22" />).
+
+### D.4.2.4 — Recubrimiento del refuerzo
+
+Las distancias de recubrimiento de <NormaRef s="D.4.2.4" pag="D-22" /> valen para **mampostería de unidades de perforación vertical** y **mampostería de cavidad reforzada**.
+
+#### D.4.2.4.1 — Barras colocadas en celdas
+
+El recubrimiento incluye el **mortero de relleno y la pared de la unidad** (<NormaRef s="D.4.2.4.1" pag="D-22" />):
+
+<TablaNorma numero="D.4.2.4.1" titulo="Recubrimiento mínimo de barras colocadas en celdas" pag="D-22" nota="Cuadro del autor a partir de los literales (a) y (b) de D.4.2.4.1; no es una tabla numerada de la norma.">
+
+| Condición de la mampostería | Barra | Recubrimiento mínimo |
+|---|---|---|
+| (a) Expuesta a tierra o intemperie | Mayor que N° 5 (5/8") ó 16M (16 mm) | 50 mm |
+| (a) Expuesta a tierra o intemperie | Menor o igual que N° 5 (5/8") ó 16M (16 mm) | 40 mm |
+| (b) No expuesta a tierra ni intemperie | Cualquiera | 40 mm |
+
+</TablaNorma>
+
+#### D.4.2.4.2 — Refuerzo de junta
+
+El refuerzo horizontal de las juntas de pega debe estar **completamente embebido en mortero**, con recubrimiento mínimo de **12 mm** si la mampostería está en contacto con tierra o intemperie, o **6 mm** si no lo está. Debe **protegerse con productos anticorrosivos** cuando la mampostería esté en contacto con la tierra o con agua permanente (<NormaRef s="D.4.2.4.2" pag="D-22" />).
+
+### D.4.2.5 — Desarrollo del refuerzo embebido en mortero de relleno
+
+#### D.4.2.5.1 — Generalidades
+
+La tracción o compresión calculada en el refuerzo en cada sección debe **desarrollarse a cada lado de la sección** mediante **longitud de desarrollo, gancho, anclaje mecánico o una combinación** de ellos (<NormaRef s="D.4.2.5.1" pag="D-22" />).
+
+#### D.4.2.5.2 — Longitud de desarrollo
+
+La longitud de desarrollo $\ell_d$ de barras **corrugadas** embebidas en mortero de relleno, **en tracción o en compresión**, se obtiene con la Ec. D.4.2-1. Para **barras lisas** se toma **el doble** del valor obtenido para corrugadas (<NormaRef s="D.4.2.5.2" pag="D-22" />).
+
+<Ecuacion num="D.4.2-1" titulo="Longitud de desarrollo del refuerzo en mortero de relleno">
+
+$$
+\ell_d = \frac{1.5\, d_b^{2}\, f_y}{K\,\sqrt{f'_m}} \;\ge\; 300\ \text{mm}
+$$
+
+- $d_b$: diámetro de la barra (mm).
+- $f_y$: resistencia a la fluencia del acero (MPa).
+- $f'_m$: resistencia a la compresión de la mampostería (MPa).
+- $K$: recubrimiento medido desde el extremo exterior de la unidad de mampostería (mm). **No debe exceder** el espaciamiento libre entre empalmes de refuerzo adyacentes **ni $5\,d_b$** (<NormaRef s="D.4.2.5.2" pag="D-23" />).
+- Resultado en mm, con los datos en esas unidades (la norma no escribe unidades en el coeficiente 1.5).
+
+</Ecuacion>
+
+Cómo leerla: $\ell_d$ crece con el **cuadrado del diámetro** (una barra el doble de gruesa necesita cuatro veces más longitud) y con $f_y$, y **disminuye** con el recubrimiento $K$ y con $\sqrt{f'_m}$ (una mampostería más resistente adhiere mejor). El tope $K \le 5\,d_b$ impide «premiar» un recubrimiento muy grande, y el tope $K \le$ espaciamiento libre castiga los empalmes muy próximos entre sí. El mínimo de **300 mm** gobierna en barras delgadas con mampostería resistente.
+
+<Figura alt="Dos barras traslapadas dentro del mortero de relleno: la longitud de traslapo igual a la longitud de desarrollo y la separación transversal máxima entre barras sin contacto" numero="Esquema" pie="Empalme por traslapo de dos barras: la longitud de traslapo es igual a ℓd y, si las barras no se tocan, su separación transversal no excede la menor entre ℓ/5 y 200 mm (D.4.2.5.3). Con posicionadores las barras pueden estar en contacto; sin contacto, a no menos de 25 mm (D.4.5.12.3). (esquema del proyecto)">
+<svg viewBox="0 0 520 210" role="img" aria-label="Empalme por traslapo de dos barras con longitud de traslapo igual a ld" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="20" y="40" width="480" height="90" fill="currentColor" fillOpacity="0.06" stroke="currentColor" strokeOpacity="0.35" strokeDasharray="4 4" />
+  <line x1="40" y1="68" x2="320" y2="68" stroke="currentColor" strokeWidth="5" />
+  <line x1="200" y1="102" x2="480" y2="102" stroke="currentColor" strokeWidth="5" strokeOpacity="0.6" />
+  <line x1="200" y1="36" x2="200" y2="150" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+  <line x1="320" y1="36" x2="320" y2="150" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+  <line x1="200" y1="146" x2="320" y2="146" stroke="currentColor" strokeWidth="1.5" />
+  <polygon points="200,146 210,142 210,150" fill="currentColor" />
+  <polygon points="320,146 310,142 310,150" fill="currentColor" />
+  <text x="260" y="168" textAnchor="middle" fontSize="13" fill="currentColor">Longitud de traslapo = ℓd</text>
+  <line x1="250" y1="68" x2="250" y2="102" stroke="currentColor" strokeWidth="1.5" />
+  <polygon points="250,68 246,78 254,78" fill="currentColor" />
+  <polygon points="250,102 246,92 254,92" fill="currentColor" />
+  <text x="258" y="90" fontSize="12" fill="currentColor">s ≤ ℓ/5 y ≤ 200 mm</text>
+  <text x="40" y="60" fontSize="12" fill="currentColor">Barra 1</text>
+  <text x="440" y="120" fontSize="12" fill="currentColor">Barra 2</text>
+  <text x="260" y="26" textAnchor="middle" fontSize="12" fill="currentColor" fillOpacity="0.8">Mortero de relleno (ambas barras embebidas)</text>
+  <text x="260" y="196" textAnchor="middle" fontSize="12" fill="currentColor" fillOpacity="0.8">Para barras lisas, ℓd es el doble del de una corrugada</text>
+</svg>
+</Figura>
+
+#### D.4.2.5.3 — Longitud de empalme por traslapo
+
+La longitud de empalme por traslapo es **igual a la longitud de desarrollo $\ell_d$** (<NormaRef s="D.4.2.5.3" pag="D-23" />). Las barras empalmadas por traslapo **que no estén en contacto** no pueden estar separadas transversalmente **más de una quinta parte de la longitud de traslapo requerida ni más de 200 mm**:
+
+$$
+s_{\max} = \min\!\left(\tfrac{1}{5}\,\ell_{\text{traslapo}},\; 200\ \text{mm}\right)
+$$
+
+(La forma de $s_{\max}$ como mínimo es lectura del proyecto del texto «ni más de»).
+
+#### D.4.2.5.4 — Empalmes mecánicos o soldados
+
+Deben resistir **al menos 1.25 veces el $f_y$ de la barra**; toda soldadura debe cumplir la **norma NTC 4040 (ANSI/AWS D1.4)** (<NormaRef s="D.4.2.5.4" pag="D-23" />). Para $f_y$ = 420 MPa, eso equivale a un empalme capaz de 525 MPa de esfuerzo en la barra.
+
+<Ejemplo numero={1} titulo="Longitud de desarrollo y de empalme de una barra N° 5">
+Barra vertical **N° 5** ($d_b$ = 15.9 mm), $f_y$ = 420 MPa, mampostería con $f'_m$ = 10 MPa, recubrimiento $K$ = 75 mm (valor de entrada del ejemplo: barra al centro de un muro de 150 mm; ver la nota sobre la definición de $K$ en «Erratas y rarezas»). Hallar $\ell_d$, la longitud de empalme, la separación transversal máxima y ver cómo varía con $K$ y $f'_m$.
+
+<Paso titulo="Verificar K" ref="D.4.2.5.2">
+$K \le 5\,d_b$ = 5 (15.9) = **{f(5 * ej1.base.db, 1)} mm**. Como 75 mm es menor, se usa $K$ = **{f(ej1.r.K, 1)} mm** (no hay espaciamiento libre menor que limite).
+</Paso>
+<Paso titulo="Longitud de desarrollo" ref="D.4.2-1">
+
+$$
+\ell_d = \frac{1.5\,(15.9)^2\,(420)}{75\,\sqrt{10}}
+$$
+
+Con $\sqrt{10}$ = {f(ej1.r.raizFm, 3)}: $\ell_d$ = **{f(ej1.r.ld, 0)} mm** ≈ {f(ej1.r.relacionDb, 1)} $d_b$. Es mayor que el mínimo de 300 mm, que no gobierna.
+
+</Paso>
+<Paso titulo="Longitud de empalme y separación" ref="D.4.2.5.3">
+Longitud de traslapo = $\ell_d$ = **{f(ej1.emp, 0)} mm**. Si las barras no se tocan: $s_{\max}$ = mín(ℓ/5; 200) = mín({f(ej1.emp / 5, 0)}; 200) = **{f(ej1.sep.valor, 0)} mm** (gobierna {ej1.sep.gobierna === '200mm' ? 'el tope de 200 mm' : 'ℓ/5'}).
+</Paso>
+<Paso titulo="Sensibilidad" ref="D.4.2-1">
+Con $K$ = 120 mm (se limita a 5 $d_b$ = 79.5 mm) el resultado no cambia: **{f(ej1.rK100.ld, 0)} mm**. Con $K$ = 40 mm sube a **{f(ej1.rK40.ld, 0)} mm**. Con $f'_m$ = 20 MPa baja a **{f(ej1.rFm20.ld, 0)} mm**. Si la barra fuese **lisa**, el valor sería el doble: **{f(ej1.lisa.ld, 0)} mm**.
+</Paso>
+<Resultado>
+$\ell_d$ = **{f(ej1.r.ld, 0)} mm**; traslapo = {f(ej1.emp, 0)} mm; $s_{\max}$ = {f(ej1.sep.valor, 0)} mm; un empalme mecánico debe resistir 1.25 $f_y$ = {f(ej1.mec, 0)} MPa. Compruébalo con la calculadora:
+</Resultado>
+</Ejemplo>
+
+<CalculadoraEmbed id="desarrollo-mamposteria" />
+
+### D.4.2.6 — Desarrollo del refuerzo embebido en concreto
+
+El desarrollo del refuerzo **anclado o embebido en concreto** se rige por los requisitos del **Título C**. Es el caso de las **barras de empalme ancladas en la cimentación** y de las barras de los **elementos de concreto reforzado embebidos en la mampostería** o que trabajan combinados con ella (<NormaRef s="D.4.2.6" pag="D-23" />). En otras palabras: la Ec. D.4.2-1 sirve solo para el tramo de barra embebido en **mortero de relleno**; el tramo embebido en la zapata o en la viga de concreto se desarrolla con el Capítulo C.12.
+
+### D.4.2.7 — Ganchos estándar
+
+<NormaRef s="D.4.2.7" pag="D-23" /> define **gancho estándar** como:
+
+<TablaNorma numero="D.4.2.7" titulo="Ganchos estándar del refuerzo" pag="D-23" nota="Cuadro del autor a partir de los literales (a), (b) y (c) de D.4.2.7; las extensiones se miden en el extremo libre de la barra.">
+
+| Literal | Doblez | Extensión recta en el extremo libre |
+|---|---|---|
+| (a) | 180° | Al menos 4 $d_b$, pero **no menor de 64 mm** |
+| (b) | 90° | Al menos 12 $d_b$ |
+| (c) | 135° | Al menos 6 $d_b$ |
+
+</TablaNorma>
+
+<Figura alt="Tres ganchos estándar de una barra: de 180 grados con extensión de 4 db y mínimo 64 mm, de 90 grados con extensión de 12 db y de 135 grados con extensión de 6 db" numero="Esquema" pie="Ganchos estándar de D.4.2.7. La extensión recta se mide desde el final del doblez hasta el extremo libre de la barra. (esquema del proyecto)">
+<svg viewBox="0 0 520 190" role="img" aria-label="Ganchos estándar de 180, 90 y 135 grados" className="mx-auto h-auto w-full max-w-xl">
+  <path d="M 20 60 H 90 A 20 20 0 0 1 90 100 H 45" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+  <text x="45" y="125" fontSize="12" fill="currentColor">Extensión ≥ 4 db</text>
+  <text x="45" y="141" fontSize="12" fill="currentColor">y ≥ 64 mm</text>
+  <text x="20" y="175" fontSize="13" fontWeight="bold" fill="currentColor">Gancho de 180°</text>
+  <path d="M 200 130 H 262 A 15 15 0 0 0 277 115 V 50" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+  <text x="284" y="86" fontSize="12" fill="currentColor">Extensión</text>
+  <text x="284" y="102" fontSize="12" fill="currentColor">≥ 12 db</text>
+  <text x="200" y="175" fontSize="13" fontWeight="bold" fill="currentColor">Gancho de 90°</text>
+  <path d="M 370 130 H 420 A 15 15 0 0 0 430.6 104.4 L 398.8 72.6" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+  <text x="438" y="90" fontSize="12" fill="currentColor">Extensión</text>
+  <text x="438" y="106" fontSize="12" fill="currentColor">≥ 6 db</text>
+  <text x="370" y="175" fontSize="13" fontWeight="bold" fill="currentColor">Gancho de 135°</text>
+</svg>
+</Figura>
+
+### D.4.2.8 — Diámetros mínimos de doblamiento para barras de refuerzo
+
+El **diámetro mínimo de doblamiento, medido por el lado interior de la barra**, no debe ser menor que los valores de la Tabla D.4.2-1 (<NormaRef s="D.4.2.8" pag="D-23" />).
+
+<TablaNorma numero="Tabla D.4.2-1" titulo="Diámetros de doblamiento para barras de refuerzo" pag="D-23" nota="Verificada contra la imagen de la página. Cada fila de fy tiene su propio intervalo de barras: la de 240 MPa llega hasta N° 7 ó 22M y la de 420 MPa hasta N° 8 ó 25M.">
+
+| Diámetro ($d_b$) | $f_y$ | Diámetro mínimo de doblamiento |
+|---|---|---|
+| N° 3 (3/8") ó 10M (10 mm) a N° 7 (7/8") ó 22M (22 mm) | 240 MPa | 5 $d_b$ |
+| N° 3 (3/8") ó 10M (10 mm) a N° 8 (1") ó 25M (25 mm) | 420 MPa | 6 $d_b$ |
+
+</TablaNorma>
+
+La tabla solo da **dos filas**; para otros valores de $f_y$ no hay regla expresa. El criterio de la calculadora (**autoría del proyecto**) es usar la fila de 240 para $f_y \le$ 240 MPa y la de 420 para valores intermedios (lado conservador, 6 $d_b$); para $f_y$ mayor de 420 MPa o barras fuera de los intervalos, la tabla **no cubre el caso**.
+
+<Ejemplo numero={2} titulo="Ganchos y doblamiento de una barra N° 4">
+Barra **N° 4** ($d_b$ = 12.7 mm), $f_y$ = 420 MPa. Hallar la extensión recta de los tres ganchos estándar y el diámetro mínimo de doblamiento.
+
+<Paso titulo="Extensiones de los ganchos" ref="D.4.2.7">
+- **180°:** 4 $d_b$ = 4 (12.7) = {f(4 * ej2.db, 1)} mm, que es **menor de 64 mm**: gobierna el mínimo, extensión = **{f(ej2.g180.extension, 0)} mm**.
+- **90°:** 12 $d_b$ = **{f(ej2.g90.extension, 1)} mm**.
+- **135°:** 6 $d_b$ = **{f(ej2.g135.extension, 1)} mm**.
+</Paso>
+<Paso titulo="Diámetro mínimo de doblamiento" ref="D.4.2.8, Tabla D.4.2-1">
+Con $f_y$ = 420 MPa corresponde **6 $d_b$** = 6 (12.7) = **{f(ej2.dob420.diametro, 1)} mm**, medido por el lado interior de la barra. Si el acero fuera de 240 MPa bastaría 5 $d_b$ = {f(ej2.dob240.diametro, 1)} mm.
+</Paso>
+<Paso titulo="Caso fuera de tabla" ref="Tabla D.4.2-1">
+Una barra N° 8 de 240 MPa **no figura** en la tabla (la fila de 240 MPa llega solo hasta N° 7): el cálculo devuelve «sin valor» ({ej2.dob8.factorDb === null ? 'fuera de la tabla' : 'dentro de la tabla'}) y el diseñador debe resolverlo por otra vía (por ejemplo, usando acero de 420 MPa o consultando el Título C).
+</Paso>
+<Resultado>
+Gancho de 180°: {f(ej2.g180.extension, 0)} mm; de 90°: {f(ej2.g90.extension, 1)} mm; de 135°: {f(ej2.g135.extension, 1)} mm; diámetro de doblamiento: {f(ej2.dob420.diametro, 1)} mm.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Verificación de la barra, el mortero y los recubrimientos en una celda">
+Muro de **150 mm** de espesor nominal, celda de **80 mm × 120 mm** libres entre rebabas, mortero de relleno **fino**. Verificar una barra N° 5 y, como contraste, una N° 7.
+
+<Paso titulo="Barra N° 5 (15.9 mm)" ref="D.4.2.2.1, D.4.2.3.3">
+Diámetro mínimo (9.5 mm): cumple. Máximo por espesor (muro menor de 200 mm): **{f(ej3.ok.dbMaxMuro, 0)} mm**; máximo por celda (1/3 de 80 mm): **{f(ej3.ok.dbMaxCelda, 1)} mm**; gobierna {f(ej3.ok.dbMax, 1)} mm: **cumple**. Con la barra al centro, el mortero que la rodea mide (80 − 15.9)/2 = **{f(ej3.ok.morteroAlrededor, 1)} mm**, mayor que 6.5 mm: **cumple** (verificación con barra centrada, autoría del proyecto). Como la dimensión menor de la celda es 80 mm (≤ 140 mm), se permite **una sola barra** por celda.
+</Paso>
+<Paso titulo="Barra N° 7 (22.2 mm)" ref="D.4.2.2.1(c)">
+Excede el máximo de {f(ej3.mal.dbMaxMuro, 0)} mm para muros de menos de 200 mm: **no cumple** ({ej3.mal.cumpleMaximoMuro ? 'cumple el límite por espesor' : 'incumple el literal (c)'}). El muro tendría que ser de 200 mm o más para admitir una barra N° 7 o N° 8.
+</Paso>
+<Paso titulo="Recubrimientos mínimos" ref="D.4.2.4">
+En celda, **expuesta** a intemperie: N° 5 → **{ej3.cobExp5} mm** (barra ≤ N° 5); N° 7 → **{ej3.cobExp7} mm** (barra mayor que N° 5). **No expuesta:** {ej3.cobInt} mm. Refuerzo de junta: 12 mm expuesto, 6 mm no expuesto; con mortero de pega de 10 mm su diámetro va entre {ej3.junta.minimo} y {f(ej3.junta.maximo, 0)} mm.
+</Paso>
+<Resultado>
+La N° 5 cumple en esta celda (barra máx. {f(ej3.ok.dbMax, 0)} mm); la N° 7 no cumple (límite por espesor de muro).
+</Resultado>
+</Ejemplo>
+
+## D.4.3 — Actividades preliminares a la construcción
+
+Antes de levantar el primer muro, la norma exige organizar la obra para proteger los materiales y poder demostrar su calidad. Son tres requisitos cualitativos:
+
+- **D.4.3.1 — Almacenamiento de los materiales.** Todos los materiales deben almacenarse **protegidos contra deterioro anormal o contaminación** y usarse **en los tiempos previstos**. Los materiales cuyas propiedades físicas se deterioren por debajo de lo especificado **deben rechazarse** (<NormaRef s="D.4.3.1" pag="D-23" />).
+- **D.4.3.2 — Almacenamiento de las unidades de mampostería.** En la obra debe haber un espacio destinado a las unidades, **preferiblemente cubierto y ventilado, con acceso externo e interno** (<NormaRef s="D.4.3.2" pag="D-23" />).
+- **D.4.3.3 — Lugar para la toma y almacenamiento de muestras.** Debe haber un espacio para **tomar las muestras** de los materiales especificados y otro apropiado para su **curado y almacenamiento** en las condiciones previstas en las normas respectivas (<NormaRef s="D.4.3.3" pag="D-23" />). Estas muestras son las que sustentan las comprobaciones de $f'_m$ y de los morteros de D.3.
+
+<Callout tipo="practica" titulo="Lista de verificación previa a la construcción (autoría del proyecto)">
+Antes de iniciar el pegado de unidades conviene comprobar: (1) bodega cubierta para cemento y para el acero, sin contacto con el suelo; (2) patio de unidades con estibas, protegido de la lluvia y accesible a la grúa o a la mano de obra; (3) espacio para moldes de muestras de mortero de pega, mortero de relleno y muretes, con condiciones de curado; (4) registro de recepción de materiales con rechazo de lotes deteriorados; (5) planos con diámetros, ganchos y longitudes de empalme coherentes con D.4.2 y con la Ec. D.4.2-1. Esta lista **no es texto de la norma**.
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores frecuentes al detallar el refuerzo">
+- **Usar $K$ sin límite.** Un recubrimiento grande no reduce $\ell_d$ indefinidamente: $K$ se limita a $5\,d_b$ y al espaciamiento libre entre empalmes (<NormaRef s="D.4.2.5.2" pag="D-23" />).
+- **Aplicar la Ec. D.4.2-1 al tramo de barra anclado en la cimentación.** Ahí manda el Título C, no D.4 (<NormaRef s="D.4.2.6" pag="D-23" />).
+- **Olvidar que el mínimo de 300 mm existe** y que **para barras lisas se duplica** el valor de la ecuación (<NormaRef s="D.4.2.5.2" pag="D-22" />).
+- **Colocar barras gruesas en muros delgados.** En muros de menos de 200 mm el máximo es N° 6 ó 20M, y siempre 1/3 de la menor dimensión libre de la celda (<NormaRef s="D.4.2.2.1" pag="D-21" />).
+- **Poner dos barras por celda sin cumplir las condiciones.** Solo si la dimensión menor de la celda supera 140 mm y las barras no pasan de N° 5 ó 16M (<NormaRef s="D.4.2.3.1" pag="D-22" />).
+- **Dejar poco mortero alrededor de la barra.** Mínimo 6.5 mm con mortero fino y 13 mm con grueso (<NormaRef s="D.4.2.3.3" pag="D-22" />).
+- **Doblar con un diámetro menor al de la Tabla D.4.2-1** o aplicar la fila de 240 MPa a barras N° 8 (<NormaRef s="D.4.2.8" pag="D-23" />).
+- **Aceptar empalmes soldados o mecánicos sin ensayo de 1.25 $f_y$** o sin cumplir la NTC 4040 (<NormaRef s="D.4.2.5.4" pag="D-23" />).
+</Callout>
+
+<Detalle titulo="Erratas y rarezas del PDF en estas páginas (D-21 a D-23)">
+
+- **El símbolo $\phi$ está en D.4.0 pero no se usa en D.4.** Es nomenclatura heredada de otros capítulos.
+- **$K$ no está definido con precisión:** «recubrimiento del refuerzo medido desde el extremo exterior de la unidad». No dice si se mide hasta el eje o hasta la cara de la barra, ni cómo se obtiene en una celda; por eso la calculadora toma $K$ **como dato de entrada** y no lo deduce de la geometría.
+- **Homogeneidad de la Ec. D.4.2-1:** el coeficiente 1.5 no tiene unidades escritas; la ecuación solo es válida con $d_b$ y $K$ en mm y $f_y$, $f'_m$ en MPa (el resultado sale en mm).
+- **Barras lisas y mínimo de 300 mm:** el texto dice «el doble de la obtenida para barras corrugadas»; el proyecto aplica el doble al valor **ya con el mínimo de 300 mm** (600 mm como mínimo para lisas). Es una interpretación.
+- **Tabla D.4.2-1 incompleta:** solo trae $f_y$ = 240 y 420 MPa, y la fila de 240 llega hasta N° 7 ó 22M, mientras la de 420 llega hasta N° 8 ó 25M. No cubre $f_y$ intermedios ni mayores de 420 MPa.
+- **Diámetros «N° n ó nM»:** las dos designaciones del mismo renglón difieren ligeramente (N° 5 = 15.9 mm, 16M = 16 mm; N° 8 = 25.4 mm, 25M = 25 mm). Las funciones comparan con el mayor de los dos para aceptar ambas designaciones.
+- **La Tabla D.4.2-2** (tolerancias constructivas) lleva numeración de D.4.2 pero **está impresa en D.4.5.10 (D-26)** y se transcribe en el capítulo D.4b.
+- **D.4.2.4** se anuncia para unidades de perforación vertical y de cavidad reforzada, pero los literales hablan solo de «barras colocadas en celdas».
+- **Símbolo $\ell_d$ en el texto extraído:** el texto del PDF lo entrega como «Ad» (una A en lugar de ℓ); la imagen de la página muestra $\ell_d$. La Ec. D.4.2-1, la Tabla D.4.2-1 y la Tabla D.4.2-2 se transcribieron verificándolas contra la imagen de las páginas D-22, D-23 y D-26.
+
+</Detalle>
+
+## Resumen en una línea
+
+El refuerzo de la mampostería debe estar **embebido en mortero** con diámetro, recubrimiento y separación adecuados y con $\ell_d = 1.5\,d_b^2 f_y/(K\sqrt{f'_m}) \ge$ 300 mm (el traslapo vale $\ell_d$), ganchos estándar de 4 $d_b$ (≥ 64 mm) a 180°, 12 $d_b$ a 90° y 6 $d_b$ a 135°, y doblamientos de 5 $d_b$ (240 MPa) o 6 $d_b$ (420 MPa); antes de construir hay que proteger los materiales y reservar sitio para las muestras.

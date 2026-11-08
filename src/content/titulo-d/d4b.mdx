@@ -1,0 +1,585 @@
+---
+codigo: 'D.4b'
+tipo: capitulo
+titulo: 'Requisitos constructivos: obra'
+resumen: 'Cómo se construye un muro de mampostería estructural: cimentaciones y barras de empalme, unidades, mortero de pega, tuberías, aparejo, juntas de control, tolerancias (Tabla D.4.2-2), colocación del refuerzo, mortero de relleno e inyección (Tabla D.4.6-1), losas de entrepiso, apuntalamiento, juntas de construcción y curado.'
+objetivos:
+  - 'Controlar la posición de las barras de empalme en la cimentación (tolerancia de 1/4 de celda, corrección 1H:6V) y corregir errores de nivel del cimiento'
+  - 'Aplicar los requisitos de unidades, mortero de pega, tuberías embebidas, aparejo y juntas de control de D.4.5'
+  - 'Verificar las tolerancias constructivas de la Tabla D.4.2-2 y las de colocación del refuerzo vertical y horizontal'
+  - 'Determinar la altura máxima de inyección con la Tabla D.4.6-1 y planear las etapas de inyección, la compactación y las juntas de vaciado'
+  - 'Resumir los requisitos para losas de entrepiso, apuntalamiento, juntas de construcción y curado, y usar una lista de verificación de obra'
+paginasNorma: 'D-24 a D-30'
+paginaPdf: 589
+orden: 5
+calculadoras: []
+nivel: intermedio
+---
+
+import {
+  alturaMaximaInyeccion,
+  dimensionesMinimasParaAltura,
+  etapasInyeccion,
+  nivelMaximoVaciado,
+  toleranciaMaxima,
+} from '../../lib/nsr10/desarrolloMamposteria';
+
+export const f = (x, d = 1) => x.toFixed(d);
+
+export const secuencia = (H, hMax) => {
+  const etapas = [];
+  let base = 0;
+  while (base < H - 1e-9 && etapas.length < 20) {
+    const top = Math.min(nivelMaximoVaciado(base + hMax), H);
+    if (top <= base + 1e-9) break;
+    etapas.push({ desde: base, hasta: top });
+    base = top;
+  }
+  return etapas;
+};
+
+export const ej1 = (() => {
+  const a = 55;
+  const b = 80;
+  const H = 2.6;
+  const hf = alturaMaximaInyeccion(a, b, 'fino');
+  const hg = alturaMaximaInyeccion(a, b, 'grueso');
+  const sf = secuencia(H, hf);
+  const sg = secuencia(H, hg);
+  return {
+    a,
+    b,
+    H,
+    hf,
+    hg,
+    sf,
+    sg,
+    nf: etapasInyeccion(H, hf),
+    ng: etapasInyeccion(H, hg),
+    exigencia: dimensionesMinimasParaAltura(H, 'fino'),
+    esc: 95,
+    y0: 300,
+  };
+})();
+
+export const ej2 = (() => {
+  const L = 5;
+  const h = 2.6;
+  const pisos = 3;
+  const error = 18;
+  return {
+    L,
+    h,
+    pisos,
+    nivelJunta: toleranciaMaxima(4, L),
+    apoyo: toleranciaMaxima(5, L),
+    plomo: toleranciaMaxima(6, h),
+    alineamiento: toleranciaMaxima(7, L),
+    planta: toleranciaMaxima(8, L),
+    elevacion3: toleranciaMaxima(9, pisos),
+    elevacion4: toleranciaMaxima(9, 4),
+    error,
+    juntas: Math.ceil(error / 4),
+    porJunta: error / Math.ceil(error / 4),
+  };
+})();
+
+export const aparejo = (() => {
+  const cel = (x0, w) => (w === 60 ? [x0 + 6, x0 + 36] : [x0 + 6]);
+  const trabado = [0, 1, 2, 3].map((i) =>
+    (i % 2 === 0
+      ? [{ x: 0, w: 60 }, { x: 60, w: 60 }, { x: 120, w: 60 }]
+      : [{ x: 0, w: 30 }, { x: 30, w: 60 }, { x: 90, w: 60 }, { x: 150, w: 30 }]
+    ).map((s) => ({ ...s, celdas: cel(s.x, s.w) })),
+  );
+  const petaca = [0, 1, 2, 3].map(() => [{ x: 0, w: 60 }, { x: 60, w: 60 }, { x: 120, w: 60 }].map((s) => ({ ...s, celdas: cel(s.x, s.w) })));
+  return { trabado, petaca };
+})();
+
+## Idea central del capítulo
+
+La segunda mitad del Capítulo D.4 recorre **la obra en el orden en que se construye**: primero la **cimentación** y las barras de empalme que dejan el refuerzo vertical listo; luego los **muros** (unidades, mortero de pega, tuberías, aparejo, juntas de control, tolerancias y colocación del refuerzo); después la **inyección del mortero de relleno**; y finalmente **losas, apuntalamiento, juntas entre edificaciones y curado**. El primer capítulo (D.4a) trató el detalle del refuerzo y las actividades preliminares.
+
+La mampostería reforzada es muy sensible a la **calidad de ejecución**: una celda mal limpia, una barra fuera de posición o una inyección demasiado alta pueden anular lo que el cálculo supone. Por eso la norma convierte la buena práctica en **requisitos medibles**: tolerancias en milímetros, alturas máximas de inyección, tiempos de mezclado y de curado.
+
+<Callout tipo="importante" titulo="Alcance de estos requisitos">
+Los requisitos de D.4.5 son **fundamentalmente para muros de unidades de perforación vertical**. Para **mampostería de cavidad reforzada** hay requisitos adicionales en D.6.5 y para **muros confinados** en D.10.8 (<NormaRef s="D.4.5.1" pag="D-24" />). Todo lo que no se advierta como propio de un sistema es obligatorio para todos (<NormaRef s="D.4.1.1" pag="D-21" />).
+</Callout>
+
+<Callout tipo="nota" titulo="Convención de este capítulo (autoría del proyecto)">
+Los esquemas son diagramas propios (**«esquema del proyecto»**: el PDF del Título D no trae figuras). Lo marcado «autoría del proyecto» —lista de verificación de obra, número de etapas de inyección, niveles de vaciado— **no es texto de la norma**. Las funciones de los ejemplos están en `src/lib/nsr10/desarrolloMamposteria.ts`; las tablas, en `src/data/refuerzoMamposteria.ts`. La calculadora de altura de inyección está en [D.4a](/titulo-d/d4a) (calculadora «Desarrollo, empalmes y doblamiento del refuerzo»).
+</Callout>
+
+## D.4.4 — Requisitos constructivos para cimentaciones
+
+### D.4.4.1 — General
+
+Las características de la cimentación dependen del **suelo de cimentación** y del **proyecto**; su diseño y construcción se ajustan al **Título C** y al **Título H** (<NormaRef s="D.4.4.1" pag="D-24" />).
+
+### D.4.4.2 — Anclaje en la cimentación del refuerzo de los muros
+
+**Todos los refuerzos verticales** de los muros estructurales deben quedar anclados, según el Título C, en el sistema de cimentación, mediante **barras de empalme** que sobresalgan la longitud necesaria para el traslapo y estén **fijadas a la armadura del cimiento**, de modo que los desplazamientos durante la compactación y el vaciado del concreto de cimentación queden dentro de las tolerancias de D.4.4.3 (<NormaRef s="D.4.4.2" pag="D-24" />). La longitud de traslapo con el refuerzo del muro es $\ell_d$ (<NormaRef s="D.4.2.5.3" pag="D-23" />).
+
+### D.4.4.3 — Tolerancia de localización del refuerzo de empalme con el muro
+
+La tolerancia de colocación, **longitudinal y transversal**, de la barra de empalme es como máximo **una cuarta parte de la dimensión de la celda en cada sentido**. Si se excede, la posición se puede corregir con una **inclinación suave 1H:6V**. **Se prohíbe** la corrección brusca de la barra y el **corte de tabiques** de las unidades de mampostería (<NormaRef s="D.4.4.3" pag="D-24" />).
+
+<Figura alt="Dos barras de empalme que salen de la cimentación y deben quedar alineadas con una celda: a la izquierda, corrección suave con inclinación 1H:6V; a la derecha, doblez brusco, prohibido" numero="Esquema" pie="Corrección de la posición de una barra de empalme (D.4.4.3): inclinación suave 1H:6V (permitida) frente a un doblez brusco (prohibido). También se prohíbe cortar los tabiques de la unidad para acomodar la barra. (esquema del proyecto)">
+<svg viewBox="0 0 520 280" role="img" aria-label="Corrección suave 1H:6V de una barra de empalme frente a un doblez brusco prohibido" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="20" y="220" width="220" height="40" fill="currentColor" fillOpacity="0.3" stroke="currentColor" strokeWidth="2" />
+  <rect x="280" y="220" width="220" height="40" fill="currentColor" fillOpacity="0.3" stroke="currentColor" strokeWidth="2" />
+  <text x="130" y="245" textAnchor="middle" fontSize="12" fill="currentColor">Cimentación</text>
+  <text x="390" y="245" textAnchor="middle" fontSize="12" fill="currentColor">Cimentación</text>
+  <path d="M 110 220 V 190 L 140 70 V 20" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+  <line x1="140" y1="190" x2="140" y2="70" stroke="currentColor" strokeDasharray="4 3" strokeOpacity="0.6" />
+  <line x1="110" y1="190" x2="140" y2="190" stroke="currentColor" strokeDasharray="4 3" strokeOpacity="0.6" />
+  <text x="150" y="150" fontSize="12" fill="currentColor">1H : 6V</text>
+  <text x="130" y="272" textAnchor="middle" fontSize="13" fontWeight="bold" fill="currentColor">Permitido: inclinación suave</text>
+  <path d="M 370 220 V 160 L 410 150 L 410 20" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" strokeOpacity="0.6" />
+  <line x1="355" y1="60" x2="425" y2="130" stroke="currentColor" strokeWidth="3" />
+  <line x1="425" y1="60" x2="355" y2="130" stroke="currentColor" strokeWidth="3" />
+  <text x="390" y="272" textAnchor="middle" fontSize="13" fontWeight="bold" fill="currentColor">Prohibido: doblez brusco</text>
+</svg>
+</Figura>
+
+### D.4.4.4 — Vaciado de los elementos de cimentación
+
+El vaciado de los elementos estructurales de la cimentación se hace con la **aprobación previa del supervisor técnico**. Las **juntas de vaciado deben ser verticales** y estar en el **tercio central entre los vanos libres de muros** (<NormaRef s="D.4.4.4" pag="D-24" />).
+
+### D.4.4.5 — Alineamiento horizontal
+
+Los entramados y losas de cimentación se **alinean y nivelan por la cara superior**, buscando **alturas modulares de los muros** (<NormaRef s="D.4.4.5" pag="D-24" />): la altura del muro debe coincidir con un número entero de hiladas.
+
+### D.4.4.6 — Corrección del alineamiento del cimiento
+
+Terminado el vaciado se verifican los alineamientos y las posiciones finales de las barras de empalme. Las diferencias verticales se corrigen así (<NormaRef s="D.4.4.6" pag="D-24" />):
+
+<TablaNorma numero="D.4.4.6" titulo="Corrección de errores en el nivel superior de la cimentación" pag="D-24" nota="Cuadro del autor a partir de los literales (a) y (b). La norma no dice qué hacer con un error exactamente igual a 25 mm.">
+
+| Error en el nivel superior | Corrección |
+|---|---|
+| (a) Menor de 25 mm | Repartirlo en las **juntas de pega del primer tramo**, respetando las tolerancias de la Tabla D.4.2-2 |
+| (b) Mayor de 25 mm | **Realce en concreto reforzado** que garantice funcionamiento monolítico con el cimiento |
+
+</TablaNorma>
+
+## D.4.5 — Requisitos constructivos para muros de mampostería
+
+### D.4.5.1 — General
+
+Los requisitos de esta sección son fundamentalmente para muros de **unidades de perforación vertical**. Otros sistemas tienen requisitos adicionales: **cavidad reforzada** en D.6.5 y **muros confinados** en D.10.8 (<NormaRef s="D.4.5.1" pag="D-24" />).
+
+### D.4.5.2 — Unidades de mampostería
+
+Estos requisitos se suman a los de D.3.6 (<NormaRef s="D.4.5.2" pag="D-24" />).
+
+#### D.4.5.2.1 — Estado de las unidades previo a su colocación
+
+Las unidades deben estar **limpias y libres de imperfecciones** que afecten las propiedades mecánicas o físicas del muro. Para las de **arcilla cocida** se mide la **tasa inicial de absorción** (TIA, norma NTC 4017 / ASTM C67) y se actúa así (<NormaRef s="D.4.5.2.1" pag="D-24" />):
+
+<TablaNorma numero="D.4.5.2.1" titulo="Humedecimiento de unidades según su tasa inicial de absorción" pag="D-24" nota="Cuadro del autor a partir de D.4.5.2.1. Unidades en gramos por minuto por cm². El PDF no dice qué hacer con una TIA exactamente igual a 0.15 ni a 0.25; se leen como «exceda» y «mayores de».">
+
+| Unidad | TIA | Tratamiento |
+|---|---|---|
+| Arcilla cocida | Hasta 0.15 g/min/cm² | Sin humedecer |
+| Arcilla cocida | Más de 0.15 g/min/cm² | Humedecer convenientemente antes de colocar |
+| Arcilla cocida | Más de 0.25 g/min/cm² | Humedecer durante **24 horas** previas a la colocación |
+| Concreto | — | **Siempre secas** |
+
+</TablaNorma>
+
+En todos los casos las unidades se colocan **sin exceso de agua en la superficie**, que se retira frotando con un paño seco.
+
+#### D.4.5.2.2 — Unidades especiales
+
+La configuración del muro y de los refuerzos, las **juntas de control**, los **remates, dinteles y antepechos** requieren **unidades especiales** que deben estar **disponibles al momento de la colocación** (<NormaRef s="D.4.5.2.2" pag="D-24" />).
+
+### D.4.5.3 y D.4.5.4 — Mortero de pega y mortero de inyección
+
+El **mortero de pega** debe cumplir D.3.4 (<NormaRef s="D.4.5.3" pag="D-25" />) y el **mortero de inyección**, D.3.5 (<NormaRef s="D.4.5.4" pag="D-25" />).
+
+### D.4.5.5 — Acero de refuerzo
+
+Debe cumplir C.3.5 y, además (<NormaRef s="D.4.5.5" pag="D-25" />):
+
+- **D.4.5.5.1 — Superficie:** limpia de grasas, arcillas y sustancias perjudiciales; **sin corrosión**, aunque a juicio del supervisor técnico se puede permitir **oxidación superficial** (<NormaRef s="D.4.5.5.1" pag="D-25" />).
+- **D.4.5.5.2 — Dimensiones:** el refuerzo cumple las **dimensiones, figuración y ubicación** de los planos (<NormaRef s="D.4.5.5.2" pag="D-25" />).
+- **D.4.5.5.3 — Doblado de refuerzo parcialmente embebido:** **no se permite doblar** acero ya parcialmente embebido en mortero o concreto, **salvo** los **conectores flexibles** y las **barras de empalme** cuando se cumple D.4.4.3 (<NormaRef s="D.4.5.5.3" pag="D-25" />).
+
+### D.4.5.6 — Tuberías embebidas
+
+Se pueden embeber tuberías en muros **solo en celdas no inyectadas** y de **diámetro inferior a la menor dimensión de la celda** (<NormaRef s="D.4.5.6" pag="D-25" />).
+
+- **D.4.5.6.1 — Regatas:** **se prohíbe** colocar tuberías en muros de unidades de perforación vertical **mediante regatas** (<NormaRef s="D.4.5.6.1" pag="D-25" />).
+- **D.4.5.6.2 — Salidas a la superficie del muro:** las salidas de instalaciones interiores con tuberías embebidas se ubican en **unidades especialmente diseñadas** para ello (<NormaRef s="D.4.5.6.2" pag="D-25" />).
+- **D.4.5.6.3 — Tuberías en celdas inyectadas:** se permiten solo si se cumplen **todos** estos literales (<NormaRef s="D.4.5.6.3" pag="D-25" />):
+
+<TablaNorma numero="D.4.5.6.3" titulo="Condiciones para tuberías embebidas en celdas inyectadas" pag="D-25" nota="Cuadro del autor a partir de los literales (a) a (f) y del párrafo final de D.4.5.6.3.">
+
+| Literal | Condición |
+|---|---|
+| (a) | El líquido que conducen está a **menos de 65 °C** |
+| (b) | Presión **inferior a 0.4 MPa** |
+| (c) | El líquido **no puede congelarse** a la temperatura de servicio |
+| (d) | El diámetro individual o del paquete de tuberías es **inferior a la tercera parte del espesor del muro** |
+| (e) | El material de la tubería **no reacciona nocivamente** con el mortero de relleno |
+| (f) | **En la celda no hay barra** |
+| Además | **Ninguna** tubería ocupa más del **5 %** del área transversal del muro; están separadas **más de 5 diámetros** centro a centro y **no van en celdas adyacentes** |
+
+</TablaNorma>
+
+### D.4.5.7 y D.4.5.8 — Aparejo
+
+- **D.4.5.7 — Aparejo de petaca:** **se prohíbe** en muros estructurales; solo se admite en **machones y columnas aisladas** (<NormaRef s="D.4.5.7" pag="D-25" />). En la petaca las juntas verticales quedan alineadas entre hiladas.
+- **D.4.5.8 — Aparejo trabado:** el patrón debe permitir **continuidad en las celdas verticales** que se inyectan con mortero de relleno (<NormaRef s="D.4.5.8" pag="D-25" />).
+
+<Figura alt="Dos paneles con cuatro hiladas de bloques: aparejo trabado con juntas verticales desfasadas medio bloque y celdas verticales continuas resaltadas, y aparejo de petaca con las juntas verticales alineadas" numero="Esquema" pie="Aparejo trabado (celdas verticales continuas, permitido en muros) frente a aparejo de petaca (juntas verticales alineadas, solo para machones y columnas aisladas). D.4.5.7 y D.4.5.8. (esquema del proyecto)">
+<svg viewBox="0 0 520 250" role="img" aria-label="Comparación de aparejo trabado y aparejo de petaca" className="mx-auto h-auto w-full max-w-xl">
+  <g transform="translate(20,30)">
+    {aparejo.trabado.map((hilada, i) => (
+      <g key={i} transform={`translate(0,${i * 36})`}>
+        {hilada.map((s, j) => (
+          <g key={j}>
+            <rect x={s.x} y="0" width={s.w} height="32" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.5" />
+            {s.celdas.map((c, k) => (
+              <rect key={k} x={c} y="6" width="18" height="20" fill="currentColor" fillOpacity={Math.abs(c + 9 - 75) < 1 ? 0.7 : 0.08} stroke="currentColor" strokeWidth="0.75" />
+            ))}
+          </g>
+        ))}
+      </g>
+    ))}
+    <text x="90" y="170" textAnchor="middle" fontSize="13" fontWeight="bold" fill="currentColor">Trabado (permitido)</text>
+    <text x="90" y="188" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">celdas centrales continuas</text>
+  </g>
+  <g transform="translate(300,30)">
+    {aparejo.petaca.map((hilada, i) => (
+      <g key={i} transform={`translate(0,${i * 36})`}>
+        {hilada.map((s, j) => (
+          <g key={j}>
+            <rect x={s.x} y="0" width={s.w} height="32" fill="currentColor" fillOpacity="0.2" stroke="currentColor" strokeWidth="1.5" />
+            {s.celdas.map((c, k) => (
+              <rect key={k} x={c} y="6" width="18" height="20" fill="currentColor" fillOpacity="0.08" stroke="currentColor" strokeWidth="0.75" />
+            ))}
+          </g>
+        ))}
+      </g>
+    ))}
+    <line x1="60" y1="-6" x2="60" y2="150" stroke="currentColor" strokeWidth="2.5" strokeDasharray="5 3" />
+    <text x="90" y="170" textAnchor="middle" fontSize="13" fontWeight="bold" fill="currentColor">Petaca (no en muros)</text>
+    <text x="90" y="188" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">juntas verticales alineadas</text>
+  </g>
+</svg>
+</Figura>
+
+### D.4.5.9 — Juntas de control
+
+Deben proveerse juntas de control para permitir los movimientos relativos previstos (<NormaRef s="D.4.5.9" pag="D-25" />):
+
+| Literal | Dónde se colocan |
+|---|---|
+| (a) | Donde la **altura del muro cambia** de manera apreciable |
+| (b) | En **cambios de espesor** en la longitud del muro |
+| (c) | Cuando el diseño así lo prevea |
+| (d) | En empates con elementos estructurales de **función diferente** no integrados a la del muro |
+| (e) | Donde haya **juntas de control en la fundación, en las losas o en las cubiertas** |
+| (f) | En **antepechos de ventanas**, cuando así se haya previsto |
+
+- **D.4.5.9.1 — Distancia entre juntas:** máximo **8 m**, ampliable si hay **evidencia técnica** que lo permita (<NormaRef s="D.4.5.9.1" pag="D-25" />).
+- **D.4.5.9.2 — Configuración:** se hace con las **unidades apropiadas**; sin unidades especiales, la junta se **diseña y detalla en los planos**. En todos los casos se garantiza que **no haya movimiento diferencial transversal** entre los muros separados por la junta (<NormaRef s="D.4.5.9.2" pag="D-26" />).
+
+### D.4.5.10 — Construcción del muro
+
+El muro se levanta siguiendo el **patrón de colocación** de las unidades, con la metodología apropiada al rendimiento de la mano de obra y **sin perjuicio** de lo que exige el Reglamento ni de la **adherencia** del mortero con las unidades. Las tolerancias de alineamiento están en la **Tabla D.4.2-2** (<NormaRef s="D.4.5.10" pag="D-26" />).
+
+<TablaNorma numero="Tabla D.4.2-2" titulo="Tolerancias constructivas para muros de mampostería" pag="D-26" nota="Verificada contra la imagen de la página (el texto extraído desordena las filas). La tabla lleva numeración de D.4.2 pero está impresa en D.4.5.10. Las filas 4 a 8 dan una pendiente de 2 mm por metro (1/500) y un máximo absoluto; la fila 9 es por piso.">
+
+| N° | Elemento | Tolerancia | Máximo |
+|---|---|---|---|
+| 1 | Dimensiones de elementos (sección o elevación) | −6 mm, +12.5 mm | — |
+| 2 | Junta de mortero (10 mm) | −4 mm, +4 mm | — |
+| 3 | Cavidad o celda de inyección | −6 mm, +9 mm | — |
+| 4 | Variación del nivel de junta horizontal | ± 2 mm/metro (1/500) | ± 12.5 mm |
+| 5 | Variación de la superficie de apoyo (cara superior del muro) | ± 2 mm/metro (1/500) | ± 12 mm |
+| 6 | Variación del plomo del muro | ± 2 mm/metro (1/500) | ± 12 mm |
+| 7 | Variación del alineamiento longitudinal | ± 2 mm/metro (1/500) | ± 12 mm |
+| 8 | Tolerancia de elementos en planta | ± 2 mm/metro (1/500) | ± 20 mm |
+| 9 | Tolerancia de elementos en elevación | ± 6 mm/piso | ± 20 mm |
+
+</TablaNorma>
+
+#### D.4.5.10.1 — Mortero de pega
+
+Debe colocarse mortero de pega **en todas las juntas** entre piezas, con estos requisitos especiales (<NormaRef s="D.4.5.10.1" pag="D-26" />):
+
+- **(a)** En las **juntas horizontales** de unidades de perforación vertical: sobre las **paredes laterales y sobre los tabiques transversales**.
+- **(b)** Alternativamente, **solo sobre las paredes laterales**, siempre que la comprobación de $f'_m$ de D.3.8 se haga sobre **muretes con mortero únicamente en las paredes laterales** y esto se **indique claramente en los planos**.
+- **(c)** En las **juntas verticales** de unidades de perforación vertical: en las paredes laterales de la unidad.
+- **(d)** Con **piezas macizas o bloques de perforación horizontal**: mortero en **todo el ancho del muro**, juntas verticales y horizontales.
+- **(e)** El **avance del mortero** debe ser tal que, al colocar las unidades, **no se haya reducido la plasticidad** del mortero.
+- **(f)** El **espesor máximo de las juntas** es de **10 mm**, con las tolerancias de la Tabla D.4.2-2 (fila 2: ±4 mm).
+
+#### D.4.5.10.2 — Ventanas de inspección y limpieza
+
+Deben dejarse **en la base de los muros**, en **cada celda que se vaya a inyectar**, y a no más de **1.0 m** entre sí en mampostería de cavidad (<NormaRef s="D.4.5.10.2" pag="D-26" />):
+
+- **(a)** Dimensiones **no menores de 75 mm × 75 mm ni mayores de 100 mm × 100 mm**.
+- **(b)** En **inyecciones parciales en altura** no se requiere ventana si la porción de muro por inyectar **no supera 1.4 m**.
+- **(c)** Se **retiran las rebabas** internas y externas de la junta de pega.
+
+### D.4.5.11 — Colocación del refuerzo horizontal
+
+En muros de unidades de perforación vertical el refuerzo horizontal se coloca de **dos maneras**, según su función (<NormaRef s="D.4.5.11" pag="D-27" />).
+
+#### D.4.5.11.1 — Refuerzo horizontal de junta
+
+Sirve sobre todo para **controlar la fisuración** por cambios de temperatura y retracción de fraguado; va **dentro de las juntas horizontales de pega** (<NormaRef s="D.4.5.11.1" pag="D-27" />):
+
+- **(a)** Puede tenerse en cuenta para la **resistencia al cortante** aportada por el refuerzo.
+- **(b)** Su área cuenta para las **cuantías mínimas de refuerzo horizontal** del muro.
+- **(c)** **No atraviesa las juntas de control**: se ancla con un **gancho estándar doblado sobre el refuerzo vertical** en cada extremo del muro y antes de la junta de control.
+
+#### D.4.5.11.2 — Elementos embebidos para colocación del refuerzo horizontal
+
+El refuerzo horizontal que resiste **cortante**, y el que no puede ir como refuerzo de junta, se aloja en **unidades especiales** (<NormaRef s="D.4.5.11.2" pag="D-27" />):
+
+- **(a)** Exteriormente tienen la **misma apariencia** que las unidades del resto del muro.
+- **(b)** Tienen **tabiques transversales de menor altura** para permitir colocar el refuerzo.
+- **(c)** La cavidad horizontal se **inyecta con mortero de relleno** hasta la parte superior de la unidad.
+- **(d)** Antes de asentarlas se **impide** (con angeo, malla metálica u otro medio) que el mortero caiga en las **celdas verticales que no se inyectan**, sin afectar el paso del mortero a las que sí se inyectan.
+- **(e)** El refuerzo cumple los **mismos diámetros máximos y mínimos** del refuerzo vertical en celdas (D.4.2.2.1).
+- **(f)** Termina en sus extremos en un **gancho estándar** (extensión hacia arriba, abajo u horizontal, sin obstruir la inyección); si termina en vigas o columnas, queda **totalmente anclado** allí.
+
+### D.4.5.12 — Colocación del refuerzo vertical
+
+Además de lo dispuesto en D.4.2 (<NormaRef s="D.4.5.12" pag="D-27" />):
+
+- **D.4.5.12.1 — Tolerancias:** (a) transversal: **1/4 de la dimensión transversal** de la celda; (b) longitudinal: **1/4 de la dimensión longitudinal** de la celda (<NormaRef s="D.4.5.12.1" pag="D-27" />).
+- **D.4.5.12.2 — Localización en la celda:** preferiblemente en el **centro** de la celda (<NormaRef s="D.4.5.12.2" pag="D-27" />).
+- **D.4.5.12.3 — Empalmes:** en la zona de empalme las barras traslapadas pueden estar **en contacto mediante posicionadores** o **separadas no menos de 25 mm**. Se puede empalmar entre **celdas adyacentes** siempre que **ambas estén completamente inyectadas** (<NormaRef s="D.4.5.12.3" pag="D-27" />). Si no están en contacto, la separación transversal máxima de D.4.2.5.3 (menor entre ℓ/5 y 200 mm) debe respetarse también.
+- **D.4.5.12.4 — Sujeción:** antes de inyectar, el refuerzo se **asegura contra desplazamientos** con posicionadores de alambre o dispositivos similares (<NormaRef s="D.4.5.12.4" pag="D-27" />).
+- **D.4.5.12.5 — Cambios:** el cambio de **posición o dimensión** del refuerzo solo lo autoriza **el responsable del diseño estructural o su delegado** (<NormaRef s="D.4.5.12.5" pag="D-27" />).
+
+<Ejemplo numero={1} titulo="Tolerancias de un muro y corrección del nivel de la cimentación">
+Muro de **5 m** de longitud y **2.6 m** de altura de piso, en una edificación de **3 pisos**. La cimentación quedó **18 mm por debajo** del nivel proyectado.
+
+<Paso titulo="Tolerancias del muro" ref="Tabla D.4.2-2">
+Cada pendiente de 2 mm/m se limita por el máximo de su fila:
+
+- Nivel de junta horizontal (fila 4): 2 × 5 = 10 mm, máximo 12.5 → **± {f(ej2.nivelJunta, 1)} mm**.
+- Superficie de apoyo (fila 5): 2 × 5 = 10 mm, máximo 12 → **± {f(ej2.apoyo, 1)} mm**.
+- Plomo del muro, en la altura de un piso (fila 6): 2 × 2.6 = 5.2 mm → **± {f(ej2.plomo, 1)} mm**.
+- Alineamiento longitudinal (fila 7): 2 × 5 = 10 mm → **± {f(ej2.alineamiento, 1)} mm**.
+- Elementos en elevación (fila 9): 6 mm × 3 pisos = {f(6 * ej2.pisos, 0)} mm → **± {f(ej2.elevacion3, 0)} mm**; con 4 pisos serían 24 mm y gobierna el máximo de **± {f(ej2.elevacion4, 0)} mm**.
+</Paso>
+<Paso titulo="Corrección del nivel del cimiento" ref="D.4.4.6">
+El error de 18 mm es **menor de 25 mm**: se corrige **repartiéndolo en las juntas de pega del primer tramo**, sin salirse de la tolerancia de la junta (10 mm ± 4 mm, fila 2). Si cada junta absorbe como máximo 4 mm de más, se necesitan al menos **{ej2.juntas} juntas** (18/4 = 4.5); cada una engruesa ≈ **{f(ej2.porJunta, 1)} mm** (juntas de 13.6 mm, por debajo del límite de 14 mm; criterio de autoría del proyecto). Si el error fuera de 30 mm (mayor de 25 mm), habría que construir un **realce de concreto reforzado** monolítico con el cimiento.
+</Paso>
+<Resultado>
+Las tolerancias máximas son ±{f(ej2.nivelJunta, 1)} mm (nivel de junta), ±{f(ej2.plomo, 1)} mm (plomo de un piso) y ±{f(ej2.elevacion3, 0)} mm (3 pisos); el error de 18 mm se reparte en {ej2.juntas} juntas.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Tubería embebida en un muro de 150 mm">
+Se quiere pasar una tubería de **25 mm** de diámetro (agua fría a 25 °C y 0.30 MPa, material que no reacciona con el mortero) por un muro de **150 mm**, y se duda entre una **celda sin inyectar** y una **inyectada sin barra**. Evaluar también una tubería de **55 mm**.
+
+<Paso titulo="Celda no inyectada" ref="D.4.5.6">
+Se permite si el diámetro es **inferior a la menor dimensión de la celda**. Con una celda de unos 80 mm libres, una tubería de 25 mm **cabe**; la de 55 mm también cabría, pero ocupa casi toda la celda y conviene verificar el área total (5 %).
+</Paso>
+<Paso titulo="Celda inyectada, tubería de 25 mm" ref="D.4.5.6.3">
+(a) 25 °C < 65 °C ✓; (b) 0.30 MPa < 0.4 MPa ✓; (c) el agua a 25 °C de servicio no se congela ✓; (d) diámetro 25 mm < 150/3 = **{f(150 / 3, 0)} mm** ✓; (e) material compatible ✓; (f) **la celda no debe tener barra** (verificar en planos). Área transversal: 5 % de 150 mm × 1000 mm = **{f(0.05 * 150 * 1000, 0)} mm²** por metro de muro; una tubería de 25 mm ocupa π(25)²/4 = {f((Math.PI * 25 * 25) / 4, 0)} mm². Separación centro a centro **mayor de 5 × 25 = {f(5 * 25, 0)} mm** y no en celdas adyacentes.
+</Paso>
+<Paso titulo="Celda inyectada, tubería de 55 mm" ref="D.4.5.6.3(d)">
+55 mm **no es inferior** a 150/3 = 50 mm: **no se permite** en celda inyectada. Debe ir en una celda **no inyectada** o replantearse el trazado (por ejemplo, un ducto o una cámara fuera del muro). Las **regatas** están prohibidas en cualquier caso (D.4.5.6.1).
+</Paso>
+<Resultado>
+La tubería de 25 mm es admisible en celda inyectada sin barra si se cumplen todos los literales; la de 55 mm no, porque supera 1/3 del espesor del muro (50 mm).
+</Resultado>
+</Ejemplo>
+
+## D.4.6 — Requisitos constructivos para el mortero de relleno
+
+### D.4.6.1 y D.4.6.2 — Preparación y fluidez
+
+- **D.4.6.1 — Preparación:** el mortero de relleno hecho en obra se **mezcla entre 3 y 10 minutos en equipo mecánico**, con el agua necesaria para la trabajabilidad deseada (<NormaRef s="D.4.6.1" pag="D-28" />).
+- **D.4.6.2 — Fluidez:** al colocarlo debe tener la **fluidez requerida sin que haya iniciado el endurecimiento por hidratación** del cemento, para que fluya **sin segregación** por los espacios a inyectar (<NormaRef s="D.4.6.2" pag="D-28" />).
+
+### D.4.6.3 — Inyección del mortero
+
+Se coloca directamente **con bomba o manualmente con embudo**, cuidando que todo el espacio quede **homogéneo y compacto**, con **vinculación íntima** entre el mortero de relleno y las unidades (<NormaRef s="D.4.6.3" pag="D-28" />).
+
+#### D.4.6.3.1 — Altura de inyección
+
+La **altura máxima de inyección** se determina teniendo en cuenta (<NormaRef s="D.4.6.3.1" pag="D-28" />):
+
+- **(a)** la **distancia entre traslapos** del refuerzo vertical;
+- **(b)** la **condición resistente de las unidades** a la presión hidrostática del mortero de relleno;
+- **(c)** la **altura de inyección en un día**, con intervalos máximos de **una hora**;
+- **(d)** el **tamaño del espacio a inyectar** según la altura de inyección (**Tabla D.4.6-1**).
+
+<TablaNorma numero="Tabla D.4.6-1" titulo="Altura máxima de inyección según el tamaño del espacio de inyección" pag="D-28" nota="Verificada contra la imagen de la página. (1) Espacio libre entre rebabas internas. (2) Se refiere al espacio entre muros en la mampostería de cavidad reforzada. (3) El área del refuerzo no ocupará más del 6 % del área de la cavidad. «—»: esa combinación de altura y mortero no existe en la tabla.">
+
+| Altura, mortero fino | Altura, mortero grueso | Dimensiones mínimas de celda requerida (1) (mm) | Dimensión mínima de cavidad (2) (3) (mm) |
+|---|---|---|---|
+| 0.4 m | — | 40 × 50 | 25 |
+| 1.2 m | 0.4 m | 50 × 60 | 38 |
+| 1.5 m | 1.2 m | 50 × 75 | 50 |
+| 3.0 m | 1.5 m | 60 × 75 | 60 |
+| — | 3.0 m | 75 × 75 | 75 |
+
+</TablaNorma>
+
+**Cómo leerla (autoría del proyecto).** Se mide el **espacio libre de la celda entre rebabas** (dos dimensiones) y se busca la fila más exigente que **la celda cumple**: la menor dimensión debe ser al menos la menor de la fila y la mayor, al menos la mayor. Cuanto **más grande el hueco**, **más alto** se puede inyectar de una vez; el **mortero grueso** (con agregado) exige huecos mayores que el fino para la misma altura. Las alturas de 3.0 m no son una invitación a inyectar todo de una vez: siguen mandando los puntos (a) a (c).
+
+<Ejemplo numero={3} titulo="Altura de inyección y etapas de un muro de 2.6 m">
+Celda con espacio libre entre rebabas de **55 mm × 80 mm** y muro de **2.6 m** de altura. Determinar la altura máxima de inyección con mortero fino y con mortero grueso, y el número de etapas.
+
+<Paso titulo="Fila de la tabla que cumple la celda" ref="Tabla D.4.6-1">
+La celda de 55 × 80 mm cumple la fila de **50 × 75** (55 ≥ 50 y 80 ≥ 75) y no la de 60 × 75 (55 < 60). Altura máxima: **mortero fino {f(ej1.hf, 1)} m**; **mortero grueso {f(ej1.hg, 1)} m**.
+</Paso>
+<Paso titulo="Etapas de inyección (autoría del proyecto)" ref="D.4.6.3.1, D.4.6.3.4">
+Con mortero fino: 2.6 / {f(ej1.hf, 1)} → **{ej1.nf} etapas**. Con mortero grueso: 2.6 / {f(ej1.hg, 1)} → **{ej1.ng} etapas**. Las juntas de vaciado entre etapas quedan a no menos de 40 mm por debajo de una junta de pega: con hiladas de 200 mm, los niveles de las etapas con mortero fino son {ej1.sf.map((e) => f(e.hasta, 2)).join(' m y ')} m, y con mortero grueso {ej1.sg.map((e) => f(e.hasta, 2)).join(' m, ')} m (cota medida desde la base).
+</Paso>
+<Paso titulo="Muro de una sola inyección" ref="Tabla D.4.6-1">
+Para inyectar los 2.6 m de una vez con mortero fino haría falta una celda de **{ej1.exigencia ? `${ej1.exigencia.celda[0]} × ${ej1.exigencia.celda[1]}` : '—'} mm** como mínimo (fila de 3.0 m); aun así, el control de la presión hidrostática sobre las unidades (D.4.6.3.1 b) y el intervalo máximo de una hora pueden obligar a dividir la inyección.
+</Paso>
+<Resultado>
+Mortero fino: {f(ej1.hf, 1)} m por vaciado, {ej1.nf} etapas; mortero grueso: {f(ej1.hg, 1)} m, {ej1.ng} etapas.
+</Resultado>
+</Ejemplo>
+
+<Figura alt="Elevación de un muro de 2.6 metros inyectado en etapas con mortero fino: la primera hasta 1.5 metros y la segunda hasta el borde superior, con las juntas de vaciado entre etapas 40 milímetros por debajo de una junta de pega y una ventana de inspección en la base" numero="Esquema" pie="Secuencia de inyección por alturas de un muro de 2.6 m con mortero fino y celda de 55 × 80 mm (Ejemplo 3): etapa 1 hasta 1.5 m (máx. de la Tabla D.4.6-1) y etapa 2 hasta el borde superior; cada junta de vaciado queda al menos 40 mm bajo una junta de pega y las inyecciones se hacen con intervalos máximos de una hora. Hiladas de 200 mm supuestas por el proyecto. (esquema del proyecto)">
+<svg viewBox="0 0 520 330" role="img" aria-label="Secuencia de inyección por etapas de un muro de 2.6 metros" className="mx-auto h-auto w-full max-w-xl">
+  <line x1="60" y1="300" x2="300" y2="300" stroke="currentColor" strokeWidth="4" />
+  {ej1.sf.map((e, i) => (
+    <g key={i}>
+      <rect x="120" y={ej1.y0 - e.hasta * ej1.esc} width="120" height={(e.hasta - e.desde) * ej1.esc} fill="currentColor" fillOpacity={0.25 + 0.25 * i} stroke="currentColor" strokeWidth="1" />
+      <text x="260" y={ej1.y0 - ((e.desde + e.hasta) / 2) * ej1.esc + 4} fontSize="12" fill="currentColor">{`Etapa ${i + 1}: de ${e.desde.toFixed(2)} m a ${e.hasta.toFixed(2)} m`}</text>
+    </g>
+  ))}
+  {Array.from({ length: 13 }, (_, k) => (
+    <line key={k} x1="120" y1={ej1.y0 - (k + 1) * 0.2 * ej1.esc} x2="240" y2={ej1.y0 - (k + 1) * 0.2 * ej1.esc} stroke="currentColor" strokeOpacity="0.45" strokeWidth="0.75" />
+  ))}
+  {ej1.sf.slice(0, -1).map((e, i) => (
+    <g key={i}>
+      <line x1="100" y1={ej1.y0 - e.hasta * ej1.esc} x2="250" y2={ej1.y0 - e.hasta * ej1.esc} stroke="currentColor" strokeWidth="2" strokeDasharray="6 3" />
+      <text x="260" y={ej1.y0 - e.hasta * ej1.esc - 8} fontSize="12" fill="currentColor" fillOpacity="0.85">Junta de vaciado: ≥ 40 mm bajo una junta de pega</text>
+    </g>
+  ))}
+  <rect x="120" y="288" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" />
+  <text x="260" y="296" fontSize="12" fill="currentColor">Ventana de inspección y limpieza (75 a 100 mm)</text>
+  <line x1="106" y1={ej1.y0 - ej1.H * ej1.esc} x2="106" y2="300" stroke="currentColor" strokeWidth="1" />
+  <text x="30" y={ej1.y0 - (ej1.H * ej1.esc) / 2} fontSize="12" fill="currentColor" transform={`rotate(-90 30 ${ej1.y0 - (ej1.H * ej1.esc) / 2})`}>{`Muro de ${ej1.H} m`}</text>
+  <text x="180" y="322" textAnchor="middle" fontSize="11" fill="currentColor" fillOpacity="0.8">Líneas finas: juntas de pega cada 200 mm</text>
+</svg>
+</Figura>
+
+El diagrama muestra el principio: se inyecta **por etapas**, se **compacta** cada porción y la junta de vaciado se **desfasa** de la junta de pega para no crear un plano débil común.
+
+#### D.4.6.3.2 — Suspensión de la inyección
+
+Si la inyección se **suspende por más de una hora**, debe iniciarse **un nuevo vaciado** con las precauciones anotadas (ventanas de inspección, etc.) (<NormaRef s="D.4.6.3.2" pag="D-28" />).
+
+#### D.4.6.3.3 — Inyección parcial
+
+Cuando la inyección del muro es **parcial** conviene proveer **controles laterales de flujo**; por ejemplo, **rellenar con arena** las celdas seleccionadas como barrera u otro mecanismo apropiado (<NormaRef s="D.4.6.3.3" pag="D-28" />).
+
+#### D.4.6.3.4 — Juntas entre inyecciones de mortero
+
+La junta de vaciado entre etapas se hace **al mismo nivel**, con un mínimo de **40 mm por debajo de una junta de mortero de pega** (<NormaRef s="D.4.6.3.4" pag="D-28" />).
+
+### D.4.6.4 — Compactación
+
+El mortero de relleno se compacta con **vibrador o barra lisa**, en **porciones de 300 mm de altura o menos**. Donde hay refuerzo vertical se puede compactar **haciendo vibrar la barra** (<NormaRef s="D.4.6.4" pag="D-28" />).
+
+#### D.4.6.4.1 — Recompactación
+
+Si se coloca en **porciones de más de 300 mm** y pasado un tiempo prudencial de **unos 5 minutos**, hay que **recompactar** para garantizar la adherencia con las unidades, porque el mortero **pierde volumen** al perder el agua que absorben las unidades. Alternativamente, se puede usar un **aditivo de expansión de volumen** (<NormaRef s="D.4.6.4.1" pag="D-28" />).
+
+## D.4.7 — Requisitos constructivos para losas de entrepiso
+
+- **D.4.7.1 — Acción como diafragma:** las losas cumplen los requisitos de **diafragma de A.3.6.8** y **C.21.11** (<NormaRef s="D.4.7.1" pag="D-29" />). **D.4.7.1.1 — Diafragmas flexibles:** los que no cumplan esos requisitos pueden usarse en edificaciones de **1 y 2 niveles del grupo de uso I**, cumpliendo el control de desplazamientos y la distribución especial de cargas laterales del Título A (<NormaRef s="D.4.7.1.1" pag="D-29" />).
+- **D.4.7.2 — Apoyo de los elementos del entrepiso:** los elementos que se apoyan directamente sobre los muros deben quedar **suficientemente soportados durante la construcción** y **vinculados adecuadamente en forma permanente** (<NormaRef s="D.4.7.2" pag="D-29" />).
+- **D.4.7.3 — Volcamiento de la hilada de apoyo:** garantizar que el apoyo de la losa **no cause volcamiento** de la hilada de apoyo por **exceso de excentricidad**, ni posibilidad de **desprendimiento** de la placa en construcción o en servicio (<NormaRef s="D.4.7.3" pag="D-29" />).
+- **D.4.7.4 — Losas prefabricadas:** (a) **espesor mínimo nominal del muro de carga de 120 mm**; (b) cumplir A.3.6.8 y C.21.11 según la capacidad de disipación de energía del sistema; (c) **apuntalamiento provisional** hasta que funcione el conjunto losa-muro, garantizando la **transferencia de esfuerzos** en la intersección para carga vertical y lateral (<NormaRef s="D.4.7.4" pag="D-29" />).
+
+## D.4.8 — Apuntalamiento de muros
+
+Cuando se requiera, los muros expuestos a **viento y humedad** deben **protegerse de sus efectos**, de manera **provisional o definitiva** (<NormaRef s="D.4.8.1" pag="D-29" />). Un muro recién levantado, con el mortero fresco y sin la losa que lo arriostre, es muy vulnerable: el apuntalamiento provisional es una medida habitual (el texto no fija valores).
+
+## D.4.9 — Juntas de construcción
+
+Las juntas entre **edificaciones estructuralmente independientes** deben permitir los **desplazamientos laterales sin golpeteo**; estar **libres de escombros** y de materiales que limiten el movimiento horizontal; y el **acabado de las fachadas se suspende en la junta**, usando **elementos flexibles** para prevenir la humedad (<NormaRef s="D.4.9.1" pag="D-29" />). La separación mínima sísmica entre edificaciones se determina en el Título A.
+
+## D.4.10 — Curado de muros de mampostería
+
+<TablaNorma numero="D.4.10" titulo="Curado según el tipo de unidad" pag="D-29" nota="Cuadro del autor a partir de D.4.10.1 y D.4.10.2.">
+
+| Mampostería | Protección y curado | Duración |
+|---|---|---|
+| Unidades de **concreto o sílico-calcáreas** (D.4.10.1) | Proteger de **lluvia, viento y sol excesivo**; **no curar con riego de agua**. Solo si hay evidencia de hidratación deficiente del mortero de pega, humedecer las juntas **con brocha húmeda**, sin mojar las unidades | **Tres primeros días** después de pegar o inyectar |
+| Unidades de **arcilla** (D.4.10.2) | Proporcionar **humedad y temperatura adecuadas** | **Al menos 7 días** después de pegar o inyectar |
+
+</TablaNorma>
+
+<NormaRef s="D.4.10.1" pag="D-29" /> y <NormaRef s="D.4.10.2" pag="D-29" />. La diferencia tiene lógica: las unidades de arcilla **absorben agua** y requieren humedad prolongada; las de concreto **no deben mojarse** porque se hinchan y retraen.
+
+## Lista de verificación de obra (autoría del proyecto)
+
+<Callout tipo="practica" titulo="Lista de verificación para el supervisor y el constructor">
+Esta lista organiza los requisitos de D.4.4 a D.4.10 en el orden de la obra. **No es texto de la norma**: cada renglón remite a su numeral.
+
+| Etapa | Verificación | Numeral |
+|---|---|---|
+| Cimentación | Barras de empalme fijadas a la armadura; desviación ≤ 1/4 de la celda en cada sentido; corrección solo con inclinación 1H:6V | D.4.4.2, D.4.4.3 |
+| Cimentación | Vaciado aprobado por el supervisor; juntas verticales en el tercio central de los vanos | D.4.4.4 |
+| Cimentación | Cara superior nivelada; error < 25 mm repartido en juntas, > 25 mm con realce de concreto | D.4.4.5, D.4.4.6 |
+| Materiales | Unidades limpias; arcilla con TIA > 0.15 humedecida (24 h si > 0.25); unidades de concreto secas | D.4.5.2.1 |
+| Materiales | Acero sin corrosión ni grasa; dimensiones y figuración según planos; sin doblar barra parcialmente embebida | D.4.5.5 |
+| Muro | Aparejo trabado con celdas continuas (petaca solo en machones y columnas aisladas) | D.4.5.7, D.4.5.8 |
+| Muro | Juntas de control cada ≤ 8 m y en los sitios de D.4.5.9; sin movimiento diferencial transversal | D.4.5.9 |
+| Muro | Mortero de pega en paredes y tabiques; junta de 10 mm (±4 mm); mortero con plasticidad | D.4.5.10.1 |
+| Muro | Tolerancias de la Tabla D.4.2-2 (nivel, plomo, alineamiento, planta, elevación) | D.4.5.10 |
+| Muro | Ventanas de inspección de 75 a 100 mm en celdas por inyectar; rebabas retiradas | D.4.5.10.2 |
+| Muro | Tuberías en celdas no inyectadas o inyectadas sin barra y con los límites de D.4.5.6.3; sin regatas | D.4.5.6 |
+| Refuerzo | Barras al centro de la celda (± 1/4); sujetas con posicionadores; traslapos en contacto o ≥ 25 mm | D.4.5.12 |
+| Refuerzo | Refuerzo de junta anclado con gancho antes de la junta de control; horizontal en unidades especiales con gancho | D.4.5.11 |
+| Inyección | Mortero mezclado 3 a 10 min; fluido y sin endurecer; altura por vaciado según Tabla D.4.6-1; intervalo ≤ 1 h | D.4.6.1 a D.4.6.3.2 |
+| Inyección | Compactado en porciones ≤ 300 mm; recompactación a los ~5 min si la porción es mayor; junta de vaciado ≥ 40 mm bajo una junta de pega | D.4.6.3.4, D.4.6.4 |
+| Entrepiso | Losa soportada durante la construcción y vinculada al muro; apoyo sin volcar la hilada; prefabricada con muro ≥ 120 mm y apuntalamiento | D.4.7 |
+| Protección | Muros protegidos del viento y la humedad; juntas de construcción libres de escombros | D.4.8, D.4.9 |
+| Curado | Concreto o sílico-calcáreas: 3 días sin riego; arcilla: ≥ 7 días con humedad | D.4.10 |
+
+</Callout>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Errores frecuentes en la construcción de muros de mampostería">
+- **Corregir una barra de empalme con un doblez brusco** o cortando tabiques de la unidad: solo se permite la inclinación 1H:6V (<NormaRef s="D.4.4.3" pag="D-24" />).
+- **Aceptar un cimiento desnivelado** y «arreglarlo» con mortero grueso en la primera hilada: error de más de 25 mm exige realce de concreto reforzado (<NormaRef s="D.4.4.6" pag="D-24" />).
+- **Mojar siempre las unidades.** Las de concreto se colocan secas; las de arcilla se humedecen según su TIA (<NormaRef s="D.4.5.2.1" pag="D-24" />).
+- **Hacer regatas** para las tuberías, o inyectar celdas con tuberías gruesas o con barra (<NormaRef s="D.4.5.6" pag="D-25" />).
+- **Usar aparejo de petaca en muros** (solo se admite en machones y columnas aisladas) (<NormaRef s="D.4.5.7" pag="D-25" />).
+- **Omitir las ventanas de inspección y limpieza** o no retirar las rebabas, dejando mortero caído en el fondo de la celda (<NormaRef s="D.4.5.10.2" pag="D-26" />).
+- **Inyectar a una altura mayor que la de la Tabla D.4.6-1** para el tamaño de la celda, o dejar pasar más de una hora entre vaciados sin tratarlo como un nuevo vaciado (<NormaRef s="D.4.6.3" pag="D-28" />).
+- **No compactar o no recompactar** el mortero de relleno, dejando vacíos y mala adherencia con la unidad (<NormaRef s="D.4.6.4" pag="D-28" />).
+- **Hacer la junta de vaciado al nivel de una junta de pega**: debe quedar al menos 40 mm por debajo (<NormaRef s="D.4.6.3.4" pag="D-28" />).
+- **Curar con riego de agua unidades de concreto o sílico-calcáreas**, o curar menos de 7 días las de arcilla (<NormaRef s="D.4.10" pag="D-29" />).
+</Callout>
+
+<Detalle titulo="Erratas y rarezas del PDF en estas páginas (D-24 a D-30)">
+
+- **Tabla D.4.2-2 impresa en D.4.5.10:** lleva numeración de D.4.2 (refuerzo) pero está en la página D-26, en el texto de D.4.5.10; D.4.4.6(a), D.4.5.10 y D.4.5.10.1(f) la citan. Se transcribió con la numeración original. El **texto extraído** de esa página desordena las filas (los máximos aparecen separados); las nueve filas se leyeron de la **imagen**.
+- **Fila 4 de la Tabla D.4.2-2:** máximo ± 12.5 mm, mientras las filas 5 a 7 tienen ± 12 mm; se transcribe tal cual está impreso, aunque la diferencia de medio milímetro parece arbitraria.
+- **Tabla D.4.6-1, referencias (1), (2), (3):** las notas (2) y (3) se refieren a la **columna «cavidad»** (mampostería de cavidad reforzada), no a las celdas; el texto de D.4.6.3.1 solo habla de «tamaño del espacio a inyectar». La tabla no dice cómo combinar dos dimensiones de celda (cuál es «menor» y cuál «mayor»); la lectura del proyecto es que el orden de las dos dimensiones no importa.
+- **Alturas de inyección y mortero fino/grueso:** la tabla no define cuándo un mortero es «fino» o «grueso»: remite a D.3.5.
+- **Errores exactamente iguales a 25 mm (D.4.4.6):** el literal (a) cubre «inferior a 25 mm» y el (b) «mayor de 25 mm»; el caso igual a 25 mm queda sin regla.
+- **TIA de 0.15 y 0.25 (D.4.5.2.1):** «excedan 0.15» y «mayores de 0.25»; los valores iguales no se mencionan.
+- **Numeración de las páginas:** la página D-30 está impresa como «Notas» y está en blanco; el capítulo D.4 termina en D-29.
+- **Posible confusión en D.4.5.12.3:** la separación mínima de 25 mm entre barras traslapadas sin contacto convive con la máxima de D.4.2.5.3 (ℓ/5 y 200 mm): la separación admisible es el intervalo entre ambas.
+- **D.4.4.2:** la frase termina sin punto («…numeral D.4.4.3»), erratas de puntuación sin consecuencia.
+
+</Detalle>
+
+## Resumen en una línea
+
+El muro se construye de abajo hacia arriba con barras de empalme dentro de 1/4 de celda (corrección 1H:6V), unidades, mortero y refuerzo dentro de las tolerancias de la Tabla D.4.2-2, mortero de relleno inyectado por etapas según la Tabla D.4.6-1 (compactado en porciones de 300 mm o menos y con junta de vaciado 40 mm bajo una junta de pega), y curado de 3 días (concreto) o 7 días (arcilla).

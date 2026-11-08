@@ -1,0 +1,391 @@
+---
+codigo: 'D.1'
+tipo: capitulo
+titulo: 'Requisitos generales'
+resumen: 'Alcance, procedimiento de diseño (estado límite de resistencia o esfuerzos admisibles), contenido mínimo de los planos, supervisión técnica y requisitos generales de las estructuras de mampostería: muros en dos direcciones, rigidez mínima entre direcciones, modelo de análisis, diafragmas, combinación de sistemas, derivas, materiales y mano de obra.'
+objetivos:
+  - 'Explicar el alcance del Título D y los dos métodos de diseño permitidos (resistencia y esfuerzos de trabajo admisibles)'
+  - 'Enumerar lo que deben decir los planos estructurales de mampostería (literales a a i de D.1.2.1)'
+  - 'Decidir cuándo la supervisión técnica es obligatoria y qué debe registrar el supervisor'
+  - 'Verificar la rigidez mínima entre las dos direcciones ortogonales de una edificación (20 % o 10 %)'
+  - 'Reconocer los requisitos generales sobre análisis, diafragmas, combinación de sistemas, deriva, materiales y mano de obra'
+paginasNorma: 'D-1 a D-4'
+paginaPdf: 566
+orden: 1
+calculadoras: []
+nivel: basico
+---
+
+import {
+  CONTENIDO_PLANOS_D,
+  limiteRigidezOrtogonal,
+  supervisionTecnica,
+  verificarRigidezOrtogonal,
+} from '../../lib/nsr10/requisitosGeneralesD';
+
+export const f = (x, d = 2) => x.toFixed(d);
+
+export const ej1 = (() => {
+  const kx = 480;
+  const ky = 85;
+  const kyMejorada = 115;
+  return {
+    kx,
+    ky,
+    kyMejorada,
+    cuatro: verificarRigidezOrtogonal(kx, ky, 4),
+    dos: verificarRigidezOrtogonal(kx, ky, 2),
+    mejorada: verificarRigidezOrtogonal(kx, kyMejorada, 4),
+    barras: [
+      { etiqueta: 'Dirección X', valor: kx },
+      { etiqueta: 'Y (inicial)', valor: ky },
+      { etiqueta: 'Y (mejorada)', valor: kyMejorada },
+    ],
+  };
+})();
+
+export const ej2 = (() => {
+  const a = 2850;
+  const b = 3420;
+  return { a, b, sa: supervisionTecnica(a), sb: supervisionTecnica(b) };
+})();
+
+## Idea central del capítulo
+
+El Capítulo D.1 es la **puerta de entrada** del Título D: dice **a qué estructuras se aplica**, **con qué método se diseñan**, **qué información deben contener los planos**, **cuándo es obligatoria la supervisión técnica** y qué condiciones generales debe cumplir una edificación de mampostería estructural antes de entrar en los cálculos de los capítulos siguientes. No trae ecuaciones de resistencia: trae **reglas de juego** que condicionan todo lo demás.
+
+La idea física que atraviesa el capítulo es una sola: los muros de mampostería son **muy rígidos y resistentes en su propio plano** y **muy débiles fuera de él**. Por eso la norma exige muros en **dos direcciones ortogonales**, una rigidez mínima en la dirección menos rígida, diafragmas de piso que arriostren los muros, un solo sistema estructural en altura y una calidad de mano de obra y de materiales especialmente cuidada, porque la mampostería es muy sensible a los defectos de ejecución.
+
+<Callout tipo="importante" titulo="Qué es y qué no es D.1">
+D.1 es un capítulo de **requisitos y procedimiento**; los números de diseño están más adelante: materiales en D.3, construcción en D.4, resistencia en D.5, y los siete tipos de mampostería en D.6 a D.12. Las referencias a otros Títulos (A, B, C, I) son **remisiones**: esas normas no se repiten aquí.
+</Callout>
+
+<Callout tipo="nota" titulo="Páginas del capítulo">
+D.1 ocupa las páginas impresas D-1 a D-3; la página D-4 del PDF (PDF 569) es una hoja con el rótulo «Notas» y sin contenido normativo.
+</Callout>
+
+## D.1.1 — Alcance
+
+### D.1.1.1 — Alcance
+
+El Título D establece los **requisitos mínimos de diseño y construcción** de las estructuras de mampostería y de sus elementos, con un nivel de seguridad comparable al de las estructuras de otros materiales cuando se diseñan y construyen según el Reglamento (<NormaRef s="D.1.1.1" pag="D-1" />).
+
+### D.1.1.2 — Estructuras especiales
+
+Para **arcos, bóvedas, tanques, silos y chimeneas**, los requisitos del Título D pueden usarse **cuando sean aplicables, a juicio del ingeniero diseñador** (<NormaRef s="D.1.1.2" pag="D-1" />). No es una obligación ni una prohibición: el diseñador decide qué partes del Título valen para esa geometría y debe justificarlo.
+
+### D.1.1.3 — Propósito
+
+Lo que se busca es un comportamiento apropiado y la **integridad estructural** de las construcciones de mampostería bajo tres tipos de solicitación (<NormaRef s="D.1.1.3" pag="D-1" />):
+
+- carga **vertical** permanente o transitoria;
+- **fuerza lateral** de viento o de sismo;
+- estados ocasionales de **fuerzas anormales**.
+
+### D.1.1.4 — Complemento con los demás Títulos
+
+El Título D se **complementa** con los otros Títulos del Reglamento. Si hay conflicto entre requisitos, **se adopta el más severo** (<NormaRef s="D.1.1.4" pag="D-1" />).
+
+### D.1.1.5 — Requisitos mínimos
+
+Los procedimientos y especificaciones del Título son **requisitos mínimos**, orientados a proteger la vida y, en lo posible, los bienes de los usuarios (<NormaRef s="D.1.1.5" pag="D-1" />). Cumplirlos no exime del criterio profesional cuando la obra exige más.
+
+### D.1.1.6 — Procedimiento de diseño
+
+Las estructuras de mampostería se diseñan por el **método del estado límite de resistencia**, con las combinaciones de carga de **B.2.4** y los requisitos del Título D (<NormaRef s="D.1.1.6" pag="D-1" />). Se **permite** el diseño por **esfuerzos de trabajo admisibles**, con las combinaciones de **B.2.3** y los requisitos alternos del **Apéndice D-1**. Hay una condición decisiva: **todo el diseño de la estructura debe realizarse por uno solo de los dos métodos**.
+
+<TablaNorma numero="Resumen de D.1.1.6" titulo="Los dos métodos de diseño permitidos para mampostería" pag="D-1" nota="Elaborada a partir del texto de D.1.1.6; no es una tabla impresa.">
+
+| Aspecto | Estado límite de resistencia | Esfuerzos de trabajo admisibles |
+|---|---|---|
+| Carácter | Procedimiento principal del Título D | Permitido como alternativa |
+| Combinaciones de carga | B.2.4 (cargas mayoradas) | B.2.3 (cargas de servicio) |
+| Requisitos de diseño | Capítulos D.5 a D.12 | Apéndice D-1 |
+| Mezcla de métodos | No se puede mezclar con el otro en la misma estructura | No se puede mezclar con el otro en la misma estructura |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Un método por estructura">
+«Todo el diseño de la estructura debe realizarse por uno de los dos métodos»: no se vale diseñar un muro con φ y combinaciones B.2.4 y otro muro de la misma edificación con esfuerzos admisibles y B.2.3. Lo que sí es normal es que los requisitos **constructivos** (D.4) y de **materiales** (D.3) valgan para ambos.
+</Callout>
+
+## D.1.2 — Planos y memorias
+
+### D.1.2.1 — Planos estructurales
+
+Además de lo exigido por **A.1.5.2**, los planos deben **especificar y detallar** lo siguiente (<NormaRef s="D.1.2.1" pag="D-1" />). La lista es clave porque la resistencia de la mampostería depende de **cómo se construye** y el constructor solo puede cumplir lo que el plano le dice:
+
+<TablaNorma numero="D.1.2.1" titulo="Información obligatoria en los planos estructurales de mampostería" pag="D-1" nota="Literales (a) a (g) en la página D-1 y (h) e (i) en la D-2. Redacción resumida; los literales conservan su letra.">
+
+| Lit. | Qué debe quedar en el plano | Dónde se desarrolla |
+|---|---|---|
+| (a) | Características de las unidades de mampostería usadas en el diseño y la **norma NTC** (de las permitidas) bajo la cual se fabrican | D.3.6 |
+| (b) | **Resistencia nominal a la compresión** de la mampostería en cada elemento estructural, referida al **área neta promedio**: $f'_m$ | D.3.7 |
+| (c) | **Mortero de pega**: tipo H, M, S o N y resistencia mínima a la compresión, medida como define esa sección | D.3.4 |
+| (d) | **Ubicación de las celdas y cavidades** que deben inyectarse con mortero de relleno | D.3.5 y D.4.6 |
+| (e) | **Mortero de relleno**: tipo y resistencia mínima a la compresión, según esa sección | D.3.5 |
+| (f) | **Tamaño y localización** de todos los elementos especificados | — |
+| (g) | **Tamaño, resistencia, tipo y localización** del refuerzo, de los anclajes mecánicos y de los conectores | D.3.3 y D.4.2 |
+| (h) | **Ubicación, tamaño y características** de las juntas de control y de construcción | D.4.9 |
+| (i) | **Ubicación y tamaño** de las celdas de inspección | D.4 |
+
+</TablaNorma>
+
+<Callout tipo="nota" titulo="Lo que es del proyecto en la tabla anterior (autoría del proyecto)">
+Las remisiones de la columna «Dónde se desarrolla» **no están impresas en D.1.2.1**, salvo D.3.4, D.3.5 y D.3.6 que el propio texto cita en los literales (a), (c) y (e). El resto las añade este proyecto como guía de lectura, apoyándose en los títulos de las secciones del capítulo D.3 y D.4.
+</Callout>
+
+### D.1.2.2 — Memorias
+
+Las memorias de cálculo deben cumplir lo establecido en **A.1.5.3** (<NormaRef s="D.1.2.2" pag="D-2" />). El Título D no agrega requisitos propios sobre su contenido.
+
+## D.1.3 — Supervisión técnica
+
+### D.1.3.1 — Obligatoriedad
+
+**Toda edificación de más de 3000 m² de área construida** debe someterse a **supervisión técnica**, como indica la **Ley 400 de 1997**; el supervisor cumple lo dispuesto en el **Título I** (<NormaRef s="D.1.3.1" pag="D-2" />). Como la mampostería es **susceptible a los defectos de mano de obra y de materiales**, la norma **recomienda** que las obras de **menos de 3000 m²** se construyan «bajo estricta supervisión técnica» de un profesional idóneo: ingeniero civil o arquitecto matriculado, o un representante competente bajo su responsabilidad.
+
+### D.1.3.2 — Alcance de la supervisión
+
+El supervisor verifica la **concordancia entre la obra ejecutada y los planos y especificaciones**, según **I.2.4** (<NormaRef s="D.1.3.2" pag="D-2" />).
+
+### D.1.3.3 — Registro de las labores
+
+El supervisor lleva un **registro escrito** de su labor. Además de A.1.3.9 y el Título I, debe **controlar y registrar** (<NormaRef s="D.1.3.3" pag="D-2" />):
+
+- la calidad de las **unidades de mampostería**;
+- la calidad de los **morteros de pega y de relleno**;
+- la **disposición** de armaduras, anclajes y conectores;
+
+y debe **supervisar las operaciones de inyección** de mortero.
+
+## D.1.4 — Requisitos generales para las estructuras en mampostería estructural
+
+### D.1.4.1 — Resistencia ante cargas horizontales en dos direcciones ortogonales
+
+Los muros estructurales son **muy rígidos para fuerzas aplicadas en su plano** y de **baja rigidez y resistencia para fuerzas perpendiculares a su plano**. Por eso toda estructura de muros debe tener **componentes en las dos direcciones ortogonales principales**, ya sea con **muros en las direcciones apropiadas** o con **elementos compuestos** (muros con aletas L, T, C…) cuya geometría en planta dé rigidez en ambas direcciones (<NormaRef s="D.1.4.1" pag="D-2" />).
+
+<Figura alt="Planta de una edificación con muros en dirección X y en dirección Y. Una flecha de fuerza horizontal actúa sobre los muros paralelos a ella (resisten en su plano) y sobre los perpendiculares (flexión fuera del plano, débil)" numero="Esquema" pie="Por qué se necesitan muros en dos direcciones ortogonales: ante la fuerza Fx, los muros paralelos a X trabajan en su plano (rígidos) y los paralelos a Y trabajan fuera del plano (débiles). (esquema del proyecto)">
+<svg viewBox="0 0 520 300" role="img" aria-label="Planta con muros en dos direcciones y fuerza horizontal Fx" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="130" y="50" width="270" height="170" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-dasharray="4 4" />
+  <rect x="130" y="46" width="270" height="9" fill="currentColor" fill-opacity="0.8" />
+  <rect x="130" y="215" width="270" height="9" fill="currentColor" fill-opacity="0.8" />
+  <rect x="126" y="50" width="9" height="170" fill="currentColor" fill-opacity="0.4" />
+  <rect x="395" y="50" width="9" height="170" fill="currentColor" fill-opacity="0.4" />
+  <rect x="262" y="50" width="9" height="170" fill="currentColor" fill-opacity="0.4" />
+  <line x1="20" y1="135" x2="118" y2="135" stroke="currentColor" stroke-width="3" />
+  <polygon points="118,135 104,128 104,142" fill="currentColor" />
+  <text x="22" y="122" font-size="14" fill="currentColor">Fx</text>
+  <text x="265" y="38" text-anchor="middle" font-size="12" fill="currentColor">Muros paralelos a X: rígidos en su plano</text>
+  <text x="265" y="248" text-anchor="middle" font-size="12" fill="currentColor">Muros paralelos a X: rígidos en su plano</text>
+  <text x="265" y="272" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity="0.8">Muros paralelos a Y (tono claro): trabajan fuera del plano para Fx</text>
+  <text x="265" y="288" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity="0.8">y son los rígidos para una fuerza Fy</text>
+</svg>
+</Figura>
+
+#### D.1.4.1.1 — Diferencia en rigidez entre las dos direcciones principales
+
+En **cualquier piso** de edificaciones de mampostería estructural con **tres niveles o más**, la rigidez aportada por el conjunto de elementos estructurales en una dirección **no puede ser inferior al 20 %** de la rigidez de la dirección ortogonal. En edificaciones de **uno y dos niveles** esa relación puede reducirse al **10 %** (<NormaRef s="D.1.4.1.1" pag="D-2" />).
+
+<Ecuacion num="D.1.4.1.1" titulo="Verificación de la rigidez entre direcciones (forma de autoría del proyecto)">
+
+$$
+\frac{K_{\text{menor}}}{K_{\text{mayor}}} \;\ge\; \begin{cases} 0.20 & \text{tres niveles o más} \\ 0.10 & \text{uno o dos niveles} \end{cases}
+$$
+
+- $K_{\text{menor}}$ y $K_{\text{mayor}}$: rigidez lateral aportada por el conjunto de muros de la dirección menos y más rígida en **ese piso**, en las mismas unidades (por ejemplo kN/mm).
+- La norma expresa la regla con palabras; la forma de cociente es una lectura del proyecto, equivalente al texto.
+
+</Ecuacion>
+
+<Callout tipo="nota" titulo="Cómo se usa en la práctica (autoría del proyecto)">
+La regla se verifica **piso por piso** y en ambas direcciones: se calcula la rigidez de cada dirección sumando la de los muros (o elementos compuestos) que la aportan y se divide la menor entre la mayor. La norma no dice cómo calcular «la rigidez aportada»; el modelo de D.1.4.2 y los módulos y dimensiones efectivas de D.5 son la base natural.
+</Callout>
+
+### D.1.4.2 — Modelo matemático para el análisis
+
+Se puede usar el modelo de **muros en voladizo empotrados en la base y arriostrados lateralmente por los diafragmas de piso**. En su defecto, **cualquier modelo alternativo** compatible con el funcionamiento real de la construcción para la solicitación analizada, **siempre que se garantice por evidencia experimental o teórica una mejor precisión** de la respuesta que la del modelo de voladizos (<NormaRef s="D.1.4.2" pag="D-2" />).
+
+<Figura alt="Elevación de un muro de tres pisos empotrado en la base, con las losas de entrepiso como apoyos laterales y una fuerza horizontal en cada nivel" numero="Esquema" pie="Modelo de muro en voladizo empotrado en la base y arriostrado por los diafragmas de piso (D.1.4.2). Las losas actúan como apoyos laterales del muro; la fuerza lateral actúa en el plano del muro. (esquema del proyecto)">
+<svg viewBox="0 0 520 300" role="img" aria-label="Muro en voladizo empotrado en la base con diafragmas de piso" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="215" y="40" width="40" height="210" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-width="2" />
+  <line x1="185" y1="250" x2="285" y2="250" stroke="currentColor" stroke-width="4" />
+  {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+    <line key={i} x1={190 + i * 12} y1="250" x2={180 + i * 12} y2="266" stroke="currentColor" stroke-opacity="0.6" />
+  ))}
+  {[110, 180, 250].map((y, i) => (
+    <g key={y}>
+      <rect x="160" y={y - 32} width="150" height="8" fill="currentColor" fill-opacity="0.7" />
+      <line x1="40" y1={y - 28} x2="156" y2={y - 28} stroke="currentColor" stroke-width="2.5" />
+      <polygon points={`156,${y - 28} 144,${y - 34} 144,${y - 22}`} fill="currentColor" />
+    </g>
+  ))}
+  <text x="330" y="82" font-size="12" fill="currentColor">Diafragma de piso (apoyo lateral)</text>
+  <text x="330" y="152" font-size="12" fill="currentColor">Diafragma de piso (apoyo lateral)</text>
+  <text x="330" y="222" font-size="12" fill="currentColor">Diafragma de piso (apoyo lateral)</text>
+  <text x="330" y="276" font-size="12" fill="currentColor">Empotramiento en la base</text>
+  <text x="40" y="45" font-size="12" fill="currentColor" fill-opacity="0.8">Fuerzas laterales</text>
+  <text x="40" y="60" font-size="12" fill="currentColor" fill-opacity="0.8">(en el plano del muro)</text>
+</svg>
+</Figura>
+
+### D.1.4.3 — Diafragmas horizontales de piso
+
+El sistema de piso que actúa como diafragma debe diseñarse para los esfuerzos de su función, **teniendo en cuenta A.3.6.8** (<NormaRef s="D.1.4.3" pag="D-2" />). El Título D no repite las reglas del diafragma; se aplican las del Título A, y en el Título C los elementos colectores de concreto reforzado.
+
+### D.1.4.4 — Inconveniencia de combinar sistemas estructurales
+
+Como la estructura puede trabajar en rango **inelástico** ante sismos severos, **no se considera conveniente combinar en altura** sistemas estructurales de **diferentes capacidades de disipación de energía** (<NormaRef s="D.1.4.4" pag="D-2" />). Es una recomendación de buena práctica, no una prohibición.
+
+### D.1.4.5 — Requisitos para la combinación de sistemas de mampostería
+
+Si de todos modos se combinan sistemas diferentes **en planta o en altura**, deben cumplirse los requisitos de **A.3.2.4 y A.3.2.5** (<NormaRef s="D.1.4.5" pag="D-2" />).
+
+### D.1.4.6 — Límites de deriva
+
+Los límites de deriva para construcciones de mampostería estructural están en la **Tabla A.6.4-1** del Reglamento (<NormaRef s="D.1.4.6" pag="D-2" />, continúa en D-3). El Título D no da valores propios; se usan los del Capítulo A.6.
+
+### D.1.4.7 — Requisitos para los materiales
+
+Todos los materiales usados en estructuras de mampostería deben cumplir las **normas y especificaciones del Capítulo D.3** (<NormaRef s="D.1.4.7" pag="D-3" />).
+
+### D.1.4.8 — Condiciones ambientales
+
+Cuando las condiciones ambientales estén **fuera de lo normal** o puedan **afectar negativamente las características especificadas** de los materiales, deben tomarse **precauciones adicionales** que garanticen el funcionamiento correcto de la obra (<NormaRef s="D.1.4.8" pag="D-3" />). La norma no define cuáles; es un llamado general al criterio del diseñador (por ejemplo, humedad, sales o temperaturas extremas durante la colocación).
+
+### D.1.4.9 — Mano de obra
+
+Debe darse **especial importancia a la mano de obra calificada**. Los controles iniciales y previos de la construcción deben ser los especificados, para poder determinar la **calificación más exigente** del personal involucrado (<NormaRef s="D.1.4.9" pag="D-3" />).
+
+## Mapa del capítulo
+
+<TablaNorma numero="Mapa de D.1" titulo="Secciones del Capítulo D.1 y su idea principal" pag="D-1" nota="Elaborada a partir del índice de secciones del capítulo; no es una tabla impresa.">
+
+| Sección | Tema | Idea principal |
+|---|---|---|
+| D.1.1 | Alcance | Requisitos mínimos; método de resistencia o esfuerzos admisibles, uno solo por estructura |
+| D.1.2 | Planos y memorias | Nueve literales (a–i) que deben figurar en los planos |
+| D.1.3 | Supervisión técnica | Obligatoria sobre 3000 m²; el supervisor controla y registra materiales y colocación |
+| D.1.4.1 | Dos direcciones | Muros en dos direcciones; rigidez mínima del 20 % o el 10 % |
+| D.1.4.2–D.1.4.3 | Modelo y diafragmas | Muros en voladizo arriostrados por diafragmas; diafragma según A.3.6.8 |
+| D.1.4.4–D.1.4.6 | Combinación y deriva | No conviene combinar capacidades en altura; deriva de la Tabla A.6.4-1 |
+| D.1.4.7–D.1.4.9 | Materiales, ambiente, mano de obra | D.3, precauciones y personal calificado |
+
+</TablaNorma>
+
+## Ejemplos resueltos
+
+<Ejemplo numero={1} titulo="Rigidez entre las dos direcciones de un edificio de muros">
+Un edificio de mampostería de **4 niveles** tiene, en el piso más desfavorable, una rigidez lateral de los muros paralelos a X de $K_x$ = {ej1.kx} kN/mm y de los muros paralelos a Y de $K_y$ = {ej1.ky} kN/mm (valores ilustrativos de autoría del proyecto). Verifica D.1.4.1.1 y decide qué hacer.
+
+<Paso titulo="Límite aplicable según el número de niveles" ref="D.1.4.1.1">
+
+Con 4 niveles (tres o más) el cociente mínimo es **{f(limiteRigidezOrtogonal(4), 2)}** (20 %).
+
+</Paso>
+<Paso titulo="Cociente entre la dirección menos rígida y la más rígida" ref="D.1.4.1.1">
+
+$$
+\frac{K_{\text{menor}}}{K_{\text{mayor}}} = \frac{85}{480}
+$$
+
+Resultado: la dirección más flexible es **{ej1.cuatro.direccionDebil.toUpperCase()}** y el cociente vale **{f(ej1.cuatro.relacion, 3)}**, menor que {f(ej1.cuatro.limite, 2)}: **no cumple**.
+
+</Paso>
+<Paso titulo="Comparar con el caso de uno o dos niveles" ref="D.1.4.1.1">
+
+Si la misma distribución de muros fuese de **2 niveles**, el límite sería {f(limiteRigidezOrtogonal(2), 2)} (10 %) y el cociente {f(ej1.dos.relacion, 3)} **{ej1.dos.cumple ? 'sí cumpliría' : 'no cumpliría'}**.  La norma exige más al edificio de tres o más niveles que al de uno o dos.
+
+</Paso>
+<Paso titulo="Corrección: añadir muros en la dirección débil" ref="D.1.4.1, D.1.4.1.1">
+
+Se agregan muros paralelos a Y hasta $K_y$ = {ej1.kyMejorada} kN/mm. Nuevo cociente: {ej1.kyMejorada}/{ej1.kx} = **{f(ej1.mejorada.relacion, 3)}**, mayor que {f(ej1.mejorada.limite, 2)}: **cumple**.
+
+<Figura alt="Barras horizontales con la rigidez en la dirección X, en Y inicial y en Y mejorada, y una marca en el 20 por ciento de la rigidez de X" numero="Esquema" pie="Rigidez lateral por dirección del ejemplo 1 y límite del 20 % de la dirección más rígida (D.1.4.1.1). Valores ilustrativos de autoría del proyecto. (esquema del proyecto)">
+<svg viewBox="0 0 520 170" role="img" aria-label="Comparación de la rigidez Kx, Ky inicial y Ky mejorada con el límite del 20 por ciento" className="mx-auto h-auto w-full max-w-xl">
+  {ej1.barras.map((b, i) => (
+    <g key={b.etiqueta}>
+      <text x="0" y={32 + i * 40} font-size="12" fill="currentColor">{b.etiqueta}</text>
+      <rect x="95" y={16 + i * 40} width={(b.valor / 480) * 340} height="24" rx="3" fill="currentColor" fill-opacity={[0.85, 0.4, 0.65][i]} />
+      <text x="448" y={32 + i * 40} font-size="12" fill="currentColor">{b.valor} kN/mm</text>
+    </g>
+  ))}
+  <line x1={95 + 0.2 * 340} y1="6" x2={95 + 0.2 * 340} y2="140" stroke="currentColor" stroke-width="2" stroke-dasharray="5 4" />
+  <text x={95 + 0.2 * 340} y="156" text-anchor="middle" font-size="12" fill="currentColor">Límite: 0.20 Kx = 96 kN/mm</text>
+</svg>
+</Figura>
+
+</Paso>
+<Resultado>
+Con $K_y$ = {ej1.ky} kN/mm el edificio de 4 niveles **no cumple** D.1.4.1.1 (cociente {f(ej1.cuatro.relacion, 3)} menor que 0.20); con $K_y$ = {ej1.kyMejorada} kN/mm **cumple** (cociente {f(ej1.mejorada.relacion, 3)}).
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="¿Supervisión técnica obligatoria o recomendada?">
+Dos proyectos de vivienda en mampostería: uno de **{ej2.a} m²** y otro de **{ej2.b} m²** de área construida. Decide qué exige el Título D y qué debe registrar el supervisor.
+
+<Paso titulo="Comparar con el umbral de 3000 m²" ref="D.1.3.1">
+
+- Proyecto de {ej2.a} m²: supervisión **{ej2.sa}** (menos de 3000 m²). La norma la recomienda «bajo estricta supervisión técnica» de un profesional idóneo.
+- Proyecto de {ej2.b} m²: supervisión **{ej2.sb}** (más de 3000 m²), conforme a la Ley 400 de 1997 y al Título I.
+
+</Paso>
+<Paso titulo="Qué debe controlar y registrar el supervisor" ref="D.1.3.3">
+
+En ambos casos conviene el mismo registro: calidad de **unidades**, **morteros de pega y de relleno**, disposición de **armaduras, anclajes y conectores** y **operaciones de inyección**. En el proyecto obligatorio, además, rige todo el Título I (I.2.4 para el alcance de la verificación con los planos).
+
+</Paso>
+<Resultado>
+{ej2.a} m²: supervisión {ej2.sa}; {ej2.b} m²: supervisión {ej2.sb}. En obras pequeñas de mampostería la recomendación de D.1.3.1 es, en la práctica, tan importante como la obligación.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={3} titulo="Qué debe decir el plano de una vivienda de mampostería reforzada">
+Un diseñador va a entregar los planos de una vivienda de mampostería reforzada de unidades de perforación vertical. Revisa los nueve literales de D.1.2.1 y la información que cada uno obliga a escribir (valores de ejemplo ilustrativos de autoría del proyecto).
+
+<Paso titulo="Recorrer la lista (a)–(i)" ref="D.1.2.1">
+
+<TablaNorma numero="Ejemplo" titulo="Notas de materiales que debe llevar el plano (ilustrativo)" pag="D-1" nota="Los textos entre comillas son un ejemplo de redacción, no valores de la norma.">
+
+| Lit. | Contenido de la nota del plano (ejemplo) |
+|---|---|
+| (a) | «Unidades de arcilla de perforación vertical según NTC 4205» |
+| (b) | «Resistencia nominal a la compresión de la mampostería $f'_m$ = valor de diseño sobre área neta promedio» |
+| (c) | «Mortero de pega tipo [H/M/S/N según D.3.4] con la resistencia mínima que fija esa sección» |
+| (d) | «Inyectar con mortero de relleno únicamente las celdas con refuerzo vertical» (y los cuadros de ubicación) |
+| (e) | «Mortero de relleno según D.3.5, con su resistencia mínima» |
+| (f) | Plantas y cortes con dimensiones y localización de muros, dinteles y vigas |
+| (g) | Cuadro de barras: diámetro, $f_y$, tipo y localización; anclajes y conectores |
+| (h) | Juntas de control y de construcción ubicadas en planta y en alzado |
+| (i) | Celdas de inspección ubicadas y dimensionadas en las plantas y los alzados |
+
+</TablaNorma>
+
+</Paso>
+<Paso titulo="Verificar que no falta ninguno" ref="D.1.2.1">
+
+La lista de D.1.2.1 tiene **{CONTENIDO_PLANOS_D.length} literales** ({CONTENIDO_PLANOS_D.map((c) => c.literal).join(', ')}). Un plano que omite, por ejemplo, el tipo de mortero de relleno (e) o las celdas de inspección (i) incumple D.1.2.1 aunque los cálculos estén bien.
+
+</Paso>
+<Resultado>
+Los nueve literales deben aparecer en los planos estructurales, además de lo que pide A.1.5.2.
+</Resultado>
+</Ejemplo>
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Qué suele salir mal">
+- **Mezclar los dos métodos de diseño** en la misma estructura: D.1.1.6 exige que **todo** el diseño use uno solo (resistencia con B.2.4, o esfuerzos admisibles con B.2.3 y el Apéndice D-1).
+- **Creer que D.1.1.2 obliga** a aplicar el Título D a tanques, silos o chimeneas: dice que **puede** utilizarse «cuando sea aplicable, a juicio del ingeniero diseñador».
+- **Diseñar muros solo en una dirección:** cada dirección ortogonal necesita muros o elementos compuestos, y la menos rígida debe aportar al menos el **20 %** (3 o más niveles) o el **10 %** (1 o 2 niveles) de la rigidez de la otra (<NormaRef s="D.1.4.1.1" pag="D-2" />).
+- **Verificar la rigidez solo en la base:** la regla es «en cualquier piso», no solo en el primero.
+- **Dejar f′m o los morteros sin especificar** en los planos: son los literales (b), (c) y (e) de D.1.2.1; el constructor no puede adivinar qué mortero ni qué resistencia usar.
+- **Olvidar las celdas de inspección y las juntas de control** (literales (h) e (i)): sin ellas no se puede verificar la inyección ni controlar la fisuración.
+- **Dar por hecho que la supervisión técnica solo importa sobre 3000 m²:** por debajo de ese umbral la norma la recomienda expresamente por la sensibilidad de la mampostería a la mano de obra.
+- **Combinar en altura sistemas de distinta capacidad de disipación** sin cumplir A.3.2.4 y A.3.2.5: D.1.4.4 lo desaconseja y D.1.4.5 exige esos requisitos si se hace.
+- **Usar derivas propias del Título D:** no existen; se usan los límites de la Tabla A.6.4-1 (D.1.4.6).
+</Callout>
+
+## Resumen en una línea
+
+**El Título D se aplica por un solo método de diseño (resistencia con B.2.4 o esfuerzos admisibles con B.2.3 y el Apéndice D-1), exige planos con los nueve literales de D.1.2.1, supervisión técnica obligatoria sobre 3000 m², muros en dos direcciones con rigidez mínima del 20 % (3+ niveles) o 10 % (1–2 niveles), diafragmas, un sistema en altura, materiales de D.3 y mano de obra calificada.**

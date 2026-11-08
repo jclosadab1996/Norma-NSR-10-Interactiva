@@ -1,137 +1,157 @@
 /**
- * Apéndice C-G (Procedimiento alterno de diseño a flexión por el método de esfuerzos admisibles).
- * PDF p.561–563 (C-259 a C-261). PDF = impresa + 302. Unidades: mm, MPa, N·mm (momentos en kN·m en las salidas de alto nivel).
+ * Título C de la NSR-10 — Apéndice C-G: diseño a flexión por esfuerzos admisibles bajo cargas de servicio.
+ * Lógica pura, sin React. (El método análogo para mampostería, Apéndice D-1, vive en esfuerzosAdmisiblesMamposteria.ts.)
+ *
+ * UNIDADES: longitudes en mm · áreas en mm² · esfuerzos en MPa · momentos en kN·m (la conversión N·mm → kN·m se hace aquí).
+ * PDF = página impresa "C-n" + 302 (C-259 a C-262 = PDF 561 a 564).
+ *
+ * Qué es de la norma y qué es «autoría del proyecto»:
+ *  - Norma: esfuerzos admisibles de C-G.3 (0.45 f′c; 120 MPa para fy ≤ 240; 170 MPa para fy ≥ 420 y malla), relación modular n de
+ *    C-G.4.4 (entero más cercano, no menor de 6) y las ecuaciones C-G-1 a C-G-6.
+ *  - Proyecto: E_c = 4700 √f′c para calcular n; leer «0.50 fy o 210 MPa» como el MENOR; usar 120 MPa para 240 < fy < 420 MPa
+ *    en seccionServicio (la norma no da valor y fsAdmisible devuelve null); el momento admisible como el menor entre el del
+ *    acero y el del concreto.
+ *
+ * ÍNDICE
+ *   relacionModularDesdeFc (C-G.4.4) · fcAdmisible (C-G.3.1) · fsAdmisible (C-G.3.2) · kSimple (C-G-5) · kDoble (C-G-6)
+ *   seccionServicio: k, j, esfuerzos fs, f′s y fc (C-G-1 a C-G-4) y momentos admisibles de una sección rectangular.
  */
-import { ES_ACERO_MPA, moduloElasticidad } from './concreto';
 
-/** Concreto: fc ≤ 0.45 f′c (C-G.3.1, PDF p.562, C-260). */
-export const FACTOR_FC_ADMISIBLE = 0.45;
+/** Módulo de elasticidad del acero, MPa (C.8.5.2). */
+export const ES_ACERO_MPA = 200000;
 
-/** Esfuerzo admisible del acero en tracción (C-G.3.2, PDF p.562, C-260), MPa. */
-export const FS_ADMISIBLE_FY_240 = 120;
-export const FS_ADMISIBLE_FY_420 = 170;
-export const FS_ADMISIBLE_LOSA_MAX = 210;
-/** Losas en una dirección de luz < 3.50 m con barras No. 3 (10M) o menores: 0.50 fy o 210 MPa. */
-export const LUZ_LOSA_ESPECIAL_M = 3.5;
-
-/** Relación modular n = Es/Ec, entero más cercano pero no menor de 6 (C-G.4.4). */
-export function relacionModular(Ec: number, Es = ES_ACERO_MPA): number {
-  return Math.max(6, Math.round(Es / Ec));
-}
-
-/** n con Ec = 4700 √f′c (concreto de peso normal). */
-export const relacionModularDesdeFc = (fc: number) => relacionModular(moduloElasticidad(fc));
-
-/** Relación modular efectiva para el acero de compresión: 2 Es/Ec (C-G.4.5). */
-export const relacionModularCompresion = (Ec: number, Es = ES_ACERO_MPA) => (2 * Es) / Ec;
+/** Módulo de elasticidad del concreto normal, MPa: 4700 √f′c (C.8.5.1; f′c en MPa). */
+const moduloConcreto = (fc: number): number => 4700 * Math.sqrt(fc);
 
 /**
- * fs admisible (C-G.3.2). Para fy entre 240 y 420 MPa sin malla la norma no da valor (devuelve null).
- * Para losas en una dirección de luz < 3.50 m con barras No. 3 o menores: el menor entre 0.50 fy y 210 MPa
- * (lectura del proyecto del «0.50fy o 210 MPa»).
+ * C-G.4.4 — relación modular n = Es/Ec tomada como el entero más cercano, no menor de 6.
+ * Ec = 4700 √f′c (autoría del proyecto: la norma remite a C.8.5.1).
  */
-export function fsAdmisible(fy: number, opciones: { losaUnaDireccionCorta?: boolean; mallaSoldada?: boolean } = {}): number | null {
-  if (opciones.losaUnaDireccionCorta) return Math.min(0.5 * fy, FS_ADMISIBLE_LOSA_MAX);
-  if (opciones.mallaSoldada || fy >= 420) return FS_ADMISIBLE_FY_420;
-  if (fy <= 240) return FS_ADMISIBLE_FY_240;
+export function relacionModularDesdeFc(fc: number): number {
+  if (!(fc > 0)) throw new RangeError('f′c debe ser positivo');
+  return Math.max(6, Math.round(ES_ACERO_MPA / moduloConcreto(fc)));
+}
+
+/** C-G.3.1 — esfuerzo admisible en la fibra extrema comprimida del concreto: 0.45 f′c (MPa). */
+export function fcAdmisible(fc: number): number {
+  return 0.45 * fc;
+}
+
+export interface OpcionesFs {
+  /** Barras No. 3 (3/8″) o 10M o menores en losas en una dirección de luz menor de 3.50 m (C-G.3.2). */
+  losaBarraPequena?: boolean;
+}
+
+/**
+ * C-G.3.2 — esfuerzo admisible del acero de refuerzo en tracción (MPa).
+ *  - fy ≤ 240 MPa → 120 MPa · fy ≥ 420 MPa → 170 MPa.
+ *  - Losas en una dirección (luz < 3.50 m) con barras No. 3 o menores: «0.50 fy o 210 MPa», leído como el menor.
+ *  - 240 < fy < 420 MPa: la norma no da valor → null.
+ */
+export function fsAdmisible(fy: number, opciones: OpcionesFs = {}): number | null {
+  if (!(fy > 0)) throw new RangeError('fy debe ser positivo');
+  if (opciones.losaBarraPequena) return Math.min(0.5 * fy, 210);
+  if (fy <= 240) return 120;
+  if (fy >= 420) return 170;
   return null;
 }
 
-/** fc admisible = 0.45 f′c. */
-export const fcAdmisible = (fc: number) => FACTOR_FC_ADMISIBLE * fc;
-
-/** Ec. C-G-5: k = √((nρ)² + 2nρ) − nρ (solo refuerzo en tracción). */
+/** C-G-5 — profundidad relativa del eje neutro k = kd/d con solo refuerzo en tracción: √((nρ)² + 2nρ) − nρ. */
 export function kSimple(n: number, rho: number): number {
   const nr = n * rho;
   return Math.sqrt(nr * nr + 2 * nr) - nr;
 }
 
-/** Ec. C-G-6: k = √(n²(ρ+ρ′)² + 2n(ρ + ρ′ d′/d)) − n(ρ+ρ′). */
-export function kDoble(n: number, rho: number, rhoP: number, dPrimaSobreD: number): number {
-  const s = rho + rhoP;
-  return Math.sqrt(n * n * s * s + 2 * n * (rho + rhoP * dPrimaSobreD)) - n * s;
+/**
+ * C-G-6 — k con refuerzo en compresión:
+ * √(n²(ρ+ρ′)² + 2n(ρ + ρ′·d′/d)) − n(ρ+ρ′). Con ρ′ = 0 coincide con C-G-5.
+ */
+export function kDoble(n: number, rho: number, rhoPrima: number, dPrimaSobreD: number): number {
+  const s = n * (rho + rhoPrima);
+  return Math.sqrt(s * s + 2 * n * (rho + rhoPrima * dPrimaSobreD)) - s;
 }
 
-/** Ec. C-G-4: j = 1 − k/3. */
-export const jBrazo = (k: number) => 1 - k / 3;
-
-/** Ec. C-G-1: fs = M/(As j d) (M en N·mm, resultado en MPa). */
-export const fsTraccion = (M: number, As: number, j: number, d: number) => M / (As * j * d);
-
-/** Ec. C-G-2: f′s = 2 fs (k − d′/d)/(1 − k) (MPa). */
-export const fsCompresion = (fs: number, k: number, dPrimaSobreD: number) => (2 * fs * (k - dPrimaSobreD)) / (1 - k);
-
-/** Ec. C-G-3: fc = 2M/(b d² j k) (MPa, M en N·mm). */
-export const fcConcreto = (M: number, b: number, d: number, j: number, k: number) => (2 * M) / (b * d * d * j * k);
-
-export interface EntradaServicio {
+export interface EntradaSeccion {
+  /** Ancho de la cara en compresión, mm. */
   b: number;
+  /** Peralte efectivo, mm. */
   d: number;
+  /** Área del refuerzo en tracción, mm². */
   As: number;
+  /** f′c, MPa. */
   fc: number;
+  /** fy, MPa. */
   fy: number;
-  /** Acero de compresión opcional. */
-  AsPrima?: number;
-  dPrima?: number;
-  /** Momento de servicio, kN·m (opcional). */
+  /** Momento de servicio, kN·m (opcional: sin él no se calculan los esfuerzos actuantes). */
   M?: number;
+  /** Área del refuerzo en compresión, mm² (opcional). */
+  AsPrima?: number;
+  /** Distancia de la fibra comprimida al refuerzo en compresión, mm (requerida si AsPrima > 0). */
+  dPrima?: number;
+  /** Relación modular; por defecto la de C-G.4.4 con la f′c dada. */
   n?: number;
-  fsAdm?: number;
+  /** Losa en una dirección con barras pequeñas (C-G.3.2, último renglón). */
+  losaBarraPequena?: boolean;
 }
 
-export interface ResultadoServicio {
+export interface ResultadoSeccion {
   n: number;
   rho: number;
   rhoPrima: number;
+  /** Profundidad relativa del eje neutro, k = kd/d. */
   k: number;
+  /** Brazo interno relativo, j = 1 − k/3 (C-G-4). */
   j: number;
+  /** Esfuerzo admisible del acero, MPa (120 por prudencia si 240 < fy < 420; autoría del proyecto). */
   fsAdm: number;
+  /** Esfuerzo admisible del concreto, MPa. */
   fcAdm: number;
-  /** Momentos admisibles (kN·m): por acero en tracción, por concreto y, con A′s, por acero en compresión. */
+  /** Momento admisible por el acero, fs·As·j·d (C-G-1), kN·m. */
   MadmAcero: number;
+  /** Momento admisible por el concreto, fc·b·d²·j·k/2 (C-G-3), kN·m. */
   MadmConcreto: number;
-  MadmCompresion: number | null;
+  /** Cuál material gobierna el momento admisible. */
+  gobierna: 'acero' | 'concreto';
+  /** Menor de los dos momentos admisibles, kN·m (autoría del proyecto). */
   Madm: number;
-  gobierna: 'acero' | 'concreto' | 'acero-compresion';
-  /** Esfuerzos para M (si se dio). */
-  fs?: number;
-  fcCalc?: number;
-  fsPrima?: number;
+  /** Esfuerzo en el acero en tracción para M (C-G-1), MPa; null si no se dio M. */
+  fs: number | null;
+  /** Esfuerzo en el concreto para M (C-G-3), MPa; null si no se dio M. */
+  fcCalc: number | null;
+  /** Esfuerzo en el acero en compresión (C-G-2), MPa; null si no hay A′s o no se dio M. */
+  fsPrima: number | null;
 }
 
-/**
- * Esfuerzos y momento admisible de una sección rectangular con las Ecs. C-G-1 a C-G-6. El momento admisible es el menor que
- * lleva algún material a su esfuerzo admisible (combinación del proyecto; la norma da las ecuaciones y los límites).
- */
-export function seccionServicio(e: EntradaServicio): ResultadoServicio {
-  const n = e.n ?? relacionModularDesdeFc(e.fc);
-  const rho = e.As / (e.b * e.d);
-  const rhoP = e.AsPrima ? e.AsPrima / (e.b * e.d) : 0;
-  const dpd = e.dPrima ? e.dPrima / e.d : 0;
-  const k = rhoP > 0 ? kDoble(n, rho, rhoP, dpd) : kSimple(n, rho);
-  const j = jBrazo(k);
-  const fsAdm = e.fsAdm ?? fsAdmisible(e.fy) ?? FS_ADMISIBLE_FY_240;
-  const fcAdm = fcAdmisible(e.fc);
-  const MadmAcero = (fsAdm * e.As * j * e.d) / 1e6;
-  const MadmConcreto = (fcAdm * e.b * e.d * e.d * j * k) / 2 / 1e6;
-  let MadmCompresion: number | null = null;
-  if (rhoP > 0 && k > dpd) {
-    // f′s = 2 fs (k − d′/d)/(1 − k) ≤ fs,adm  →  fs ≤ fsAdm (1 − k)/(2 (k − d′/d))
-    const fsMax = (fsAdm * (1 - k)) / (2 * (k - dpd));
-    MadmCompresion = (fsMax * e.As * j * e.d) / 1e6;
+/** Esfuerzos y momentos admisibles de una sección rectangular fisurada y transformada (C-G.4). */
+export function seccionServicio(e: EntradaSeccion): ResultadoSeccion {
+  const { b, d, As, fc, fy } = e;
+  if (!(b > 0 && d > 0 && As > 0 && fc > 0 && fy > 0)) throw new RangeError('b, d, As, f′c y fy deben ser positivos');
+  const n = e.n ?? relacionModularDesdeFc(fc);
+  const rho = As / (b * d);
+  const AsPrima = e.AsPrima ?? 0;
+  const rhoPrima = AsPrima / (b * d);
+  let k: number;
+  if (AsPrima > 0) {
+    if (e.dPrima == null || !(e.dPrima > 0)) throw new RangeError('dPrima es obligatorio si hay refuerzo en compresión');
+    k = kDoble(n, rho, rhoPrima, e.dPrima / d);
+  } else {
+    k = kSimple(n, rho);
   }
-  const candidatos: [number, ResultadoServicio['gobierna']][] = [
-    [MadmAcero, 'acero'],
-    [MadmConcreto, 'concreto'],
-  ];
-  if (MadmCompresion !== null) candidatos.push([MadmCompresion, 'acero-compresion']);
-  const [Madm, gobierna] = candidatos.reduce((a, c) => (c[0] < a[0] ? c : a));
-  const r: ResultadoServicio = { n, rho, rhoPrima: rhoP, k, j, fsAdm, fcAdm, MadmAcero, MadmConcreto, MadmCompresion, Madm, gobierna };
-  if (e.M !== undefined) {
-    const Mnmm = e.M * 1e6;
-    r.fs = fsTraccion(Mnmm, e.As, j, e.d);
-    r.fcCalc = fcConcreto(Mnmm, e.b, e.d, j, k);
-    if (rhoP > 0) r.fsPrima = fsCompresion(r.fs, k, dpd);
+  const j = 1 - k / 3;
+  const fsAdm = fsAdmisible(fy, { losaBarraPequena: e.losaBarraPequena }) ?? 120;
+  const fcAdm = fcAdmisible(fc);
+  const MadmAcero = (fsAdm * As * j * d) / 1e6;
+  const MadmConcreto = (fcAdm * b * d * d * j * k) / 2 / 1e6;
+  const gobierna = MadmAcero <= MadmConcreto ? 'acero' : 'concreto';
+
+  let fs: number | null = null;
+  let fcCalc: number | null = null;
+  let fsPrima: number | null = null;
+  if (e.M != null) {
+    const M = e.M * 1e6; // N·mm
+    fs = M / (As * j * d);
+    fcCalc = (2 * M) / (b * d * d * j * k);
+    if (AsPrima > 0) fsPrima = (2 * fs * (k - (e.dPrima as number) / d)) / (1 - k);
   }
-  return r;
+  return { n, rho, rhoPrima, k, j, fsAdm, fcAdm, MadmAcero, MadmConcreto, gobierna, Madm: Math.min(MadmAcero, MadmConcreto), fs, fcCalc, fsPrima };
 }

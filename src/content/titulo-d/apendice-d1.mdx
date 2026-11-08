@@ -1,0 +1,913 @@
+---
+codigo: 'D-1'
+tipo: apendice
+titulo: 'Diseño por esfuerzos de trabajo admisibles'
+resumen: 'El procedimiento alterno al método de resistencia (D.5): bajo cargas de servicio, los esfuerzos calculados en la mampostería y en el acero no pueden exceder los esfuerzos admisibles de compresión axial, flexión, tracción por flexión, cortante y del refuerzo (Ecs. D-1.5-1 a D-1.5-23 y Tabla D-1.5-1), más la ecuación de esfuerzos combinados.'
+objetivos:
+  - 'Explicar cuándo y por qué se puede usar el método de los esfuerzos de trabajo en lugar del de resistencia (D-1.1, D-1.3)'
+  - 'Calcular Fa, Fb y Pa con el factor de esbeltez Re y verificar la ecuación de esfuerzos combinados fa/Fa + fb/Fb ≤ 1'
+  - 'Leer la Tabla D-1.5-1 de tracción admisible por flexión y aplicar la interpolación para mampostería parcialmente inyectada'
+  - 'Obtener el esfuerzo cortante admisible Fv de vigas y de muros (con M/Vd) y dimensionar el refuerzo transversal Av = fv bw s / Fs'
+  - 'Calcular los esfuerzos admisibles del acero Fs (corrugado, liso, alambres; tracción y compresión) y verificar cumple / no cumple'
+paginasNorma: 'D-69 a D-74'
+paginaPdf: 634
+orden: 16
+calculadoras: ['esfuerzos-admisibles-mamposteria']
+nivel: 'avanzado'
+---
+
+import {
+  esfuerzoAdmisibleAcero,
+  esfuerzoCortanteSolicitado,
+  evaluarEsfuerzos,
+  faColumnaNoReforzada,
+  faMuro,
+  fbAdmisible,
+  ftAdmisible,
+  fvMuroNoReforzado,
+  fvMuroReforzado,
+  fvVigaAdmisible,
+  reEsbeltez,
+  refuerzoCortante,
+  separacionMaximaCortante,
+} from '../../lib/nsr10/esfuerzosAdmisiblesMamposteria';
+import { resistenciaAxial } from '../../lib/nsr10/mamposteria';
+import { TABLA_D151 } from '../../data/esfuerzosAdmisiblesMamposteria';
+
+export const f = (x, d = 2) => x.toFixed(d);
+export const vf = (r, k) => r.verificaciones.find((v) => v.clave === k);
+export const tf = (i, m, c) => TABLA_D151[i][m][c].toFixed(2);
+
+export const tablaFs = [
+  'corrugada-traccion',
+  'lisa-traccion',
+  'alambre-traccion',
+  'columna-compresion',
+  'flexion-corrugada-compresion',
+  'flexion-lisa-compresion',
+].map((clave) => ({ clave, f240: esfuerzoAdmisibleAcero(clave, 240), f420: esfuerzoAdmisibleAcero(clave, 420) }));
+
+export const ej1 = (() => {
+  const res = evaluarEsfuerzos({
+    elemento: 'muro-reforzado',
+    fm: 10,
+    hPrime: 2400,
+    t: 150,
+    Ae: 450000,
+    fy: 420,
+    tipoAcero: 'corrugada',
+    actuantes: { P: 400000, fb: 1.0, fsTraccion: 100 },
+  });
+  const crit = evaluarEsfuerzos({
+    elemento: 'muro-reforzado',
+    fm: 10,
+    hPrime: 2400,
+    t: 150,
+    Ae: 450000,
+    fy: 420,
+    actuantes: { P: 600000, fb: 2.0 },
+  });
+  return { res, crit, Fb: fbAdmisible(10) };
+})();
+
+export const ej2 = (() => {
+  const base = { fm: 12, hPrime: 3000, t: 300, Ae: 150000, Ast: 516, fy: 420 };
+  const res = evaluarEsfuerzos({ elemento: 'columna-reforzada', ...base, tipoAcero: 'corrugada', actuantes: { P: 350000 } });
+  const Re = reEsbeltez(base.hPrime, base.t);
+  const faNoRef = faColumnaNoReforzada(base.fm, Re);
+  return { base, res, Re, faNoRef, Fs: esfuerzoAdmisibleAcero('columna-compresion', base.fy) };
+})();
+
+export const ej3 = (() => {
+  const fm = 10;
+  const b = 150;
+  const d = 2400;
+  const V1 = 70000;
+  const M1 = 130e6;
+  const MVd = M1 / (V1 * d);
+  const fv1 = esfuerzoCortanteSolicitado(V1, b, d);
+  const FvM = fvMuroReforzado(fm, MVd, 'mamposteria');
+  const V2 = 90000;
+  const fv2 = esfuerzoCortanteSolicitado(V2, b, d);
+  const FvR = fvMuroReforzado(fm, MVd, 'refuerzo');
+  const Fs = esfuerzoAdmisibleAcero('corrugada-traccion', 420).Fs;
+  const s = 400;
+  const Av = refuerzoCortante(fv2, b, s, Fs);
+  const AvReal = 129;
+  const sPorAv = (AvReal * Fs) / (fv2 * b);
+  return { fm, b, d, V1, M1, MVd, fv1, FvM, V2, fv2, FvR, Fs, s, Av, AvReal, sPorAv, sMax: separacionMaximaCortante(d) };
+})();
+
+export const ej4 = (() => {
+  const t = 150;
+  const Ae = 1000 * t;
+  const S = (1000 * t * t) / 6;
+  const P = 20000;
+  const M = 1.0e6;
+  const fa = P / Ae;
+  const fbFlex = M / S;
+  const ftNeto = fbFlex - fa;
+  const base = { direccion: 'perpendicular-junta-horizontal', unidad: 'perforacion-vertical-sin-rellenar', clase: 'HMS' };
+  const Ft50 = ftAdmisible({ ...base, mortero: 'cemento-cal', fraccionRelleno: 0.5 });
+  const Ft50m = ftAdmisible({ ...base, mortero: 'cemento-mamposteria', fraccionRelleno: 0.5 });
+  const FtVacio = ftAdmisible({ ...base, mortero: 'cemento-cal' });
+  const res = evaluarEsfuerzos({
+    elemento: 'muro-no-reforzado',
+    fm: 10,
+    hPrime: 2400,
+    t,
+    Ae,
+    traccion: { ...base, mortero: 'cemento-cal', fraccionRelleno: 0.5 },
+    cortante: { fam: fa },
+    actuantes: { P, fb: fbFlex, ft: ftNeto, fv: 0.05 },
+  });
+  const resM = evaluarEsfuerzos({
+    elemento: 'muro-no-reforzado',
+    fm: 10,
+    hPrime: 2400,
+    t,
+    Ae,
+    traccion: { ...base, mortero: 'cemento-mamposteria', fraccionRelleno: 0.5 },
+    actuantes: { ft: ftNeto },
+  });
+  return { t, Ae, S, P, M, fa, fbFlex, ftNeto, Ft50, Ft50m, FtVacio, res, resM, fvNR: fvMuroNoReforzado(10, fa) };
+})();
+
+export const figFa = (() => {
+  const fm = 10;
+  const t = 150;
+  const Ae = 150000;
+  const X = (r) => 55 + (r / 30) * 395;
+  const Y = (v) => 225 - (v / 6) * 200;
+  const rs = Array.from({ length: 61 }, (_, i) => i * 0.5);
+  const serv = rs.map((r) => ({ r, v: faMuro(fm, reEsbeltez(r * t, t)) }));
+  const dis = (phi) => rs.map((r) => ({ r, v: (resistenciaAxial({ fm, Ae, Ast: 0, fy: 420, hPrime: r * t, t, phi }).phiPn * 1000) / Ae }));
+  const d80 = dis(0.8);
+  const d60 = dis(0.6);
+  const pl = (a) => a.map((p) => `${X(p.r).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  return { X, Y, serv: pl(serv), d80: pl(d80), d60: pl(d60), s0: serv[0].v, d800: d80[0].v, d600: d60[0].v };
+})();
+
+export const figFv = (() => {
+  const X = (m) => 55 + (m / 2) * 395;
+  const Y = (v) => 225 - (v / 0.8) * 200;
+  const xs = Array.from({ length: 101 }, (_, i) => i * 0.02);
+  const curva = (fm, q) => xs.map((m) => `${X(m).toFixed(1)},${Y(fvMuroReforzado(fm, m, q).Fv).toFixed(1)}`).join(' ');
+  return {
+    X,
+    Y,
+    m10: curva(10, 'mamposteria'),
+    r10: curva(10, 'refuerzo'),
+    m20: curva(20, 'mamposteria'),
+    r20: curva(20, 'refuerzo'),
+  };
+})();
+
+## Idea central del capítulo
+
+El Apéndice D-1 es **la otra forma de diseñar mampostería**. El Capítulo D.5 (método de resistencia) amplifica las cargas y compara con la resistencia reducida $\phi R_n$. El Apéndice D-1 hace lo contrario: usa las cargas **de servicio**, calcula los **esfuerzos** que producen en la mampostería y en el acero suponiendo que ambos trabajan en rango **elástico**, y exige que ningún esfuerzo supere el **esfuerzo admisible** de la sección D-1.5 (<NormaRef s="D-1.1.1" pag="D-69" />, <NormaRef s="D-1.5.1" pag="D-70" />).
+
+El apéndice no trae procedimientos de análisis nuevos: es una **lista de esfuerzos admisibles** (compresión axial $F_a$, compresión por flexión $F_b$, tracción por flexión $F_t$, cortante $F_v$, y esfuerzo del acero $F_s$), una ecuación para combinar compresión axial y flexión (D-1.5-7) y la forma de calcular el refuerzo de cortante. Todo en 6 páginas, con 23 ecuaciones y una tabla.
+
+<Callout tipo="importante" titulo="Un método alterno, no el principal">
+La NSR-10 diseña la mampostería **por resistencia** (Capítulo D.5). El Apéndice D-1 lo permite «como un procedimiento alterno» (<NormaRef s="D-1.1.1" pag="D-69" />). Además, la sección B.2.3.1 aclara que las combinaciones de esfuerzos de trabajo solo se emplean cuando el Título, Capítulo o Sección correspondiente lo indica explícitamente (<NormaRef s="B.2.3.1" pag="B-5" />): aquí lo indica el propio apéndice. Una vez elegido el método, no se mezclan combinaciones de uno y otro en la misma estructura (<NormaRef s="B.2.1.2" pag="B-4" />).
+</Callout>
+
+<Callout tipo="nota" titulo="Unidades y convenciones del capítulo">
+Longitudes en mm, áreas en mm², esfuerzos en MPa, fuerzas en N (el apéndice las escribe en N; en los ejemplos se convierte desde kN con 1 kN = 1000 N) y momentos en N·mm. Los resultados de los ejemplos salen de las mismas funciones (`src/lib/nsr10/esfuerzosAdmisiblesMamposteria.ts`) que usa la calculadora incrustada. Lo marcado **«autoría del proyecto»** es una interpretación o complemento nuestro, no texto de la norma.
+</Callout>
+
+## D-1.0 — Nomenclatura
+
+El apéndice define 26 símbolos propios. Se reproducen con sus unidades (<NormaRef s="D-1.0" pag="D-69" />):
+
+<TablaNorma numero="D-1.0" titulo="Nomenclatura del Apéndice D-1" pag="D-69" nota="Resumen de la nomenclatura impresa; se agrega la columna «Dónde se usa» (autoría del proyecto).">
+
+| Símbolo | Significado según la norma | Dónde se usa |
+|---|---|---|
+| $A_e$ | Área efectiva de la sección transversal del elemento, mm² | D-1.5-3, D-1.5-4 |
+| $A_{st}$ | Área del refuerzo longitudinal del elemento, mm² | D-1.5-4 |
+| $A_v$ | Área del refuerzo a cortante, mm² | D-1.5-17 |
+| $b$ | Ancho efectivo de una sección rectangular, mm | D-1.5-8, D-1.5-11 |
+| $b_w$ | Ancho del alma del elemento, mm | D-1.5-17 |
+| $d$ | Altura efectiva de la sección del elemento, mm | D-1.5-8, D-1.5-11, $M/Vd$ |
+| $E$ | Efectos sísmicos reducidos | D-1.3.2 |
+| $F_a$ | Esfuerzo admisible de compresión debido a carga axial, MPa | D-1.5-1 a D-1.5-3 |
+| $F_b$ | Esfuerzo admisible de compresión debido a flexión, MPa | D-1.5-6 |
+| $F_s$ | Esfuerzo admisible en el refuerzo, MPa, **o fuerzas sísmicas** | D-1.5-4, D-1.5-17 a D-1.5-23 |
+| $F_t$ | Esfuerzo admisible de tracción debida a flexión, MPa | Tabla D-1.5-1 |
+| $F_v$ | Esfuerzo admisible de cortante, MPa | D-1.5-9 a D-1.5-16 |
+| $f_a$ | Esfuerzo causado por la fuerza axial calculado con el área efectiva, MPa | D-1.5-7 |
+| $f_b$ | Esfuerzo de compresión causado por la flexión calculado con el área efectiva, MPa | D-1.5-7 |
+| $f'_m$ | Resistencia a la compresión de la mampostería, MPa | casi todas |
+| $f_v$ | Esfuerzo cortante solicitado, MPa | D-1.5-8, D-1.5-11, D-1.5-17 |
+| $f_y$ | Esfuerzo nominal de fluencia del refuerzo, MPa | D-1.5-18 a D-1.5-23 |
+| $h'$ | Altura efectiva del muro o columna, mm | D-1.5-5 |
+| $j$ | Factor del brazo de palanca tracción-compresión, adimensional | D-1.5-8, D-1.5-11 |
+| $M$ | Momento flector sobre la sección debido a la carga de servicio | $M/Vd$ |
+| $P_a$ | Fuerza axial de compresión admisible, N | D-1.5-3, D-1.5-4 |
+| $R$ | Coeficiente de capacidad de disipación de energía | D-1.3.2 |
+| $R_e$ | Coeficiente que tiene en cuenta los efectos de esbeltez en elementos a compresión | D-1.5-1 a D-1.5-5 |
+| $s$ | Espaciamiento del refuerzo transversal, paralelo al eje del elemento, mm | D-1.5-17 |
+| $t$ | Espesor efectivo de la sección para evaluar pandeo, mm (véase D.5.4.2) | D-1.5-5 |
+| $V$ | Fuerza de cortante bajo cargas de servicio, N | D-1.5-8, D-1.5-11 |
+
+</TablaNorma>
+
+<Callout tipo="atencion" titulo="Dos usos de $F_s$ y un símbolo sin definir">
+La nomenclatura define $F_s$ a la vez como «esfuerzo admisible en el refuerzo» y como «fuerzas sísmicas» (así aparece en D-1.3.2, donde $E = F_s/R$). Son dos cosas distintas: aquí $F_s$ es **siempre el esfuerzo admisible del acero** salvo en la fórmula de $E$. Además, $f_{am}$ (esfuerzo por carga muerta sola, D-1.5.7 a) se usa en el texto pero **no está en la nomenclatura**.
+</Callout>
+
+## D-1.1 — Alcance
+
+Dos frases (<NormaRef s="D-1.1.1" pag="D-69" /> y <NormaRef s="D-1.1.2" pag="D-69" />):
+
+- **D-1.1.1:** se permite diseñar mampostería estructural por esfuerzos de trabajo, con las combinaciones de carga de B.2.3, **como procedimiento alterno** al Capítulo D.5.
+- **D-1.1.2:** se permite el diseño de estructuras de mampostería por el método de los esfuerzos de trabajo descrito en B.2.3. (Repite en esencia la anterior.)
+
+Las combinaciones de B.2.3.1 son **sin mayorar** (o con factores 0.75, 0.7 y 0.6); por ejemplo $D + F$, $D + H + F + L + T$ o $D + H + F + 0.7E$ (<NormaRef s="B.2.3.1" pag="B-5" />). El coeficiente que afecta a $E$ es 0.7 cuando se diseña por esfuerzos de trabajo (<NormaRef s="B.2.3.2" pag="B-6" />).
+
+## D-1.2 — Principios generales
+
+### D-1.2.1 y D-1.2.2 — Sin tracción y con distribución lineal
+
+- **No se cuenta con la tracción de la mampostería** para esfuerzos de tracción axial ni de flexión, paralela o perpendicular al plano del muro (<NormaRef s="D-1.2.1" pag="D-69" />). La tracción la toma el acero.
+- Se puede suponer una **distribución lineal entre esfuerzos y deformaciones**, con los materiales trabajando en el **rango elástico** (<NormaRef s="D-1.2.2" pag="D-70" />). Es la teoría clásica de flexión de la sección agrietada: los esfuerzos varían linealmente con la distancia al eje neutro.
+
+<Figura alt="Sección rectangular agrietada con distribución triangular de esfuerzos de compresión en la mampostería y fuerza de tracción en el acero" numero="Esquema" pie="Sección elástica agrietada: la mampostería comprime en un triángulo con máximo fb ≤ Fb, no se cuenta su tracción (D-1.2.1) y el acero toma la tracción con fs ≤ Fs. (esquema del proyecto)">
+<svg viewBox="0 0 480 260" role="img" aria-label="Sección elástica agrietada con triángulo de compresión y fuerza de tracción en el acero" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="40" y="30" width="70" height="190" fill="var(--muted)" stroke="currentColor" strokeWidth="1.5" />
+  <rect x="40" y="30" width="70" height="70" fill="var(--chart-1)" fillOpacity="0.35" />
+  <line x1="30" x2="120" y1="100" y2="100" stroke="currentColor" strokeDasharray="5 3" />
+  <circle cx="75" cy="195" r="5" fill="currentColor" />
+  <text x="75" y="240" textAnchor="middle" fontSize="11" fill="currentColor">sección</text>
+  <text x="124" y="104" fontSize="11" fill="currentColor">eje neutro</text>
+  <text x="124" y="199" fontSize="11" fill="currentColor">refuerzo, As</text>
+  <line x1="215" x2="215" y1="22" y2="226" stroke="currentColor" strokeOpacity="0.4" />
+  <polygon points="215,30 315,30 215,100" fill="var(--chart-1)" fillOpacity="0.45" stroke="var(--chart-1)" strokeWidth="1.5" />
+  <text x="322" y="34" fontSize="11" fill="currentColor">fb ≤ Fb</text>
+  <text x="222" y="125" fontSize="11" fill="currentColor">mampostería sin tracción</text>
+  <text x="222" y="139" fontSize="11" fill="currentColor">(D-1.2.1)</text>
+  <line x1="215" x2="150" y1="195" y2="195" stroke="var(--chart-2)" strokeWidth="3" />
+  <polygon points="156,189 146,195 156,201" fill="var(--chart-2)" />
+  <text x="160" y="214" fontSize="11" fill="currentColor">T = As fs, fs ≤ Fs</text>
+  <line x1="395" x2="395" y1="60" y2="195" stroke="currentColor" />
+  <line x1="389" x2="401" y1="60" y2="60" stroke="currentColor" />
+  <line x1="389" x2="401" y1="195" y2="195" stroke="currentColor" />
+  <text x="405" y="132" fontSize="12" fill="currentColor">j d</text>
+  <text x="300" y="62" fontSize="11" fill="currentColor" textAnchor="end">C</text>
+</svg>
+</Figura>
+
+### D-1.2.3 a D-1.2.5 — Material y módulos
+
+- Los esfuerzos admisibles se basan en el $f'_m$ seleccionado según D.3.7 (<NormaRef s="D-1.2.3" pag="D-70" />).
+- El diseño debe cumplir equilibrio, compatibilidad de deformaciones y las características mecánicas del material (<NormaRef s="D-1.2.4" pag="D-70" />).
+- Se pueden usar los módulos de elasticidad y de cortante de D.5.2 (<NormaRef s="D-1.2.5" pag="D-70" />). Esto sirve, por ejemplo, para la relación modular $n = E_s/E_m$ de la sección transformada (autoría del proyecto).
+
+## D-1.3 — Cargas
+
+### D-1.3.1 y D-1.3.2 — Combinaciones y sismo reducido
+
+Las estructuras se diseñan para las cargas combinadas del Título B, y en la evaluación de esfuerzos se tienen en cuenta los efectos de las cargas sobre los desplazamientos (<NormaRef s="D-1.3.1" pag="D-70" />). Las solicitaciones se combinan según B.2.3; para el sismo se usan **efectos sísmicos reducidos** $E$, obtenidos dividiendo las fuerzas sísmicas de diseño $F_s$ del Título A entre el coeficiente de disipación de energía $R$ (<NormaRef s="D-1.3.2" pag="D-70" />):
+
+<Ecuacion num="D-1.3.2" titulo="Efectos sísmicos reducidos">
+
+$$
+E = \frac{F_s}{R}
+$$
+
+- $F_s$: fuerzas sísmicas de diseño del Título A (aquí es fuerza, no esfuerzo del acero). $R$: coeficiente de capacidad de disipación de energía.
+- En las combinaciones de B.2.3 el coeficiente que afecta a $E$ es 0.7 (<NormaRef s="B.2.3.2" pag="B-6" />).
+
+</Ecuacion>
+
+### D-1.3.3 y D-1.3.4 — Otros efectos e incremento de esfuerzos
+
+- Además de las cargas verticales y horizontales se debe capacitar la estructura para contracción, expansión, flujo plástico, asentamientos previstos y condiciones ambientales de funcionamiento (<NormaRef s="D-1.3.3" pag="D-70" />).
+- Cuando se incluyen cargas transitorias de viento o sismo, **los esfuerzos permisibles se pueden incrementar** «siguiendo lo indicado en B.2.3.4» (<NormaRef s="D-1.3.4" pag="D-70" />).
+
+<Callout tipo="atencion" titulo="Referencia a B.2.3.4 que no existe">
+En el Título B de este documento, la sección B.2.3 termina en B.2.3.2.2: **no hay B.2.3.4** (ni B.2.3.3) y, por tanto, la norma no da aquí ningún valor del incremento. Este capítulo **no asume** uno: la calculadora ofrece un «factor de incremento» opcional que vale 1.0 por defecto (autoría del proyecto), para que el usuario aplique el que su criterio o la versión vigente de la norma indique.
+</Callout>
+
+## D-1.4 — Características dimensionales efectivas
+
+La sección tiene un solo párrafo: en el diseño por esfuerzos de trabajo **deben cumplirse todos los requisitos de D.5.4** (<NormaRef s="D-1.4" pag="D-70" />). Es decir, las mismas dimensiones efectivas del Capítulo D.5a: área efectiva $A_e$ (D.5.4.1), espesor efectivo $t$ (D.5.4.2), altura efectiva $h'$ (D.5.4.3, con $h'/t \le 25$ en muros estructurales), anchos efectivos y áreas de cortante.
+
+<Callout tipo="nota" titulo="Numeración del original">
+El párrafo único de D-1.4 está numerado «D-1.5.1» en el PDF (debería ser D-1.4.1), y a continuación aparece de nuevo un «D-1.5.1 — Generalidades». Es una errata de numeración del original; aquí se cita como D-1.4.
+</Callout>
+
+## D-1.5 — Diseño por el método de los esfuerzos de trabajo admisibles
+
+### D-1.5.1 — Generalidades
+
+Los esfuerzos máximos calculados en los elementos de mampostería **bajo cargas de servicio** no deben exceder los valores de esta sección, usando las características dimensionales y los materiales especificados (<NormaRef s="D-1.5.1" pag="D-70" />). La estructura lógica es siempre la misma:
+
+$$
+f_{\text{actuante}} \;\le\; F_{\text{admisible}}
+$$
+
+donde el esfuerzo actuante sale de las cargas de servicio con un análisis elástico y el admisible, de las ecuaciones de D-1.5.
+
+La tabla siguiente es un resumen del proyecto (no está impresa en la norma): dice qué ecuación aplica a qué elemento.
+
+<TablaNorma numero="Resumen D-1.5" titulo="Esfuerzos admisibles según el elemento" pag="D-70 a D-74" nota="Resumen elaborado por el proyecto a partir de D-1.5.2 a D-1.5.10; no es una tabla impresa.">
+
+| Elemento | Compresión axial $F_a$ | Flexión $F_b$ | Tracción $F_t$ | Cortante $F_v$ | Acero $F_s$ |
+|---|---|---|---|---|---|
+| Muro reforzado | D-1.5-1 | D-1.5-6 | no se cuenta (D-1.2.1) | D-1.5-13 a D-1.5-16 | D-1.5-18 a D-1.5-23 |
+| Muro no reforzado | D-1.5-1 | D-1.5-6 | Tabla D-1.5-1 | D-1.5-12 (+ 0.2 $f_{am}$) | no aplica |
+| Columna reforzada | D-1.5-3 y D-1.5-4 | D-1.5-6 | no se cuenta | no lo da el apéndice | D-1.5-18 a D-1.5-21 |
+| Columna no reforzada | D-1.5-2 | D-1.5-6 | Tabla D-1.5-1 | no lo da el apéndice | no aplica |
+| Viga o dintel | no aplica | D-1.5-6 | no se cuenta | D-1.5-9 y D-1.5-10 | D-1.5-18 a D-1.5-20, D-1.5-22, D-1.5-23 |
+
+</TablaNorma>
+
+### D-1.5.2 — Esfuerzos admisibles para compresión axial
+
+Los esfuerzos admisibles de compresión axial $F_a$ no deben exceder los siguientes (<NormaRef s="D-1.5.2" pag="D-70" />). Dependen del tipo de elemento:
+
+**Muros de mampostería:**
+
+<Ecuacion num="D-1.5-1" titulo="Fa en muros">
+
+$$
+F_a = 0.20\,f'_m\,R_e
+$$
+
+- $f'_m$: resistencia a compresión de la mampostería (MPa). $R_e$: factor de esbeltez (Ec. D-1.5-5).
+
+</Ecuacion>
+
+**Columnas de mampostería no reforzadas:**
+
+<Ecuacion num="D-1.5-2" titulo="Fa en columnas no reforzadas">
+
+$$
+F_a = 0.20\,f'_m\,R_e
+$$
+
+- Es la misma expresión que para muros (<NormaRef s="D-1.5.2" pag="D-71" />).
+
+</Ecuacion>
+
+**Columnas de mampostería reforzadas:** la fuerza axial admisible $P_a$ suma la mampostería neta y el acero, y el esfuerzo es $P_a$ sobre el área efectiva.
+
+<Ecuacion num="D-1.5-3" titulo="Fa en columnas reforzadas">
+
+$$
+F_a = \frac{P_a}{A_e}
+$$
+
+- $P_a$: fuerza axial de compresión admisible (N), Ec. D-1.5-4. $A_e$: área efectiva (mm²).
+
+</Ecuacion>
+
+<Ecuacion num="D-1.5-4" titulo="Fuerza axial admisible Pa">
+
+$$
+P_a = \left[\,0.20\,f'_m\,(A_e - A_{st}) + 0.65\,A_{st}\,F_s\,\right] R_e
+$$
+
+- $A_{st}$: área del refuerzo longitudinal (mm²). $F_s$: esfuerzo admisible del acero (MPa).
+- El factor 0.65 reduce la contribución del acero. Resultado en N si las áreas están en mm² y los esfuerzos en MPa.
+
+</Ecuacion>
+
+La ecuación D-1.5-4 dice solamente «$F_s$». La lectura natural es el esfuerzo admisible del acero **en compresión en columnas**, $F_s = 0.4f_y \le 170$ MPa (Ec. D-1.5-21, ver más abajo). Esa es la que usan los ejemplos y la calculadora (autoría del proyecto).
+
+**Factor de esbeltez $R_e$**, para ambos tipos de elemento:
+
+<Ecuacion num="D-1.5-5" titulo="Factor de reducción por esbeltez Re">
+
+$$
+R_e = 1 - \left[\frac{h'}{42\,t}\right]^2 \quad \text{para } h'/t \le 30
+$$
+
+$$
+R_e = \left[\frac{21\,t}{h'}\right]^2 \quad \text{para } h'/t > 30
+$$
+
+- $h'$: altura efectiva del muro o columna (mm). $t$: espesor efectivo para evaluar pandeo (mm, D.5.4.2).
+
+</Ecuacion>
+
+Es **exactamente la misma ecuación** que la D.5.5-2 del método de resistencia (<NormaRef s="D.5.5.2" pag="D-37" />): la primera rama es una parábola que arranca en 1 y la segunda es el pandeo de Euler; ambas coinciden en $h'/t = 30$. Para muros estructurales recuerda que $h'/t \le 25$ (<NormaRef s="D.5.4.3.1" pag="D-36" />), así que en muros solo se usa la primera rama.
+
+<Ejemplo numero={1} titulo="Muro reforzado: compresión axial, flexión y acero con cargas de servicio">
+
+Muro de bloque de concreto con celdas inyectadas, largo 3.0 m y espesor $t$ = 150 mm: $A_e$ = 3000 × 150 = 450 000 mm². Altura efectiva $h'$ = 2400 mm, $f'_m$ = 10 MPa, acero corrugado de $f_y$ = 420 MPa. Bajo cargas de servicio, el análisis elástico da $P$ = 400 kN, un esfuerzo de compresión por flexión $f_b$ = 1.0 MPa y un esfuerzo en el acero a tracción $f_s$ = 100 MPa.
+
+<Paso titulo="Esbeltez y factor Re" ref="D-1.5-5, D.5.4.3.1">
+
+$h'/t$ = 2400/150 = **{f(ej1.res.esbeltez, 1)}** ≤ 25 (cumple). Como $h'/t \le 30$:
+
+$$
+R_e = 1 - \left[\frac{2400}{42(150)}\right]^2
+$$
+
+Resultado: **$R_e$ = {f(ej1.res.Re, 4)}**.
+
+</Paso>
+<Paso titulo="Compresión axial" ref="D-1.5-1">
+
+$F_a = 0.20\,f'_m\,R_e = 0.20(10)(R_e)$ = **{f(vf(ej1.res, 'axial').admisible, 3)} MPa**. El esfuerzo actuante es $f_a = P/A_e$ = 400 000/450 000 = **{f(vf(ej1.res, 'axial').actuante, 3)} MPa**; razón $f_a/F_a$ = {f(vf(ej1.res, 'axial').razon, 3)}.
+
+</Paso>
+<Paso titulo="Compresión por flexión" ref="D-1.5-6">
+
+$F_b = 0.33 f'_m = 0.33(10)$ = **{f(ej1.Fb.Fb, 2)} MPa** ($\le$ 14 MPa, no rige el tope). Razón $f_b/F_b$ = 1.0/{f(ej1.Fb.Fb, 2)} = {f(vf(ej1.res, 'flexion').razon, 3)}.
+
+</Paso>
+<Paso titulo="Esfuerzos combinados" ref="D-1.5-7">
+
+$$
+\frac{f_a}{F_a} + \frac{f_b}{F_b} \le 1.0
+$$
+
+Con $f_a$ = {f(ej1.res.fa, 3)} MPa, $F_a$ = {f(vf(ej1.res, 'axial').admisible, 3)} MPa, $f_b$ = 1.0 MPa y $F_b$ = {f(ej1.Fb.Fb, 2)} MPa, la suma vale {f(vf(ej1.res, 'combinada').actuante, 3)} ≤ 1.0, **{vf(ej1.res, 'combinada').cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Paso titulo="Acero a tracción" ref="D-1.5-18">
+
+Para barras corrugadas, $F_s = 0.5 f_y$ = 210 MPa, pero el tope es 170 MPa: **$F_s$ = {f(vf(ej1.res, 'acero-traccion').admisible, 0)} MPa**. Con $f_s$ = 100 MPa la razón es {f(vf(ej1.res, 'acero-traccion').razon, 3)}: **{vf(ej1.res, 'acero-traccion').cumple ? 'cumple' : 'no cumple'}**. Aquí el tope de 170 MPa, y no la fluencia de 420 MPa, fija el límite.
+
+</Paso>
+<Resultado>
+Los cuatro esfuerzos cumplen: $f_a/F_a$ = {f(vf(ej1.res, 'axial').razon, 2)}, $f_b/F_b$ = {f(vf(ej1.res, 'flexion').razon, 2)}, combinada = {f(vf(ej1.res, 'combinada').actuante, 2)} y $f_s/F_s$ = {f(vf(ej1.res, 'acero-traccion').razon, 2)}. Con $P$ = 600 kN y $f_b$ = 2.0 MPa la combinada subiría a {f(vf(ej1.crit, 'combinada').actuante, 2)}: {vf(ej1.crit, 'combinada').cumple ? 'aún cumpliría' : 'no cumpliría'}.
+</Resultado>
+</Ejemplo>
+
+<Ejemplo numero={2} titulo="Columna de mampostería reforzada: Pa y Fa">
+
+Columna de 300 × 500 mm ($A_e$ = 150 000 mm²) con espesor efectivo $t$ = 300 mm (la menor dimensión controla el pandeo), altura efectiva $h'$ = 3000 mm, $f'_m$ = 12 MPa, refuerzo vertical 4 No. 4 ($A_{st}$ = 4 × 129 = 516 mm²) con $f_y$ = 420 MPa. Carga axial de servicio $P$ = 350 kN.
+
+<Paso titulo="Re" ref="D-1.5-5">
+
+$h'/t$ = 10; $R_e = 1 - [3000/(42 \times 300)]^2$ = **{f(ej2.Re, 4)}**.
+
+</Paso>
+<Paso titulo="Esfuerzo admisible del acero en la columna" ref="D-1.5-21">
+
+$F_s = 0.4 f_y = 0.4(420)$ = {f(ej2.Fs.sinTope, 0)} MPa ≤ 170 MPa: **$F_s$ = {f(ej2.Fs.Fs, 0)} MPa**.
+
+</Paso>
+<Paso titulo="Fuerza axial admisible" ref="D-1.5-4">
+
+$$
+P_a = \left[\,0.20(12)(150\,000 - 516) + 0.65(516)(168)\,\right] R_e
+$$
+
+Los dos sumandos: mampostería {f((0.2 * 12 * (150000 - 516)) / 1000, 1)} kN y acero {f((0.65 * 516 * 168) / 1000, 1)} kN. Multiplicados por $R_e$: **$P_a$ = {f(ej2.res.Pa / 1000, 1)} kN**.
+
+</Paso>
+<Paso titulo="Esfuerzo admisible y verificación" ref="D-1.5-3">
+
+$F_a = P_a/A_e$ = **{f(vf(ej2.res, 'axial').admisible, 3)} MPa**. Esfuerzo actuante $f_a$ = 350 000/150 000 = {f(vf(ej2.res, 'axial').actuante, 3)} MPa; razón {f(vf(ej2.res, 'axial').razon, 3)}: **{vf(ej2.res, 'axial').cumple ? 'cumple' : 'no cumple'}**. Sin refuerzo, la misma columna tendría $F_a = 0.20 f'_m R_e$ = {f(ej2.faNoRef, 3)} MPa (D-1.5-2): el acero aporta {f((vf(ej2.res, 'axial').admisible / ej2.faNoRef - 1) * 100, 0)} % más de capacidad admisible.
+
+</Paso>
+<Resultado>
+$P_a$ = {f(ej2.res.Pa / 1000, 1)} kN ({f(vf(ej2.res, 'axial').admisible, 2)} MPa); con $P$ = 350 kN la columna **{vf(ej2.res, 'axial').cumple ? 'cumple' : 'no cumple'}** por compresión axial.
+</Resultado>
+</Ejemplo>
+
+<Figura alt="Esfuerzo admisible de servicio Fa frente al esfuerzo resistente de diseño por unidad de área, ambos en función de h′/t" numero="Esquema" pie="Fa = 0.20 f′m Re (servicio) frente a φPn/Ae de la Ec. D.5.5-4 sin refuerzo, con φ = 0.80 y 0.60, para f′m = 10 MPa. Las tres curvas tienen la forma de Re; la línea vertical marca h′/t = 25. (esquema del proyecto)">
+<svg viewBox="0 0 480 280" role="img" aria-label="Fa de servicio y resistencia de diseño frente a h′/t de 0 a 30" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="55" y="25" width="395" height="200" fill="none" stroke="currentColor" strokeOpacity="0.3" />
+  {[0, 1, 2, 3, 4, 5, 6].map((v) => (
+    <g key={v}>
+      <line x1="55" x2="450" y1={figFa.Y(v)} y2={figFa.Y(v)} stroke="currentColor" strokeOpacity="0.12" />
+      <text x="49" y={figFa.Y(v) + 4} textAnchor="end" fontSize="11" fill="currentColor">{v}</text>
+    </g>
+  ))}
+  {[0, 10, 20, 25, 30].map((r) => (
+    <g key={r}>
+      <line x1={figFa.X(r)} x2={figFa.X(r)} y1="225" y2="229" stroke="currentColor" />
+      <text x={figFa.X(r)} y="243" textAnchor="middle" fontSize="11" fill="currentColor">{r}</text>
+    </g>
+  ))}
+  <line x1={figFa.X(25)} x2={figFa.X(25)} y1="25" y2="225" stroke="currentColor" strokeDasharray="5 3" strokeOpacity="0.6" />
+  <polyline points={figFa.d80} fill="none" stroke="var(--chart-1)" strokeWidth="2.5" />
+  <polyline points={figFa.d60} fill="none" stroke="var(--chart-3)" strokeWidth="2.5" />
+  <polyline points={figFa.serv} fill="none" stroke="var(--chart-2)" strokeWidth="2.5" />
+  <text x={figFa.X(8)} y={figFa.Y(figFa.d800) - 6} fontSize="11" fill="currentColor">φPn/Ae, φ = 0.80</text>
+  <text x={figFa.X(8)} y={figFa.Y(figFa.d600) - 6} fontSize="11" fill="currentColor">φPn/Ae, φ = 0.60</text>
+  <text x={figFa.X(8)} y={figFa.Y(figFa.s0) - 6} fontSize="11" fill="currentColor">Fa (servicio)</text>
+  <text x={figFa.X(25) - 4} y="38" textAnchor="end" fontSize="11" fill="currentColor">h′/t = 25</text>
+  <text x="252" y="266" textAnchor="middle" fontSize="12" fill="currentColor">h′/t</text>
+  <text x="14" y="125" textAnchor="middle" fontSize="12" fill="currentColor" transform="rotate(-90 14 125)">esfuerzo (MPa)</text>
+</svg>
+</Figura>
+
+<Callout tipo="nota" titulo="¿Es más conservador el método de esfuerzos admisibles? (autoría del proyecto)">
+En compresión axial sin refuerzo y con $f'_m$ = 10 MPa, el esfuerzo admisible de servicio vale {f(figFa.s0, 2)} MPa (con $R_e$ = 1), mientras que el esfuerzo resistente de diseño $\phi P_n/A_e$ vale {f(figFa.d800, 2)} MPa con φ = 0.80 y {f(figFa.d600, 2)} MPa con φ = 0.60. Para comparar hay que dividir la resistencia de diseño entre un factor de carga: con un factor global típico de unos 1.4, la capacidad en servicio equivalente sería {f(figFa.d800 / 1.4, 2)} MPa (φ = 0.80) o {f(figFa.d600 / 1.4, 2)} MPa (φ = 0.60), frente a los {f(figFa.s0, 2)} MPa del apéndice. Es un orden de magnitud ilustrativo —el factor real depende de la proporción de carga muerta y viva—, no una equivalencia de la norma.
+</Callout>
+
+### D-1.5.3 — Esfuerzos admisibles para compresión por flexión
+
+El esfuerzo máximo admisible de compresión por flexión $F_b$ es **0.33 $f'_m$ pero no mayor que 14 MPa** (<NormaRef s="D-1.5.3" pag="D-71" />):
+
+<Ecuacion num="D-1.5-6" titulo="Fb: compresión por flexión">
+
+$$
+F_b = 0.33\,f'_m \le 14\ \text{MPa}
+$$
+
+- El tope de 14 MPa solo rige si $f'_m > 42.4$ MPa, valor que en la práctica de la mampostería colombiana casi nunca se alcanza.
+
+</Ecuacion>
+
+Nota que $F_b$ (0.33 $f'_m$) es mayor que $F_a$ (0.20 $f'_m R_e$): la compresión por flexión se admite más alta que la compresión uniforme. Una razón habitual (autoría del proyecto) es que el esfuerzo máximo de flexión solo ocurre en la fibra extrema y decae hacia el eje neutro.
+
+### D-1.5.4 — Tracción por flexión en mampostería no reforzada
+
+La tracción desarrollada **en las juntas de mortero** por flexión en muros con **aparejo trabado** no puede exceder los valores de la Tabla D-1.5-1 (<NormaRef s="D-1.5.4" pag="D-71" />). Los valores dependen de tres cosas: la **dirección** de la tracción (perpendicular a las juntas horizontales o a la junta vertical), el **tipo de unidad y de inyección**, y el **mortero** (cemento y cal, o cemento para mampostería; tipos H, M, S o N).
+
+<TablaNorma numero="Tabla D-1.5-1" titulo="Esfuerzos admisibles para tracción por flexión de la mampostería con aparejo trabado, Ft (MPa)" pag="D-71" nota="Transcrita y verificada contra la imagen de la página. Nota 1: para mampostería parcialmente inyectada, Ft se obtiene por interpolación lineal entre unidades de perforación vertical sin rellenar y rellenas, según el porcentaje inyectado.">
+
+| Dirección de la tracción por flexión y tipo de mampostería | Cemento pórtland y cal, H, M o S | Cemento pórtland y cal, N | Cemento para mampostería, H, M o S | Cemento para mampostería, N |
+|---|---:|---:|---:|---:|
+| **Perpendicular a las juntas horizontales** | | | | |
+| Unidades macizas | {tf(0, 'cementoCal', 'HMS')} | {tf(0, 'cementoCal', 'N')} | {tf(0, 'cementoMamposteria', 'HMS')} | {tf(0, 'cementoMamposteria', 'N')} |
+| Unidades de perforación vertical (1), sin rellenar | {tf(1, 'cementoCal', 'HMS')} | {tf(1, 'cementoCal', 'N')} | {tf(1, 'cementoMamposteria', 'HMS')} | {tf(1, 'cementoMamposteria', 'N')} |
+| Unidades de perforación vertical (1), rellenas con mortero de inyección | {tf(2, 'cementoCal', 'HMS')} | {tf(2, 'cementoCal', 'N')} | {tf(2, 'cementoMamposteria', 'HMS')} | {tf(2, 'cementoMamposteria', 'N')} |
+| **Perpendicular a la junta vertical** | | | | |
+| Unidades macizas | {tf(3, 'cementoCal', 'HMS')} | {tf(3, 'cementoCal', 'N')} | {tf(3, 'cementoMamposteria', 'HMS')} | {tf(3, 'cementoMamposteria', 'N')} |
+| Unidades de perforación vertical, sin rellenar | {tf(4, 'cementoCal', 'HMS')} | {tf(4, 'cementoCal', 'N')} | {tf(4, 'cementoMamposteria', 'HMS')} | {tf(4, 'cementoMamposteria', 'N')} |
+| Unidades de perforación vertical, rellenas y parcialmente rellenas con mortero de inyección | {tf(5, 'cementoCal', 'HMS')} | {tf(5, 'cementoCal', 'N')} | {tf(5, 'cementoMamposteria', 'HMS')} | {tf(5, 'cementoMamposteria', 'N')} |
+
+</TablaNorma>
+
+Reglas que acompañan la tabla:
+
+- **Cemento de mampostería:** el texto dice que cuando el mortero lo contenga los valores «deben reducirse en un 50 %». La tabla ya trae las columnas para ese mortero (ver las erratas al final): se usan las columnas impresas.
+- **D-1.5.4.1:** no se puede suponer resistencia a la tracción en las juntas para esfuerzos producidos por **cargas axiales de tracción** (solo por flexión) (<NormaRef s="D-1.5.4.1" pag="D-71" />).
+- **D-1.5.4.2:** los valores no se aplican a elementos **sin carga axial**, como vigas y dinteles (<NormaRef s="D-1.5.4.2" pag="D-71" />).
+- **Inyección parcial:** interpolación lineal según el porcentaje inyectado (nota 1 de la tabla). La nota está ligada a las unidades de perforación vertical de la primera mitad de la tabla (tracción perpendicular a las juntas horizontales); en la segunda mitad la tabla ya da una sola fila para «rellenas y parcialmente rellenas».
+
+<Ejemplo numero={3} titulo="Muro no reforzado en flexión fuera de su plano: Ft con inyección parcial">
+
+Franja de 1 m de un muro no reforzado de bloque de perforación vertical, espesor $t$ = 150 mm ($A_e$ = {ej4.Ae} mm² por metro; módulo elástico de sección $S = bt^2/6$ = {ej4.S} mm³), con 50 % de las celdas inyectadas, mortero de cemento y cal tipo M, $f'_m$ = 10 MPa, $h'$ = 2400 mm. Bajo cargas de servicio: $P$ = 20 kN/m, momento fuera del plano $M$ = 1.0 kN·m/m.
+
+<Paso titulo="Esfuerzos actuantes" ref="D-1.5.5">
+
+$f_a = P/A_e$ = 20 000/{ej4.Ae} = **{f(ej4.fa, 3)} MPa**. El esfuerzo de flexión es $M/S$ = 1.0 × 10⁶/{ej4.S} = **{f(ej4.fbFlex, 3)} MPa**: en una cara es compresión y en la otra, tracción por flexión. Si la tracción de flexión supera la compresión axial, en la junta queda una tracción neta $f_t = M/S - P/A_e$ = **{f(ej4.ftNeto, 3)} MPa** (interpretación del proyecto: la norma compara «la tracción desarrollada» sin precisar si es bruta o neta).
+
+</Paso>
+<Paso titulo="Ft de la Tabla D-1.5-1 e interpolación" ref="Tabla D-1.5-1">
+
+Perpendicular a las juntas horizontales, cemento y cal tipo M (H, M o S): sin rellenar {f(ej4.FtVacio, 2)} MPa; rellenas 0.45 MPa. Con 50 % inyectado: $F_t = 0.17 + 0.50(0.45 - 0.17)$ = **{f(ej4.Ft50, 3)} MPa**.
+
+</Paso>
+<Paso titulo="Verificación de la tracción y la combinada" ref="D-1.5-6, D-1.5-1, D-1.5-7">
+
+$F_a = 0.20(10)(R_e)$ con $R_e$ = {f(ej4.res.Re, 4)}: **{f(vf(ej4.res, 'axial').admisible, 3)} MPa**; $F_b = 0.33(10)$ = {f(vf(ej4.res, 'flexion').admisible, 2)} MPa. Combinada: $f_a/F_a + f_b/F_b$ = {f(vf(ej4.res, 'combinada').actuante, 3)} ≤ 1.0: **{vf(ej4.res, 'combinada').cumple ? 'cumple' : 'no cumple'}**. Tracción: $f_t/F_t$ = {f(vf(ej4.res, 'traccion').razon, 3)}: **{vf(ej4.res, 'traccion').cumple ? 'cumple' : 'no cumple'}**.
+
+</Paso>
+<Paso titulo="Cambio a mortero de cemento para mampostería" ref="Tabla D-1.5-1">
+
+Con cemento para mampostería (tipo H, M o S), los extremos son 0.10 (sin rellenar) y 0.42 MPa (rellenas): $F_t$ = **{f(ej4.Ft50m, 3)} MPa** y $f_t/F_t$ = {f(vf(ej4.resM, 'traccion').razon, 3)}: **{vf(ej4.resM, 'traccion').cumple ? 'cumple' : 'no cumple'}**. El cambio de mortero reduce la tracción admisible de {f(ej4.Ft50, 2)} a {f(ej4.Ft50m, 2)} MPa ({f((1 - ej4.Ft50m / ej4.Ft50) * 100, 0)} %).
+
+</Paso>
+<Resultado>
+$F_t$ = {f(ej4.Ft50, 2)} MPa frente a $f_t$ = {f(ej4.ftNeto, 2)} MPa: razón {f(vf(ej4.res, 'traccion').razon, 2)}; el muro **{ej4.res.cumpleTodo ? 'cumple' : 'no cumple'}** todas las verificaciones con datos.
+</Resultado>
+</Ejemplo>
+
+### D-1.5.5 — Esfuerzos combinados
+
+Cuando se combinan compresión axial y flexión se debe usar un procedimiento apropiado basado en la mecánica de sólidos; **en su defecto** se verifica con la ecuación fundamental (<NormaRef s="D-1.5.5" pag="D-72" />):
+
+<Ecuacion num="D-1.5-7" titulo="Ecuación fundamental de esfuerzos combinados">
+
+$$
+\frac{f_a}{F_a} + \frac{f_b}{F_b} \le 1.0
+$$
+
+- $f_a$: esfuerzo de compresión por carga axial, calculado con el área efectiva (MPa). $f_b$: esfuerzo de compresión por flexión, calculado con el área efectiva (MPa).
+- $F_a$ y $F_b$ son los admisibles de las Ecs. D-1.5-1 a D-1.5-6.
+
+</Ecuacion>
+
+La ecuación es una **interacción lineal**: representada en el plano ($f_a$, $f_b$) es una recta que va de $(0, F_b)$ a $(F_a, 0)$, y cualquier punto por debajo de ella cumple. La calculadora de este capítulo dibuja esa recta y el punto de la sección.
+
+### D-1.5.6 — Esfuerzos admisibles de cortante para vigas
+
+En vigas (elementos a flexión), el esfuerzo cortante solicitado es (<NormaRef s="D-1.5.6" pag="D-72" />):
+
+<Ecuacion num="D-1.5-8" titulo="Esfuerzo cortante solicitado en vigas">
+
+$$
+f_v = \frac{V}{b\,j\,d}
+$$
+
+- $V$: cortante de servicio (N). $b$: ancho efectivo (mm), que en secciones T o I se reemplaza por $b_w$. $d$: altura efectiva (mm). $j$: factor del brazo de palanca; se puede tomar **0.8** si no se hace análisis de compatibilidad de deformaciones.
+
+</Ecuacion>
+
+**Sin refuerzo para cortante:**
+
+<Ecuacion num="D-1.5-9" titulo="Fv en vigas sin refuerzo de cortante">
+
+$$
+F_v = \frac{\sqrt{f'_m}}{12} \le 0.35\ \text{MPa}
+$$
+
+</Ecuacion>
+
+**Si se exceden los valores anteriores**, el refuerzo debe tomar **todo** el cortante y debe espaciarse a distancias no mayores que $d/2$; entonces no se debe exceder:
+
+<Ecuacion num="D-1.5-10" titulo="Fv en vigas con refuerzo que toma todo el cortante">
+
+$$
+F_v = \frac{\sqrt{f'_m}}{4} \le 1.1\ \text{MPa}
+$$
+
+</Ecuacion>
+
+Para $f'_m$ = 10 MPa: sin refuerzo $F_v$ = {f(fvVigaAdmisible(10, false).Fv, 3)} MPa y con refuerzo $F_v$ = {f(fvVigaAdmisible(10, true).Fv, 3)} MPa (tres veces mayor). El tope de 0.35 MPa empieza a regir sin refuerzo desde $f'_m$ = 17.6 MPa, y el de 1.1 MPa con refuerzo desde $f'_m$ = 19.4 MPa.
+
+### D-1.5.7 — Esfuerzos admisibles para cortante en muros
+
+El esfuerzo cortante solicitado en muros tiene la misma forma que en vigas (<NormaRef s="D-1.5.7" pag="D-72" />):
+
+<Ecuacion num="D-1.5-11" titulo="Esfuerzo cortante solicitado en muros">
+
+$$
+f_v = \frac{V}{b\,j\,d}
+$$
+
+- Con $j$ = 0.8 si no se hace análisis de compatibilidad de deformaciones; en secciones T o I se reemplaza $b$ por $b_w$.
+
+</Ecuacion>
+
+**(a) Muros de mampostería no reforzada:**
+
+<Ecuacion num="D-1.5-12" titulo="Fv en muros no reforzados">
+
+$$
+F_v = \frac{\sqrt{f'_m}}{40} \le 0.56\ \text{MPa}
+$$
+
+- $F_v$ puede incrementarse en $0.2\,f_{am}$, donde $f_{am}$ es el esfuerzo de compresión debido a **carga muerta solamente**.
+
+</Ecuacion>
+
+El tope de 0.56 MPa solo rige con $f'_m$ > 500 MPa, es decir, nunca en la práctica: $F_v$ queda gobernado por $\sqrt{f'_m}/40$. El texto no aclara si el tope se aplica antes o después de sumar el incremento; aquí se suma al valor ya topado (autoría del proyecto).
+
+**(b) Muros de mampostería con refuerzo.** Hay dos casos según **quién toma el cortante**, y dentro de cada uno dos ramas según la relación $M/(Vd)$:
+
+*La mampostería toma todo el cortante:*
+
+<Ecuacion num="D-1.5-13" titulo="Fv, mampostería toma el cortante, M/Vd menor que 1">
+
+$$
+\frac{M}{Vd} \lt 1.0: \quad F_v = \left(4 - \frac{M}{Vd}\right)\frac{\sqrt{f'_m}}{40} \le \left(0.6 - 0.3\,\frac{M}{Vd}\right)\ \text{MPa}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D-1.5-14" titulo="Fv, mampostería toma el cortante, M/Vd mayor o igual a 1">
+
+$$
+\frac{M}{Vd} \ge 1.0: \quad F_v = \frac{\sqrt{f'_m}}{12} \le 0.25\ \text{MPa}
+$$
+
+</Ecuacion>
+
+*El refuerzo toma todo el cortante:*
+
+<Ecuacion num="D-1.5-15" titulo="Fv, refuerzo toma el cortante, M/Vd menor que 1">
+
+$$
+\frac{M}{Vd} \lt 1.0: \quad F_v = \left(4 - \frac{M}{Vd}\right)\frac{\sqrt{f'_m}}{24} \le \left(0.84 - 0.3\,\frac{M}{Vd}\right)\ \text{MPa}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D-1.5-16" titulo="Fv, refuerzo toma el cortante, M/Vd mayor o igual a 1">
+
+$$
+\frac{M}{Vd} \ge 1.0: \quad F_v = \frac{\sqrt{f'_m}}{8} \le 0.52\ \text{MPa}
+$$
+
+- $M/(Vd)$ es la relación entre el momento y el cortante de servicio en la sección, por la altura efectiva $d$. En la rama de $M/(Vd)$ menor que 1, tanto el primer término como el tope crecen cuando $M/(Vd)$ disminuye.
+- Se toma $M/(Vd)$ en valor absoluto (autoría del proyecto: el apéndice no discute el signo).
+
+</Ecuacion>
+
+<Figura alt="Esfuerzo cortante admisible Fv de muros reforzados frente a M/(Vd) para f′m = 10 y 20 MPa, con la mampostería o el refuerzo tomando el cortante" numero="Esquema" pie="Fv de las Ecs. D-1.5-13 a D-1.5-16 frente a M/(Vd), para f′m = 10 MPa (trazo continuo) y 20 MPa (trazo discontinuo). Las ramas cambian en M/(Vd) = 1. (esquema del proyecto)">
+<svg viewBox="0 0 480 290" role="img" aria-label="Fv admisible de muros reforzados frente a M/Vd entre 0 y 2" className="mx-auto h-auto w-full max-w-xl">
+  <rect x="55" y="25" width="395" height="200" fill="none" stroke="currentColor" strokeOpacity="0.3" />
+  {[0, 0.2, 0.4, 0.6, 0.8].map((v) => (
+    <g key={v}>
+      <line x1="55" x2="450" y1={figFv.Y(v)} y2={figFv.Y(v)} stroke="currentColor" strokeOpacity="0.12" />
+      <text x="49" y={figFv.Y(v) + 4} textAnchor="end" fontSize="11" fill="currentColor">{v.toFixed(1)}</text>
+    </g>
+  ))}
+  {[0, 0.5, 1, 1.5, 2].map((m) => (
+    <g key={m}>
+      <line x1={figFv.X(m)} x2={figFv.X(m)} y1="225" y2="229" stroke="currentColor" />
+      <text x={figFv.X(m)} y="243" textAnchor="middle" fontSize="11" fill="currentColor">{m.toFixed(1)}</text>
+    </g>
+  ))}
+  <line x1={figFv.X(1)} x2={figFv.X(1)} y1="25" y2="225" stroke="currentColor" strokeDasharray="5 3" strokeOpacity="0.5" />
+  <polyline points={figFv.r20} fill="none" stroke="var(--chart-2)" strokeWidth="2" strokeDasharray="6 3" />
+  <polyline points={figFv.r10} fill="none" stroke="var(--chart-2)" strokeWidth="2.5" />
+  <polyline points={figFv.m20} fill="none" stroke="var(--chart-1)" strokeWidth="2" strokeDasharray="6 3" />
+  <polyline points={figFv.m10} fill="none" stroke="var(--chart-1)" strokeWidth="2.5" />
+  <line x1="70" x2="92" y1="266" y2="266" stroke="var(--chart-1)" strokeWidth="2.5" />
+  <text x="97" y="270" fontSize="11" fill="currentColor">mampostería toma el cortante</text>
+  <line x1="270" x2="292" y1="266" y2="266" stroke="var(--chart-2)" strokeWidth="2.5" />
+  <text x="297" y="270" fontSize="11" fill="currentColor">refuerzo toma el cortante</text>
+  <text x="252" y="256" textAnchor="middle" fontSize="12" fill="currentColor">M/(Vd)</text>
+  <text x="14" y="125" textAnchor="middle" fontSize="12" fill="currentColor" transform="rotate(-90 14 125)">Fv (MPa)</text>
+</svg>
+</Figura>
+
+<Ejemplo numero={4} titulo="Cortante en un muro reforzado: ¿lo toma la mampostería o el refuerzo?">
+
+Muro reforzado de $b$ = 150 mm y altura efectiva $d$ = 2400 mm, $f'_m$ = 10 MPa. Cortante de servicio $V$ = 70 kN y momento $M$ = 130 kN·m en la sección crítica.
+
+<Paso titulo="Esfuerzo cortante y relación M/(Vd)" ref="D-1.5-11, D-1.5.7">
+
+$$
+f_v = \frac{70\,000}{150(0.8)(2400)}
+$$
+
+Resultado: **$f_v$ = {f(ej3.fv1, 3)} MPa** (con $j$ = 0.8). $M/(Vd)$ = 130 × 10⁶/(70 000 × 2400) = **{f(ej3.MVd, 3)}**, menor que 1.
+
+</Paso>
+<Paso titulo="Fv si la mampostería toma todo el cortante" ref="D-1.5-13">
+
+$$
+F_v = \left(4 - \frac{M}{Vd}\right)\frac{\sqrt{f'_m}}{40} \le 0.6 - 0.3\,\frac{M}{Vd}
+$$
+
+Con $M/(Vd)$ = {f(ej3.MVd, 3)} y $f'_m$ = 10 MPa, el primer término vale {f(ej3.FvM.sinTope, 3)} MPa y el tope {f(ej3.FvM.tope, 3)} MPa: **$F_v$ = {f(ej3.FvM.Fv, 3)} MPa**. Razón $f_v/F_v$ = {f(ej3.fv1 / ej3.FvM.Fv, 3)} → **{ej3.fv1 <= ej3.FvM.Fv ? 'cumple' : 'no cumple'}** (casi al límite).
+
+</Paso>
+<Paso titulo="Si el cortante sube a 90 kN con la misma M/(Vd)" ref="D-1.5-11, D-1.5-13, D-1.5-15">
+
+$f_v$ = 90 000/(150 × 0.8 × 2400) = **{f(ej3.fv2, 3)} MPa** > {f(ej3.FvM.Fv, 3)} MPa: la mampostería sola ya no alcanza y el **refuerzo debe tomar todo el cortante**. Con la Ec. D-1.5-15, $F_v$ = **{f(ej3.FvR.Fv, 3)} MPa** (tope {f(ej3.FvR.tope, 3)} MPa); como $f_v \le F_v$ el muro es admisible, pero el refuerzo debe dimensionarse.
+
+</Paso>
+<Paso titulo="Refuerzo transversal" ref="D-1.5-17, D-1.5-18, D-1.5.8">
+
+$F_s$ = 0.5(420) = 210 MPa, con tope de 170 MPa, así que **$F_s$ = {f(ej3.Fs, 0)} MPa**. Con una separación $s$ = {ej3.s} mm y $b_w$ = 150 mm:
+
+$$
+A_v = \frac{f_v\,b_w\,s}{F_s}
+$$
+
+Con $f_v$ = {f(ej3.fv2, 3)} MPa: **$A_v$ = {f(ej3.Av, 0)} mm²**: una barra No. 4 ({ej3.AvReal} mm²) cada 400 mm sirve (con No. 4 se podría llegar hasta $s$ = {f(ej3.sPorAv, 0)} mm). El límite de separación es $\min(1200, d/2)$ = {ej3.sMax} mm: cumple.
+
+</Paso>
+<Resultado>
+Con $V$ = 70 kN: $f_v$ = {f(ej3.fv1, 3)} MPa ≤ $F_v$ = {f(ej3.FvM.Fv, 3)} MPa (la mampostería toma el cortante). Con $V$ = 90 kN: $f_v$ = {f(ej3.fv2, 3)} MPa ≤ $F_v$ = {f(ej3.FvR.Fv, 3)} MPa con refuerzo; $A_v$ = {f(ej3.Av, 0)} mm² cada {ej3.s} mm.
+</Resultado>
+</Ejemplo>
+
+### D-1.5.8 — Refuerzo transversal de cortante
+
+La cantidad de refuerzo transversal se calcula con (<NormaRef s="D-1.5.8" pag="D-73" />):
+
+<Ecuacion num="D-1.5-17" titulo="Refuerzo transversal de cortante">
+
+$$
+A_v = \frac{f_v\,b_w\,s}{F_s}
+$$
+
+- $s$: espaciamiento del refuerzo al corte, que **no debe exceder 1.20 m ni $d/2$**. $b_w$: ancho efectivo del alma (mm). $F_s$: esfuerzo admisible del refuerzo a cortante (MPa). $f_v$: esfuerzo cortante de diseño (MPa). $A_v$ en mm².
+
+</Ecuacion>
+
+Observa que la ecuación usa **todo** $f_v$: no resta una parte que tome la mampostería. Es coherente con las Ecs. D-1.5-10, D-1.5-15 y D-1.5-16, donde «el refuerzo toma todo el cortante».
+
+**D-1.5.8.1 — Dónde se coloca.** El refuerzo transversal de cortante va en **piezas especiales tipo viga**, ubicadas como máximo cada 1.20 m y a distancias no mayores que $d/2$. El refuerzo colocado en las juntas de mortero **no se incluye** en $A_v$: solo sirve para disminuir la fisuración (<NormaRef s="D-1.5.8.1" pag="D-73" />).
+
+### D-1.5.9 — Sección crítica para cortante
+
+La sección crítica de diseño a cortante se localiza teniendo en cuenta las condiciones de apoyo, la aplicación de cargas y las condiciones particulares de funcionamiento del elemento (<NormaRef s="D-1.5.9" pag="D-73" />). La norma no da más precisión: es criterio del diseñador.
+
+### D-1.5.10 — Esfuerzos admisibles en el refuerzo
+
+Los esfuerzos máximos admisibles en el refuerzo $F_s$ son (<NormaRef s="D-1.5.10" pag="D-73" />):
+
+**(a) Esfuerzos de tracción, por flexión o por cortante:**
+
+<Ecuacion num="D-1.5-18" titulo="Fs, barras corrugadas (tracción)">
+
+$$
+F_s = 0.5\,f_y \le 170\ \text{MPa}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D-1.5-19" titulo="Fs, barras lisas (tracción)">
+
+$$
+F_s = 0.4\,f_y \le 140\ \text{MPa}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D-1.5-20" titulo="Fs, alambres (tracción)">
+
+$$
+F_s = 0.5\,f_y \le 210\ \text{MPa}
+$$
+
+</Ecuacion>
+
+**(b) Esfuerzos de compresión.** En columnas:
+
+<Ecuacion num="D-1.5-21" titulo="Fs, compresión en columnas">
+
+$$
+F_s = 0.4\,f_y \le 170\ \text{MPa}
+$$
+
+</Ecuacion>
+
+En elementos sometidos a flexión, la resistencia del acero a compresión **debe despreciarse** a menos que el refuerzo vertical lleve refuerzo transversal como indica el artículo D.4.2 (<NormaRef s="D-1.5.10" pag="D-74" />). Si lo lleva:
+
+<Ecuacion num="D-1.5-22" titulo="Fs, barras corrugadas en compresión por flexión">
+
+$$
+F_s = 0.5\,f_y \le 170\ \text{MPa}
+$$
+
+</Ecuacion>
+
+<Ecuacion num="D-1.5-23" titulo="Fs, barras lisas en compresión por flexión">
+
+$$
+F_s = 0.4\,f_y \le 140\ \text{MPa}
+$$
+
+</Ecuacion>
+
+El PDF imprime las Ecs. D-1.5-22 y D-1.5-23 (barras corrugadas y lisas) justo después del párrafo de elementos a flexión; se interpretan como los valores de la compresión del acero en elementos a flexión confinados (autoría del proyecto). Para alambres en compresión por flexión **la norma no da valor**.
+
+<TablaNorma numero="Resumen D-1.5.10" titulo="Esfuerzos admisibles del refuerzo, Fs (MPa), para fy = 240 y 420 MPa" pag="D-73 y D-74" nota="Las ecuaciones son las impresas en D-1.5.10; los valores para fy = 240 y 420 MPa los calcula el proyecto con esas ecuaciones.">
+
+| Ecuación | Barra | Caso | $F_s$ | $f_y$ = 240 MPa | $f_y$ = 420 MPa |
+|---|---|---|---|---:|---:|
+| D-1.5-18 | Corrugada | Tracción (flexión o cortante) | $0.5f_y \le 170$ | {f(tablaFs[0].f240.Fs, 0)} | {f(tablaFs[0].f420.Fs, 0)} |
+| D-1.5-19 | Lisa | Tracción (flexión o cortante) | $0.4f_y \le 140$ | {f(tablaFs[1].f240.Fs, 0)} | {f(tablaFs[1].f420.Fs, 0)} |
+| D-1.5-20 | Alambre | Tracción (flexión o cortante) | $0.5f_y \le 210$ | {f(tablaFs[2].f240.Fs, 0)} | {f(tablaFs[2].f420.Fs, 0)} |
+| D-1.5-21 | Barras en columnas | Compresión | $0.4f_y \le 170$ | {f(tablaFs[3].f240.Fs, 0)} | {f(tablaFs[3].f420.Fs, 0)} |
+| D-1.5-22 | Corrugada | Compresión en elementos a flexión | $0.5f_y \le 170$ | {f(tablaFs[4].f240.Fs, 0)} | {f(tablaFs[4].f420.Fs, 0)} |
+| D-1.5-23 | Lisa | Compresión en elementos a flexión | $0.4f_y \le 140$ | {f(tablaFs[5].f240.Fs, 0)} | {f(tablaFs[5].f420.Fs, 0)} |
+
+</TablaNorma>
+
+Con acero de $f_y$ = 420 MPa los topes gobiernan en casi todos los casos: el acero trabaja a menos de la mitad de su fluencia (170/420 ≈ 40 %), mientras que con $f_y$ = 240 MPa el valor proporcional (0.5 $f_y$ = 120 MPa) sí gobierna.
+
+## Calculadora
+
+La calculadora evalúa **todos** los esfuerzos admisibles aplicables al elemento y, si le das los esfuerzos actuantes de servicio, verifica cumple / no cumple fila por fila, con la razón actuante/admisible, un gráfico de barras y el diagrama de la interacción D-1.5-7.
+
+<CalculadoraEmbed id="esfuerzos-admisibles-mamposteria" />
+
+## Errores comunes
+
+<Callout tipo="error" titulo="Fallas frecuentes al aplicar el Apéndice D-1">
+
+- **Mezclar métodos.** Usar cargas mayoradas (B.2.4) con esfuerzos admisibles, o esfuerzos de trabajo con $\phi R_n$. Los esfuerzos admisibles exigen cargas de **servicio** (B.2.3) con $E = F_s/R$ afectado por 0.7 (<NormaRef s="B.2.3.2" pag="B-6" />).
+- **Olvidar $R_e$.** $F_a$ sin el factor de esbeltez sobrestima la capacidad; y $h'/t \le 25$ en muros estructurales sigue rigiendo (<NormaRef s="D.5.4.3.1" pag="D-36" />, <NormaRef s="D-1.4" pag="D-70" />).
+- **Usar $f_y$ en vez de $F_s$.** El acero se limita a 0.5 $f_y \le$ 170 MPa (corrugado), no a su fluencia.
+- **Contar con la tracción de la mampostería** en muros reforzados o en elementos sin carga axial (<NormaRef s="D-1.2.1" pag="D-69" />, <NormaRef s="D-1.5.4.2" pag="D-71" />). La Tabla D-1.5-1 es solo para mampostería **no reforzada** con aparejo trabado.
+- **Aplicar la reducción del 50 % a la Tabla D-1.5-1 dos veces.** Las columnas de cemento de mampostería ya vienen reducidas en la tabla.
+- **Sumar $F_a$ y $F_b$ en lugar de las razones.** La Ec. D-1.5-7 suma $f_a/F_a + f_b/F_b$, no $f_a + f_b$.
+- **Tomar $M/(Vd)$ con $V$ y $M$ de combinaciones distintas** o con el $d$ equivocado: el valor define la rama de $F_v$ (menor o mayor que 1).
+- **Contar el refuerzo de juntas** dentro de $A_v$ (<NormaRef s="D-1.5.8.1" pag="D-73" />) o separar el refuerzo más de $\min(1200\ \text{mm}, d/2)$.
+- **Asumir un incremento de esfuerzos por viento o sismo.** D-1.3.4 lo remite a una sección (B.2.3.4) que este Título B no contiene.
+- **Usar mezcla de unidades** (kN con mm²): $F_a = P_a/A_e$ da MPa solo si $P_a$ está en N.
+
+</Callout>
+
+## Erratas y observaciones del PDF
+
+<Callout tipo="nota" titulo="Anomalías detectadas al transcribir el Apéndice D-1">
+
+- **D-1.4 (D-70):** su único párrafo está numerado «D-1.5.1»; y luego «D-1.5.1 — Generalidades» repite el número. Debería ser D-1.4.1.
+- **D-1.3.4 (D-70):** remite a «B.2.3.4», que **no existe** en el Título B (B.2.3 termina en B.2.3.2.2). No se conoce el valor de incremento aplicable.
+- **D-1.5.4 (D-71):** dice que con cemento de mampostería los valores «deben reducirse en un 50 %», pero la tabla trae columnas propias que **no** son la mitad (p. ej. 0.28 → 0.17 y 0.45 → 0.42; en unidades rellenas la reducción real es de solo ~7 %). Se usan los valores de la tabla.
+- **Tabla D-1.5-1 (D-71):** la nota 1 (inyección parcial) está ligada a la fila «Unidades de perforación vertical» de la tracción perpendicular a las juntas horizontales; para la junta vertical la tabla ya da una fila «rellenas y parcialmente rellenas».
+- **D-1.5-4 (D-71):** el símbolo $F_s$ no se especifica; se interpreta como el de columnas en compresión (D-1.5-21).
+- **D-1.5.10 (D-73/D-74):** la presentación de las Ecs. D-1.5-22 y D-1.5-23 (tras el párrafo sobre elementos a flexión) hace ambigua su aplicación; la Ec. D-1.5-23 trae «Mpa» con tipografía distinta. No hay valor para alambres en compresión por flexión.
+- **D-1.5.7 a (D-72):** «puede ser incrementado en 0.2 $f_{am}$» no aclara si el tope de 0.56 MPa se aplica antes o después; y $f_{am}$ no está en la nomenclatura.
+- **D-1.5-13 a D-1.5-16 (D-73):** $M/(Vd)$ no se define en la nomenclatura (sí $M$, $V$, $d$) ni se dice nada sobre su signo; las ramas de $M/(Vd)$ menor que 1 y mayor o igual a 1 no son continuas (en $M/(Vd) = 1$ hay un pequeño salto: con $f'_m$ = 10 MPa, de {f(fvMuroReforzado(10, 0.999, 'mamposteria').Fv, 3)} a {f(fvMuroReforzado(10, 1, 'mamposteria').Fv, 3)} MPa).
+- **D-1.0 (D-69):** $F_s$ se define a la vez como esfuerzo del refuerzo y como fuerzas sísmicas; $f_{am}$ y $M/(Vd)$ no figuran.
+- **D-1.1.1 y D-1.1.2 (D-69):** son prácticamente la misma frase.
+- **D-1.2.2 (D-69/D-70):** «distribución lineal entre esfuerzos y deformaciones» debería leerse como «relación lineal» (esfuerzos proporcionales a deformaciones en rango elástico).
+
+</Callout>
+
+## Resumen en una línea
+
+Bajo cargas de servicio (B.2.3, con $E = F_s/R$ afectado por 0.7), cada esfuerzo calculado en rango elástico debe quedar por debajo de su admisible —$F_a = 0.20f'_mR_e$, $F_b = 0.33f'_m \le 14$ MPa, $F_t$ de la Tabla D-1.5-1, $F_v$ según el elemento y $F_s = 0.5f_y \le 170$ MPa—, con $f_a/F_a + f_b/F_b \le 1$ y $A_v = f_vb_ws/F_s$ para el cortante.
